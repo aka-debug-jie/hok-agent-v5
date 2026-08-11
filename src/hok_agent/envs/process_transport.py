@@ -11,6 +11,7 @@ from multiprocessing import get_context
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
 
+from hok_agent.contracts import EnvironmentKind
 from hok_agent.envs.mock import MockEnvironment
 from hok_agent.envs.rpc import LocalRpcServer, TransportError
 
@@ -18,7 +19,10 @@ from hok_agent.envs.rpc import LocalRpcServer, TransportError
 def _serve_mock(connection: Connection, max_steps_per_episode: int) -> None:
     """Own the service-side state until the parent sends the shutdown sentinel."""
 
-    server = LocalRpcServer(MockEnvironment(max_steps_per_episode=max_steps_per_episode))
+    server = LocalRpcServer(
+        MockEnvironment(max_steps_per_episode=max_steps_per_episode),
+        expected_kind=EnvironmentKind.MOCK,
+    )
     try:
         while True:
             request = connection.recv()

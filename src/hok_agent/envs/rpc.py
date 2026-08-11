@@ -17,6 +17,7 @@ from hok_agent.contracts import (
     StepResponse,
 )
 from hok_agent.contracts.types import ContractValidationError, JsonObject
+from hok_agent.control_plane import ControlledOperation, ExternalAccessDenied, ExternalAccessGate
 from hok_agent.envs.base import EnvironmentService, ProtocolViolation
 
 PROTOCOL_VERSION = 1
@@ -45,8 +46,16 @@ class JsonTransport(Protocol):
 class LocalRpcServer:
     """In-process server stub; network transports can reuse this exact dispatcher."""
 
-    def __init__(self, service: EnvironmentService) -> None:
+    def __init__(
+        self,
+        service: EnvironmentService,
+        *,
+        expected_kind: EnvironmentKind,
+        external_access_gate: ExternalAccessGate | None = None,
+    ) -> None:
         self._service = service
+        self._expected_kind = expected_kind
+        self._external_access_gate = external_access_gate
 
     def handle(self, raw_request: str) -> str:
         try:
@@ -92,10 +101,12 @@ class LocalRpcServer:
         if method == "health":
             if payload:
                 raise RpcError("INVALID_REQUEST", "health request payload must be empty")
-            return self._service.health().to_dict()
+            return self._read_authorized_health().to_dict()
         if method == "reset":
+            self._read_authorized_health()
             return self._service.reset(ResetRequest.from_dict(payload)).to_dict()
         if method == "step":
+            self._read_authorized_health()
             return self._service.step(StepRequest.from_dict(payload)).to_dict()
         if method == "close":
             if set(payload) != {"episode_id", "stop_reason"}:
@@ -106,6 +117,35 @@ class LocalRpcServer:
                 raise RpcError("INVALID_REQUEST", "close request values must be strings")
             return self._service.close(episode_id, stop_reason).to_dict()
         raise RpcError("UNKNOWN_METHOD", f"unsupported method {method}")
+
+    def _read_authorized_health(self) -> HealthResponse:
+        self._require_local_external_access()
+        health = self._service.health()
+        require_safe_service_identity(health, self._expected_kind)
+        self._require_runtime_license(health)
+        return health
+
+    def _require_local_external_access(self) -> None:
+        if self._expected_kind is not EnvironmentKind.HOK_GAMECORE:
+            return
+        if self._external_access_gate is None:
+            raise RpcError(
+                "EXTERNAL_ACCESS_GATE_REQUIRED",
+                "hok_gamecore service requires an explicit external access control-plane gate",
+            )
+        try:
+            self._external_access_gate.require_local(ControlledOperation.GAMECORE_TRANSPORT)
+        except ExternalAccessDenied as error:
+            raise RpcError(error.code, str(error)) from error
+
+    def _require_runtime_license(self, health: HealthResponse) -> None:
+        if self._expected_kind is not EnvironmentKind.HOK_GAMECORE:
+            return
+        assert self._external_access_gate is not None
+        try:
+            self._external_access_gate.require_runtime_license(health.license_status)
+        except ExternalAccessDenied as error:
+            raise RpcError(error.code, str(error)) from error
 
 
 class InProcessJsonTransport:
@@ -121,25 +161,44 @@ class InProcessJsonTransport:
 class LocalRpcClient:
     """Learner-facing client with an enforced identity and execution gate."""
 
-    def __init__(self, transport: JsonTransport, *, expected_kind: EnvironmentKind) -> None:
+    def __init__(
+        self,
+        transport: JsonTransport,
+        *,
+        expected_kind: EnvironmentKind,
+        external_access_gate: ExternalAccessGate | None = None,
+    ) -> None:
         self._transport = transport
         self._expected_kind = expected_kind
+        self._external_access_gate = external_access_gate
         self._active_ticks: dict[str, int] = {}
         self._legal_actions: dict[str, LegalActionSet] = {}
+        self._poisoned = False
+        self._require_local_external_access()
         health = self._read_health()
         require_safe_service_identity(health, expected_kind)
+        self._require_runtime_license(health)
         self._environment = health.environment
         self._health = health
 
     def health(self) -> HealthResponse:
+        if self._poisoned:
+            raise RpcError("CLIENT_POISONED", "client is poisoned by a prior protocol mismatch")
         return self._require_live_service()
 
     def reset(self, request: ResetRequest) -> ResetResponse:
+        if self._poisoned:
+            raise RpcError("CLIENT_POISONED", "client is poisoned by a prior protocol mismatch")
         self._require_live_service()
         try:
             response = ResetResponse.from_dict(self._call("reset", request.to_dict()))
         except ContractValidationError as error:
             raise RpcError("INVALID_RESET_RESPONSE", str(error)) from error
+        if response.request_id != request.request_id:
+            self._poison("request_id_mismatch")
+            raise RpcError(
+                "REQUEST_ID_MISMATCH", "reset response request_id does not match request request_id"
+            )
         if response.environment != self._environment:
             self._close_without_gate(response.episode_id, "identity_changed")
             raise ServiceIdentityError("IDENTITY_CHANGED", "reset response environment differs from health identity")
@@ -151,6 +210,8 @@ class LocalRpcClient:
         return response
 
     def step(self, request: StepRequest) -> StepResponse:
+        if self._poisoned:
+            raise RpcError("CLIENT_POISONED", "client is poisoned by a prior protocol mismatch")
         if request.episode_id not in self._active_ticks:
             raise RpcError("NO_ACTIVE_SESSION", "step requires an active reset session")
         try:
@@ -173,6 +234,9 @@ class LocalRpcClient:
         except RpcError:
             self._close_without_gate(request.episode_id, "step_rpc_error")
             raise
+        if response.episode_id != request.episode_id:
+            self._poison("episode_id_mismatch")
+            raise RpcError("EPISODE_ID_MISMATCH", "step response episode_id does not match request episode_id")
         if response.tick != expected_tick + 1:
             self._close_without_gate(request.episode_id, "tick_mismatch")
             raise RpcError("TICK_MISMATCH", "step response tick is not monotonic")
@@ -207,12 +271,36 @@ class LocalRpcClient:
             raise RpcError("INVALID_HEALTH_RESPONSE", str(error)) from error
 
     def _require_live_service(self) -> HealthResponse:
+        self._require_local_external_access()
         health = self._read_health()
         require_safe_service_identity(health, self._expected_kind)
+        self._require_runtime_license(health)
         if health.environment != self._environment:
             raise ServiceIdentityError("IDENTITY_CHANGED", "environment identity changed after client construction")
         self._health = health
         return health
+
+    def _require_local_external_access(self) -> None:
+        if self._expected_kind is not EnvironmentKind.HOK_GAMECORE:
+            return
+        if self._external_access_gate is None:
+            raise ServiceIdentityError(
+                "EXTERNAL_ACCESS_GATE_REQUIRED",
+                "hok_gamecore transport requires an explicit external access control-plane gate",
+            )
+        try:
+            self._external_access_gate.require_local(ControlledOperation.GAMECORE_TRANSPORT)
+        except ExternalAccessDenied as error:
+            raise ServiceIdentityError(error.code, str(error)) from error
+
+    def _require_runtime_license(self, health: HealthResponse) -> None:
+        if self._expected_kind is not EnvironmentKind.HOK_GAMECORE:
+            return
+        assert self._external_access_gate is not None
+        try:
+            self._external_access_gate.require_runtime_license(health.license_status)
+        except ExternalAccessDenied as error:
+            raise ServiceIdentityError(error.code, str(error)) from error
 
     def _close_without_gate(self, episode_id: str, stop_reason: str) -> None:
         try:
@@ -222,6 +310,14 @@ class LocalRpcClient:
         finally:
             self._active_ticks.pop(episode_id, None)
             self._legal_actions.pop(episode_id, None)
+
+    def _close_all_active_sessions(self, stop_reason: str) -> None:
+        for episode_id in tuple(self._active_ticks):
+            self._close_without_gate(episode_id, stop_reason)
+
+    def _poison(self, stop_reason: str) -> None:
+        self._poisoned = True
+        self._close_all_active_sessions(stop_reason)
 
     def _call(self, method: str, payload: JsonObject) -> object:
         try:

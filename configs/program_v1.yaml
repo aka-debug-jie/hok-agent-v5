@@ -3,8 +3,9 @@ program:
   version: 1
   created_date: "2026-08-11"
   north_star: fixed_hero_1v1_closed_loop_win
-  current_milestone: M0
-  current_task: TASK-000
+  current_milestone: M1
+  current_task: TASK-005
+  current_status: WAITING_EXTERNAL
 
 repositories:
   active_repo: "<NEW_REPO_URL_OR_PATH>"
@@ -14,13 +15,15 @@ repositories:
 
 environments:
   strategy_authority:
-    kind: authorized_hok_gamecore
+    kind: hok_gamecore
     upstream_repository: "https://github.com/tencent-ailab/hok_env"
-    connection_status: unknown
+    connection_status: waiting_external
     license_status: unknown
+    external_authorization_attested: false
+    external_authorization_evidence_ref: null
     supported_modes_must_be_discovered: true
   test_double:
-    kind: pixelarena_or_mock
+    kind: mock
     may_claim_hok_capability: false
   commercial_client:
     mode: read_only_shadow
@@ -63,8 +66,12 @@ safety:
   license_or_secret_in_git_permitted: false
 
 locks:
+  gamecore_transport: true
+  formal_evaluation: true
+  behavior_cloning: true
   long_training: true
   ppo: true
+  promotion: true
   multi_hero: true
   three_v_three: true
   vision_policy: true

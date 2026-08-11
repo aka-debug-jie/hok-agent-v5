@@ -35,6 +35,8 @@ PROMOTION_EVAL
 PREFLIGHT → WAITING_EXTERNAL
 ```
 
+TASK-005 处于 `WAITING_EXTERNAL` 时，仅可运行 mock、schema、preflight 与安全检查；任何未来的 GameCore transport、formal evaluation 或 promotion 入口都必须先调用同一外部访问 gate。`access-gate` 只检查本地控制面，绝不连接服务；当前配置必须拒绝三类敏感操作。
+
 ## 3. 组件
 
 ### Orchestrator
@@ -81,6 +83,7 @@ PREFLIGHT → WAITING_EXTERNAL
 
 ```text
 python -m hok_agent preflight
+python -m hok_agent access-gate --operation gamecore_transport --runtime-license-status valid
 python -m hok_agent env-smoke --config configs/run_smoke_v1.yaml
 python -m hok_agent env-benchmark
 python -m hok_agent collect-bc

@@ -18,7 +18,9 @@ from hok_agent.envs.rpc import RpcError, ServiceIdentityError, require_safe_serv
 
 def _client() -> LocalRpcClient:
     return LocalRpcClient(
-        InProcessJsonTransport(LocalRpcServer(MockEnvironment(max_steps_per_episode=12))),
+        InProcessJsonTransport(
+            LocalRpcServer(MockEnvironment(max_steps_per_episode=12), expected_kind=EnvironmentKind.MOCK)
+        ),
         expected_kind=EnvironmentKind.MOCK,
     )
 
@@ -37,6 +39,7 @@ def _play(seed: int) -> str:
             evaluation_mode=True,
         )
     )
+    assert reset.request_id == f"request-{seed}"
     assert len(reset.legal_actions.actions) >= 3
     tick = reset.tick
     legal_actions = reset.legal_actions
@@ -49,6 +52,7 @@ def _play(seed: int) -> str:
                 action_schema_version=1,
             )
         )
+        assert response.episode_id == reset.episode_id
         assert response.tick == tick + 1
         tick = response.tick
         legal_actions = response.legal_actions
@@ -96,7 +100,9 @@ def test_rpc_rejects_stale_tick_and_identity_mismatch() -> None:
 
 
 def test_client_rejects_service_kind_during_construction() -> None:
-    transport = InProcessJsonTransport(LocalRpcServer(MockEnvironment(max_steps_per_episode=12)))
+    transport = InProcessJsonTransport(
+        LocalRpcServer(MockEnvironment(max_steps_per_episode=12), expected_kind=EnvironmentKind.MOCK)
+    )
     with pytest.raises(ServiceIdentityError) as caught:
         LocalRpcClient(transport, expected_kind=EnvironmentKind.PIXELARENA)
     assert caught.value.code == "IDENTITY_MISMATCH"
@@ -121,8 +127,8 @@ class _UnlicensedGameCoreLikeMock(MockEnvironment):
         )
 
 
-def test_client_rejects_unlicensed_gamecore_during_construction() -> None:
-    transport = InProcessJsonTransport(LocalRpcServer(_UnlicensedGameCoreLikeMock(max_steps_per_episode=12)))
+def test_service_identity_rejects_unlicensed_gamecore() -> None:
+    health = _UnlicensedGameCoreLikeMock(max_steps_per_episode=12).health()
     with pytest.raises(ServiceIdentityError) as caught:
-        LocalRpcClient(transport, expected_kind=EnvironmentKind.HOK_GAMECORE)
+        require_safe_service_identity(health, EnvironmentKind.HOK_GAMECORE)
     assert caught.value.code == "LICENSE_NOT_VALID"

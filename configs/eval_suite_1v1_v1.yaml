@@ -1,9 +1,13 @@
 suite:
   id: eval-suite-1v1-v1
   version: 1
-  formal_promotion_suite: true
+  enabled: false
+  status: WAITING_EXTERNAL
+  formal_promotion_suite: false
+  planned_formal_promotion_suite: true
+  activation_gate: EXTERNAL_ACCESS_CONFIRMED
   mode: "1v1"
-  environment_kind: authorized_hok_gamecore
+  environment_kind: hok_gamecore
 
 cohort:
   hero: "${HOK_MVP_HERO}"

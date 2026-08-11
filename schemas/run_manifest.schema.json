@@ -83,10 +83,9 @@
       "properties": {
         "kind": {
           "enum": [
-            "authorized_hok_gamecore",
+            "hok_gamecore",
             "mock",
-            "pixelarena",
-            "mini_research_env"
+            "pixelarena"
           ]
         },
         "service_version": {
@@ -249,5 +248,71 @@
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "environment"
+        ],
+        "properties": {
+          "environment": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "mock",
+                  "pixelarena"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "formal": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "environment"
+        ],
+        "properties": {
+          "environment": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "hok_gamecore"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "environment": {
+            "required": [
+              "license_status"
+            ],
+            "properties": {
+              "license_status": {
+                "const": "valid"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

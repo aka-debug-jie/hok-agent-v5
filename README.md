@@ -89,7 +89,10 @@ python -m hok_agent env-smoke --config configs/run_smoke_v1.yaml
 python -m hok_agent env-benchmark --episodes 100
 python -m hok_agent preflight --probe-upstream
 python -m hok_agent verify-artifact <run_manifest.json>
+python -m hok_agent access-gate --operation gamecore_transport --runtime-license-status valid
 ```
 
 `env-smoke` 与 `env-benchmark` 永远标记为 `mock`，只证明服务、合同、schema 和
 artifact 基础设施；它们不构成任何 Honor of Kings 或 GameCore 能力结论。
+
+`access-gate` 不连接服务。当前它会以 `WAITING_EXTERNAL` 拒绝 GameCore transport、formal evaluation 和 promotion；服务自报 `valid` 不是腾讯外部授权证明。

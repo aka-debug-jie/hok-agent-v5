@@ -656,6 +656,7 @@ class EpisodeOutcome:
 
 @dataclass(frozen=True, slots=True)
 class ResetResponse:
+    request_id: str
     episode_id: str
     tick: int
     observation: PublicObservation
@@ -665,14 +666,15 @@ class ResetResponse:
     replay_identity: str
 
     def __post_init__(self) -> None:
-        if not self.episode_id or self.tick != self.observation.tick:
-            raise ContractValidationError("reset response episode/tick mismatch")
+        if not self.request_id or not self.episode_id or self.tick != self.observation.tick:
+            raise ContractValidationError("reset response episode/request/tick mismatch")
         if not self.legal_actions.actions:
             raise ContractValidationError("reset response legal actions must not be empty")
         _sha256(self.replay_identity, "reset_response.replay_identity")
 
     def to_dict(self) -> JsonObject:
         return {
+            "request_id": self.request_id,
             "episode_id": self.episode_id,
             "tick": self.tick,
             "observation": self.observation.to_dict(),
@@ -686,6 +688,7 @@ class ResetResponse:
     def from_dict(cls, value: object) -> ResetResponse:
         mapped = _require_mapping(value, "reset_response")
         allowed = {
+            "request_id",
             "episode_id",
             "tick",
             "observation",
@@ -696,6 +699,7 @@ class ResetResponse:
         }
         _require_keys(mapped, allowed, allowed, "reset_response")
         return cls(
+            request_id=_string(mapped["request_id"], "reset_response.request_id"),
             episode_id=_string(mapped["episode_id"], "reset_response.episode_id"),
             tick=_integer(mapped["tick"], "reset_response.tick", minimum=0),
             observation=PublicObservation.from_dict(mapped["observation"]),
@@ -748,6 +752,7 @@ class StepRequest:
 class StepResponse:
     observation: PublicObservation
     reward: RewardVector
+    episode_id: str
     terminal: bool
     truncated: bool
     outcome: EpisodeOutcome | None
@@ -757,6 +762,8 @@ class StepResponse:
     error_code: str | None
 
     def __post_init__(self) -> None:
+        if not self.episode_id:
+            raise ContractValidationError("step response episode_id must be non-empty")
         if self.tick != self.observation.tick:
             raise ContractValidationError("step response tick must match observation tick")
         if self.terminal or self.truncated:
@@ -772,6 +779,7 @@ class StepResponse:
         return {
             "observation": self.observation.to_dict(),
             "reward": self.reward.to_dict(),
+            "episode_id": self.episode_id,
             "terminal": self.terminal,
             "truncated": self.truncated,
             "outcome": None if self.outcome is None else self.outcome.to_dict(),
@@ -787,6 +795,7 @@ class StepResponse:
         allowed = {
             "observation",
             "reward",
+            "episode_id",
             "terminal",
             "truncated",
             "outcome",
@@ -800,6 +809,7 @@ class StepResponse:
         return cls(
             observation=PublicObservation.from_dict(mapped["observation"]),
             reward=RewardVector.from_dict(mapped["reward"]),
+            episode_id=_string(mapped["episode_id"], "step_response.episode_id"),
             terminal=_boolean(mapped["terminal"], "step_response.terminal"),
             truncated=_boolean(mapped["truncated"], "step_response.truncated"),
             outcome=None if outcome_value is None else EpisodeOutcome.from_dict(outcome_value),

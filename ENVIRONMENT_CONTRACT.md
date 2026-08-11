@@ -2,13 +2,13 @@
 
 ## 1. 环境权威
 
-V5 使用三类环境：
+V5 识别三类环境，但 TASK-005 当前只允许项目自有 `mock`。没有独立书面授权时，Tencent Mini、其他轻量研究环境与 GameCore 都是锁定的未来环境，不是 fallback。
 
 | 环境 | 权威范围 |
 |---|---|
-| 授权 Honor of Kings GameCore / `hok_env` | 1v1/3v3 策略能力与胜负权威 |
-| Tencent Mini 或其他轻量研究环境 | 分布式 RL、MAPPO、credit assignment 练兵 |
-| PixelArena | 单元测试、counterfactual、视觉课程、CI |
+| 授权 Honor of Kings GameCore / `hok_env` | 外部授权、非 Git 证据引用、运行时 valid license 与控制面解锁后，才是 1v1/3v3 策略能力与胜负权威 |
+| Tencent Mini 或其他轻量研究环境 | 未来单独授权的研究环境；不得用“其他”扩展当前权限 |
+| 项目自有 mock / PixelArena | mock 当前用于单元测试、RPC、CI 与诊断；未来 PixelArena 仅可用于 test double、counterfactual、视觉课程，均不可产生 HoK 能力或 promotion 结论 |
 
 同一报告必须明确 `environment_kind`，不得合并不同环境的胜率。
 
@@ -29,7 +29,7 @@ V5 使用三类环境：
 └──────────────────────────────┘
 ```
 
-不得把旧版 SDK 直接安装进 learner 环境后长期耦合。
+不得把旧版 SDK 直接安装进 learner 环境后长期耦合。任何未来 GameCore transport/service factory 都必须先通过本地外部访问 gate，才可创建 socket、进程或 SDK service；health 的 runtime license 读取只能发生在该本地 gate 之后。
 
 ## 3. RPC 最小接口
 
@@ -71,6 +71,7 @@ V5 使用三类环境：
 
 输出：
 
+- 原样回显 `request_id`；
 - `episode_id`
 - `tick/frame`
 - observation；
@@ -90,6 +91,7 @@ V5 使用三类环境：
 
 输出：
 
+- 原样回显 `episode_id`；
 - next observation；
 - reward vector；
 - terminal/truncated；
@@ -98,6 +100,8 @@ V5 使用三类环境：
 - tick；
 - replay hash；
 - error code。
+
+client 必须将 reset 的 `request_id` 和 step 的 `episode_id` 与本地请求关联；任何错配 response 都不得继续执行动作，并必须关闭已知本地 session、毒化当前 client/transport。毒化后只能进行 best-effort `close` 清理，必须重建隔离 transport 后才能恢复调用。
 
 ### 3.4 `Close`
 
@@ -224,7 +228,7 @@ benchmark 中 policy 使用固定轻量随机/常数模型，避免把模型速�
 - 实现 mock service；
 - 实现 RPC；
 - 完成 schema/tests；
-- 接入开源 Mini/PixelArena；
+- 使用项目自有 mock；未来自有 PixelArena 仍只能作 diagnostic test double；
 - 完成 learner 和 evaluator skeleton；
 - 记录申请/外部阻塞。
 

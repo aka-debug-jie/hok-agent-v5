@@ -1,4 +1,8 @@
-"""Schema validation and self-hash verification for JSON evidence artifacts."""
+"""Technical schema and integrity validation for JSON evidence artifacts.
+
+Passing this verifier never establishes external GameCore authorization.  Runtime
+authorization is enforced separately by :mod:`hok_agent.control_plane`.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +15,8 @@ from typing import Any, cast
 from jsonschema import Draft202012Validator
 
 from hok_agent.artifacts.hashing import sha256_file, sha256_json
+
+_ALLOWED_ENVIRONMENT_KINDS = frozenset({"hok_gamecore", "mock", "pixelarena"})
 
 
 class ArtifactVerificationError(ValueError):
@@ -171,12 +177,30 @@ def _run_manifest_artifact_checks(
     return []
 
 
+def _environment_kind_checks(document: Mapping[str, Any], *, evaluation: bool) -> list[str]:
+    environment = document.get("environment")
+    if not isinstance(environment, Mapping):
+        return ["artifact environment is not an object"]
+    kind = environment.get("kind")
+    if not isinstance(kind, str) or kind not in _ALLOWED_ENVIRONMENT_KINDS:
+        return ["artifact environment kind is not an approved typed environment kind"]
+    if kind == "hok_gamecore" and environment.get("license_status") != "valid":
+        return ["hok_gamecore artifact requires runtime license_status=valid"]
+    if kind in {"mock", "pixelarena"}:
+        if evaluation:
+            if document.get("disposition") != "DIAGNOSTIC_ONLY":
+                return ["mock/pixelarena evaluation must use DIAGNOSTIC_ONLY disposition"]
+        elif document.get("formal") is not False:
+            return ["mock/pixelarena run manifest must be non-formal"]
+    return []
+
+
 def _evaluation_report_gate_checks(document: Mapping[str, Any]) -> list[str]:
     environment = document.get("environment")
     gate = document.get("gate")
     if not isinstance(environment, Mapping) or not isinstance(gate, Mapping):
         return []
-    if environment.get("kind") != "mock":
+    if environment.get("kind") not in {"mock", "pixelarena"}:
         return []
     checks = gate.get("checks")
     if not isinstance(checks, Mapping):
@@ -220,8 +244,10 @@ def verify_artifact(
 
     kind = _artifact_kind(cast_document, schema)
     if kind == "run_manifest":
+        errors.extend(_environment_kind_checks(cast_document, evaluation=False))
         errors.extend(_run_manifest_artifact_checks(cast_document, path, repo_root))
     if kind == "evaluation_report":
+        errors.extend(_environment_kind_checks(cast_document, evaluation=True))
         errors.extend(_evaluation_report_gate_checks(cast_document))
 
     return VerificationResult(

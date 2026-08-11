@@ -100,6 +100,7 @@ class MockEnvironment:
         )
         self._sessions[episode_id] = session
         return ResetResponse(
+            request_id=request.request_id,
             episode_id=episode_id,
             tick=session.tick,
             observation=self._observation(session),
@@ -154,6 +155,7 @@ class MockEnvironment:
 
         return StepResponse(
             observation=self._observation(session),
+            episode_id=request.episode_id,
             reward=RewardVector(components=rewards),
             terminal=terminal,
             truncated=truncated,

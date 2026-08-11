@@ -142,6 +142,53 @@ def test_verify_artifact_rejects_mock_report_gate_pass_mismatch(tmp_path: Path) 
     assert any("gate.pass must equal all checks are true" in message for message in result.errors)
 
 
+def test_verify_artifact_accepts_mock_report_with_false_checks_and_false_pass(tmp_path: Path) -> None:
+    report = EvaluationReport(
+        report_id="report-pass-rule",
+        created_at_utc="2026-01-01T00:00:00Z",
+        suite_id="m0-mock-smoke",
+        suite_version=1,
+        suite_config_hash=HASH,
+        checkpoint_path="builtin://deterministic_mock_smoke_policy",
+        checkpoint_hash=HASH,
+        training_run_id="M0-NO-TRAINING",
+        environment={"kind": "mock", "identity_hash": HASH},
+        episode_count=1,
+        episode_completed=1,
+        details_artifact="artifacts/episodes.jsonl",
+        metrics={"environment_kind": "mock"},
+        engineering={
+            "protocol_errors": 0,
+            "action_decode_errors": 0,
+            "illegal_executed_actions": 0,
+            "replay_errors": 0,
+            "nonfinite_events": 0,
+        },
+        gate_checks={"mock_only": True},
+        disposition="DIAGNOSTIC_ONLY",
+    )
+    report_path = tmp_path / "evaluation_report.json"
+    write_hashed_json(
+        report_path,
+        report.to_dict(),
+        self_hash_field="report_hash",
+        schema_path=EVALUATION_REPORT_SCHEMA,
+    )
+
+    document = json.loads(report_path.read_text(encoding="utf-8"))
+    document["gate"]["checks"]["mock_only"] = False
+    document["gate"]["pass"] = False
+    document["report_hash"] = sha256_json(document, exclude_key="report_hash")
+    report_path.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = verify_artifact(report_path, EVALUATION_REPORT_SCHEMA)
+
+    assert result.passed
+
+
 def test_verify_artifact_rejects_mock_report_disposition_non_diagnostic(tmp_path: Path) -> None:
     report = EvaluationReport(
         report_id="report-2",
@@ -168,9 +215,117 @@ def test_verify_artifact_rejects_mock_report_disposition_non_diagnostic(tmp_path
         disposition="PROMOTED_ACTIVE",
     )
     report_path = tmp_path / "evaluation_report.json"
-    write_hashed_json(report_path, report.to_dict(), self_hash_field="report_hash")
+    document = report.to_dict()
+    document["report_hash"] = sha256_json(document)
+    report_path.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
     result = verify_artifact(report_path, EVALUATION_REPORT_SCHEMA)
+
+    assert not result.passed
+    assert any("DIAGNOSTIC_ONLY" in message for message in result.errors)
+
+
+def test_verify_artifact_rejects_formal_mock_manifest_without_schema(tmp_path: Path) -> None:
+    manifest_path, _ = _run_manifest_base(tmp_path)
+    document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    document["formal"] = True
+    document["manifest_hash"] = sha256_json(document, exclude_key="manifest_hash")
+    manifest_path.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = verify_artifact(manifest_path)
+
+    assert not result.passed
+    assert any("non-formal" in message for message in result.errors)
+
+
+def test_verify_artifact_rejects_unlicensed_gamecore_manifest_without_schema(tmp_path: Path) -> None:
+    manifest_path, _ = _run_manifest_base(tmp_path)
+    document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    document["environment"]["kind"] = "hok_gamecore"
+    document["manifest_hash"] = sha256_json(document, exclude_key="manifest_hash")
+    manifest_path.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = verify_artifact(manifest_path)
+
+    assert not result.passed
+    assert any("license_status=valid" in message for message in result.errors)
+
+
+def test_verify_artifact_accepts_runtime_license_metadata_without_access_claim(tmp_path: Path) -> None:
+    manifest_path, _ = _run_manifest_base(tmp_path)
+    document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    document["environment"]["kind"] = "hok_gamecore"
+    document["environment"]["license_status"] = "valid"
+    document["manifest_hash"] = sha256_json(document, exclude_key="manifest_hash")
+    manifest_path.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = verify_artifact(manifest_path, RUN_MANIFEST_SCHEMA)
+
+    assert result.passed
+
+
+def test_schema_rejects_undefined_mini_environment(tmp_path: Path) -> None:
+    manifest_path, _ = _run_manifest_base(tmp_path)
+    document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    document["environment"]["kind"] = "mini_research_env"
+    document["manifest_hash"] = sha256_json(document, exclude_key="manifest_hash")
+    manifest_path.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = verify_artifact(manifest_path, RUN_MANIFEST_SCHEMA)
+
+    assert not result.passed
+    assert any("mini_research_env" in message for message in result.errors)
+
+
+def test_verify_artifact_rejects_pixelarena_promotion_without_schema(tmp_path: Path) -> None:
+    report = EvaluationReport(
+        report_id="pixelarena-report",
+        created_at_utc="2026-01-01T00:00:00Z",
+        suite_id="pixelarena-smoke",
+        suite_version=1,
+        suite_config_hash=HASH,
+        checkpoint_path="builtin://diagnostic",
+        checkpoint_hash=HASH,
+        training_run_id="M0-NO-TRAINING",
+        environment={"kind": "pixelarena", "identity_hash": HASH},
+        episode_count=1,
+        episode_completed=1,
+        details_artifact="artifacts/episodes.jsonl",
+        metrics={"environment_kind": "pixelarena"},
+        engineering={
+            "protocol_errors": 0,
+            "action_decode_errors": 0,
+            "illegal_executed_actions": 0,
+            "replay_errors": 0,
+            "nonfinite_events": 0,
+        },
+        gate_checks={"diagnostic": True},
+        disposition="PROMOTED_ACTIVE",
+    )
+    report_path = tmp_path / "evaluation_report.json"
+    document = report.to_dict()
+    document["report_hash"] = sha256_json(document)
+    report_path.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = verify_artifact(report_path)
 
     assert not result.passed
     assert any("DIAGNOSTIC_ONLY" in message for message in result.errors)

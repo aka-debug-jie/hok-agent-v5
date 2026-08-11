@@ -1,4 +1,4 @@
-"""Command line entry points permitted during M0 bootstrap."""
+"""Safety-bounded command line entry points for bootstrap and control-plane checks."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from hok_agent.artifacts.verification import ArtifactVerificationError, verify_artifact
+from hok_agent.contracts import LicenseStatus
+from hok_agent.control_plane import ControlledOperation, ExternalAccessDenied, ExternalAccessGate
 from hok_agent.evaluation.smoke import run_mock_benchmark, run_mock_smoke
 from hok_agent.preflight import collect_preflight, write_preflight
 from hok_agent.safety import SafetyViolation, scan_repository
@@ -27,7 +29,7 @@ def _default_schema(path: Path, root: Path) -> Path | None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="hok-agent", description="HoK-Agent V5 M0 infrastructure CLI")
+    parser = argparse.ArgumentParser(prog="hok-agent", description="HoK-Agent V5 infrastructure CLI")
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     smoke = subcommands.add_parser("env-smoke", help="run the deterministic mock E0 smoke")
@@ -52,6 +54,23 @@ def build_parser() -> argparse.ArgumentParser:
     preflight.add_argument("--gamecore-path", type=Path, default=None)
     preflight.add_argument("--license-path", type=Path, default=None)
     preflight.add_argument("--probe-upstream", action="store_true")
+
+    access_gate = subcommands.add_parser(
+        "access-gate",
+        help="check a sensitive GameCore operation without connecting to any service",
+    )
+    access_gate.add_argument("--config", type=Path, default=Path("configs/program_v1.yaml"))
+    access_gate.add_argument(
+        "--operation",
+        required=True,
+        choices=[operation.value for operation in ControlledOperation],
+    )
+    access_gate.add_argument(
+        "--runtime-license-status",
+        required=True,
+        choices=[status.value for status in LicenseStatus],
+        help="service-reported metadata only; this is not external authorization evidence",
+    )
     return parser
 
 
@@ -91,6 +110,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             write_preflight(output, report)
             _print_document({"output": str(output), **report})
             return 0
+        if args.command == "access-gate":
+            gate = ExternalAccessGate.from_yaml(args.config)
+            operation = ControlledOperation(args.operation)
+            license_status = LicenseStatus(args.runtime_license_status)
+            gate.require(operation, runtime_license_status=license_status)
+            _print_document(
+                {
+                    "operation": operation.value,
+                    "runtime_license_status": license_status.value,
+                    "status": "ALLOWED_BY_LOCAL_CONTROL_PLANE",
+                }
+            )
+            return 0
+    except ExternalAccessDenied as error:
+        print(f"error [{error.code}]: {error}", file=sys.stderr)
+        return 2
     except (ArtifactVerificationError, SafetyViolation, ValueError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
