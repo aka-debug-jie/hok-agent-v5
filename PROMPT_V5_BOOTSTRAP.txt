@@ -1,0 +1,128 @@
+你正在接管一个全新的 `HoK-Agent V5` 项目。目标是在腾讯明确授权的 Honor of Kings GameCore / AI 开放研究环境中，先训练能够完成完整 1v1 对局的结构化策略，再扩展到多英雄与 3v3，最后才做像素蒸馏和真实客户端只读智能教练。
+
+## 一、先确认工作边界
+
+1. 旧仓库 `aka-debug-jie/pixel-moba-codex-starter` 是只读 legacy evidence。
+2. 不修改旧仓库，不继续 v4.4，不创建 v4.4.1，不从旧 checkpoint/optimizer/K96 profile 恢复。
+3. 闭环动作只允许发送到腾讯明确授权的 GameCore 或项目自有 PixelArena/mock。
+4. 真实商业客户端严格只读，禁止 ADB input、scrcpy control、HID/UHID、uinput、Accessibility、root、hook、内存/协议修改、反检测和任何自动对局。
+5. GameCore 许可证、二进制、密钥和真实账号信息不能进入 Git。
+6. 未确认许可证或 GameCore 时，不得假设存在；必须输出 `WAITING_EXTERNAL`，同时继续完成不依赖外部二进制的工程工作。
+
+## 二、必须先读
+
+在开始实现前完整读取并遵守：
+
+1. `AGENTS.md`
+2. `PROGRAM_CHARTER.md`
+3. `SAFETY_BOUNDARIES.md`
+4. `DELIVERY_PROGRESS.md`
+5. `MILESTONES.md`
+6. `ENVIRONMENT_CONTRACT.md`
+7. `POLICY_ARCHITECTURE.md`
+8. `TRAINING_CONTRACT.md`
+9. `EVALUATION_PROMOTION.md`
+10. `DATA_AND_ARTIFACT_CONTRACT.md`
+11. `AUTOMATION_RUNBOOK.md`
+12. `TASK_000_BOOTSTRAP.md`
+
+`DELIVERY_PROGRESS.md` 是当前状态唯一权威。
+
+## 三、当前唯一任务
+
+实际实施 `TASK_000_BOOTSTRAP.md`，不要只写计划。
+
+如果当前工作目录是 legacy 仓库，在其同级创建一个全新的 `hok-agent-v5` 目录；不要初始化、修改或提交 legacy 仓库。
+
+第一轮交付必须包含：
+
+- Python 3.11 项目骨架；
+- typed contract types；
+- deterministic mock environment；
+- environment service 的 health/reset/step/close 协议；
+- RPC client/server stub；
+- run manifest 和 evaluation report schema；
+- artifact hashing/verification；
+- `env-smoke`、`env-benchmark`、`verify-artifact` CLI；
+- Ruff、strict mypy、pytest；
+- CI；
+- safety/secret/license scan；
+- upstream `tencent-ailab/hok_env` preflight；
+- `DELIVERY_PROGRESS.md` 更新；
+- M0 验收报告。
+
+## 四、架构要求
+
+### 1. 环境隔离
+
+- learner/evaluator：Python 3.11+；
+- upstream `hok_env` 如需 Python 3.6–3.9，放在独立 service/container；
+- learner 不直接依赖旧版 SDK；
+- transport 与 contract 分离；
+- GameCore 未获得时，mock service 必须完整可测试。
+
+### 2. 动作
+
+定义因子化动作：
+
+- macro intent
+- action type
+- target
+- direction
+- skill
+- item/upgrade
+- auxiliary parameter
+
+不要实现 K96 硬候选空间。可以预留 debug top-actions，但关闭后不能改变 Actor 行为。
+
+### 3. Legal action
+
+legal mask 只允许用于 sampling/execution/loss-side audit，不进入 Actor encoder、hidden 或普通 observation。
+
+### 4. 数据
+
+public/privileged 物理或逻辑隔离。Actor schema不得含 truth、teacher、reward、不可见敌方或训练专用 entity ID。
+
+### 5. 证据
+
+本轮没有能力结论。Mock 的成功只能证明基础设施。
+
+## 五、执行顺序
+
+1. 把 `DELIVERY_PROGRESS.md` 当前任务置为 `IN_PROGRESS`。
+2. 检查工作目录和 legacy 状态。
+3. 建新仓库骨架。
+4. 实现合同和 mock。
+5. 实现 RPC stub。
+6. 实现 manifest/schema/artifact verifier。
+7. 实现 CLI。
+8. 实现安全检查。
+9. 运行 focused tests。
+10. 运行 full checks。
+11. 运行 mock 100-episode stability。
+12. 运行 upstream/GameCore preflight。
+13. 更新 `DELIVERY_PROGRESS.md`，记录真实命令、结果、阻塞和下一任务。
+
+## 六、失败处理
+
+- 外部许可证/二进制缺失：`WAITING_EXTERNAL`，不是代码 No-Go。
+- Mock determinism、schema、RPC、safety 失败：修复后重新验证。
+- 不因为 GameCore 缺失而停下全部工作。
+- 不下载来源不明的二进制或许可证。
+- 不创建长训练任务。
+
+## 七、最终回复格式
+
+最终给出：
+
+1. 实际创建的仓库路径；
+2. 改动文件；
+3. 运行命令与真实结果；
+4. mock stability；
+5. upstream/GameCore/license preflight；
+6. 未解决阻塞；
+7. 下一任务；
+8. commit SHA（若已创建）；
+9. 不得声称未实际完成的事项。
+
+现在开始实施。

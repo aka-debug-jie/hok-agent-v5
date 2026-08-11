@@ -1,0 +1,71 @@
+program:
+  id: hok-agent-v5
+  version: 1
+  created_date: "2026-08-11"
+  north_star: fixed_hero_1v1_closed_loop_win
+  current_milestone: M0
+  current_task: TASK-000
+
+repositories:
+  active_repo: "<NEW_REPO_URL_OR_PATH>"
+  legacy_repo: "https://github.com/aka-debug-jie/pixel-moba-codex-starter"
+  legacy_read_only: true
+  legacy_checkpoint_inputs_permitted: false
+
+environments:
+  strategy_authority:
+    kind: authorized_hok_gamecore
+    upstream_repository: "https://github.com/tencent-ailab/hok_env"
+    connection_status: unknown
+    license_status: unknown
+    supported_modes_must_be_discovered: true
+  test_double:
+    kind: pixelarena_or_mock
+    may_claim_hok_capability: false
+  commercial_client:
+    mode: read_only_shadow
+    automated_actions_permitted: false
+
+runtime:
+  learner_python: ">=3.11"
+  upstream_service_python: ">=3.6,<=3.9"
+  accelerator: "NVIDIA RTX 4090-class"
+  environment_service_isolated: true
+
+policy:
+  action_space: factorized
+  k96_hard_candidate_space_permitted: false
+  recurrent_core_initial: GRU
+  target_attention: true
+  actor_privileged_inputs_permitted: false
+  legal_mask_in_actor_encoder_permitted: false
+
+training:
+  order:
+    - behavior_cloning
+    - recurrent_ppo
+    - opponent_league
+    - multi_hero
+    - mappo_3v3
+    - vision_distillation
+  full_run_requires_mini_gate: true
+  promotion_uses_training_cohort: false
+  independent_training_seeds_for_promotion: 3
+
+safety:
+  real_client_read_only: true
+  adb_input_permitted: false
+  scrcpy_control_permitted: false
+  hid_uinput_permitted: false
+  accessibility_automation_permitted: false
+  root_hook_memory_protocol_modification_permitted: false
+  anti_cheat_evasion_permitted: false
+  license_or_secret_in_git_permitted: false
+
+locks:
+  long_training: true
+  ppo: true
+  multi_hero: true
+  three_v_three: true
+  vision_policy: true
+  real_client_closed_loop: true

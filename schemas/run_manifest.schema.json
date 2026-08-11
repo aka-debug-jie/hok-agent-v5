@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/run_manifest.schema.json",
+  "title": "HoK-Agent V5 Run Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "created_at_utc",
+    "stage",
+    "status",
+    "formal",
+    "git",
+    "environment",
+    "config",
+    "algorithm",
+    "seeds",
+    "safety",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "stage": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "CREATED",
+        "PREFLIGHT",
+        "WAITING_EXTERNAL",
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+        "INVALID",
+        "CANCELLED"
+      ]
+    },
+    "formal": {
+      "type": "boolean"
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "dirty"
+      ],
+      "properties": {
+        "commit": {
+          "type": "string",
+          "minLength": 7
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "repository": {
+          "type": "string"
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "kind",
+        "service_version",
+        "identity_hash"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "authorized_hok_gamecore",
+            "mock",
+            "pixelarena",
+            "mini_research_env"
+          ]
+        },
+        "service_version": {
+          "type": "string"
+        },
+        "sdk_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gamecore_build": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "license_status": {
+          "enum": [
+            "valid",
+            "missing",
+            "invalid",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "identity_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "hash"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "algorithm": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "input_checkpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output_checkpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "seeds": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "registry_hash"
+      ],
+      "properties": {
+        "registry_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "compute": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "real_client_read_only",
+        "commercial_client_actions_used",
+        "privileged_state_enters_actor"
+      ],
+      "properties": {
+        "real_client_read_only": {
+          "type": "boolean",
+          "const": true
+        },
+        "commercial_client_actions_used": {
+          "type": "boolean",
+          "const": false
+        },
+        "privileged_state_enters_actor": {
+          "type": "boolean",
+          "const": false
+        },
+        "license_or_secret_written_to_git": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "metrics_artifact": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "error": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": true
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256",
+          "role"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "manifest_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

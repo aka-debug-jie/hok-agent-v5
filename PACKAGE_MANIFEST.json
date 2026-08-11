@@ -1,0 +1,165 @@
+{
+  "package": "hok-agent-v5-starter",
+  "version": "v5.0-bootstrap-1",
+  "created_date": "2026-08-11",
+  "file_count_excluding_manifest": 25,
+  "validation": {
+    "yaml": {
+      "eval_suite_1v1_v1.yaml": "ok",
+      "program_v1.yaml": "ok",
+      "run_smoke_v1.yaml": "ok"
+    },
+    "json": {
+      "evaluation_report.schema.json": "ok",
+      "run_manifest.schema.json": "ok"
+    },
+    "json_schema_meta": "ok",
+    "markdown": {
+      "AGENTS.md": "ok",
+      "AUTOMATION_RUNBOOK.md": "ok",
+      "CODEX_START_PROMPT.md": "ok",
+      "DATA_AND_ARTIFACT_CONTRACT.md": "ok",
+      "DECISION_LOG.md": "ok",
+      "DELIVERY_PROGRESS.md": "ok",
+      "ENVIRONMENT_CONTRACT.md": "ok",
+      "EVALUATION_PROMOTION.md": "ok",
+      "LEGACY_MIGRATION_PLAN.md": "ok",
+      "MILESTONES.md": "ok",
+      "POLICY_ARCHITECTURE.md": "ok",
+      "PROGRAM_CHARTER.md": "ok",
+      "README.md": "ok",
+      "REFERENCES.md": "ok",
+      "RISK_REGISTER.md": "ok",
+      "SAFETY_BOUNDARIES.md": "ok",
+      "TASK_000_BOOTSTRAP.md": "ok",
+      "TRAINING_CONTRACT.md": "ok"
+    }
+  },
+  "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 460,
+      "sha256": "sha256:3e5847313c284ba74167abe747c95ce74665d08fbbbd4b537e06814d90db6566"
+    },
+    {
+      "path": "AGENTS.md",
+      "bytes": 4326,
+      "sha256": "sha256:f103fa68a79c254e9ae730feb0fa030add0f7cdc49ef3c368bd9e8215b04da6a"
+    },
+    {
+      "path": "AUTOMATION_RUNBOOK.md",
+      "bytes": 4006,
+      "sha256": "sha256:bb4f74749cb1b8c3185ee65a9b0181ae3efc5aa93a82f0463600d14dbebc7bc6"
+    },
+    {
+      "path": "CODEX_START_PROMPT.md",
+      "bytes": 4853,
+      "sha256": "sha256:a52f49267910b9d3d865e65cd740d9cc75d392cfff5c820c5ce8aef04625c4fa"
+    },
+    {
+      "path": "DATA_AND_ARTIFACT_CONTRACT.md",
+      "bytes": 4326,
+      "sha256": "sha256:80b9954732c389d39d088f4a42bbb59406e2b567082365afb2cf51d4fb12ac51"
+    },
+    {
+      "path": "DECISION_LOG.md",
+      "bytes": 1064,
+      "sha256": "sha256:fc0cc9606ceefcc607111d1073624d13c930bfad7d1ae2dd4030ba3415f7ce15"
+    },
+    {
+      "path": "DELIVERY_PROGRESS.md",
+      "bytes": 2847,
+      "sha256": "sha256:72ccb03ed0978c0c05ce4d0cac80d4c36fb052fbca55f6f46ff65a2091f2d6df"
+    },
+    {
+      "path": "ENVIRONMENT_CONTRACT.md",
+      "bytes": 5324,
+      "sha256": "sha256:50d83590399214a43e4e9c6448b5d1651ba320c4cc83c6c97e85efbacf4a43ee"
+    },
+    {
+      "path": "EVALUATION_PROMOTION.md",
+      "bytes": 4923,
+      "sha256": "sha256:1d6562f7eadf15894d946f6d8bbcf40a906c32462293e94754e362945cf1772c"
+    },
+    {
+      "path": "LEGACY_MIGRATION_PLAN.md",
+      "bytes": 2630,
+      "sha256": "sha256:4d89f434e2c550e1de7e2e948867a9d2f166b629ff3445a461ce30d940534c28"
+    },
+    {
+      "path": "MILESTONES.md",
+      "bytes": 8070,
+      "sha256": "sha256:4f722e44f19238bd447bdaf1850016010fa2c8527996ddceb452671056af2700"
+    },
+    {
+      "path": "POLICY_ARCHITECTURE.md",
+      "bytes": 4549,
+      "sha256": "sha256:0a9f4f872dcdaee4e0a5689ac1eaf9cbaf6b692177e2d6e510ee534a21a10a23"
+    },
+    {
+      "path": "PROGRAM_CHARTER.md",
+      "bytes": 3769,
+      "sha256": "sha256:c9e76677836368d3496460c0d15cf212702869c6d13422bb04b43ce46b92e754"
+    },
+    {
+      "path": "PROMPT_V5_BOOTSTRAP.txt",
+      "bytes": 4360,
+      "sha256": "sha256:0b633a4377e0c0f16f13bcf8d5e5528f75de59cf508909160d3407d3b888f7f0"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3975,
+      "sha256": "sha256:77c4cce7595df2aaa067a6987a7f1cd36a3be183622a3a49943d4d432ec4771c"
+    },
+    {
+      "path": "REFERENCES.md",
+      "bytes": 2119,
+      "sha256": "sha256:c49f07427b6b6231c06c2600ef77d82071ed0301512a6b1b56468614be13480b"
+    },
+    {
+      "path": "RISK_REGISTER.md",
+      "bytes": 3214,
+      "sha256": "sha256:90d798bb422bd65377b80189cd3e035f2fcfe7d636f3620890755b8ddde0868a"
+    },
+    {
+      "path": "SAFETY_BOUNDARIES.md",
+      "bytes": 4114,
+      "sha256": "sha256:34be236706076ed1dccec0f3c6ea8fbeb3a6ddcffcd4c864ee278853a8132ffb"
+    },
+    {
+      "path": "TASK_000_BOOTSTRAP.md",
+      "bytes": 3994,
+      "sha256": "sha256:4f6f62abd71b2e330a574dd2b7e8fa8632b668b8470670f5058d0e458b6f917c"
+    },
+    {
+      "path": "TRAINING_CONTRACT.md",
+      "bytes": 4914,
+      "sha256": "sha256:06c11f389bc6104a246bba82f621b17eeda8252c47244fdfbca96e93c1e2c163"
+    },
+    {
+      "path": "configs/eval_suite_1v1_v1.yaml",
+      "bytes": 1323,
+      "sha256": "sha256:6319ba01b889aba09fc0bf463388c20c00decd27555bab60b7fb44bae7bc775c"
+    },
+    {
+      "path": "configs/program_v1.yaml",
+      "bytes": 1871,
+      "sha256": "sha256:34e75881d79f4aef78b34c1b2b76624c6fc4b2c2001af9ef744af43634fefdb2"
+    },
+    {
+      "path": "configs/run_smoke_v1.yaml",
+      "bytes": 692,
+      "sha256": "sha256:4379e4f373213c346ade3555a0b13395a7bd3edfb6f28af10779d8d44d6c14b2"
+    },
+    {
+      "path": "schemas/evaluation_report.schema.json",
+      "bytes": 4743,
+      "sha256": "sha256:b642d97c64415c9b3f90a5f12674b1e9aaccce886fef45b2a505b8e30b6574ae"
+    },
+    {
+      "path": "schemas/run_manifest.schema.json",
+      "bytes": 5070,
+      "sha256": "sha256:eead441372328abaac87d3d48edced67ee812cf4431529b89c552e550ddf013b"
+    }
+  ]
+}

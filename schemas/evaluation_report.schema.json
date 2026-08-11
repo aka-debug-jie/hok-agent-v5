@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/evaluation_report.schema.json",
+  "title": "HoK-Agent V5 Evaluation Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_id",
+    "created_at_utc",
+    "suite",
+    "checkpoint",
+    "environment",
+    "episodes",
+    "metrics",
+    "engineering",
+    "gate",
+    "disposition",
+    "safety"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "config_hash"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer"
+        },
+        "config_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "training_run_id",
+        "frozen_before_eval"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "training_run_id": {
+          "type": "string"
+        },
+        "frozen_before_eval": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "kind",
+        "identity_hash"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "authorized_hok_gamecore",
+            "mock",
+            "pixelarena",
+            "mini_research_env"
+          ]
+        },
+        "identity_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "episodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "completed",
+        "details_artifact"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "completed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "details_artifact": {
+          "type": "string"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "engineering": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_errors",
+        "action_decode_errors",
+        "illegal_executed_actions",
+        "replay_errors",
+        "nonfinite_events"
+      ],
+      "properties": {
+        "protocol_errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "action_decode_errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "illegal_executed_actions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "replay_errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nonfinite_events": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "pass",
+        "checks"
+      ],
+      "properties": {
+        "pass": {
+          "type": "boolean"
+        },
+        "checks": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "primary_failure_category": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "secondary_evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "disposition": {
+      "enum": [
+        "PROMOTED_ACTIVE",
+        "REJECTED_CAPABILITY_OR_REGRESSION",
+        "INVALID_ROLLBACK",
+        "DIAGNOSTIC_ONLY"
+      ]
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commercial_client_actions_used",
+        "privileged_state_enters_actor"
+      ],
+      "properties": {
+        "commercial_client_actions_used": {
+          "type": "boolean",
+          "const": false
+        },
+        "privileged_state_enters_actor": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "report_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

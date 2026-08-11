@@ -1,0 +1,52 @@
+suite:
+  id: eval-suite-1v1-v1
+  version: 1
+  formal_promotion_suite: true
+  mode: "1v1"
+  environment_kind: authorized_hok_gamecore
+
+cohort:
+  hero: "${HOK_MVP_HERO}"
+  opponents:
+    - id: common_ai_primary
+      weight: 0.5
+    - id: active_or_historical_secondary
+      weight: 0.5
+  sides:
+    - id: camp_0
+      episodes: 100
+      seed_start: 200000
+    - id: camp_1
+      episodes: 100
+      seed_start: 200100
+  total_episodes: 200
+  training_seed_overlap_permitted: false
+  checkpoint_frozen_before_eval: true
+
+metrics:
+  report_wilson_interval: true
+  report_by_side: true
+  report_by_opponent: true
+  report_action_distribution: true
+  report_objective_progress: true
+  report_engineering_errors: true
+
+promotion:
+  overall_win_rate_minimum: 0.70
+  each_side_win_rate_minimum: 0.60
+  complete_episode_rate_minimum: 0.99
+  protocol_errors_maximum: 0
+  action_decode_errors_maximum: 0
+  illegal_executed_actions_maximum: 0
+  replay_errors_maximum: 0
+  hero_structure_or_crystal_damage_required: true
+  dominant_active_action_share_maximum: 0.90
+  independent_training_seed_passes_minimum: 2
+  independent_training_seed_count: 3
+  results_may_tune_reward: false
+  results_may_select_training_update: false
+
+disposition:
+  pass: PROMOTED_ACTIVE
+  fail: REJECTED_CAPABILITY_OR_REGRESSION
+  invalid: INVALID_ROLLBACK
