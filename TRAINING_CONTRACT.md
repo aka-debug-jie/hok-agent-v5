@@ -3,11 +3,12 @@
 ## 1. 总原则
 
 ```text
-环境先可用
+PixelArena-Structured 规则与吞吐先通过
+→ scripted baseline/dataset 审计
 → BC 建立可玩初始化
 → on-policy PPO 学会赢
 → opponent league 提升稳健性
-→ 多英雄
+→ 多原型
 → 3v3
 → 视觉蒸馏
 ```
@@ -30,11 +31,10 @@
 
 ### 3.1 数据
 
-来源：
+M2 初始来源：
 
-- common AI；
-- 官方/授权 teacher；
-- 规则基线；
+- PixelArena scripted teacher；
+- 项目内规则基线；
 - 已通过的 league policy；
 - 完整胜局和失败局。
 
@@ -123,16 +123,16 @@ promotion 由固定 curriculum evaluator 决定。
 - 总和可复算；
 - 终局胜负优先级最高；
 - 塔/水晶优先于纯英雄伤害；
-- 小兵自然推进不能被误记为 hero 可归因能力；
+- 小兵自然推进不能被误记为 Agent 可归因能力；
 - 训练 reward 不作为 checkpoint 唯一晋升指标；
 - 不根据正式 eval 结果反调 reward。
 
 固定审计策略：
 
-- random；
+- deterministic random；
 - NULL/idle；
-- common AI；
-- winning teacher；
+- PixelArena scripted teacher；
+- 已通过的 winning policy；
 - active candidate。
 
 若 NULL 获得高结构正奖励，reward 设计直接 No-Go。
@@ -141,7 +141,7 @@ promotion 由固定 curriculum evaluator 决定。
 
 对手池：
 
-- common AI；
+- PixelArena scripted baseline；
 - current；
 - best；
 - recent historical；
@@ -151,7 +151,7 @@ promotion 由固定 curriculum evaluator 决定。
 每个 checkpoint 保存：
 
 - policy identity；
-- hero set；
+- archetype set；
 - training opponents；
 - Elo；
 - evaluation report；
@@ -159,16 +159,16 @@ promotion 由固定 curriculum evaluator 决定。
 
 不得删除导致 current 失败的历史对手。
 
-## 8. 多英雄
+## 8. 多原型
 
 阶段顺序：
 
-1. 单英雄通过；
-2. 同 archetype 2–3 英雄；
+1. 单原型通过；
+2. 同 family 2–3 原型；
 3. 不同 archetype；
-4. 扩大英雄池。
+4. 扩大原型池。
 
-每次扩展必须运行旧英雄 retention suite。
+每次扩展必须运行旧原型 retention suite。
 
 ## 9. 3v3
 
@@ -224,8 +224,16 @@ promotion 由固定 curriculum evaluator 决定。
 1. 环境并行；
 2. 小型 structured recurrent policy；
 3. BC/PPO；
-4. 多英雄共享；
+4. 多原型共享；
 5. 3v3；
 6. 视觉模型。
 
 环境吞吐未测前，不承诺总训练步数和完成时间。
+
+## 14. 环境与 claim 限定
+
+- 当前所有训练只允许在通过对应门的 PixelArena ruleset 中进行；
+- checkpoint registry 强制绑定 `claim_scope=pixelarena_internal` 和 ruleset major；
+- mock 不得训练或晋升；
+- 可选 GameCore 若未来启用，使用新的独立训练/评测任务，不能直接继承 PixelArena active；
+- 真实客户端视频不用于 online exploration、reward-driven adaptation 或策略闭环。

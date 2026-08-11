@@ -1,7 +1,7 @@
 # 参考资料
 
 > 核验日期：2026-08-11。  
-> 外部环境会更新，真正实施前应重新检查 upstream README、license 和文档。
+> GameCore 当前不是主线依赖。以下外部资料只服务于未来可选校准轨或研究背景，不表示项目已授权、接通或需要等待它们。
 
 ## 1. Tencent Honor of Kings AI Open Environment
 
@@ -29,7 +29,7 @@ Hua Wei et al.
 NeurIPS Datasets and Benchmarks 2022.  
 https://arxiv.org/abs/2209.08483
 
-用途：
+研究背景用途：
 
 - 环境、observation/action/reward 设计；
 - 英雄和对手泛化；
@@ -66,4 +66,4 @@ https://arxiv.org/abs/2011.12582
 
 - https://github.com/aka-debug-jie/pixel-moba-codex-starter
 
-仅作历史证据、工程模块参考和 PixelArena test double 来源。
+仅作只读历史证据和工程模式参考。V5 重新实现自己的 PixelArena ruleset，不复制旧 runtime、模型、K96、配置或能力结论。

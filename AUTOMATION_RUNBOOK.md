@@ -29,13 +29,13 @@ PROMOTION_EVAL
   └─ INVALID_ROLLBACK
 ```
 
-外部环境缺失：
+可选 GameCore 轨缺失：
 
 ```text
-PREFLIGHT → WAITING_EXTERNAL
+OPTIONAL_EXTERNAL_PREFLIGHT → NOT_AVAILABLE|WAITING_EXTERNAL
 ```
 
-TASK-005 处于 `WAITING_EXTERNAL` 时，仅可运行 mock、schema、preflight 与安全检查；任何未来的 GameCore transport、formal evaluation 或 promotion 入口都必须先调用同一外部访问 gate。`access-gate` 只检查本地控制面，绝不连接服务；当前配置必须拒绝三类敏感操作。
+这不改变 PixelArena 主状态机。PixelArena 的每个阶段由 ruleset、dataset、mini/full 和 scoped promotion 门控制。任何未来 GameCore transport/evaluation/promotion 入口都必须先调用同一可选外部访问 gate；`access-gate` 只检查该外部轨并绝不连接服务。
 
 ## 3. 组件
 
@@ -82,7 +82,7 @@ TASK-005 处于 `WAITING_EXTERNAL` 时，仅可运行 mock、schema、preflight 
 ## 4. 建议 CLI
 
 ```text
-python -m hok_agent preflight
+python -m hok_agent preflight  # optional GameCore track only
 python -m hok_agent validate-config
 python -m hok_agent package-integrity
 python -m hok_agent access-gate --operation gamecore_transport --runtime-license-status valid
@@ -90,6 +90,8 @@ python -m hok_agent env-smoke --config configs/run_smoke_v1.yaml
 python -m hok_agent env-benchmark
 python -m hok_agent mock-replay-record --output /tmp/mock_public_replay.json
 python -m hok_agent mock-replay-verify /tmp/mock_public_replay.json
+python -m hok_agent pixelarena-smoke
+python -m hok_agent pixelarena-benchmark
 python -m hok_agent collect-bc
 python -m hok_agent train-bc
 python -m hok_agent train-ppo
@@ -114,32 +116,33 @@ python -m hok_agent verify-artifact <path>
 - safety/secret scan；
 - legacy freeze记录。
 
-### Day 4–7
+### TASK-010 / M1
 
-- upstream repo/version preflight；
-- GameCore license/binary检查；
-- Python 3.8 service skeleton；
+- scoped evidence schema；
+- PixelArena-Structured ruleset/service；
 - RPC health/reset/step/close；
-- mock integration；
-- 若真实环境可用，跑通一个完整 episode。
+- public/privileged projection；
+- replay/snapshot 和一个完整 episode。
 
-### Day 8–10
+### TASK-010 关闭门
 
 - 规范化 observation/action adapter；
-- random/common-AI baseline；
+- NULL/random/scripted baseline；
 - replay index；
 - throughput benchmark；
 - 100-episode stability准备。
 
-### Day 11–14
+### TASK-020/030 前置
 
 - V5-Actor-1 skeleton；
 - factorized action/log-prob tests；
 - BC dataset contract；
-- common-AI collection mini；
+- scripted-teacher collection mini；
 - 32-sample overfit；
 - BC闭环 smoke；
 - 不在两周内承诺长 PPO。
+
+以上是依赖顺序，不是完成时间承诺。只有前一任务报告通过后才进入下一任务。
 
 ## 6. 长作业规则
 

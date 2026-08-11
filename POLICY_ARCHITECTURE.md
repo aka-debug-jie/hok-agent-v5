@@ -9,7 +9,7 @@ V5 的策略必须：
 - 支持多实体和目标注意力；
 - 直接建模因子化动作；
 - 不依赖 K96 作为硬候选瓶颈；
-- 能扩展到多英雄和 3v3；
+- 能扩展到多原型和 3v3；
 - 能被 RGB/public belief student 蒸馏。
 
 ## 2. V5-Actor-1
@@ -20,7 +20,7 @@ Public Observation
   ├─ scalar/economy encoder
   ├─ entity set encoder
   ├─ map/global encoder
-  ├─ hero/side embedding
+  ├─ archetype/side embedding
   └─ previous action encoder
              │
              ▼
@@ -156,24 +156,24 @@ BC 和 PPO 不得分别实现两套 action decode。
 - 将 teacher action 注入 debug list；
 - 把 debug list 作为部署动作空间。
 
-## 10. 多英雄扩展
+## 10. 多原型扩展
 
 采用：
 
 - shared encoder；
-- hero embedding；
-- hero-specific action availability adapter；
+- archetype embedding；
+- archetype-specific action availability adapter；
 - shared recurrent core；
-- 必要时 small hero-specific output adapters。
+- 必要时 small archetype-specific output adapters。
 
-优先验证参数共享，再考虑按英雄独立模型。
+优先验证参数共享，再考虑按原型独立模型。
 
 ## 11. 3v3 扩展
 
 Actor：
 
-- 同一参数共享给多个受控英雄；
-- 每个 hero 独立 hidden；
+- 同一参数共享给多个受控角色；
+- 每个角色独立 hidden；
 - public teammate features可见；
 - role embedding。
 

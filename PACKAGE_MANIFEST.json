@@ -11,54 +11,54 @@
       "sha256": "sha256:a024690635733ad874dee4a82a030e3891e42c73d269afa9c50bb4998a3f6ddf"
     },
     {
-      "bytes": 4326,
+      "bytes": 4916,
       "path": "AGENTS.md",
-      "sha256": "sha256:f103fa68a79c254e9ae730feb0fa030add0f7cdc49ef3c368bd9e8215b04da6a"
+      "sha256": "sha256:9e4b811de2ad9d0297313694ae3200d442d9fff6fa0f98dc1b254da4df2be325"
     },
     {
-      "bytes": 4645,
+      "bytes": 4878,
       "path": "AUTOMATION_RUNBOOK.md",
-      "sha256": "sha256:448edc8545d187f92866917e14faca8ae7d5d1aac6017cc170892a90ddf58533"
+      "sha256": "sha256:9f87d7f9c3762c5209f5b885681105727d56e0604d2019842ffc6af389bb9ec0"
     },
     {
-      "bytes": 4853,
+      "bytes": 1922,
       "path": "CODEX_START_PROMPT.md",
-      "sha256": "sha256:a52f49267910b9d3d865e65cd740d9cc75d392cfff5c820c5ce8aef04625c4fa"
+      "sha256": "sha256:d30743ea29b7481d0ec77c60a73618da805890a21eac901a1691ff4a72644305"
     },
     {
-      "bytes": 5637,
+      "bytes": 6381,
       "path": "DATA_AND_ARTIFACT_CONTRACT.md",
-      "sha256": "sha256:8683197a3dfcf0738d1b29f46ab1b919b161a5035a48933c1360197d518432bf"
+      "sha256": "sha256:ac4db40869baec048512ed74f9a6008e072eb9097c772e868826b5fc22bdc9be"
     },
     {
-      "bytes": 1064,
+      "bytes": 2105,
       "path": "DECISION_LOG.md",
-      "sha256": "sha256:fc0cc9606ceefcc607111d1073624d13c930bfad7d1ae2dd4030ba3415f7ce15"
+      "sha256": "sha256:a686c84ce0f984fef05bb2da73975dfea6ff042a0b192e4152f20aa9db771812"
     },
     {
-      "bytes": 17837,
+      "bytes": 22439,
       "path": "DELIVERY_PROGRESS.md",
-      "sha256": "sha256:97502481693a3e93e3b302033834843cb305ff5db179fd27a7ee72d0cb19e49f"
+      "sha256": "sha256:76f72ac63339bebbc7e5d20083a7598e1330ff358037993f88b07e7ec8d89add"
     },
     {
-      "bytes": 7047,
+      "bytes": 7856,
       "path": "ENVIRONMENT_CONTRACT.md",
-      "sha256": "sha256:01c309cad9376102bac15fd93e39a5253fb2f7df51df9f6a5e61bc7383073109"
+      "sha256": "sha256:3e047a85ee4bb193cbde687806458c3f6934d703d38fb326f61af5032de33d41"
     },
     {
-      "bytes": 4923,
+      "bytes": 5865,
       "path": "EVALUATION_PROMOTION.md",
-      "sha256": "sha256:1d6562f7eadf15894d946f6d8bbcf40a906c32462293e94754e362945cf1772c"
+      "sha256": "sha256:b20e689a86db30e9bb01ee00a4e83bd7329b6f28530981047502e3c30b39705f"
     },
     {
-      "bytes": 2630,
+      "bytes": 2928,
       "path": "LEGACY_MIGRATION_PLAN.md",
-      "sha256": "sha256:4d89f434e2c550e1de7e2e948867a9d2f166b629ff3445a461ce30d940534c28"
+      "sha256": "sha256:4df104cdc088a9fc7c75636ec10203ad9f66e2d7edb69982aa95741ec2595bd3"
     },
     {
-      "bytes": 8070,
+      "bytes": 10331,
       "path": "MILESTONES.md",
-      "sha256": "sha256:4f722e44f19238bd447bdaf1850016010fa2c8527996ddceb452671056af2700"
+      "sha256": "sha256:6429fdea2a94183bf9a6b72db7e598247aba034b259424334c1424a20e935622"
     },
     {
       "bytes": 851,
@@ -66,69 +66,89 @@
       "sha256": "sha256:0e4da122767f023f8a47c31460177aea182ee7ea3286adf436b2837332bc2c0b"
     },
     {
-      "bytes": 4549,
+      "bytes": 4569,
       "path": "POLICY_ARCHITECTURE.md",
-      "sha256": "sha256:0a9f4f872dcdaee4e0a5689ac1eaf9cbaf6b692177e2d6e510ee534a21a10a23"
+      "sha256": "sha256:8b4680c60ef6a1b5aabe68bcc00e3580ef8c58d9004c6706e119c662d10f8275"
     },
     {
-      "bytes": 3769,
+      "bytes": 4246,
       "path": "PROGRAM_CHARTER.md",
-      "sha256": "sha256:c9e76677836368d3496460c0d15cf212702869c6d13422bb04b43ce46b92e754"
+      "sha256": "sha256:2289606b6c18a092fac53072a328e64489b6e9d7dfa78fbdb72974866e0f56eb"
     },
     {
-      "bytes": 4360,
+      "bytes": 1518,
       "path": "PROMPT_V5_BOOTSTRAP.txt",
-      "sha256": "sha256:0b633a4377e0c0f16f13bcf8d5e5528f75de59cf508909160d3407d3b888f7f0"
+      "sha256": "sha256:ee77f6f2d54853be335c33b12c7e596bf503cc83523f8cd93ba6beaa925d3d00"
     },
     {
-      "bytes": 5616,
+      "bytes": 5960,
       "path": "README.md",
-      "sha256": "sha256:82f19b097bcecdced4b16a09ec54f7d7db8b0e366cd7c6070aa51da219debee6"
+      "sha256": "sha256:86433a1017e8e512495529ba428dbea72bbf19a1ea7ca9a8b25c437e386d2ba9"
     },
     {
-      "bytes": 2119,
+      "bytes": 2281,
       "path": "REFERENCES.md",
-      "sha256": "sha256:c49f07427b6b6231c06c2600ef77d82071ed0301512a6b1b56468614be13480b"
+      "sha256": "sha256:0f4c24e4cb3358f2340628ab0bb5abd6564770c3a419b5361aea318832c7e78b"
     },
     {
-      "bytes": 3214,
+      "bytes": 3420,
       "path": "RISK_REGISTER.md",
-      "sha256": "sha256:90d798bb422bd65377b80189cd3e035f2fcfe7d636f3620890755b8ddde0868a"
+      "sha256": "sha256:8add9563a282d2326df0efc130e8fbf44bbfe936bf59bc26fac1e6564490c49a"
     },
     {
-      "bytes": 4114,
+      "bytes": 7066,
+      "path": "ROUTE_NO_GAMECORE_V1.md",
+      "sha256": "sha256:a63c07ddc7d02b9c81321ed0bbdcd9ad03f58bffdf1bcd48a5deda51c6c94345"
+    },
+    {
+      "bytes": 4711,
       "path": "SAFETY_BOUNDARIES.md",
-      "sha256": "sha256:34be236706076ed1dccec0f3c6ea8fbeb3a6ddcffcd4c864ee278853a8132ffb"
+      "sha256": "sha256:92ee07b157d5e1513f70d6d28afa1690570bdf8956b2e06319bf605f06a4b412"
     },
     {
-      "bytes": 3994,
+      "bytes": 4167,
       "path": "TASK_000_BOOTSTRAP.md",
-      "sha256": "sha256:4f6f62abd71b2e330a574dd2b7e8fa8632b668b8470670f5058d0e458b6f917c"
+      "sha256": "sha256:36db8644ef1e7b7d1e90a2fe8d66dcde270a1468560d0b963029eb7cf2d2d611"
     },
     {
-      "bytes": 3302,
+      "bytes": 3443,
       "path": "TASK_005_EXTERNAL_ACCESS_WAITING.md",
-      "sha256": "sha256:eadb9daa16e13ee472b2ea5db555ab27052ecd18d6fdb984198d834b8e766de6"
+      "sha256": "sha256:6f4f602429eb876e38c983f439e88fc8b4f5e534d66ab472c485d2b1ba3efbf9"
     },
     {
-      "bytes": 1387,
+      "bytes": 1534,
       "path": "TASK_005_MOCK_REPLAY_01.md",
-      "sha256": "sha256:e250782922b8918cb03dd51f8aba098177ab61a290b3b8350dde7e598e95ef62"
+      "sha256": "sha256:e6dcd81cc24cee016c3fca0d484f3c0518b0704316c34dee41fba3bd000a013d"
     },
     {
-      "bytes": 4914,
+      "bytes": 1334,
+      "path": "TASK_006_NO_GAMECORE_ROUTE_RESET.md",
+      "sha256": "sha256:98fd83f31fa4c0edb0d49e0d9c4b3625ffa87aac1124faaf5c4a6644d9501b3e"
+    },
+    {
+      "bytes": 3223,
+      "path": "TASK_010_PIXELARENA_STRUCTURED_FOUNDATION.md",
+      "sha256": "sha256:d7bd0c05f9527e530ba8fb1d2af690482db5fbbe60cbc50a885cfa0e85f75051"
+    },
+    {
+      "bytes": 5508,
       "path": "TRAINING_CONTRACT.md",
-      "sha256": "sha256:06c11f389bc6104a246bba82f621b17eeda8252c47244fdfbca96e93c1e2c163"
+      "sha256": "sha256:f20ba01f58da05a098f7b252f04af903de77f6b0cfe55a3dfab32f224f130a60"
     },
     {
-      "bytes": 1453,
+      "bytes": 1811,
       "path": "configs/eval_suite_1v1_v1.yaml",
-      "sha256": "sha256:0817b3b48054273e82705201ed4105c9573f6d42b115d25687bdf48484dc58b5"
+      "sha256": "sha256:c55e41381df062deb07bc00b633da0009d1b1b658434c8ae2543dbd5a51fe298"
     },
     {
-      "bytes": 2087,
+      "bytes": 745,
+      "path": "configs/pixelarena_local_v1.yaml",
+      "sha256": "sha256:5726767ef32ce47994b2e71e9a64726a65e019bf90a5274019b9ccb53f10f2d9"
+    },
+    {
+      "bytes": 3150,
       "path": "configs/program_v1.yaml",
-      "sha256": "sha256:00d783b9648f10ecca8f96685a9a1377593028cd5d216a5ff4ab2143cd3bf305"
+      "sha256": "sha256:c31563ade38e571b6ecd4245a69a3e5c9e284ca350dda86b9ae705626e172f11"
     },
     {
       "bytes": 704,
@@ -136,14 +156,14 @@
       "sha256": "sha256:3224744059e5bdfefa6915881e2526a7a55d6248e4565bc503c0c150bb1c3cd9"
     },
     {
-      "bytes": 358,
+      "bytes": 455,
       "path": "configs/runtime_inputs_v1.yaml",
-      "sha256": "sha256:90e09e6f1f570f6f3e7354422237bdb8e4179508488ed705f4dcf8aad6233ead"
+      "sha256": "sha256:6bb3a90f7930e45108a67b2983598afeed35c9280fe7413bbd9f2360d08324db"
     },
     {
-      "bytes": 1007,
+      "bytes": 988,
       "path": "pyproject.toml",
-      "sha256": "sha256:4ed1d46db66077145165b3bc449af4037c853e3d8699c15767d0f8c19b4be103"
+      "sha256": "sha256:f2e1407aa023debc1fd86715c35a76a5e03e580ba517e93e473a6988bd9a874c"
     },
     {
       "bytes": 5997,
@@ -171,14 +191,14 @@
       "sha256": "sha256:1b52453b9f7a04ff8148b0ad4030c4d686c3beab651aedf84c32e6fc370601c0"
     },
     {
-      "bytes": 577,
+      "bytes": 616,
       "path": "services/hok_gamecore/README.md",
-      "sha256": "sha256:64aeee5dc2fedfc98169d96c2ab42be8b09dea44358ed854091627aeb7dd4b79"
+      "sha256": "sha256:3f6c0ee755f45dab22ba41dede25ab80e88d04ec65a65164210ed163d02431ef"
     },
     {
-      "bytes": 349,
+      "bytes": 458,
       "path": "services/hok_gamecore/protocol/README.md",
-      "sha256": "sha256:aa7d21a505039b08e9d1b68f46d6ed286caca8316c2e80b21718897895eff8b0"
+      "sha256": "sha256:28ba0677a34270916bca6485b660e38078270a04bea73ca028f20c601650e506"
     },
     {
       "bytes": 463,
@@ -221,9 +241,9 @@
       "sha256": "sha256:153b1d6146f1fc79b91ceb2c7faea055ef84223456ca226d3ea82cb3afe599de"
     },
     {
-      "bytes": 5453,
+      "bytes": 6136,
       "path": "src/hok_agent/control_plane.py",
-      "sha256": "sha256:ce581c9c464385036ad3a6b361f547f2a662f57b0c3656ece4ecc6bbd8744ff0"
+      "sha256": "sha256:f5bfeea95d5409d7ee00022f2ffb8c84f009532c47c56bb63972b537158527a3"
     },
     {
       "bytes": 418,
@@ -266,9 +286,9 @@
       "sha256": "sha256:637c4dd4ebb8a323588232becf7a6abe43ad5a84567083b09943dc25f1f17419"
     },
     {
-      "bytes": 11132,
+      "bytes": 11124,
       "path": "src/hok_agent/package_integrity.py",
-      "sha256": "sha256:49c1f985ab0e80c241322d26003632481f273713144498532a88e03bc6014cfa"
+      "sha256": "sha256:da026b8ab47a83025c86f7174fb569106e6e400c91b71c5e89dd5f95c5678d35"
     },
     {
       "bytes": 8430,
@@ -291,9 +311,9 @@
       "sha256": "sha256:346030547c3d7e923103ccbbfc7d1bb8c7c42f27a708064b867c87462df220de"
     },
     {
-      "bytes": 796,
+      "bytes": 818,
       "path": "tests/test_access_gate_cli.py",
-      "sha256": "sha256:09863d60d65c534006427cbe039d3908badc7127cf893632778d749d0184b7be"
+      "sha256": "sha256:2d326489361386a0573e53e314538f730e2dba1500acda1754a7e0e83f14c703"
     },
     {
       "bytes": 614,
@@ -366,12 +386,12 @@
       "sha256": "sha256:0374b6ff40dc282d28be702fdb8107fbce05fae0188ccbef6c7b2fd7a038525e"
     },
     {
-      "bytes": 6632,
+      "bytes": 10371,
       "path": "tests/test_task005_control_plane.py",
-      "sha256": "sha256:46ac22dd82be17bc000a08f311bdf3dc653a871fe4d01373062643478ef28063"
+      "sha256": "sha256:1b5fccb1c13309be8dd166bcd1a7220dcc710ee17afefcdfdb8692cafc7a1fdd"
     }
   ],
   "manifest_version": "1",
-  "package": "hok-agent-v5-starter",
-  "self_hash": "sha256:0f6605a1854d62ed0948e13f5af26a61ec234a683d30e118bd062db18951c3ed"
+  "package": "hok-agent-v5",
+  "self_hash": "sha256:24d1ae412eafe4ebb867e776b45f95baaaf0ff732bb6dbbf571e7a9014f9d30e"
 }

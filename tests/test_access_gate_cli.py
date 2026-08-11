@@ -10,7 +10,10 @@ from hok_agent.cli import main
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize("operation", ["gamecore_transport", "formal_evaluation", "promotion"])
+@pytest.mark.parametrize(
+    "operation",
+    ["gamecore_transport", "gamecore_evaluation", "gamecore_promotion"],
+)
 def test_access_gate_cli_refuses_runtime_valid_gamecore_while_waiting_external(
     capsys: CaptureFixture[str], operation: str
 ) -> None:

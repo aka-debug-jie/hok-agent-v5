@@ -1,8 +1,10 @@
-# HoK-Agent V5 启动包
+# HoK-Agent V5 — PixelArena MOBA Research Agent
 
-> 版本：`v5.0-bootstrap-1`  
-> 日期：`2026-08-11`  
-> 目标：从 Pixel-MOBA v4.x 的局部补丁链迁移到“官方/授权 GameCore 中先学会赢，再进行视觉蒸馏”的可持续路线。
+> 路线：`pixelarena-local-v1`
+> 日期：`2026-08-11`
+> 目标：在项目自有 PixelArena 中先建立可复核的结构化策略，再扩展到 3v3、RGB-only 闭环和真实客户端只读教练。
+
+本项目已确认没有 GameCore。GameCore 不是主线依赖，只保留为未来默认关闭的可选外部校准轨；当前工作不等待许可证或二进制。
 
 ## 1. 本启动包解决什么问题
 
@@ -10,7 +12,7 @@
 
 V5 将问题拆成三条可独立验收的路线：
 
-1. **Strategy Track**：在腾讯授权的 Honor of Kings GameCore 或兼容研究环境中，先训练能够完成完整对局的结构化策略。
+1. **Strategy Track**：在 PixelArena-Structured 中训练能够完成完整对局的结构化策略。
 2. **Vision Track**：把画面转换成 public belief state，再蒸馏已会获胜的策略。
 3. **Shadow Track**：真实商业客户端只读，输出 Linux 端建议、分析和复盘，不发送动作。
 
@@ -23,13 +25,14 @@ V5 将问题拆成三条可独立验收的路线：
 3. `SAFETY_BOUNDARIES.md`
 4. `DELIVERY_PROGRESS.md`
 5. `MILESTONES.md`
-6. `ENVIRONMENT_CONTRACT.md`
-7. `POLICY_ARCHITECTURE.md`
-8. `TRAINING_CONTRACT.md`
-9. `EVALUATION_PROMOTION.md`
-10. `DATA_AND_ARTIFACT_CONTRACT.md`
-11. `AUTOMATION_RUNBOOK.md`
-12. `TASK_000_BOOTSTRAP.md`
+6. `ROUTE_NO_GAMECORE_V1.md`
+7. `ENVIRONMENT_CONTRACT.md`
+8. `POLICY_ARCHITECTURE.md`
+9. `TRAINING_CONTRACT.md`
+10. `EVALUATION_PROMOTION.md`
+11. `DATA_AND_ARTIFACT_CONTRACT.md`
+12. `AUTOMATION_RUNBOOK.md`
+13. `DELIVERY_PROGRESS.md` 指定的当前任务文件
 
 其中：
 
@@ -48,7 +51,8 @@ V5 将问题拆成三条可独立验收的路线：
 | `SAFETY_BOUNDARIES.md` | 商业客户端、授权环境、数据和特权信息边界 |
 | `DELIVERY_PROGRESS.md` | 当前任务与状态台账 |
 | `MILESTONES.md` | M0–M8 阶段与硬门 |
-| `ENVIRONMENT_CONTRACT.md` | GameCore 服务、RPC、环境和重放合同 |
+| `ROUTE_NO_GAMECORE_V1.md` | 当前无 GameCore 主路线、claim scope 与任务图 |
+| `ENVIRONMENT_CONTRACT.md` | PixelArena 服务、RPC、环境和重放合同 |
 | `POLICY_ARCHITECTURE.md` | 不依赖 K96 硬筛选的因子化策略架构 |
 | `TRAINING_CONTRACT.md` | BC、PPO、自博弈、MAPPO、蒸馏训练合同 |
 | `EVALUATION_PROMOTION.md` | 评测、checkpoint 晋升和回滚 |
@@ -56,7 +60,8 @@ V5 将问题拆成三条可独立验收的路线：
 | `AUTOMATION_RUNBOOK.md` | 自动化状态机、前两周执行顺序 |
 | `LEGACY_MIGRATION_PLAN.md` | Pixel-MOBA v4.x 冻结和迁移方案 |
 | `RISK_REGISTER.md` | 风险、触发器和止损规则 |
-| `TASK_000_BOOTSTRAP.md` | 第一个可直接实施的任务 |
+| `TASK_000_BOOTSTRAP.md` | 已完成的历史 bootstrap 任务 |
+| `TASK_010_PIXELARENA_STRUCTURED_FOUNDATION.md` | 当前可直接实施的 M1 任务 |
 | `CODEX_START_PROMPT.md` | 带解释的模型启动提示词 |
 | `PROMPT_V5_BOOTSTRAP.txt` | 可直接整段复制的纯提示词 |
 | `configs/*.yaml` | 项目、smoke 和 1v1 评测配置模板 |
@@ -65,18 +70,18 @@ V5 将问题拆成三条可独立验收的路线：
 
 ## 4. 最短启动路径
 
-1. 将本目录复制到一个**全新的仓库**，不要覆盖旧 Pixel-MOBA 仓库。
-2. 把 `DELIVERY_PROGRESS.md` 中的仓库路径和负责人占位符补全。
-3. 把 `PROMPT_V5_BOOTSTRAP.txt` 整段发给 Codex。
-4. 首先完成 `TASK_000_BOOTSTRAP.md`，不启动长训练。
-5. GameCore 许可证或二进制未获得时，状态必须是 `WAITING_EXTERNAL`；可以实现 mock adapter、RPC、schema 和基准框架，但不得伪造已接通官方环境。
+1. 从 `DELIVERY_PROGRESS.md` 确认当前任务。
+2. 当前实施 `TASK_010_PIXELARENA_STRUCTURED_FOUNDATION.md`，不启动训练。
+3. 先完成 scoped schema、ruleset、service、replay、baseline 和 M1 stability/throughput。
+4. 只有 M1 报告通过后才进入 dataset/BC；GameCore 缺失不阻塞这些步骤。
 
 ## 5. 核心原则
 
-- 先证明结构化策略能够赢，再训练视觉学生。
+- 先证明 PixelArena 结构化策略能够赢，再训练视觉学生。
 - checkpoint 只由闭环胜率、Elo、结构/水晶结果和安全指标晋升。
 - K96 可以保留为诊断视图，但不能再成为策略动作空间的硬信息瓶颈。
 - 真实商业客户端永远只读。
+- 所有结论必须绑定 claim scope、environment identity 和 ruleset；PixelArena 结果不是 HoK/GameCore 结果。
 - 每个失败都必须缩小问题空间，不能自动派生下一轮局部调参。
 
 ## 6. M0 可运行接口
@@ -101,6 +106,6 @@ artifact 基础设施；它们不构成任何 Honor of Kings 或 GameCore 能力
 
 `mock-replay-record`/`mock-replay-verify` 只处理内建 mock 的 public-only diagnostic trace：它保存因子化动作、tick、终局和公开 observation hash，并在新的 mock service process 中重放。它不保存 reward、legal mask、teacher、truth、privileged state 或内部 replay hash；不是训练 replay、formal evaluation 或 promotion 证据。
 
-`access-gate` 不连接服务。当前它会以 `WAITING_EXTERNAL` 拒绝 GameCore transport、formal evaluation 和 promotion；服务自报 `valid` 不是腾讯外部授权证明。
+`access-gate` 不连接服务。它只管理默认关闭的可选 GameCore 轨，并继续以 `WAITING_EXTERNAL` 拒绝 transport、GameCore evaluation 和 GameCore promotion；这不影响 PixelArena 主线。
 
-所有 V5 YAML 都遵循 legacy 的根级 `version` + 默认 `configs/` 路径约定。`preflight` 会自动读取 `configs/runtime_inputs_v1.yaml`，其中只保存非秘密环境变量名；路径、许可证和密钥值不进入 Git，也不会改变 control-plane 的 `WAITING_EXTERNAL` 锁。
+所有 V5 YAML 都遵循根级 `version` + 默认 `configs/` 路径约定。`preflight` 和 `configs/runtime_inputs_v1.yaml` 只属于可选 GameCore 轨；路径、许可证和密钥值不进入 Git，也不会改变 PixelArena 状态。

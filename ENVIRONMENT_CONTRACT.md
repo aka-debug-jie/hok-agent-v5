@@ -2,25 +2,26 @@
 
 ## 1. 环境权威
 
-V5 识别三类环境，但 TASK-005 当前只允许项目自有 `mock`。没有独立书面授权时，Tencent Mini、其他轻量研究环境与 GameCore 都是锁定的未来环境，不是 fallback。
+V5 使用四个相互隔离的环境范围。当前可执行主线是项目自有 PixelArena；GameCore 不是 fallback 或依赖。
 
 | 环境 | 权威范围 |
 |---|---|
-| 授权 Honor of Kings GameCore / `hok_env` | 外部授权、非 Git 证据引用、运行时 valid license 与控制面解锁后，才是 1v1/3v3 策略能力与胜负权威 |
-| Tencent Mini 或其他轻量研究环境 | 未来单独授权的研究环境；不得用“其他”扩展当前权限 |
-| 项目自有 mock / PixelArena | mock 当前用于单元测试、RPC、CI 与诊断；未来 PixelArena 仅可用于 test double、counterfactual、视觉课程，均不可产生 HoK 能力或 promotion 结论 |
+| deterministic mock | 单元测试、RPC、CI 与诊断；永不产生策略能力或 promotion |
+| PixelArena-Structured | 指定 ruleset 的项目内部 1v1/3v3 训练、评测和 scoped promotion |
+| PixelArena-RGB | 指定 renderer 的感知、蒸馏与 RGB-only 项目内部闭环 |
+| 可选授权 Honor of Kings GameCore / `hok_env` | 未来独立授权后的外部校准；独立 registry，不阻塞或继承主线 |
 
-同一报告必须明确 `environment_kind`，不得合并不同环境的胜率。
+同一报告必须明确 environment family、identity、ruleset 与 `claim_scope`，不得合并不同环境或 ruleset major 的胜率。PixelArena 结果不得称为 HoK/GameCore 能力。
 
 ## 2. 进程隔离
 
-上游 `hok_env` 的运行版本约束可能与主训练栈不同，因此固定为服务化：
+PixelArena 和 learner 均使用 Python 3.11+，但仍以进程和 RPC 分离，确保环境与训练可独立复核：
 
 ```text
 ┌──────────────────────────────┐
-│ hok-gamecore-service         │
-│ Python 3.8 / upstream SDK    │
-│ Windows/WSL/Docker boundary  │
+│ pixelarena-service           │
+│ Python 3.11+ / V5 ruleset    │
+│ isolated local process       │
 └──────────────┬───────────────┘
                │ versioned RPC
 ┌──────────────▼───────────────┐
@@ -29,7 +30,7 @@ V5 识别三类环境，但 TASK-005 当前只允许项目自有 `mock`。没有
 └──────────────────────────────┘
 ```
 
-不得把旧版 SDK 直接安装进 learner 环境后长期耦合。任何未来 GameCore transport/service factory 都必须先通过本地外部访问 gate，才可创建 socket、进程或 SDK service；health 的 runtime license 读取只能发生在该本地 gate 之后。
+transport 与 contract 必须分离；learner 不直接读取环境内部状态。任何未来 GameCore transport/service factory 仍必须先通过可选外部访问 gate，才可创建 socket、进程或 SDK service；它不得复用 PixelArena registry。
 
 ## 3. RPC 最小接口
 
@@ -46,15 +47,17 @@ V5 识别三类环境，但 TASK-005 当前只允许项目自有 `mock`。没有
 ```json
 {
   "service_version": "string",
-  "environment_kind": "hok_gamecore|mock|pixelarena",
+  "environment_kind": "mock|pixelarena|hok_gamecore",
   "sdk_version": "string",
   "gamecore_build": "string|null",
-  "license_status": "valid|missing|invalid|unknown",
+  "license_status": "valid|missing|invalid|unknown|not_applicable",
   "supported_modes": ["1v1"],
   "supported_heroes": ["..."],
   "ready": true
 }
 ```
+
+当前 protocol v1 的 `supported_heroes`、`hero_config` 字段为已发布前的兼容名称。TASK-010 必须作显式协议版本决议，并在 PixelArena v2 使用原型语义；不得把这些字段解释为真实 HoK 英雄支持。
 
 ### 3.2 `Reset`
 
@@ -109,15 +112,15 @@ client 必须将 reset 的 `request_id` 和 step 的 `episode_id` 与本地请�
 
 ## 4. Observation 合同
 
-上游 observation 可以是扁平数组，但 adapter 必须保存：
+环境内部 observation 可以是扁平数组，但 adapter 必须保存：
 
-1. 原始 upstream observation；
-2. upstream feature names/version；
+1. 原始环境 observation（仅内部 replay/adapter 路径）；
+2. feature names/version；
 3. 规范化 public observation；
 4. optional privileged critic observation；
 5. mapping hash。
 
-不得仅保存无语义的向量而丢失 upstream schema identity。
+不得仅保存无语义的向量而丢失 schema identity。
 
 规范化 public observation建议包含：
 
@@ -158,14 +161,14 @@ P(macro)
 × P(direction/skill/item | selected branches)
 ```
 
-adapter 负责把因子化动作转换成 upstream action。
+adapter 负责把因子化动作转换成环境 executed action。
 
 ## 6. Legal action
 
-- upstream legal action 保留原始值和 mapping hash；
+- 环境 legal action 保留原始值和 mapping hash；
 - legal mask 只在动作采样/执行前使用；
 - Actor forward 不读取 legal mask；
-- action 被 mask 后仍必须记录 raw sample、masked sample 和最终 upstream action；
+- action 被 mask 后仍必须记录 raw sample、masked sample 和最终 executed action；
 - 任何 mapping 不确定时拒绝执行。
 
 ## 7. Reward 合同
@@ -183,7 +186,7 @@ adapter 负责把因子化动作转换成 upstream action。
 - death；
 - objective/resource；
 - time/step；
-- upstream raw reward；
+- environment raw reward；
 - shaped total。
 
 `shaped total` 必须等于命名分量求和。
@@ -216,7 +219,7 @@ legal action 在 record/replay 进程内瞬时用于 sampling/execution audit，
 
 ## 9. 吞吐 benchmark
 
-M1 必须测：
+M1 对 PixelArena-Structured 必须测：
 
 | 并行实例 | env-steps/s | episode/hour | p50 RPC | p95 RPC | CPU | RAM | GPU |
 |---:|---:|---:|---:|---:|---:|---:|---:|
@@ -227,19 +230,23 @@ M1 必须测：
 
 benchmark 中 policy 使用固定轻量随机/常数模型，避免把模型速度混入环境吞吐。
 
-## 10. 无许可证时的 fallback
+## 10. GameCore 缺失时的状态
 
-许可证或 GameCore 未获得时，只允许：
+GameCore 和许可证当前不存在。可选外部轨保持 `NOT_AVAILABLE`；本地主线继续允许：
 
-- 实现 mock service；
-- 实现 RPC；
-- 完成 schema/tests；
-- 使用项目自有 mock；未来自有 PixelArena 仍只能作 diagnostic test double；
-- 完成 learner 和 evaluator skeleton；
-- 记录申请/外部阻塞。
+- mock 基础设施；
+- 实现和测试项目自有 PixelArena ruleset/service；
+- 在相应里程碑解锁后开展 PixelArena 内部 BC/PPO/league/3v3 与 scoped promotion；
+- PixelArena-RGB 与真实客户端只读 Shadow；
+- 保留可选外部轨状态，不主动猜测或下载受限输入。
 
 禁止：
 
-- 把 mock/PixelArena 胜率称为 HoK GameCore 胜率；
-- 假设支持英雄和 action schema；
+- 把 mock 胜率用作任何策略能力；
+- 把 PixelArena 胜率称为 HoK/GameCore 胜率；
+- 假设 GameCore 支持英雄和 action schema；
 - 把网上二进制或许可证镜像进仓库。
+
+## 11. PixelArena identity 最低字段
+
+每个 PixelArena run 必须绑定：package/code hash、ruleset ID/version、map ID、tick rate、observation/action/reward schema、原型/lineup registry、max episode steps、seed registry 和 service version。像素 run 还必须绑定 renderer family/version。identity 任一变化都不得静默复用旧 active。

@@ -4,7 +4,7 @@
 
 ### 1.1 Strategy training
 
-来自授权 GameCore/研究环境：
+来自通过相应里程碑门的 PixelArena-Structured：
 
 - structured public observation；
 - optional privileged Critic state；
@@ -56,7 +56,7 @@
 - seed；
 - opponent；
 - side；
-- hero/lineup；
+- archetype/lineup；
 - source trajectory；
 - renderer family；
 - real session/clip。
@@ -97,7 +97,7 @@ artifacts/
 - git commit；
 - dirty state；
 - environment identity；
-- SDK/GameCore build；
+- environment/ruleset/service build；
 - config hash；
 - seed registry；
 - algorithm；
@@ -162,10 +162,10 @@ artifacts/
 - reward；
 - terminal；
 - outcome；
-- upstream replay/ABS identity；
+- environment replay identity；
 - optional observation hashes。
 
-若上游不能完全确定性重放，必须明确记录可重复层级，不能伪装为 exact。
+若环境不能完全确定性重放，必须明确记录可重复层级，不能伪装为 exact。
 
 ### 7.1 Mock public diagnostic trace（非 canonical replay）
 
@@ -266,3 +266,15 @@ license.dat
 - 不把 PixelArena胜率合并进 HoK胜率；
 - 不从文件名猜测事实；
 - 只有 schema-valid、自哈希报告才可作为自动 promotion 输入。
+
+## 13. Claim scope 与 registry
+
+所有非 E0 artifact 必须写明 claim scope、environment family/identity、ruleset ID/major 和 schema identity。PixelArena structured、PixelArena RGB、可选 GameCore 和真实 Shadow 使用不同 registry：
+
+- `pixelarena_internal` 可保存 candidate/active/best/retired；
+- `pixelarena_rgb_closed_loop` 绑定 renderer family；
+- `external_gamecore_calibration` 只有未来单独授权任务可产生；
+- `commercial_client_shadow` 只保存感知/advisor audit，不含策略 promotion；
+- mock 只保存 diagnostic artifact。
+
+跨 registry checkpoint 不得自动继承 active 状态，跨 environment/ruleset 的指标不得聚合成一个胜率。

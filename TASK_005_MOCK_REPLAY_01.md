@@ -1,5 +1,7 @@
 # TASK-005-MOCK-PUBLIC-TRACE-01
 
+> 历史已完成诊断切片。其 mock-only、non-formal 证据仍有效；“完成后回到全局 WAITING_EXTERNAL”的路线已由 D-004 取代。
+
 ## 状态
 
 - 阶段：`M1` 前置等待期
@@ -26,4 +28,4 @@
 
 ## 退出
 
-完成后仍回到 `TASK-005 EXTERNAL_ACCESS_WAITING`。只有 Git 外的外部授权、GameCore、license 和 service 方式齐全后才可进入 TASK-010。
+完成记录保留。当前主线直接进入新的 `TASK-010 PIXELARENA_STRUCTURED_FOUNDATION`；本 trace 不参与该环境的能力或 promotion。

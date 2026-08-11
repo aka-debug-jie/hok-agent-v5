@@ -1,5 +1,7 @@
 # TASK-000 — V5 仓库与环境接入骨架
 
+> 历史已完成任务。第 8 节记录的是当时的后续路线，已由 D-004 与 `ROUTE_NO_GAMECORE_V1.md` 取代；当前任务以 `DELIVERY_PROGRESS.md` 为准。
+
 ## 1. 状态
 
 - 任务：`TASK-000`

@@ -7,7 +7,7 @@
 | 环境 | 读取 | 自动动作 | 训练 | 允许用途 |
 |---|---:|---:|---:|---|
 | 腾讯明确授权的 GameCore/AI 开放环境 | 是 | 是 | 是 | 研究、训练、评测、回放 |
-| 项目自有 PixelArena/测试模拟器 | 是 | 是 | 是 | 单测、课程、视觉、counterfactual |
+| 项目自有 PixelArena | 是 | 是 | 是 | 项目内部 1v1/3v3 训练、评测、课程、视觉与 counterfactual |
 | 真实商业客户端/普通手机客户端 | 只读视频/回放 | **否** | 不做在线 RL | Shadow 建议、离线分析、感知评测 |
 | 商业服、排位、真人对局账号 | 只读观察也应谨慎 | **绝对禁止自动动作** | 否 | 不作为自动化测试场 |
 
@@ -33,9 +33,10 @@
 
 - `hok_env` SDK 的开源许可证不自动等于 GameCore 使用授权。
 - GameCore、ABS 工具、许可证文件和相关二进制必须按照腾讯提供的申请和条款使用。
-- 未获得明确授权时，项目状态必须是 `WAITING_EXTERNAL`。
+- 未获得明确授权时，可选 GameCore 轨必须是 `WAITING_EXTERNAL` 或 `NOT_AVAILABLE`；本地 PixelArena 主线不因此停止。
 - 不得在仓库中镜像或再分发受限 GameCore、许可证、私有资产或 replay 工具。
 - 上游条款与本边界冲突时，采用更严格的一方。
+- PixelArena 报告必须明确 `claim_scope=pixelarena_internal`，不得声明 HoK/GameCore 等价性。
 
 ## 4. 特权信息隔离
 
@@ -98,7 +99,7 @@
 
 ## 7. Fail-closed
 
-以下任一情况必须拒绝动作或停止研究环境 session：
+以下任一情况必须拒绝动作或停止对应研究环境 session：
 
 - 环境身份不匹配；
 - 许可证无效；
@@ -124,3 +125,10 @@
 - artifact privacy test。
 
 任何安全门失败都不能通过降低测试、改名、删除扫描项或改成 warning 处理。
+
+## 9. 环境间隔离
+
+- mock、PixelArena、可选 GameCore 和真实 Shadow 使用不同 claim scope 与 artifact registry；
+- mock 永不 promotion；PixelArena 只允许项目内部 promotion；
+- 可选 GameCore 只有新授权任务可解锁，不能由 PixelArena active 自动触发；
+- Shadow 只晋升感知或 advisor package，不晋升闭环策略，也不接受任何动作输出。

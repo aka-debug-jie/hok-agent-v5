@@ -9,27 +9,30 @@
 1. `PROGRAM_CHARTER.md`
 2. `SAFETY_BOUNDARIES.md`
 3. `DELIVERY_PROGRESS.md`
-4. `MILESTONES.md`
-5. 与当前任务相关的合同文件
-6. `TASK_000_BOOTSTRAP.md` 或 `tasks/` 下当前任务
+4. `ROUTE_NO_GAMECORE_V1.md`
+5. `MILESTONES.md`
+6. 与当前任务相关的合同文件
+7. `DELIVERY_PROGRESS.md` 指定的当前任务文件
 
 `DELIVERY_PROGRESS.md` 是当前状态唯一权威。历史文档只能解释理由，不能覆盖当前状态。
 
 ## 2. 项目主路线
 
-V5 的主路线固定为：
+V5 的可执行主路线固定为：
 
 ```text
-授权 GameCore/研究环境接通
-→ 固定英雄 1v1 BC
+项目自有 PixelArena-Structured
+→ 固定原型 1v1 baseline/dataset
+→ 固定原型 1v1 BC
 → 1v1 recurrent PPO
-→ opponent league 与多英雄
+→ opponent league 与多原型
 → 3v3 centralized-training/decentralized-execution
 → RGB→public belief state
-→ winning policy 蒸馏
-→ PixelArena 像素闭环
+→ RGB-only PixelArena 闭环
 → 真实客户端只读 shadow advisor
 ```
+
+GameCore 不是主线依赖。它只可作为未来单独授权、默认关闭、独立 registry 的外部校准轨；缺失时不得把整个项目置为 `WAITING_EXTERNAL`。PixelArena 结果只能产生 `pixelarena_internal` 范围的结论，不能表述为 HoK/GameCore 能力。
 
 不得把旧 Pixel-MOBA v4.x 的 K96/scorer/grammar patch 链恢复为 V5 主路线。
 
@@ -94,7 +97,7 @@ checkpoint 晋升必须依赖闭环：
 5. 写入真实命令、结果、artifact 路径、剩余风险和下一任务；
 6. 只有验收全部通过才标记 `DONE`。
 
-外部许可证、硬件或二进制缺失时使用 `WAITING_EXTERNAL`，不得描述成代码失败，也不得伪造结果。
+外部许可证或二进制缺失时，仅可选 GameCore 轨使用 `WAITING_EXTERNAL` 或 `NOT_AVAILABLE`；本地 PixelArena 主线继续按自身门控推进。不得描述成代码失败，也不得伪造外部结果。
 
 ## 7. 源码控制
 
@@ -104,17 +107,16 @@ checkpoint 晋升必须依赖闭环：
 - 不覆盖失败报告；失败结果是保留证据。
 - V5 不从 legacy v4.x checkpoint、optimizer 或 K96 配置恢复训练。
 
-## 8. 第一任务
+## 8. 当前任务
 
-当前第一任务只取自 `TASK_000_BOOTSTRAP.md`。
+当前任务只取自 `DELIVERY_PROGRESS.md`。`TASK_000` 和 `TASK_005` 是历史任务，不得覆盖当前路线。
 
-在环境真实接通前，允许完成：
+当前 `TASK-010` 只允许完成：
 
-- 新仓库骨架；
-- RPC schema；
-- mock environment；
-- manifest/schema；
-- upstream preflight；
-- benchmark harness。
+- scoped evidence schema；
+- V5 原生 PixelArena ruleset 与 service；
+- public/privileged projection；
+- replay/snapshot、baseline、stability 与 throughput；
+- M1 验收报告。
 
-不允许宣称已训练会玩王者的 Agent。
+不允许在 TASK-010 启动 BC/PPO，不允许宣称已训练会玩王者的 Agent。

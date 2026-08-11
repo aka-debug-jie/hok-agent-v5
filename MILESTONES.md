@@ -3,21 +3,21 @@
 ## 总依赖
 
 ```text
-M0 Legacy freeze + repository bootstrap
+M0 Legacy freeze + repository bootstrap + no-GameCore route reset
   ↓
-M1 Authorized environment adapter + throughput
+M1 PixelArena-Structured ruleset/service + throughput
   ↓
-M2 Fixed-hero 1v1 behavior cloning
+M2 Fixed-archetype baseline + episode dataset
   ↓
-M3 Fixed-hero 1v1 recurrent PPO
+M3 Fixed-archetype 1v1 behavior cloning
   ↓
-M4 Opponent league + multi-hero 1v1
+M4 Fixed-archetype 1v1 recurrent PPO
   ↓
-M5 3v3 centralized training / decentralized execution
+M5 Opponent league + multi-archetype 1v1
   ↓
-M6 RGB → public belief state
+M6 3v3 centralized training / decentralized execution
   ↓
-M7 Pixel-derived policy in PixelArena
+M7 RGB → public belief + PixelArena RGB-only closed loop
   ↓
 M8 Real-client read-only shadow advisor
 ```
@@ -35,13 +35,14 @@ M8 Real-client read-only shadow advisor
 ### 交付物
 
 - 本启动包落库；
-- legacy 仓库只读 tag/commit 记录；
+- legacy 只读来源记录；若工作副本没有 `.git`，明确记录无法取得 commit identity；
 - Python 3.11 learner skeleton；
 - 独立 environment-service 接口；
 - mock environment；
 - run/evaluation schema；
 - CI、安全扫描和 secret scan；
-- `TASK_000` 完成报告。
+- `TASK_000` 完成报告；
+- no-GameCore 路线、scoped claim 和 `TASK-010` 合同。
 
 ### 通过门
 
@@ -54,58 +55,87 @@ M8 Real-client read-only shadow advisor
 
 ### 失败含义
 
-基础设施或边界尚未建立；不得接入真实 GameCore 或启动训练。
+基础设施或边界尚未建立；不得启动 PixelArena 训练，也不得接入真实客户端动作。
 
 ---
 
-## M1 — 授权 GameCore adapter 与吞吐
+## M1 — PixelArena-Structured ruleset、service 与吞吐
 
 ### 目标
 
-证明环境真实可用、可完整结束对局、可稳定收集训练数据。
+从零建立 V5 原生项目内环境，证明 ruleset 可完整结束对局、可精确复核并可稳定收集训练数据。
 
 ### 交付物
 
-- GameCore service；
-- versioned RPC；
-- 1v1 adapter；
+- versioned PixelArena ruleset 与 local-process service；
+- public/privileged observation、factorized action、reward 和 terminal 合同；
+- versioned RPC、snapshot/restore 和 canonical replay；
 - random baseline；
-- common-AI baseline；
-- ABS/replay artifact 索引；
+- NULL 与 scripted objective baseline；
+- replay artifact 索引；
 - throughput benchmark；
 - 100-episode stability report。
 
 ### 通过门
 
-- 许可证和二进制实际可用；
 - `reset → step → terminal → close` 连续完成；
-- 固定 seed/environment version 的结构化 replay 精确；
+- 固定 seed/environment/ruleset version 的结构化 replay 精确；
 - 100 个 episode：
   - protocol errors = 0；
   - action decode errors = 0；
-  - non-terminal forced close ≤ 1%，且原因可解释；
+  - non-terminal forced close = 0；
   - reward component finite；
   - frame/tick 单调；
 - 明确记录：
   - 单实例 env-steps/s；
   - 4/8/16 实例吞吐或可达到的最大并行数；
   - CPU、RAM、GPU、RPC 延迟；
-- 不把 GameCore/许可证提交 Git。
+- 移动、伤害、死亡/复活、兵线、塔/水晶与终局都有因果测试；
+- NULL 不获得 Agent 可归因结构奖励；
+- `claim_scope=pixelarena_engineering`，不作策略或 HoK 能力结论。
 
 ### 失败决策
 
-- 许可证缺失：`WAITING_EXTERNAL`；
-- SDK/schema 问题：只修 adapter；
+- ruleset/schema 未闭合：只修环境与合同；
+- public/privileged 泄漏或 side 不对称：M1 No-Go；
 - 吞吐过低：只做服务批处理/并行优化；
-- 不因此退回 PixelArena 宣称完成官方环境目标。
+- 不用训练补偿环境缺陷，不把内部结果宣称为官方环境目标。
 
 ---
 
-## M2 — 固定英雄 1v1 BC
+## M2 — 固定原型 1v1 baseline 与 episode dataset
 
 ### 目标
 
-用完整 common-AI/teacher 轨迹让 Agent 获得可闭环运行的初始能力。
+冻结 PixelArena-Structured 的 NULL、deterministic random 和 scripted objective baseline，并生成与训练/评测隔离合同一致的完整 episode 数据。
+
+### 交付物
+
+- scripted teacher 的版本化、确定性策略；
+- public、teacher、reward/privileged 三通道物理或逻辑隔离；
+- episode/seed/side/opponent source-disjoint split；
+- raw、legal、executed factorized action 对齐；
+- reward/terminal/outcome 可复算 validator；
+- dataset manifest、lineage 和 hash；
+- NULL/random/scripted reward audit。
+
+### 通过门
+
+- 每个 split 均按完整 episode 隔离；
+- Actor-facing public loader 无 truth、teacher、reward、不可见敌方或训练 entity ID；
+- legal mask 仅在瞬时执行/审计路径；
+- teacher 与 reward 可由 fresh replay 重算；
+- 胜局和失败局均保留，每个生效 action head 有非零覆盖；
+- NULL 不获得可归因结构正奖励；scripted baseline 有可解释结构进展；
+- 不训练神经策略，不产生 checkpoint promotion。
+
+---
+
+## M3 — 固定原型 1v1 BC
+
+### 目标
+
+用完整 PixelArena scripted-teacher 轨迹让 Agent 获得可闭环运行的初始能力。
 
 ### 交付物
 
@@ -115,7 +145,7 @@ M8 Real-client read-only shadow advisor
 - 32-sample overfit；
 - mini/full BC；
 - episode-disjoint evaluation；
-- first playable checkpoint。
+- first PixelArena BC bootstrap checkpoint。
 
 ### 数据门
 
@@ -137,17 +167,17 @@ M8 Real-client read-only shadow advisor
 闭环门：
 
 - 100 个固定 episode 完整结束率 ≥ 99%；
-- illegal/decode/protocol errors = 0；
+- illegal/decode/protocol/replay/nonfinite errors = 0；
 - 不允许全 WAIT、全 MOVE 或单动作坍塌；
 - 对塔/水晶存在非零可归因进展；
 - 相比 random 有显著改善；
 - 至少形成可继续 PPO 的稳定 checkpoint。
 
-BC 不要求立即达到最终胜率，但如果闭环完全零结构进展，不进入 M3。
+BC 不要求立即达到最终胜率，但如果闭环完全零结构进展，不进入 M4。
 
 ---
 
-## M3 — 固定英雄 1v1 recurrent PPO
+## M4 — 固定原型 1v1 recurrent PPO
 
 ### 目标
 
@@ -155,7 +185,7 @@ BC 不要求立即达到最终胜率，但如果闭环完全零结构进展，�
 
 ### 训练原则
 
-- 从通过 M2 的 BC checkpoint 开始；
+- 从通过 M3 的 BC checkpoint 开始；
 - recurrent PPO/GAE；
 - legal action mask 仅用于采样；
 -完整 episode rollout；
@@ -170,10 +200,10 @@ BC 不要求立即达到最终胜率，但如果闭环完全零结构进展，�
 - 任一 side 胜率 ≥ 60%；
 - Wilson 95% 下界高于当前 active checkpoint；
 - 完整 episode 结束率 ≥ 99%；
-- illegal/decode/protocol errors = 0；
-- hero tower/crystal damage 明确非零；
+- illegal/decode/protocol/replay/nonfinite errors = 0；
+- Agent 可归因 tower/crystal damage 明确非零；
 - 最大 active action 占比 < 90%；
-- 与 NULL/random/common-AI 基线相比结构结果改善；
+- 与 NULL/random/scripted baseline 相比结构结果改善；
 - 3 次独立 seed 中至少 2 次复现主要结论。
 
 阈值是 V5 初始工程门，可在**正式训练前**版本化调整；运行后不得事后降低。
@@ -183,47 +213,47 @@ BC 不要求立即达到最终胜率，但如果闭环完全零结构进展，�
 - reward 上升、win 不升：reward Goodhart；
 - BC 好、PPO 退化：on-policy/optimization 或 catastrophic forgetting；
 - side 差异大：side bias；
-- fixed AI 好、其他对手崩：opponent overfit；
+- fixed baseline 好、其他对手崩：opponent overfit；
 - 不能完整结束：long-horizon/terminal credit；
 - illegal 非零：action/adapter 工程问题。
 
 ---
 
-## M4 — Opponent league 与多英雄 1v1
+## M5 — Opponent league 与多原型 1v1
 
 ### 目标
 
-从固定对手、固定英雄扩展到稳定自博弈和共享多英雄策略。
+从固定对手、固定原型扩展到稳定自博弈和共享多原型策略。
 
 ### 交付物
 
 - league manager；
-- current/best/historical/exploiter/common-AI 对手池；
+- current/best/historical/exploiter/scripted 对手池；
 - Elo；
-- hero embedding；
+- archetype embedding；
 - shared encoder/recurrent core；
-- hero-conditioned heads；
+- archetype-conditioned heads；
 - distillation/retention 机制。
 
 ### 通过门
 
 - active checkpoint 对历史池 Elo 提升；
 - 无单一 cyclic exploit 主导；
-- 至少 3 个英雄达到各自预注册胜率；
-- 任一英雄不因新增英雄退化超过容差；
-- side、hero、opponent 分层均有胜局；
+- 至少 3 个 PixelArena 原型达到各自预注册胜率；
+- 任一原型不因新增原型退化超过容差；
+- side、archetype、opponent 分层均有胜局；
 - 多 seed 复现；
 - 失败 checkpoint 不进入 league active set。
 
 ### 禁止
 
 - 根据同一对手的评测反复调参；
-- 用多余英雄样本填补某英雄零能力；
-- 在固定英雄尚未通过 M3 时提前做大英雄池。
+- 用多余原型样本填补某原型零能力；
+- 在固定原型尚未通过 M4 时提前做大原型池。
 
 ---
 
-## M5 — 3v3 MAPPO/CTDE
+## M6 — 3v3 MAPPO/CTDE
 
 ### 目标
 
@@ -232,7 +262,7 @@ BC 不要求立即达到最终胜率，但如果闭环完全零结构进展，�
 ### 架构
 
 - shared Actor；
-- hero/role embedding；
+- archetype/role embedding；
 - decentralized recurrent hidden；
 - centralized Critic；
 - MAPPO 或等价 CTDE；
@@ -242,7 +272,7 @@ BC 不要求立即达到最终胜率，但如果闭环完全零结构进展，�
 
 - 3v3 环境 100-episode stability；
 - 预注册对手池中有稳定胜率/Elo；
-- 每个受控英雄均有非零角色贡献；
+- 每个受控角色均有非零角色贡献；
 - 不出现长期 lazy agent；
 - team reward、individual reward 和 terminal zero-sum 分开记录；
 - unseen lineup 和 side 独立 holdout；
@@ -254,7 +284,9 @@ BC 不要求立即达到最终胜率，但如果闭环完全零结构进展，�
 
 ---
 
-## M6 — RGB → Public Belief State
+## M7 — RGB → Public Belief State 与 RGB-only closed loop
+
+### M7A — RGB → Public Belief State
 
 ### 目标
 
@@ -282,11 +314,11 @@ BC 不要求立即达到最终胜率，但如果闭环完全零结构进展，�
 
 ---
 
-## M7 — Pixel-derived closed loop
+### M7B — Pixel-derived closed loop
 
 ### 目标
 
-使用 M6 输出驱动冻结或受控微调的 winning strategy。
+使用 M7A 输出驱动冻结或受控微调的 winning strategy。
 
 ### 顺序
 
@@ -325,3 +357,9 @@ BC 不要求立即达到最终胜率，但如果闭环完全零结构进展，�
 - 长期安全报告。
 
 M8 永不授权真实客户端闭环。
+
+---
+
+## AX — 可选授权 GameCore 校准（非依赖）
+
+AX 不属于 M0–M8 的关键路径。只有新授权合同、非 Git 证据引用、运行时有效许可证、独立任务和安全复核同时存在时才可启动。AX 使用独立 suite、report 和 registry；不得继承或重命名 PixelArena active，不得解锁真实客户端动作。

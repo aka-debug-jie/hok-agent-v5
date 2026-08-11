@@ -2,7 +2,7 @@
 
 ## 1. 核心原则
 
-V5 的 checkpoint 只能由闭环证据晋升。
+V5 的 checkpoint 只能由闭环证据在同一 claim scope、environment family 和 ruleset major 内晋升。
 
 以下不能单独晋升：
 
@@ -41,7 +41,7 @@ V5 的 checkpoint 只能由闭环证据晋升。
 
 - 完全预注册；
 - 固定 200 局或合同指定规模；
-- side、opponent、hero 平衡；
+- side、opponent、archetype 平衡；
 - evaluator 在 checkpoint freeze 后运行；
 - 结果不能反向选择 update。
 
@@ -56,11 +56,11 @@ V5 的 checkpoint 只能由闭环证据晋升。
 
 ## 3. 1v1 初始固定评测
 
-建议初版 `eval-suite-1v1-v1`：
+计划中的初版 `eval-suite-pixelarena-1v1-v1`：
 
 - 200 局；
 - 100 红方、100 蓝方；
-- 固定英雄；
+- 固定 PixelArena 原型；
 - 至少两个 opponent profiles；
 - seed 预先冻结；
 - 不进入训练。
@@ -72,8 +72,8 @@ V5 的 checkpoint 只能由闭环证据晋升。
 | 总胜率 | ≥ 0.70 |
 | 任一 side 胜率 | ≥ 0.60 |
 | 完整结束率 | ≥ 0.99 |
-| protocol/decode/illegal | 0 |
-| hero tower/crystal damage | > 0 且覆盖多数胜局 |
+| protocol/decode/illegal/replay/nonfinite | 0 |
+| Agent 可归因 tower/crystal damage | > 0 且覆盖多数胜局 |
 | 最大 active action 占比 | < 0.90 |
 | 相对 active Wilson 下界 | 严格改善或不退化+其他主指标严格改善 |
 | 独立训练复现 | ≥ 2/3 seeds |
@@ -89,7 +89,7 @@ V5 的 checkpoint 只能由闭环证据晋升。
 - numerator/denominator；
 - point estimate；
 - Wilson 95% CI；
-- side/opponent/hero 分层；
+- side/opponent/archetype 分层；
 - pairwise same-seed comparison（可用时）。
 
 ### 4.2 Elo
@@ -113,7 +113,7 @@ V5 的 checkpoint 只能由闭环证据晋升。
 - forced close；
 - side；
 - opponent；
-- hero/lineup。
+- archetype/lineup。
 
 ### 5.2 Objective
 
@@ -122,7 +122,7 @@ V5 的 checkpoint 只能由闭环证据晋升。
 - economy/experience；
 - objective/resource；
 - K/D/A；
-- hero attributable progress。
+- Agent/role attributable progress。
 
 ### 5.3 Safety/engineering
 
@@ -204,7 +204,7 @@ candidate vs active
 6. `POLICY_COLLAPSE`
 7. `SIDE_BIAS`
 8. `OPPONENT_OVERFIT`
-9. `HERO_GENERALIZATION_FAILURE`
+9. `ARCHETYPE_GENERALIZATION_FAILURE`
 10. `MULTI_AGENT_CREDIT_FAILURE`
 11. `VISION_STATE_FAILURE`
 12. `SIM_TO_REAL_FAILURE`
@@ -233,3 +233,19 @@ secondary evidence可以多个。
 - gate derivation；
 - disposition；
 - report hash。
+
+## 11. Scoped promotion
+
+PixelArena promotion 只表示指定 ruleset 内部能力。E2/E3 必须额外绑定：
+
+- `claim_scope=pixelarena_internal`；
+- environment family/identity；
+- ruleset ID/major；
+- observation/action/reward schema；
+- mode 与 archetype/lineup registry；
+- renderer family/version（RGB policy）；
+- suite 和 seed registry。
+
+不同 scope/ruleset major 使用独立 active/best registry。mock 永远 `DIAGNOSTIC_ONLY`。可选 GameCore 使用独立外部校准报告，不能自动晋升或降级 PixelArena checkpoint。
+
+现有 v1 run/evaluation schema 仍把 PixelArena 锁为 diagnostic-only；`TASK-010` 必须先交付 scoped schema v2 和机械测试，之后才能启用本文件所述 PixelArena E2。裸 `formal=true` 不表示 HoK 正式能力。

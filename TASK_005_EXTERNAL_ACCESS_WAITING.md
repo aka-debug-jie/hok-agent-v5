@@ -1,9 +1,11 @@
 # TASK-005 — External Access Waiting / Mock-only Control Plane
 
+> 历史任务：`SUPERSEDED_BY_D-004`。本任务的实现与运行记录保留为证据，但其“等待 GameCore 后进入旧 TASK-010”的退出路线已取消。当前任务以 `DELIVERY_PROGRESS.md` 为准。
+
 ## 状态
 
 - 阶段：`M1` 前置等待期
-- 当前状态：`IMPLEMENTED / WAITING_EXTERNAL`
+- 历史状态：`IMPLEMENTED / WAITING_EXTERNAL`（当时真实状态）
 - 环境权威：仅项目自有 `mock`；不连接、探测或启动真实 GameCore。
 
 ## 目标
@@ -39,4 +41,4 @@
 
 ## 退出条件
 
-仅当用户/授权方在 Git 外提供并确认：获授权的 GameCore、许可证接入方式、服务启动方式和允许的研究范围，并将控制面状态改为 `EXTERNAL_ACCESS_CONFIRMED` 后，才可转入 `TASK-010 GAMECORE_ADAPTER_AND_THROUGHPUT`。路径存在、schema-valid artifact 或 service 自报 `valid` 均不能单独满足该条件。
+原退出条件已由 D-004 取消。项目直接进入新的 `TASK-010 PIXELARENA_STRUCTURED_FOUNDATION`；可选 GameCore 轨继续锁定且不阻塞本地主线。路径存在、schema-valid artifact 或 service 自报 `valid` 仍不能授权该可选轨。

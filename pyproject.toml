@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hok-agent-v5"
 version = "0.1.0"
-description = "Safety-bounded V5 infrastructure for authorized Honor of Kings research environments"
+description = "Safety-bounded PixelArena MOBA research agent and read-only coach"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

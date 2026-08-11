@@ -8,26 +8,25 @@
 
 保留为 legacy evidence。
 
-应创建：
+只在 V5 记录：
 
-- 只读 tag，例如 `legacy-v4.4-freeze-20260811`；
-- freeze commit；
-- `LEGACY_FINAL_STATUS.md`；
-- 失败/成功 artifact索引；
+- 只读检查时的 legacy commit；若源目录没有 `.git`，如实记录 unavailable，不从文件名猜测；
+- 可复用工程模式和禁止迁移清单；
+- 旧状态只能引用 legacy 自身当前台账；
 - 不再创建 v4.4.1。
+
+不得为了 V5 冻结而修改、tag 或提交 legacy 仓库。
 
 ## 2. 先修正状态权威
 
-旧仓库中 `DELIVERY_PROGRESS.md` 必须与真实最新结果一致，至少写明：
+V5 只读取旧仓库 `DELIVERY_PROGRESS.md` 的当前状态，不替它修正台账，也不把旧报告当作 V5 能力证据。V5 自己必须写明：
 
-- v4.3.5 已运行的实际 disposition；
-- rollback；
-- v4.4 是否只处于 protocol/implementation；
-- runtime artifact未上传的边界；
-- V5另开仓库；
--旧仓库不再是 active训练项目。
+- legacy 只读；
+- 没有迁移 checkpoint/optimizer/K96/cache/阈值；
+- 只借鉴了哪些接口或测试思想；
+- legacy 的陈旧 manifest、文档和台账冲突不能成为 V5 authority。
 
-只修状态和索引，不重解释历史结果。
+不重解释或重写历史结果。
 
 ## 3. 迁移清单
 
@@ -87,10 +86,10 @@
 
 ## 5. PixelArena 新角色
 
-保留：
+V5 重新实现并承担：
 
-- mock环境；
-- CI；
+- structured 1v1/3v3 内部训练与评测权威；
+- scoped checkpoint promotion；
 - snapshot/restore；
 - effectful事件测试；
 -视觉随机化；
@@ -98,28 +97,20 @@
 -counterfactual；
 -像素蒸馏。
 
-不再：
+仍然禁止：
 
 - 证明官方王者能力；
 - 驱动最终策略架构；
 - 为每个 teacher miss 扩展候选 grammar；
-- 替代 GameCore promotion suite。
+- 将内部 promotion 表述为 GameCore/商业游戏能力。
 
-## 6. v4.4 最终处理
+## 6. Legacy 最终处理
 
-可选地只运行一次 `collect-only`，目的：
-
--统计 baseline student访问状态上的 effectful structure opportunities；
--形成旧路线 postmortem；
--不训练；
--不创建 checkpoint；
--不解锁后续。
-
-若运行，结果只进入 `legacy/postmortem/`。
+不再运行 collect、训练、评测、tag 或提交。若未来需要更多证据，只做范围明确的只读审阅，并将新结论写入 V5；不得向 legacy 写入 postmortem 或索引。
 
 ## 7. 完成门
 
-- legacy repo有明确 freeze；
+- V5 记录 legacy 只读来源；有 `.git` 时记录 commit，无 `.git` 时记录 unavailable；
 -新仓库不依赖旧 runtime path；
 -没有 v4 checkpoint输入；
 -新 CI 不需要旧报告；

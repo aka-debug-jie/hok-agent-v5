@@ -1,11 +1,11 @@
 # hok-gamecore-service
 
-This directory is a transport-isolated placeholder for a future **authorized**
-GameCore adapter. It contains no Tencent binary, license, account, or client-control
-code. The Python 3.11 learner talks only to the versioned RPC contract in
-`src/hok_agent/envs/rpc.py`.
+This directory is an inactive, transport-isolated placeholder for a future optional
+**authorized** GameCore calibration track. GameCore is not a dependency of the
+PixelArena main route. This directory contains no Tencent binary, license, account,
+or client-control code.
 
-Until an authorized GameCore path and license are supplied out of band, use only the
-deterministic mock service. A future upstream SDK service must use its own Python
-environment (currently expected to be `<3.10`) and must fail closed on identity,
-license, schema, or tick mismatches.
+The optional track remains `NOT_AVAILABLE` and locked. A future upstream SDK service
+would require a new task, external authorization evidence, its own Python environment
+(currently expected to be `<3.10`) and an independent artifact registry. It cannot
+inherit PixelArena promotion or unlock commercial-client actions.

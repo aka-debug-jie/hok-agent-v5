@@ -12,7 +12,7 @@ from hok_agent.artifacts.hashing import sha256_file, sha256_json
 
 MANIFEST_FILE = "PACKAGE_MANIFEST.json"
 MANIFEST_VERSION = "1"
-PACKAGE_ID = "hok-agent-v5-starter"
+PACKAGE_ID = "hok-agent-v5"
 MANIFEST_VERSION_FIELD = "manifest_version"
 PACKAGE_FIELD = "package"
 SELF_HASH_FIELD = "self_hash"

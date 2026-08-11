@@ -1,8 +1,9 @@
-"""Fail-closed gate for operations that would use an authorized GameCore service.
+"""Fail-closed gate for the inactive optional GameCore calibration track.
 
 This module deliberately separates a service's runtime license metadata from the
 external authorization record.  A caller must satisfy both before it can use a
-GameCore transport, formal evaluation, or promotion path.
+GameCore transport, external evaluation, or external promotion path.  It does not
+gate or authorize the project-owned PixelArena route.
 """
 
 from __future__ import annotations
@@ -17,11 +18,11 @@ from hok_agent.contracts import LicenseStatus
 
 
 class ControlledOperation(StrEnum):
-    """Operations that remain unavailable until external access is confirmed."""
+    """Optional GameCore operations unavailable until external access is confirmed."""
 
     GAMECORE_TRANSPORT = "gamecore_transport"
-    FORMAL_EVALUATION = "formal_evaluation"
-    PROMOTION = "promotion"
+    GAMECORE_EVALUATION = "gamecore_evaluation"
+    GAMECORE_PROMOTION = "gamecore_promotion"
 
 
 class ExternalAccessDenied(RuntimeError):
@@ -41,7 +42,8 @@ class ExternalAccessGate:
     or credential value.
     """
 
-    current_status: str
+    enabled: bool
+    external_status: str
     connection_status: str
     external_authorization_attested: bool
     external_authorization_evidence_ref: str | None
@@ -53,22 +55,31 @@ class ExternalAccessGate:
 
     @classmethod
     def from_mapping(cls, document: dict[str, Any]) -> ExternalAccessGate:
-        program = required_mapping(document.get("program"), "program")
         environments = required_mapping(document.get("environments"), "environments")
-        authority = required_mapping(environments.get("strategy_authority"), "strategy_authority")
+        optional_authority = required_mapping(
+            environments.get("optional_external_calibration"),
+            "optional_external_calibration",
+        )
         locks = required_mapping(document.get("locks"), "locks")
 
-        if authority.get("kind") != "hok_gamecore":
-            raise ConfigError("strategy_authority.kind must be hok_gamecore")
+        if optional_authority.get("kind") != "hok_gamecore":
+            raise ConfigError("optional_external_calibration.kind must be hok_gamecore")
 
-        attested = authority.get("external_authorization_attested")
+        enabled = optional_authority.get("enabled")
+        if not isinstance(enabled, bool):
+            raise ConfigError("optional_external_calibration.enabled must be a boolean")
+
+        attested = optional_authority.get("external_authorization_attested")
         if not isinstance(attested, bool):
-            raise ConfigError("strategy_authority.external_authorization_attested must be a boolean")
+            raise ConfigError(
+                "optional_external_calibration.external_authorization_attested must be a boolean"
+            )
 
-        evidence_ref = authority.get("external_authorization_evidence_ref")
+        evidence_ref = optional_authority.get("external_authorization_evidence_ref")
         if evidence_ref is not None and (not isinstance(evidence_ref, str) or not evidence_ref):
             raise ConfigError(
-                "strategy_authority.external_authorization_evidence_ref must be null or a non-empty string"
+                "optional_external_calibration.external_authorization_evidence_ref must be null "
+                "or a non-empty string"
             )
 
         locked: set[ControlledOperation] = set()
@@ -80,9 +91,11 @@ class ExternalAccessGate:
                 locked.add(operation)
 
         return cls(
-            current_status=required_string(program.get("current_status"), "program.current_status"),
+            enabled=enabled,
+            external_status=required_string(optional_authority.get("status"), "optional_external_calibration.status"),
             connection_status=required_string(
-                authority.get("connection_status"), "strategy_authority.connection_status"
+                optional_authority.get("connection_status"),
+                "optional_external_calibration.connection_status",
             ),
             external_authorization_attested=attested,
             external_authorization_evidence_ref=evidence_ref,
@@ -98,10 +111,15 @@ class ExternalAccessGate:
     def require_local(self, operation: ControlledOperation) -> None:
         """Check only local, non-service state before opening a transport or probing health."""
 
-        if self.current_status != "EXTERNAL_ACCESS_CONFIRMED" or self.connection_status != "ready":
+        if self.external_status != "EXTERNAL_ACCESS_CONFIRMED" or self.connection_status != "ready":
             raise ExternalAccessDenied(
                 "WAITING_EXTERNAL",
                 "external GameCore access is not confirmed by the project control plane",
+            )
+        if not self.enabled:
+            raise ExternalAccessDenied(
+                "OPTIONAL_TRACK_DISABLED",
+                "optional GameCore calibration track is disabled",
             )
         if not self.external_authorization_attested:
             raise ExternalAccessDenied(

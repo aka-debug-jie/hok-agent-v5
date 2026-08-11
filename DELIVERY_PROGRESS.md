@@ -4,82 +4,71 @@
 > 历史讨论、提示词、旧仓库台账和实验文档不能覆盖本文件。
 
 - 最后更新：`2026-08-11`
-- 当前阶段：`V5-M1-EXTERNAL-ACCESS-WAITING`
-- 当前任务：`TASK-005 EXTERNAL_ACCESS_WAITING / MOCK-ONLY CONTROL PLANE`
-- 当前状态：`WAITING_EXTERNAL`
+- 当前阶段：`V5-M1-PIXELARENA-STRUCTURED`
+- 当前任务：`TASK-010 PIXELARENA_STRUCTURED_FOUNDATION`
+- 当前状态：`READY`
 - 当前 promotion：`无 checkpoint 可晋升`
 - 真实客户端边界：`READ_ONLY_SHADOW_ONLY`
-- GameCore 连接状态：`WAITING_EXTERNAL / 未发现项目内 hok_env checkout，未进行真实服务握手`
-- GameCore 许可证状态：`WAITING_EXTERNAL / 未提供路径，未读取任何许可证内容`
+- 可选 GameCore 轨：`NOT_AVAILABLE / DISABLED / NON_BLOCKING`
+- GameCore 许可证状态：`UNKNOWN / 未提供路径，未读取任何许可证内容`
 
 ## 1. 已冻结决定
 
-1. Pixel-MOBA v4.x 保留为 legacy evidence，不再创建 v4.4.1。
-2. V5 不从 legacy checkpoint、optimizer 或 K96 profile 恢复。
-3. 结构化 Strategy Agent 先于 Vision Student。
-4. checkpoint 只由闭环评测晋升。
-5. 真实商业客户端不执行自动动作。
-6. PixelArena 降级为 test double、视觉课程和 counterfactual 环境。
-7. 授权 GameCore 是最终策略能力权威；接入失败时不能伪造替代结论。
+1. Pixel-MOBA v4.x 保留为只读 legacy evidence；不修改、不训练、不创建 v4.4.1。
+2. V5 不从 legacy checkpoint、optimizer、cache、阈值或 K96 profile 恢复。
+3. 项目没有 GameCore；GameCore 不是 M0–M8 依赖，只是默认关闭的可选外部校准轨。
+4. PixelArena-Structured 是项目内部策略权威；结果只可声明 `pixelarena_internal`。
+5. structured strategy 先于 vision student；先固定原型 1v1，再 league/多原型，再 3v3。
+6. checkpoint 只在同一 claim scope/environment/ruleset major 内由闭环评测晋升。
+7. mock 永远 diagnostic-only；现有 v1 schema 在 scoped schema v2 完成前继续拒绝 PixelArena promotion。
+8. 真实商业客户端只读，不执行自动动作或在线 RL。
 
 ## 2. 当前任务范围
 
-`TASK-000` 已完成；TASK-005 的 mock-only 控制面已实现并复验，当前仅等待授权环境输入。
+`TASK-006` 已完成路线纠正。当前唯一实施任务是 `TASK-010_PIXELARENA_STRUCTURED_FOUNDATION.md`。
 
-当前只允许：
+当前允许：
 
-- 新仓库骨架；
-- Python 3.11 learner；
-- 独立旧版 SDK service 契约；
-- mock environment；
-- run/evaluation schema；
-- upstream 和许可证 preflight；
-- random/common-AI 基准 harness；
-- 环境吞吐基准框架；
-- unit/CI。
+- scoped evidence schema v2 与独立 PixelArena registry；
+- V5 原生 PixelArena ruleset、local-process service 和版本化 RPC；
+- public/privileged projection、factorized action、reward、terminal；
+- replay/snapshot、NULL/random/scripted baseline；
+- 100 局 stability、规则因果测试和 throughput benchmark。
 
 当前不允许：
 
-- 长 BC/PPO；
-- 多英雄；
-- 3v3；
-- pixel policy；
-- 真实客户端动作；
-- 旧 v4.x 继续训练。
+- BC/PPO、可晋升 checkpoint、promotion、多原型、3v3 或 pixel policy；
+- GameCore、手机、真实客户端、输入设备或许可证操作；
+- 修改 legacy 或迁移旧 runtime/model/K96/cache。
 
-## 2.1 已完成：mock public transition trace
+## 2.1 已完成的 M0 基础设施
 
-状态：`IMPLEMENTED / WAITING_EXTERNAL`。
+typed contracts、deterministic mock、spawned-process RPC、artifact/schema verifier、package integrity、safety scan 和 public mock trace 均保留。它们只证明 M0 基础设施，不证明 PixelArena、HoK 或策略能力。
 
-范围：为 deterministic mock 增加独立、公开字段限定的逐 transition 诊断 trace 与 fresh-process 重放/篡改验证。该 trace 不是训练 replay、不是 GameCore/ABS replay、不能保存 reward、teacher、truth、privileged state、legal mask、内部 replay identity/hash 或真实客户端数据。
+## 3. 当前阻塞与非阻塞外部项
 
-固定边界：只接受内建 mock profile；不接受 GameCore、许可证、手机、control-plane 或任意外部 service 参数；输出固定标记为 `mock`、`formal=false`、`capability_claim=none`，且不是 evaluation report。
-
-验收目标：trace 自哈希、逐行 hash chain、公开 observation hash、factorized action、tick/terminal/truncated/public outcome 的 fresh-process exact replay，以及篡改拒绝。mock 成功仍只证明基础设施。
-
-## 3. 外部阻塞
-
-| 项目 | 状态 | 处理 |
+| 项目 | 状态 | 影响 |
 |---|---|---|
-| GameCore license | `WAITING_EXTERNAL` | 用户/授权方提供路径；不得上传、读取或猜测内容 |
-| GameCore binaries | `WAITING_EXTERNAL` | 按上游条款获取；不下载或提交二进制 |
-| 支持系统 | Linux + Docker daemon 已预检 | 真实服务接入时再现场确认兼容模式 |
-| 可并行实例数 | 未测 | M1 吞吐 benchmark |
-| upstream hero/action schema | 未冻结 | 接通后生成 adapter snapshot |
+| V5 PixelArena ruleset/service | `NOT_IMPLEMENTED` | TASK-010 当前工程目标 |
+| scoped evidence schema v2 | `NOT_IMPLEMENTED` | 完成前 PixelArena promotion 继续 fail-closed |
+| PixelArena 可并行实例数 | `UNMEASURED` | TASK-010 throughput 验收 |
+| GameCore/license/binaries | `NOT_AVAILABLE / OPTIONAL` | 不阻塞主线；不得猜测、下载或伪造 |
+| 真实客户端 | `READ_ONLY_SHADOW_ONLY` | M8 前不接入；永不允许动作 |
 
 ## 4. 里程碑摘要
 
 | 里程碑 | 状态 | 下一门 |
 |---|---|---|
-| M0 Legacy freeze + V5 bootstrap | `DONE` | mock 基础设施门已通过；不构成 GameCore 或能力结论 |
-| M1 GameCore adapter + throughput | `WAITING_EXTERNAL` | 需获授权的 GameCore、license 与真实 health/reset/step/close 握手 |
-| M2 1v1 BC baseline | `LOCKED` | M1 通过 |
-| M3 1v1 PPO + fixed eval | `LOCKED` | BC 闭环基线通过 |
-| M4 League + multi-hero | `LOCKED` | 1v1 PPO promotion |
-| M5 3v3 MAPPO | `LOCKED` | multi-hero 与 3v3 env 门 |
-| M6 Vision belief state | `LOCKED` | winning teacher 与对齐数据 |
-| M7 Pixel closed loop | `LOCKED` | perception 和 distillation 门 |
-| M8 Real shadow advisor | `LOCKED` | pixel/public-state 证据 |
+| M0 bootstrap + route reset | `DONE` | mock 基础设施和路线治理通过；不构成策略能力 |
+| M1 PixelArena-Structured foundation | `READY` | TASK-010 100 局稳定、重放、规则因果与吞吐 |
+| M2 baseline + episode dataset | `LOCKED` | M1 通过 |
+| M3 fixed-archetype BC | `LOCKED` | M2 dataset/reward audit 通过 |
+| M4 fixed-archetype PPO | `LOCKED` | M3 closed-loop BC 通过 |
+| M5 league + multi-archetype | `LOCKED` | M4 scoped promotion |
+| M6 3v3 CTDE/MAPPO | `LOCKED` | M5 retention/league 门 |
+| M7 belief + RGB-only PixelArena | `LOCKED` | M6 与 renderer/data 门 |
+| M8 real-client read-only coach | `LOCKED` | M7、隐私和 shadow isolation 门 |
+| AX optional GameCore calibration | `NOT_AVAILABLE / NON_BLOCKING` | 仅未来新授权任务 |
 
 ## 5. 更新模板
 
@@ -100,7 +89,11 @@
 
 不得用“基本完成”“应该通过”替代真实结果。
 
-## 6. TASK-000 实际记录
+## 6. 历史实际记录
+
+以下第 6–10 节保留当时的真实命令、状态和结论，其中 `WAITING_EXTERNAL` 与旧 `TASK-010 GAMECORE...` 只表示当时路线，已由 D-004 取代，不是当前任务或当前阻塞。
+
+### 6.1 TASK-000 实际记录
 
 日期：`2026-08-11`
 
@@ -122,7 +115,7 @@
 
 下一任务：继续 `TASK-005 EXTERNAL_ACCESS_WAITING`；若用户/授权方提供 Git 外的获授权 GameCore 与 license 接入方式，先执行真实服务 identity/license/schema/health/reset/step/close preflight，再进入 `TASK-010 GAMECORE_ADAPTER_AND_THROUGHPUT`。
 
-## 7. TASK-005 mock-only control-plane 实际记录
+### 6.2 TASK-005 mock-only control-plane 实际记录
 
 日期：`2026-08-11`
 
@@ -144,7 +137,7 @@
 
 下一任务：等待上述外部输入；外部授权证据、明确 service 方式和许可证接入方式齐全后，以新的隔离 transport/service factory 执行 TASK-010 preflight。不得以 mock 或 service 自报 runtime `valid` 代替授权。
 
-## 8. TASK-005 legacy 配置约定接入记录
+### 6.3 TASK-005 legacy 配置约定接入记录
 
 日期：`2026-08-11`
 
@@ -166,7 +159,7 @@
 
 下一任务：等待 Git 外的获授权 GameCore、license 接入方式和明确的服务启动/协议资料；随后按 TASK-010 只在隔离 service 中执行真实 health/reset/step/close preflight。
 
-## 9. TASK-005-PACKAGE-INTEGRITY-01 启动记录
+### 6.4 TASK-005-PACKAGE-INTEGRITY-01 启动记录
 
 日期：`2026-08-11`
 
@@ -192,7 +185,7 @@ legacy 只读审阅结论：唯一 current-state authority 是 legacy `DELIVERY_
 
 下一任务：保持 TASK-005 waiting；未来有意改变 V5 受控源码时，先显式运行 `package-integrity --write`，再运行 `make check`。只有 Git 外的获授权 GameCore、license 接入方式和服务协议资料齐全后，才进入 TASK-010 的隔离 service preflight。
 
-## 10. TASK-005-MOCK-PUBLIC-TRACE-01 实际记录
+### 6.5 TASK-005-MOCK-PUBLIC-TRACE-01 实际记录
 
 日期：`2026-08-11`
 
@@ -213,3 +206,40 @@ legacy 只读审阅结论：唯一 current-state authority 是 legacy `DELIVERY_
 外部操作与阻塞：未读取或连接 GameCore/license，未调用 external control-plane，未连接手机或真实商业客户端，未修改 legacy。GameCore binary、license 接入方式、外部授权证据、真实 service 协议仍未提供；状态继续为 `WAITING_EXTERNAL`。
 
 下一任务：保持 `TASK-005 EXTERNAL_ACCESS_WAITING`，等待 Git 外的获授权 GameCore、license 接入方式和 service 启动/协议资料；齐全后先进入 `TASK-010` 的隔离 service preflight。不得以本 trace 或 mock smoke 替代该输入。
+
+## 7. TASK-006 无 GameCore 路线纠正实际记录
+
+日期：`2026-08-11`
+
+任务：`TASK-006 NO_GAMECORE_ROUTE_RESET`
+
+状态：`DONE`。没有启动训练、没有 checkpoint、没有实现 PixelArena gameplay，也没有连接外部服务或设备。
+
+路线结果：GameCore 从唯一主线权威改为 `enabled=false / dependency_of_main_route=false / NOT_AVAILABLE` 的可选外部校准轨；项目主线改为 PixelArena-Structured → baseline/dataset → BC → recurrent PPO → league/多原型 → 3v3 → RGB-only PixelArena → 真实客户端只读 Shadow Coach。所有内部能力结论必须绑定 `claim_scope=pixelarena_internal`、environment/ruleset/schema/suite identity，不能称为 HoK/GameCore 能力。
+
+变更文件：新增 `ROUTE_NO_GAMECORE_V1.md`、`TASK_006_NO_GAMECORE_ROUTE_RESET.md`、`TASK_010_PIXELARENA_STRUCTURED_FOUNDATION.md` 和 `configs/pixelarena_local_v1.yaml`；同步章程、安全、里程碑、环境、策略、训练、评测、数据、runbook、legacy 迁移、风险、决策、README/启动提示、program/eval config、可选 GameCore service 说明、control-plane、tests 和 package manifest。
+
+控制面结果：`strategy_authority.kind=pixelarena`；可选 GameCore gate 与项目 `program.current_status` 解耦，并严格要求 optional track `enabled=true`、external status/connection、attestation、非秘密 evidence ref、显式 operation unlock 和 runtime valid license。操作名限定为 `gamecore_transport/gamecore_evaluation/gamecore_promotion`。测试证明 disabled-but-ready 仍在 service health 前拒绝，也证明 PixelArena identity 不消费该外部 gate。
+
+运行命令：
+
+- `.venv/bin/python -m pytest -q tests/test_task005_control_plane.py tests/test_access_gate_cli.py tests/test_config_validation.py`；
+- `.venv/bin/python -m hok_agent env-smoke --config configs/run_smoke_v1.yaml --episodes 100`；
+- 三次 `.venv/bin/python -m hok_agent access-gate ... --runtime-license-status valid`，分别覆盖 GameCore transport/evaluation/promotion；
+- `.venv/bin/python -m hok_agent package-integrity --root . --write`；
+- `make check PYTHON=.venv/bin/python`；
+- `make validate PYTHON=.venv/bin/python`；
+- `git diff --check`；
+- `git -C ../pixel-moba-codex-starter status --short` 与 `rev-parse HEAD`（只读；源目录无 `.git`，命令按预期无法提供 commit/status）。
+
+验证结果：focused route/control-plane/config suite `14 passed`；最终 Ruff 通过，strict mypy 对 23 个 source files 通过，pytest `67 passed`，safety scan 扫描 87 files、0 finding，package integrity `78/78` controlled files 通过；5 份 YAML 与 3 份 JSON schema 有效；`git diff --check` 通过。100 局 mock regression 为 `100/100` completed、terminal rate=`1.0`、deterministic replay=`true`、protocol/action-decode/illegal/replay errors 全为 0，manifest/report verification 均为 true。三个可选 GameCore gate 均以 `WAITING_EXTERNAL`、exit=`2` 拒绝；runtime 自报 `valid` 没有解锁作用。
+
+生成 artifact：`artifacts/runs/m0-mock-smoke-20260811T115415Z/`（Git 忽略）。它只证明 M0 mock 基础设施未被路线变更破坏，不证明 PixelArena 或任何策略能力。
+
+legacy：只读审阅确认可借鉴 deterministic core、snapshot/replay、public/privileged 数据隔离、raw/executed action 和 episode audit 思想；没有迁移代码、checkpoint、optimizer、K96、scorer、grammar、cache、阈值、设备配置或能力结论。当前 legacy 源目录没有 `.git`，因此本轮不能提供其 commit identity；未从文件名猜测。
+
+已知风险与未实现项：PixelArena ruleset/service、scoped evidence schema v2、canonical gameplay replay、baseline、Actor/Critic、trainer、league、renderer 和 Shadow Coach 均尚未实现。现有 v1 schema 继续把 PixelArena 锁为 diagnostic-only，`eval_suite_1v1_v1.yaml` 保持 disabled，直到 TASK-010 先完成 scoped schema 与 registry。没有 checkpoint 可晋升。
+
+外部操作：未探测或连接 GameCore，未读取许可证，未联网下载二进制，未连接手机/客户端/输入设备，未修改 legacy。
+
+下一任务：`TASK-010 PIXELARENA_STRUCTURED_FOUNDATION / READY`。只实现 scoped schema、V5 原生 PixelArena ruleset/service、public/privileged projection、replay/snapshot、NULL/random/scripted baseline、100 局 stability 和 throughput；不启动 BC/PPO。
