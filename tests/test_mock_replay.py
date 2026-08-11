@@ -96,6 +96,24 @@ def test_rehashed_action_tamper_fails_fresh_transition_replay(tmp_path: Path) ->
         verify_mock_public_replay(path)
 
 
+def test_generic_verifier_uses_artifact_kind_for_any_filename_and_contract_tamper(tmp_path: Path) -> None:
+    path = tmp_path / "custom-trace-name.json"
+    record_mock_public_replay(path, seed=101, side="blue", max_steps_per_episode=12)
+    assert verify_artifact(path, repo_root=ROOT).passed
+
+    document = _load(path)
+    transitions = document["transitions"]
+    assert isinstance(transitions, list)
+    assert isinstance(transitions[0], dict)
+    transitions[0]["output_tick"] = 2
+    _rehash(document)
+    path.write_text(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = verify_artifact(path, repo_root=ROOT)
+    assert not result.passed
+    assert any("mock public replay contract invalid" in error for error in result.errors)
+
+
 def test_private_field_and_nonpublic_target_are_rejected(tmp_path: Path) -> None:
     private_path = tmp_path / "private.json"
     record_mock_public_replay(private_path, seed=101, side="blue", max_steps_per_episode=12)

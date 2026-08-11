@@ -15,6 +15,7 @@ from typing import Any, cast
 from jsonschema import Draft202012Validator
 
 from hok_agent.artifacts.hashing import sha256_file, sha256_json
+from hok_agent.contracts.mock_replay import MockPublicReplay, MockReplayValidationError
 
 _ALLOWED_ENVIRONMENT_KINDS = frozenset({"hok_gamecore", "mock", "pixelarena"})
 
@@ -63,6 +64,14 @@ def _load_schema(schema_path: Path | None) -> tuple[dict[str, Any] | None, list[
     if not isinstance(schema, dict):
         return None, [f"schema {schema_path} is not a JSON object"]
     return cast(dict[str, Any], schema), []
+
+
+def _implicit_mock_replay_schema_path(repo_root: Path | None) -> Path | None:
+    candidates: list[Path] = []
+    if repo_root is not None:
+        candidates.append(repo_root / "schemas" / "mock_public_replay.schema.json")
+    candidates.append(Path(__file__).resolve().parents[3] / "schemas" / "mock_public_replay.schema.json")
+    return next((candidate for candidate in candidates if candidate.is_file()), None)
 
 
 def _schema_errors(document: Mapping[str, Any], schema: dict[str, Any] | None) -> list[str]:
@@ -221,6 +230,14 @@ def _evaluation_report_gate_checks(document: Mapping[str, Any]) -> list[str]:
         return ["mock report gate.pass must equal all checks are true"]
     return []
 
+
+def _mock_public_replay_checks(document: Mapping[str, Any]) -> list[str]:
+    try:
+        MockPublicReplay.from_dict(document)
+    except MockReplayValidationError as error:
+        return [f"mock public replay contract invalid: {error}"]
+    return []
+
 def verify_artifact(
     path: Path,
     schema_path: Path | None = None,
@@ -243,7 +260,18 @@ def verify_artifact(
         )
 
     cast_document = cast(dict[str, Any], document)
-    schema, schema_load_errors = _load_schema(schema_path)
+    effective_schema_path = schema_path
+    if effective_schema_path is None and cast_document.get("artifact_kind") == "mock_public_transition_replay":
+        effective_schema_path = _implicit_mock_replay_schema_path(repo_root)
+        if effective_schema_path is None:
+            return VerificationResult(
+                path=path,
+                sha256=sha256_file(path),
+                schema_valid=False,
+                self_hash_valid=False,
+                errors=("mock public replay schema is unavailable",),
+            )
+    schema, schema_load_errors = _load_schema(effective_schema_path)
     errors = list(schema_load_errors)
     errors.extend(_schema_errors(cast_document, schema))
     self_hash_error = _self_hash_error(cast_document, schema)
@@ -257,6 +285,8 @@ def verify_artifact(
     if kind == "evaluation_report":
         errors.extend(_environment_kind_checks(cast_document, evaluation=True))
         errors.extend(_evaluation_report_gate_checks(cast_document))
+    if kind == "mock_public_replay":
+        errors.extend(_mock_public_replay_checks(cast_document))
 
     return VerificationResult(
         path=path,

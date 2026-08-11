@@ -321,9 +321,9 @@
       "sha256": "sha256:b25ce37a1b0c10e5887d7e2573b7ddaf2ee5a21e2aca83bea36aaf188b2436eb"
     },
     {
-      "bytes": 6934,
+      "bytes": 7730,
       "path": "tests/test_mock_replay.py",
-      "sha256": "sha256:60e546749e923bc0f3331c1f93d670e79a06363d8024ad60b0960979cda010f6"
+      "sha256": "sha256:8c076a0b8963c5e9d14e80abe598e21e0b3c07f012fa26558932cd184eb2e28d"
     },
     {
       "bytes": 10586,
@@ -373,5 +373,5 @@
   ],
   "manifest_version": "1",
   "package": "hok-agent-v5-starter",
-  "self_hash": "sha256:a8e913bd51b3b21cbf61f3360f172a3d7dee3509c4e10d8d05376dacbd2f547d"
+  "self_hash": "sha256:fda8358311c28a0f2a4594547592d4adcba6fee17c632736daf826c16e0b0c31"
 }
