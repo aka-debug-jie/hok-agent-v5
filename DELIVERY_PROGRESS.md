@@ -5,7 +5,7 @@
 
 - 最后更新：`2026-08-11`
 - 当前阶段：`V5-M1-EXTERNAL-ACCESS-WAITING`
-- 当前任务：`TASK-005-PACKAGE-INTEGRITY-01 / MOCK-ONLY CONTROL PLANE`
+- 当前任务：`TASK-005 EXTERNAL_ACCESS_WAITING / MOCK-ONLY CONTROL PLANE`
 - 当前状态：`WAITING_EXTERNAL`
 - 当前 promotion：`无 checkpoint 可晋升`
 - 真实客户端边界：`READ_ONLY_SHADOW_ONLY`
@@ -160,7 +160,7 @@
 
 日期：`2026-08-11`
 
-状态：`IN_PROGRESS / WAITING_EXTERNAL`。
+状态：`DONE（本地交付完整性切片）/ WAITING_EXTERNAL`。
 
 范围：基于 legacy 已完成的 source-only delivery integrity 模式，修复 V5 `PACKAGE_MANIFEST.json` 的文件集合与 hash 漂移，并把只读校验接入本地检查。只实现 V5 原生 checker 与机械篡改测试；不复制 legacy 代码，不迁移模型、checkpoint、K96、训练缓存、设备配置或真实客户端路径。
 
@@ -168,4 +168,16 @@
 
 明确不做：不运行训练、不生成 checkpoint、不连接 GameCore、不读取 license、不连接手机、不改变 `WAITING_EXTERNAL` 或任何 control-plane lock。
 
-验收预期：manifest self-hash、文件集合、逐文件 size/hash 与安全相对路径均 fail-closed；新增、删除、篡改、重复或路径穿越均被拒绝；`make check` 通过。
+实际变更：新增 `src/hok_agent/package_integrity.py` 与 `tests/test_package_integrity.py`；新增默认只读 `package-integrity` CLI、显式 `--write` 刷新模式和 `make integrity`，并把 integrity 纳入 `make check`。新的 manifest 固定记录 `manifest_version`、package、受控文件的相对路径/size/SHA-256 与 canonical self-hash；受限目录和文件被排除，受控 symlink、畸形项、重复/绝对/`..` 路径、缺失/新增/篡改均 fail-closed。
+
+legacy 只读审阅结论：唯一 current-state authority 是 legacy `DELIVERY_PROGRESS.md`；v4.4 只是 non-promoting engineering canary，v4.4.1/R5/RL/MICRO-GATE/G10 均未完成或锁定。可借鉴的仅是 source-only integrity、公开/特权隔离、deterministic replay、失败关闭和事务回滚模式；任何 legacy checkpoint、optimizer、K96 profile、cache、阈值、设备配置、真实客户端路径或能力结论均未迁入。legacy 顶层旧 manifest/validation report 的日期与当前台账不一致，因此未作为能力证据。
+
+运行命令：`.venv/bin/python -m pytest tests/test_package_integrity.py`；`.venv/bin/python -m hok_agent package-integrity --root . --write`；`make check PYTHON=.venv/bin/python`；`make validate PYTHON=.venv/bin/python`；`.venv/bin/python -m hok_agent env-smoke --episodes 100`；两次 `verify-artifact`；`.venv/bin/python -m hok_agent package-integrity --root .`。
+
+验证结果：package-integrity focused tests `7 passed`；全量 `make check` 通过：Ruff、strict mypy（21 source files）、pytest（49 passed）、safety scan（77 files，0 finding）和 package integrity（68/68 controlled files）均通过；4 份 YAML 和 2 份 JSON schema 有效。100 局 mock `100/100` complete，`terminal_rate=1.0`、deterministic replay=true、protocol/action-decode/illegal/replay errors 均为 0；run manifest 与 evaluation report 的 schema/self-hash/artifact hash 均有效。runtime source commit=`d62a46c20ace14e17eda3508c18d395df9a89dbb`，`dirty=false`。
+
+生成 artifact：`artifacts/runs/m0-mock-smoke-20260811T105706Z/`（Git 忽略）；run manifest hash=`sha256:021a617a62236089882ec2533baa0fa0941cd7d3186573c20195e107a8bcb57a`；evaluation report hash=`sha256:8ca784bd893099a026ee372fb84464817e8f165a3671260da480631f7e6ad617`。
+
+外部操作与阻塞：未运行训练、未生成 checkpoint、未连接 GameCore 或手机、未读取 license、未修改 legacy。GameCore/license/service 方式仍未提供，控制面和所有外部操作继续为 `WAITING_EXTERNAL`。
+
+下一任务：保持 TASK-005 waiting；未来有意改变 V5 受控源码时，先显式运行 `package-integrity --write`，再运行 `make check`。只有 Git 外的获授权 GameCore、license 接入方式和服务协议资料齐全后，才进入 TASK-010 的隔离 service preflight。

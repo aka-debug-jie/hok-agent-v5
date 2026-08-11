@@ -36,9 +36,9 @@
       "sha256": "sha256:fc0cc9606ceefcc607111d1073624d13c930bfad7d1ae2dd4030ba3415f7ce15"
     },
     {
-      "bytes": 10879,
+      "bytes": 13565,
       "path": "DELIVERY_PROGRESS.md",
-      "sha256": "sha256:d3951ba88da2a9bc266290882c190f909e8aee4c9f3057e1c5c86f9081012efe"
+      "sha256": "sha256:6175e1d3e551484be41e6179dde4e6befc44112057af999b4a07c6d986a29f7f"
     },
     {
       "bytes": 6419,
@@ -343,5 +343,5 @@
   ],
   "manifest_version": "1",
   "package": "hok-agent-v5-starter",
-  "self_hash": "sha256:dc174edca4c16190d37d9603b7caf4210c3fe153fd8338d7ed497c1f13f17010"
+  "self_hash": "sha256:a7167acb2b10c3408ed5cf29a426c1405492623d7e8c959980c2de5f38150704"
 }
