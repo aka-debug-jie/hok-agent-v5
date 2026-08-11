@@ -5,7 +5,7 @@
 
 - 最后更新：`2026-08-11`
 - 当前阶段：`V5-M1-EXTERNAL-ACCESS-WAITING`
-- 当前任务：`TASK-005 EXTERNAL_ACCESS_WAITING + TRAINING_INFRASTRUCTURE_ON_MOCK/MINI`
+- 当前任务：`TASK-005 EXTERNAL_ACCESS_WAITING / MOCK-ONLY CONTROL PLANE`
 - 当前状态：`WAITING_EXTERNAL`
 - 当前 promotion：`无 checkpoint 可晋升`
 - 真实客户端边界：`READ_ONLY_SHADOW_ONLY`
@@ -24,7 +24,7 @@
 
 ## 2. 当前任务范围
 
-`TASK-000` 已完成；当前等待授权环境输入，后续见 `TASK-005 EXTERNAL_ACCESS_WAITING + TRAINING_INFRASTRUCTURE_ON_MOCK/MINI`。
+`TASK-000` 已完成；TASK-005 的 mock-only 控制面已实现并复验，当前仅等待授权环境输入。
 
 当前只允许：
 
@@ -110,4 +110,26 @@
 
 外部操作：未下载 GameCore，未读取许可证，未修改 legacy，未对真实客户端发送动作。
 
-下一任务：`TASK-005 EXTERNAL_ACCESS_WAITING + TRAINING_INFRASTRUCTURE_ON_MOCK/MINI`；若用户/授权方提供 Git 外的获授权 GameCore 与 license 接入方式，先执行真实服务 identity/license/schema/health/reset/step/close preflight，再进入 `TASK-010 GAMECORE_ADAPTER_AND_THROUGHPUT`。
+下一任务：继续 `TASK-005 EXTERNAL_ACCESS_WAITING`；若用户/授权方提供 Git 外的获授权 GameCore 与 license 接入方式，先执行真实服务 identity/license/schema/health/reset/step/close preflight，再进入 `TASK-010 GAMECORE_ADAPTER_AND_THROUGHPUT`。
+
+## 7. TASK-005 mock-only control-plane 实际记录
+
+日期：`2026-08-11`
+
+任务：`TASK-005 EXTERNAL_ACCESS_WAITING / MOCK-ONLY CONTROL PLANE`
+
+状态：`IMPLEMENTED / WAITING_EXTERNAL`；没有启动训练、没有 checkpoint、没有连接或探测真实 GameCore。
+
+变更文件：`TASK_005_EXTERNAL_ACCESS_WAITING.md`、`configs/program_v1.yaml`、环境/RPC 合同、control-plane gate、artifact schema/verifier、CLI、mock server stub 与相应测试；runtime source commit=`57125d4f8ff4376bf7d0eed58821df31c1b24908`，`dirty=false`。
+
+运行命令：`make check PYTHON=.venv/bin/python`；`env-smoke --config configs/run_smoke_v1.yaml --episodes 100`；两份 `verify-artifact`；三次 `access-gate --runtime-license-status valid`；`preflight --probe-upstream`。
+
+验证结果：Ruff、strict mypy（20 source files）、pytest（35 passed）、safety scan（73 files，0 finding）均通过。mock 100/100 complete，`terminal_rate=1.0`，deterministic replay=true，protocol/action-decode/illegal/replay errors 均为 0；新 manifest 与 evaluation report 均 schema+self-hash+artifact-hash valid。当前配置对 GameCore transport、formal evaluation、promotion 均返回预期 `WAITING_EXTERNAL`（exit=2），并由计数 test 证明不调用 test-double 的 health/reset/step。
+
+生成 artifact：`artifacts/runs/m0-mock-smoke-20260811T095514Z/`（Git 忽略）；最新项目内 preflight 报告为 `reports/m0/upstream_gamecore_preflight.json`。
+
+已知风险：新增 reset/step 关联字段仍是未对外发布的 local protocol v1；进入 TASK-010 前必须完成显式协议版本/兼容性决议。artifact verifier 的通过仅表示技术 schema/hash 完整，不表示腾讯外部授权。
+
+外部阻塞：GameCore binary、license 接入方式、获授权范围与真实 service 启动方式均未在 Git 外提供；preflight 仍为 `WAITING_EXTERNAL`。远程 upstream 探测可达（HTTP 200），但项目内未发现 checkout；未读取 license 内容、未记录 license 路径、未进行真实握手。
+
+下一任务：等待上述外部输入；外部授权证据、明确 service 方式和许可证接入方式齐全后，以新的隔离 transport/service factory 执行 TASK-010 preflight。不得以 mock 或 service 自报 runtime `valid` 代替授权。

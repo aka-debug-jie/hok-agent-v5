@@ -3,7 +3,7 @@
 ## 状态
 
 - 阶段：`M1` 前置等待期
-- 当前状态：`IN_PROGRESS / WAITING_EXTERNAL`
+- 当前状态：`IMPLEMENTED / WAITING_EXTERNAL`
 - 环境权威：仅项目自有 `mock`；不连接、探测或启动真实 GameCore。
 
 ## 目标
