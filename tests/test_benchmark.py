@@ -10,7 +10,8 @@ def test_mock_benchmark_reports_positive_throughput(tmp_path: Path) -> None:
     config_dir.mkdir()
     config = config_dir / "run_smoke_v1.yaml"
     config.write_text(
-        """environment:
+        """version: 1
+environment:
   seed_start: 10
   episodes: 2
   max_steps_per_episode: 8

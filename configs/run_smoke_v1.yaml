@@ -1,3 +1,5 @@
+version: 1
+
 run:
   artifact_type: environment_smoke
   config_version: 1

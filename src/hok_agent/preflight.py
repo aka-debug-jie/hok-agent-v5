@@ -4,15 +4,60 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import subprocess
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 from hok_agent.artifacts.hashing import sha256_json
+from hok_agent.config import CONFIG_VERSION, ConfigError, load_yaml_mapping, required_mapping, required_string
 
 UPSTREAM_REPOSITORY = "https://github.com/tencent-ailab/hok_env"
 UPSTREAM_PYTHON_CONSTRAINT = ">=3.6,<3.10"
+_ENVIRONMENT_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeInputConfig:
+    """Non-secret environment-variable names loaded from versioned runtime YAML."""
+
+    version: int
+    upstream_checkout_env: str
+    gamecore_path_env: str
+    license_path_env: str
+
+
+def _environment_variable_name(value: object, field: str) -> str:
+    name = required_string(value, field)
+    if _ENVIRONMENT_NAME.fullmatch(name) is None:
+        raise ConfigError(f"{field} must be an uppercase environment variable name")
+    return name
+
+
+def load_runtime_input_config(path: Path) -> RuntimeInputConfig:
+    """Load only allowed non-secret input names; paths and credentials are forbidden."""
+
+    document = load_yaml_mapping(path)
+    if set(document) != {"version", "runtime_inputs"}:
+        raise ConfigError("runtime input config must contain exactly version and runtime_inputs")
+    runtime_inputs = required_mapping(document["runtime_inputs"], "runtime_inputs")
+    allowed = {"upstream_checkout_env", "gamecore_path_env", "license_path_env"}
+    if set(runtime_inputs) != allowed:
+        raise ConfigError(f"runtime_inputs must contain exactly {sorted(allowed)}")
+    return RuntimeInputConfig(
+        version=CONFIG_VERSION,
+        upstream_checkout_env=_environment_variable_name(
+            runtime_inputs["upstream_checkout_env"], "runtime_inputs.upstream_checkout_env"
+        ),
+        gamecore_path_env=_environment_variable_name(
+            runtime_inputs["gamecore_path_env"], "runtime_inputs.gamecore_path_env"
+        ),
+        license_path_env=_environment_variable_name(
+            runtime_inputs["license_path_env"], "runtime_inputs.license_path_env"
+        ),
+    )
 
 
 def _docker_status() -> dict[str, object]:
@@ -42,8 +87,9 @@ def _wsl_detected() -> bool:
     return "microsoft" in version or "wsl" in version
 
 
-def _candidate_checkout_paths(repo_root: Path) -> list[Path]:
+def _candidate_checkout_paths(repo_root: Path, env_names: tuple[str, ...]) -> list[Path]:
     candidates = [repo_root / "upstream" / "hok_env", repo_root.parent / "hok_env"]
+    candidates.extend(Path(os.environ[name]) for name in env_names if os.environ.get(name))
     return [candidate for candidate in candidates if candidate.is_dir()]
 
 
@@ -75,6 +121,7 @@ def collect_preflight(
     *,
     gamecore_path: Path | None = None,
     license_path: Path | None = None,
+    runtime_config: Path | None = None,
     probe_upstream: bool = False,
 ) -> dict[str, object]:
     """Collect only path-presence metadata and public runtime facts.
@@ -85,9 +132,17 @@ def collect_preflight(
     """
 
     repo_root = repo_root.resolve()
-    checkouts = _candidate_checkout_paths(repo_root)
-    gamecore = _optional_path_status(("HOK_GAMECORE_PATH",), gamecore_path)
-    license_status = _optional_path_status(("HOK_LICENSE_PATH", "GAMECORE_LICENSE_PATH"), license_path)
+    runtime_inputs = load_runtime_input_config(runtime_config) if runtime_config is not None else None
+    checkout_env_names = () if runtime_inputs is None else (runtime_inputs.upstream_checkout_env,)
+    gamecore_env_names = ("HOK_GAMECORE_PATH",) if runtime_inputs is None else (runtime_inputs.gamecore_path_env,)
+    license_env_names = (
+        ("HOK_LICENSE_PATH", "GAMECORE_LICENSE_PATH")
+        if runtime_inputs is None
+        else (runtime_inputs.license_path_env,)
+    )
+    checkouts = _candidate_checkout_paths(repo_root, checkout_env_names)
+    gamecore = _optional_path_status(gamecore_env_names, gamecore_path)
+    license_status = _optional_path_status(license_env_names, license_path)
     has_required_inputs = bool(checkouts) and bool(gamecore["exists"]) and bool(license_status["exists"])
     status = "PREFLIGHT_INPUTS_PRESENT_UNVERIFIED" if has_required_inputs else "WAITING_EXTERNAL"
     reasons: list[str] = []
@@ -119,10 +174,22 @@ def collect_preflight(
         },
         "gamecore": gamecore,
         "license": license_status,
+        "runtime_inputs": {
+            "config_loaded": runtime_inputs is not None,
+            "version": None if runtime_inputs is None else runtime_inputs.version,
+            "environment_variable_names": (
+                {} if runtime_inputs is None else {
+                    "upstream_checkout": runtime_inputs.upstream_checkout_env,
+                    "gamecore_path": runtime_inputs.gamecore_path_env,
+                    "license_path": runtime_inputs.license_path_env,
+                }
+            ),
+        },
         "scope": {
             "checkout_paths_checked": ["upstream/hok_env", "../hok_env"],
             "license_contents_read": False,
             "license_path_values_recorded": False,
+            "runtime_config_path_values_recorded": False,
             "gamecore_binary_downloaded": False,
             "actual_service_handshake": False,
         },

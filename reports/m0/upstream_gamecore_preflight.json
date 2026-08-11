@@ -23,7 +23,16 @@
     "provided": false,
     "provided_by_env_var_names": []
   },
-  "report_hash": "sha256:467cecf412bcf00325ed119ad1d4c95bb7ea166213e4d1928c78653e69a1a314",
+  "report_hash": "sha256:b22d280843377373733fac895220432c5a11fd5a0d283ba041fb68a09418e372",
+  "runtime_inputs": {
+    "config_loaded": true,
+    "environment_variable_names": {
+      "gamecore_path": "HOK_GAMECORE_PATH",
+      "license_path": "HOK_LICENSE_PATH",
+      "upstream_checkout": "HOK_ENV_CHECKOUT"
+    },
+    "version": 1
+  },
   "schema_version": 1,
   "scope": {
     "actual_service_handshake": false,
@@ -33,7 +42,8 @@
     ],
     "gamecore_binary_downloaded": false,
     "license_contents_read": false,
-    "license_path_values_recorded": false
+    "license_path_values_recorded": false,
+    "runtime_config_path_values_recorded": false
   },
   "status": "WAITING_EXTERNAL",
   "upstream": {

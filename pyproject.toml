@@ -49,5 +49,5 @@ warn_unreachable = true
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["yaml", "jsonschema"]
+module = ["yaml", "jsonschema", "jsonschema.*"]
 ignore_missing_imports = true

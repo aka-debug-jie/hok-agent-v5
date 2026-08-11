@@ -83,6 +83,7 @@ TASK-005 处于 `WAITING_EXTERNAL` 时，仅可运行 mock、schema、preflight 
 
 ```text
 python -m hok_agent preflight
+python -m hok_agent validate-config
 python -m hok_agent access-gate --operation gamecore_transport --runtime-license-status valid
 python -m hok_agent env-smoke --config configs/run_smoke_v1.yaml
 python -m hok_agent env-benchmark

@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from hok_agent.artifacts.verification import ArtifactVerificationError, verify_artifact
+from hok_agent.config import validate_config_tree
 from hok_agent.contracts import LicenseStatus
 from hok_agent.control_plane import ControlledOperation, ExternalAccessDenied, ExternalAccessGate
 from hok_agent.evaluation.smoke import run_mock_benchmark, run_mock_smoke
@@ -33,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     smoke = subcommands.add_parser("env-smoke", help="run the deterministic mock E0 smoke")
-    smoke.add_argument("--config", type=Path, required=True)
+    smoke.add_argument("--config", type=Path, default=Path("configs/run_smoke_v1.yaml"))
     smoke.add_argument("--episodes", type=int, default=None)
 
     benchmark = subcommands.add_parser("env-benchmark", help="benchmark only the deterministic mock")
@@ -53,7 +54,16 @@ def build_parser() -> argparse.ArgumentParser:
     preflight.add_argument("--output", type=Path, default=Path("reports/m0/upstream_gamecore_preflight.json"))
     preflight.add_argument("--gamecore-path", type=Path, default=None)
     preflight.add_argument("--license-path", type=Path, default=None)
+    preflight.add_argument(
+        "--runtime-config",
+        type=Path,
+        default=Path("configs/runtime_inputs_v1.yaml"),
+        help="versioned YAML containing only non-secret environment-variable names",
+    )
     preflight.add_argument("--probe-upstream", action="store_true")
+
+    validate = subcommands.add_parser("validate-config", help="validate versioned YAML and JSON schemas")
+    validate.add_argument("--config-dir", type=Path, default=Path("configs"))
 
     access_gate = subcommands.add_parser(
         "access-gate",
@@ -101,14 +111,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "preflight":
             root = args.root.resolve()
             output = args.output if args.output.is_absolute() else root / args.output
+            runtime_config = (
+                args.runtime_config
+                if args.runtime_config.is_absolute()
+                else root / args.runtime_config
+            )
             report = collect_preflight(
                 root,
                 gamecore_path=args.gamecore_path,
                 license_path=args.license_path,
+                runtime_config=runtime_config,
                 probe_upstream=args.probe_upstream,
             )
             write_preflight(output, report)
             _print_document({"output": str(output), **report})
+            return 0
+        if args.command == "validate-config":
+            for message in validate_config_tree(args.config_dir.resolve()):
+                print(message)
             return 0
         if args.command == "access-gate":
             gate = ExternalAccessGate.from_yaml(args.config)

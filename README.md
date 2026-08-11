@@ -85,7 +85,8 @@ V5 将问题拆成三条可独立验收的路线：
 
 ```text
 make check
-python -m hok_agent env-smoke --config configs/run_smoke_v1.yaml
+make validate
+python -m hok_agent env-smoke
 python -m hok_agent env-benchmark --episodes 100
 python -m hok_agent preflight --probe-upstream
 python -m hok_agent verify-artifact <run_manifest.json>
@@ -96,3 +97,5 @@ python -m hok_agent access-gate --operation gamecore_transport --runtime-license
 artifact 基础设施；它们不构成任何 Honor of Kings 或 GameCore 能力结论。
 
 `access-gate` 不连接服务。当前它会以 `WAITING_EXTERNAL` 拒绝 GameCore transport、formal evaluation 和 promotion；服务自报 `valid` 不是腾讯外部授权证明。
+
+所有 V5 YAML 都遵循 legacy 的根级 `version` + 默认 `configs/` 路径约定。`preflight` 会自动读取 `configs/runtime_inputs_v1.yaml`，其中只保存非秘密环境变量名；路径、许可证和密钥值不进入 Git，也不会改变 control-plane 的 `WAITING_EXTERNAL` 锁。

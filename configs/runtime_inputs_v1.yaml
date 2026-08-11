@@ -1,0 +1,9 @@
+version: 1
+
+# Non-secret runtime input names only. Values stay outside Git, in the named
+# environment variables, matching the legacy project's versioned YAML + wrapper
+# convention. This file cannot unlock GameCore access.
+runtime_inputs:
+  upstream_checkout_env: HOK_ENV_CHECKOUT
+  gamecore_path_env: HOK_GAMECORE_PATH
+  license_path_env: HOK_LICENSE_PATH
