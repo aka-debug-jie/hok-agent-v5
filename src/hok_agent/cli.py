@@ -12,6 +12,7 @@ from hok_agent.artifacts.verification import ArtifactVerificationError, verify_a
 from hok_agent.config import validate_config_tree
 from hok_agent.contracts import LicenseStatus
 from hok_agent.control_plane import ControlledOperation, ExternalAccessDenied, ExternalAccessGate
+from hok_agent.evaluation.mock_replay import record_mock_public_replay, verify_mock_public_replay
 from hok_agent.evaluation.smoke import run_mock_benchmark, run_mock_smoke
 from hok_agent.package_integrity import PackageIntegrityError, check_manifest, write_manifest
 from hok_agent.preflight import collect_preflight, write_preflight
@@ -27,6 +28,8 @@ def _default_schema(path: Path, root: Path) -> Path | None:
         return root / "schemas" / "run_manifest.schema.json"
     if path.name == "evaluation_report.json":
         return root / "schemas" / "evaluation_report.schema.json"
+    if path.name == "mock_public_replay.json":
+        return root / "schemas" / "mock_public_replay.schema.json"
     return None
 
 
@@ -41,6 +44,21 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark = subcommands.add_parser("env-benchmark", help="benchmark only the deterministic mock")
     benchmark.add_argument("--config", type=Path, default=Path("configs/run_smoke_v1.yaml"))
     benchmark.add_argument("--episodes", type=int, default=100)
+
+    replay_record = subcommands.add_parser(
+        "mock-replay-record",
+        help="record one public-only diagnostic trace from the deterministic mock",
+    )
+    replay_record.add_argument("--output", type=Path, required=True)
+    replay_record.add_argument("--seed", type=int, default=101)
+    replay_record.add_argument("--side", choices=("blue", "red"), default="blue")
+    replay_record.add_argument("--max-steps", type=int, default=12)
+
+    replay_verify = subcommands.add_parser(
+        "mock-replay-verify",
+        help="replay a public-only mock diagnostic trace in a fresh mock process",
+    )
+    replay_verify.add_argument("path", type=Path)
 
     verify = subcommands.add_parser("verify-artifact", help="verify a self-hashed JSON artifact")
     verify.add_argument("path", type=Path)
@@ -109,6 +127,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.episodes < 1:
                 raise ValueError("--episodes must be at least 1")
             _print_document(run_mock_benchmark(args.config, episodes=args.episodes))
+            return 0
+        if args.command == "mock-replay-record":
+            _print_document(
+                record_mock_public_replay(
+                    args.output,
+                    seed=args.seed,
+                    side=args.side,
+                    max_steps_per_episode=args.max_steps,
+                ).to_dict()
+            )
+            return 0
+        if args.command == "mock-replay-verify":
+            _print_document(verify_mock_public_replay(args.path).to_dict())
             return 0
         if args.command == "verify-artifact":
             root = args.root.resolve()

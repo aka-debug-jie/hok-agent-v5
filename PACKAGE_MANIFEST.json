@@ -16,9 +16,9 @@
       "sha256": "sha256:f103fa68a79c254e9ae730feb0fa030add0f7cdc49ef3c368bd9e8215b04da6a"
     },
     {
-      "bytes": 4500,
+      "bytes": 4645,
       "path": "AUTOMATION_RUNBOOK.md",
-      "sha256": "sha256:3b1c85e633df1ccc265077989ffb8bbeed31c2b7e2895d402d7dc68b0563c857"
+      "sha256": "sha256:448edc8545d187f92866917e14faca8ae7d5d1aac6017cc170892a90ddf58533"
     },
     {
       "bytes": 4853,
@@ -26,9 +26,9 @@
       "sha256": "sha256:a52f49267910b9d3d865e65cd740d9cc75d392cfff5c820c5ce8aef04625c4fa"
     },
     {
-      "bytes": 4326,
+      "bytes": 5637,
       "path": "DATA_AND_ARTIFACT_CONTRACT.md",
-      "sha256": "sha256:80b9954732c389d39d088f4a42bbb59406e2b567082365afb2cf51d4fb12ac51"
+      "sha256": "sha256:8683197a3dfcf0738d1b29f46ab1b919b161a5035a48933c1360197d518432bf"
     },
     {
       "bytes": 1064,
@@ -36,14 +36,14 @@
       "sha256": "sha256:fc0cc9606ceefcc607111d1073624d13c930bfad7d1ae2dd4030ba3415f7ce15"
     },
     {
-      "bytes": 13565,
+      "bytes": 14426,
       "path": "DELIVERY_PROGRESS.md",
-      "sha256": "sha256:6175e1d3e551484be41e6179dde4e6befc44112057af999b4a07c6d986a29f7f"
+      "sha256": "sha256:ebc47ae17131b56c92c425dd9f63c6aada6671cbd87703e458e882fe0d483343"
     },
     {
-      "bytes": 6419,
+      "bytes": 7047,
       "path": "ENVIRONMENT_CONTRACT.md",
-      "sha256": "sha256:de5d9e4f4660dd18bfacc0e75447e9be22e3d056e23c7ca673f46c4cdaf7f628"
+      "sha256": "sha256:01c309cad9376102bac15fd93e39a5253fb2f7df51df9f6a5e61bc7383073109"
     },
     {
       "bytes": 4923,
@@ -81,9 +81,9 @@
       "sha256": "sha256:0b633a4377e0c0f16f13bcf8d5e5528f75de59cf508909160d3407d3b888f7f0"
     },
     {
-      "bytes": 5061,
+      "bytes": 5616,
       "path": "README.md",
-      "sha256": "sha256:a7bee38016b36110ef3dc7f4ed6003bafd8bd98b4eafa8354c74790329492709"
+      "sha256": "sha256:82f19b097bcecdced4b16a09ec54f7d7db8b0e366cd7c6070aa51da219debee6"
     },
     {
       "bytes": 2119,
@@ -106,9 +106,14 @@
       "sha256": "sha256:4f6f62abd71b2e330a574dd2b7e8fa8632b668b8470670f5058d0e458b6f917c"
     },
     {
-      "bytes": 3119,
+      "bytes": 3302,
       "path": "TASK_005_EXTERNAL_ACCESS_WAITING.md",
-      "sha256": "sha256:8287d580f4f53db5d91a59de8650cb3ab0a9d9b064a802b00eb8d7633158e60a"
+      "sha256": "sha256:eadb9daa16e13ee472b2ea5db555ab27052ecd18d6fdb984198d834b8e766de6"
+    },
+    {
+      "bytes": 1387,
+      "path": "TASK_005_MOCK_REPLAY_01.md",
+      "sha256": "sha256:4b8809dafd01400d56436526ddf5eec8f8f4ccab6ff352bf4654e0b7077ff590"
     },
     {
       "bytes": 4914,
@@ -156,6 +161,11 @@
       "sha256": "sha256:c991ce3061115fd166aad4209df0d1f6161c6036d1ff6e316e091a7099ecc7a1"
     },
     {
+      "bytes": 5609,
+      "path": "schemas/mock_public_replay.schema.json",
+      "sha256": "sha256:de9ea2ca72f36f81a3d53f02f44ef01952bfaa59278abf3c4f8398f66dc89f2b"
+    },
+    {
       "bytes": 6298,
       "path": "schemas/run_manifest.schema.json",
       "sha256": "sha256:1b52453b9f7a04ff8148b0ad4030c4d686c3beab651aedf84c32e6fc370601c0"
@@ -186,9 +196,9 @@
       "sha256": "sha256:8749e343ca02f2feedfaf2514a9b9b35d6a58effff48521d7d868372eac37736"
     },
     {
-      "bytes": 7901,
+      "bytes": 9268,
       "path": "src/hok_agent/cli.py",
-      "sha256": "sha256:e5555d8be20b66d824b7c6a4c84ed0cd735b2adca6b13805bbcacad0a9b4db04"
+      "sha256": "sha256:0d8d3133fdf569416f2996f173f1e2771f76e1e629a1f6b4ab7d6055d49c7aad"
     },
     {
       "bytes": 3237,
@@ -196,9 +206,14 @@
       "sha256": "sha256:ad0d3e6036b7dd1da82792b3acea2f90664bd3bbe539e03e9d33880be993b989"
     },
     {
-      "bytes": 839,
+      "bytes": 1359,
       "path": "src/hok_agent/contracts/__init__.py",
-      "sha256": "sha256:ff662588a9165ec5f4a3146fa5a2293485aa8d4a4f36789dd55351593131666a"
+      "sha256": "sha256:bcaacf2610e37e90c62617f6884cbf7d478c59683a398fba6ee7c553b742d103"
+    },
+    {
+      "bytes": 19296,
+      "path": "src/hok_agent/contracts/mock_replay.py",
+      "sha256": "sha256:39c4739b6a922dd6ace51235f32d0c469911b743bc44d9e0b2c385999e58151a"
     },
     {
       "bytes": 37240,
@@ -239,6 +254,11 @@
       "bytes": 55,
       "path": "src/hok_agent/evaluation/__init__.py",
       "sha256": "sha256:1af89046c7b64561e9f452277b0bc23fc73675260b4a5da777f0c946874e1ec2"
+    },
+    {
+      "bytes": 15394,
+      "path": "src/hok_agent/evaluation/mock_replay.py",
+      "sha256": "sha256:48cb1451d60dc609b4ff5a110dac33651553cdece51af4f2d8d03f63f05ec61b"
     },
     {
       "bytes": 16033,
@@ -301,6 +321,16 @@
       "sha256": "sha256:b25ce37a1b0c10e5887d7e2573b7ddaf2ee5a21e2aca83bea36aaf188b2436eb"
     },
     {
+      "bytes": 6934,
+      "path": "tests/test_mock_replay.py",
+      "sha256": "sha256:60e546749e923bc0f3331c1f93d670e79a06363d8024ad60b0960979cda010f6"
+    },
+    {
+      "bytes": 10586,
+      "path": "tests/test_mock_replay_contract.py",
+      "sha256": "sha256:0ca2ea991e17bb3e432384774a3869ee232e4321b580cba4374aed2059686578"
+    },
+    {
       "bytes": 4709,
       "path": "tests/test_mock_rpc.py",
       "sha256": "sha256:a3a434702f0669848b22b1299613e55d6980b35889f0889b0d919a483b7b0558"
@@ -343,5 +373,5 @@
   ],
   "manifest_version": "1",
   "package": "hok-agent-v5-starter",
-  "self_hash": "sha256:a7167acb2b10c3408ed5cf29a426c1405492623d7e8c959980c2de5f38150704"
+  "self_hash": "sha256:737a5fae7a5fb65752601c73e1b97756a381cc2faa8745a94f7c05eea908b932"
 }

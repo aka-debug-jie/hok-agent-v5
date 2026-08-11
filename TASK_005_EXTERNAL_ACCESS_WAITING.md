@@ -33,6 +33,7 @@
 3. `reset` 回显 `request_id`，`step` 回显 `episode_id`；任何错配 response 必须关闭已知本地 session、毒化 client/transport，并拒绝后续 health/reset/step，直至重建隔离 transport。
 4. GameCore transport、formal evaluation 与 promotion 必须通过同一运行时控制面 gate：`EXTERNAL_ACCESS_CONFIRMED`、非 Git 外部授权证据引用、显式解锁、服务 runtime `license_status=valid` 缺一不可。transport/service factory 必须在创建 socket、进程或 SDK service 前完成本地 gate；当前配置下三者均返回 `WAITING_EXTERNAL`，且不触发 service health/reset/step。
 5. `make check PYTHON=.venv/bin/python`、mock smoke、artifact verification、safety scan 均通过。
+6. `TASK-005-MOCK-PUBLIC-TRACE-01` 可记录并 fresh-process 重放 public-only mock trace；它只证明 mock 基础设施，不能进入训练、formal evaluation 或 promotion。
 
 协议注记：当前 RPC 是未对外发布的本地 pre-release v1。TASK-010 之前必须完成一次显式的协议版本升级或兼容性决议，才能把新增的 reset/step 关联字段交给任何非 mock peer。
 

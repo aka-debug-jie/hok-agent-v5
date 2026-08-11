@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/mock_public_replay.schema.json",
+  "title": "HoK-Agent V5 Mock Public Transition Replay",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "environment_kind",
+    "formal",
+    "capability_claim",
+    "service_identity_hash",
+    "protocol_identity_hash",
+    "mapping_identity_hash",
+    "mock_profile",
+    "seed",
+    "side",
+    "mode",
+    "episode_id",
+    "transition_count",
+    "transitions",
+    "chain_head",
+    "artifact_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "artifact_kind": {
+      "type": "string",
+      "const": "mock_public_transition_replay"
+    },
+    "environment_kind": {
+      "type": "string",
+      "const": "mock"
+    },
+    "formal": {
+      "type": "boolean",
+      "const": false
+    },
+    "capability_claim": {
+      "type": "string",
+      "const": "none"
+    },
+    "service_identity_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "protocol_identity_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "mapping_identity_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "mock_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "max_steps_per_episode"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "const": "mock-public-profile-v1"
+        },
+        "max_steps_per_episode": {
+          "type": "integer",
+          "minimum": 2
+        }
+      }
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "side": {
+      "type": "string",
+      "enum": ["blue", "red"]
+    },
+    "mode": {
+      "type": "string",
+      "const": "1v1"
+    },
+    "episode_id": {
+      "type": "string",
+      "pattern": "^mock-[0-9]+-(blue|red)-1$"
+    },
+    "transition_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "previous_row_hash",
+          "input_tick",
+          "pre_public_observation_hash",
+          "action",
+          "output_tick",
+          "post_public_observation_hash",
+          "terminal",
+          "truncated",
+          "outcome",
+          "row_hash"
+        ],
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "previous_row_hash": {
+            "type": ["string", "null"],
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "input_tick": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pre_public_observation_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "action": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema_version",
+              "macro_intent",
+              "action_type",
+              "target_type",
+              "target_key",
+              "direction",
+              "skill_slot",
+              "item_slot",
+              "auxiliary_parameter"
+            ],
+            "properties": {
+              "schema_version": {
+                "type": "integer",
+                "const": 1
+              },
+              "macro_intent": {
+                "type": "string",
+                "minLength": 1
+              },
+              "action_type": {
+                "type": "string",
+                "enum": ["wait", "move", "attack", "skill", "upgrade"]
+              },
+              "target_type": {
+                "type": "string",
+                "enum": ["none", "self", "enemy", "structure"]
+              },
+              "target_key": {
+                "type": ["string", "null"]
+              },
+              "direction": {
+                "type": ["integer", "null"],
+                "minimum": 0,
+                "maximum": 7
+              },
+              "skill_slot": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              },
+              "item_slot": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              },
+              "auxiliary_parameter": {
+                "type": ["number", "null"]
+              }
+            }
+          },
+          "output_tick": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "post_public_observation_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "terminal": {
+            "type": "boolean"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "outcome": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["result"],
+            "properties": {
+              "result": {
+                "type": "string",
+                "enum": ["win", "loss", "draw"]
+              }
+            }
+          },
+          "row_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "chain_head": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "artifact_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

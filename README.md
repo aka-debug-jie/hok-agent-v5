@@ -89,6 +89,8 @@ make validate
 make integrity
 python -m hok_agent env-smoke
 python -m hok_agent env-benchmark --episodes 100
+python -m hok_agent mock-replay-record --output /tmp/mock_public_replay.json --seed 101 --side blue --max-steps 12
+python -m hok_agent mock-replay-verify /tmp/mock_public_replay.json
 python -m hok_agent preflight --probe-upstream
 python -m hok_agent verify-artifact <run_manifest.json>
 python -m hok_agent access-gate --operation gamecore_transport --runtime-license-status valid
@@ -96,6 +98,8 @@ python -m hok_agent access-gate --operation gamecore_transport --runtime-license
 
 `env-smoke` 与 `env-benchmark` 永远标记为 `mock`，只证明服务、合同、schema 和
 artifact 基础设施；它们不构成任何 Honor of Kings 或 GameCore 能力结论。
+
+`mock-replay-record`/`mock-replay-verify` 只处理内建 mock 的 public-only diagnostic trace：它保存因子化动作、tick、终局和公开 observation hash，并在新的 mock service process 中重放。它不保存 reward、legal mask、teacher、truth、privileged state 或内部 replay hash；不是训练 replay、formal evaluation 或 promotion 证据。
 
 `access-gate` 不连接服务。当前它会以 `WAITING_EXTERNAL` 拒绝 GameCore transport、formal evaluation 和 promotion；服务自报 `valid` 不是腾讯外部授权证明。
 

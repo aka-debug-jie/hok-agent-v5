@@ -88,6 +88,8 @@ python -m hok_agent package-integrity
 python -m hok_agent access-gate --operation gamecore_transport --runtime-license-status valid
 python -m hok_agent env-smoke --config configs/run_smoke_v1.yaml
 python -m hok_agent env-benchmark
+python -m hok_agent mock-replay-record --output /tmp/mock_public_replay.json
+python -m hok_agent mock-replay-verify /tmp/mock_public_replay.json
 python -m hok_agent collect-bc
 python -m hok_agent train-bc
 python -m hok_agent train-ppo

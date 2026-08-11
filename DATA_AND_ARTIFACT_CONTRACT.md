@@ -167,6 +167,30 @@ artifacts/
 
 若上游不能完全确定性重放，必须明确记录可重复层级，不能伪装为 exact。
 
+### 7.1 Mock public diagnostic trace（非 canonical replay）
+
+`mock_public_transition_replay` 是 TASK-005 中只用于 deterministic `mock` 的公开诊断 trace，不是本节 canonical replay，也不满足上文 reward、upstream replay/ABS identity 的保存要求。
+
+它必须固定为：
+
+- `environment_kind=mock`；
+- `formal=false`；
+- `capability_claim=none`；
+- 内建固定 mock profile；
+- 单局完整 transition、canonical self-hash 与逐行 hash chain；
+- 仅保存 seed、side、mode、mock episode 关联符、环境 identity hash、factorized action、tick、terminal/truncated、公开 outcome 和公开 observation 的 hash。
+
+它不得保存：
+
+- reward 或 reward component；
+- legal action set/mask；
+- teacher、truth、privileged/Core state；
+- raw observation、upstream/ABS identity、internal replay identity/hash；
+- 账号、设备、路径、许可证、GameCore 或真实客户端数据；
+- 训练 entity ID 或不可见目标 ID。
+
+验证器必须在 fresh spawned mock process 中重放已记录 action，并比较逐 transition 的公开 observation hash、tick、terminal/truncated 与公开 outcome。该验证只证明 mock 基础设施的公开路径可重放；不得用于训练、formal evaluation、promotion 或任何 HoK/GameCore 能力结论。
+
 ## 8. Public / Privileged 分离
 
 建议物理分离：

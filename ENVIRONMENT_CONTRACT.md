@@ -208,6 +208,12 @@ promotion 始终优先使用真实 terminal、胜负和结构结果，不允许�
 - 相同 checkpoint 的 action distribution 在容差内；
 - fixed evaluation 能给出统计一致结论。
 
+### 8.1 Mock public diagnostic trace
+
+TASK-005 可用一个由 verifier 自己启动的 fresh `ProcessJsonTransport` 对单局 `mock_public_transition_replay` 重放。它只使用内建 mock profile，不读取 `program_v1.yaml`、不创建 GameCore transport、不接收 license/service/phone 参数，也不接触 `ExternalAccessGate`。
+
+legal action 在 record/replay 进程内瞬时用于 sampling/execution audit，不能写入 trace；trace 只保留 public observation 的 canonical hash。任何 non-mock、formal、capability claim、未知/私密字段、hash chain 断裂或逐步不一致都必须 fail-closed。
+
 ## 9. 吞吐 benchmark
 
 M1 必须测：

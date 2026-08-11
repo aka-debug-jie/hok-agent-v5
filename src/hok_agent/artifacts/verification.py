@@ -80,11 +80,15 @@ def _artifact_kind(document: Mapping[str, Any], schema: dict[str, Any] | None) -
             return "run_manifest"
         if title == "HoK-Agent V5 Evaluation Report":
             return "evaluation_report"
+        if title == "HoK-Agent V5 Mock Public Transition Replay":
+            return "mock_public_replay"
 
     if "artifacts" in document:
         return "run_manifest"
     if "suite" in document and "checkpoint" in document and "episodes" in document:
         return "evaluation_report"
+    if document.get("artifact_kind") == "mock_public_transition_replay":
+        return "mock_public_replay"
     return None
 
 
@@ -94,6 +98,8 @@ def _self_hash_field(document: Mapping[str, Any], schema: dict[str, Any] | None)
         return "manifest_hash"
     if kind == "evaluation_report":
         return "report_hash"
+    if kind == "mock_public_replay":
+        return "artifact_hash"
     has_manifest = "manifest_hash" in document
     has_report = "report_hash" in document
     if has_manifest and has_report:
@@ -102,6 +108,8 @@ def _self_hash_field(document: Mapping[str, Any], schema: dict[str, Any] | None)
         return "manifest_hash"
     if has_report:
         return "report_hash"
+    if "artifact_hash" in document:
+        return "artifact_hash"
     return None
 
 

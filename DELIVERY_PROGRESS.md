@@ -5,7 +5,7 @@
 
 - 最后更新：`2026-08-11`
 - 当前阶段：`V5-M1-EXTERNAL-ACCESS-WAITING`
-- 当前任务：`TASK-005 EXTERNAL_ACCESS_WAITING / MOCK-ONLY CONTROL PLANE`
+- 当前任务：`TASK-005-MOCK-PUBLIC-TRACE-01 / MOCK-ONLY CONTROL PLANE`
 - 当前状态：`WAITING_EXTERNAL`
 - 当前 promotion：`无 checkpoint 可晋升`
 - 真实客户端边界：`READ_ONLY_SHADOW_ONLY`
@@ -46,6 +46,16 @@
 - pixel policy；
 - 真实客户端动作；
 - 旧 v4.x 继续训练。
+
+## 2.1 当前进行中：mock public transition trace
+
+状态：`IN_PROGRESS / WAITING_EXTERNAL`。
+
+范围：为 deterministic mock 增加独立、公开字段限定的逐 transition 诊断 trace 与 fresh-process 重放/篡改验证。该 trace 不是训练 replay、不是 GameCore/ABS replay、不能保存 reward、teacher、truth、privileged state、legal mask、内部 replay identity/hash 或真实客户端数据。
+
+固定边界：只接受内建 mock profile；不接受 GameCore、许可证、手机、control-plane 或任意外部 service 参数；输出固定标记为 `mock`、`formal=false`、`DIAGNOSTIC_ONLY`。
+
+验收目标：trace 自哈希、逐行 hash chain、公开 observation hash、factorized action、tick/terminal/truncated/public outcome 的 fresh-process exact replay，以及篡改拒绝。mock 成功仍只证明基础设施。
 
 ## 3. 外部阻塞
 

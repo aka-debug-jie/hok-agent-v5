@@ -1,5 +1,15 @@
 """Versioned data contracts shared by learner and environment services."""
 
+from hok_agent.contracts.mock_replay import (
+    MockPublicOutcome,
+    MockPublicProfile,
+    MockPublicReplay,
+    MockPublicTransition,
+    MockPublicTransitionReplay,
+    MockReplayValidationError,
+    build_mock_public_replay,
+    parse_mock_public_transition_replay,
+)
 from hok_agent.contracts.types import (
     CloseResponse,
     EnvironmentIdentity,
@@ -38,4 +48,12 @@ __all__ = [
     "RunManifest",
     "StepRequest",
     "StepResponse",
+    "MockPublicOutcome",
+    "MockPublicProfile",
+    "MockPublicReplay",
+    "MockPublicTransition",
+    "MockPublicTransitionReplay",
+    "MockReplayValidationError",
+    "build_mock_public_replay",
+    "parse_mock_public_transition_replay",
 ]
