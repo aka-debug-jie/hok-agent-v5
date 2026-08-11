@@ -4,9 +4,9 @@
 > 历史讨论、提示词、旧仓库台账和实验文档不能覆盖本文件。
 
 - 最后更新：`2026-08-11`
-- 当前阶段：`V5-M0-BOOTSTRAP`
-- 当前任务：`TASK-000 REPOSITORY_AND_ENVIRONMENT_BOOTSTRAP`
-- 当前状态：`IN_PROGRESS`
+- 当前阶段：`V5-M1-EXTERNAL-ACCESS-WAITING`
+- 当前任务：`TASK-005 EXTERNAL_ACCESS_WAITING + TRAINING_INFRASTRUCTURE_ON_MOCK/MINI`
+- 当前状态：`WAITING_EXTERNAL`
 - 当前 promotion：`无 checkpoint 可晋升`
 - 真实客户端边界：`READ_ONLY_SHADOW_ONLY`
 - GameCore 连接状态：`WAITING_EXTERNAL / 未发现项目内 hok_env checkout，未进行真实服务握手`
@@ -24,7 +24,7 @@
 
 ## 2. 当前任务范围
 
-见 `TASK_000_BOOTSTRAP.md`。
+`TASK-000` 已完成；当前等待授权环境输入，后续见 `TASK-005 EXTERNAL_ACCESS_WAITING + TRAINING_INFRASTRUCTURE_ON_MOCK/MINI`。
 
 当前只允许：
 
@@ -61,8 +61,8 @@
 
 | 里程碑 | 状态 | 下一门 |
 |---|---|---|
-| M0 Legacy freeze + V5 bootstrap | `IN_PROGRESS` | 补齐独立 service process 与 client 强制 fail-closed gate |
-| M1 GameCore adapter + throughput | `BLOCKED_BY_M0` | M0 完成后仍需获授权的 GameCore、license 与真实 health/reset/step/close 握手 |
+| M0 Legacy freeze + V5 bootstrap | `DONE` | mock 基础设施门已通过；不构成 GameCore 或能力结论 |
+| M1 GameCore adapter + throughput | `WAITING_EXTERNAL` | 需获授权的 GameCore、license 与真实 health/reset/step/close 握手 |
 | M2 1v1 BC baseline | `LOCKED` | M1 通过 |
 | M3 1v1 PPO + fixed eval | `LOCKED` | BC 闭环基线通过 |
 | M4 League + multi-hero | `LOCKED` | 1v1 PPO promotion |
@@ -96,18 +96,18 @@
 
 任务：`TASK-000 REPOSITORY_AND_ENVIRONMENT_BOOTSTRAP`
 
-状态：`IN_PROGRESS（补齐 service isolation 与 fail-closed gate）`
+状态：`DONE（仅 M0 mock 基础设施）`
 
-变更文件：新建 Python 3.11+ 包、typed contracts、deterministic mock、JSON RPC stub、artifact verifier、CLI、tests、CI、preflight 与 M0 报告；详见 `reports/m0/M0_ACCEPTANCE_REPORT.md`。
+变更文件：Python 3.11+ package、typed contracts、deterministic mock、spawned-process JSON RPC service、artifact verifier、CLI、tests、CI、preflight 与 M0 报告；详见 `reports/m0/M0_ACCEPTANCE_REPORT.md`。
 
 运行命令：Ruff、strict mypy、pytest、`env-smoke --episodes 100`、`env-benchmark --episodes 100`、`verify-artifact`、`safety-scan`、`preflight --probe-upstream`。
 
-验证结果：此前 mock 100/100 complete；现因独立审阅发现 service isolation 与 client gate 缺口，M0 不以该结果结案，修复后重新验证。
+验证结果：`make check PYTHON=.venv/bin/python` 通过：Ruff、strict mypy（19 source files）、pytest（18 passed）和 safety scan（67 files，0 finding）均通过。最终 mock 100/100 complete，`terminal_rate=1.0`，deterministic replay=true，protocol/action-decode/illegal/replay errors 均为 0；manifest 与 evaluation report 均为 schema+self-hash+artifact-hash valid。mock service 运行于独立 spawned process；client 对 identity/license/tick/legal-action 违规 fail-closed。
 
-生成 artifact：`artifacts/runs/m0-mock-smoke-20260811T084847Z/`（被 Git 忽略）；runtime source commit=`1aa2ba3ae83e4d93a1d1c5ec46e8f250deb126cf`。
+生成 artifact：`artifacts/runs/m0-mock-smoke-20260811T090534Z/` 与 `artifacts/runs/m0-mock-benchmark-20260811T090549Z/`（均被 Git 忽略）；runtime source commit=`4fe32d622de24523bcc7dfad6f0935b568c23773`，`dirty=false`。
 
 已知风险：mock 仅证明基础设施；尚无 GameCore 二进制、许可证、真实 schema、真实服务握手或任何策略能力证据。
 
 外部操作：未下载 GameCore，未读取许可证，未修改 legacy，未对真实客户端发送动作。
 
-下一任务：完成 TASK-000 的 isolation/gate 修复并重新验收；之后转入 `TASK-005 EXTERNAL_ACCESS_WAITING + TRAINING_INFRASTRUCTURE_ON_MOCK/MINI`。
+下一任务：`TASK-005 EXTERNAL_ACCESS_WAITING + TRAINING_INFRASTRUCTURE_ON_MOCK/MINI`；若用户/授权方提供 Git 外的获授权 GameCore 与 license 接入方式，先执行真实服务 identity/license/schema/health/reset/step/close preflight，再进入 `TASK-010 GAMECORE_ADAPTER_AND_THROUGHPUT`。
