@@ -43,3 +43,15 @@ def test_public_observation_rejects_actor_denylisted_field() -> None:
             global_features={"phase": 0.0},
             previous_action=None,
         )
+
+
+def test_public_observation_rejects_legal_action_leak() -> None:
+    with pytest.raises(ContractValidationError, match="not permitted"):
+        PublicObservation(
+            schema_version=1,
+            tick=0,
+            self_state={"legal_actions": 1.0},
+            visible_entities=(),
+            global_features={"phase": 0.0},
+            previous_action=None,
+        )

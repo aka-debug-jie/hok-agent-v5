@@ -29,6 +29,9 @@ ABSTOOL*/
 
 # Runtime artifacts
 artifacts/
+!src/hok_agent/artifacts/
+!src/hok_agent/artifacts/**
+src/hok_agent/artifacts/__pycache__/
 datasets/
 checkpoints/
 replays/

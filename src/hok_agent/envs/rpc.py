@@ -9,6 +9,7 @@ from hok_agent.contracts import (
     CloseResponse,
     EnvironmentKind,
     HealthResponse,
+    LegalActionSet,
     LicenseStatus,
     ResetRequest,
     ResetResponse,
@@ -27,6 +28,10 @@ class RpcError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+class TransportError(RpcError):
+    """A local transport could not safely complete an RPC exchange."""
 
 
 class ServiceIdentityError(RpcError):
@@ -114,32 +119,124 @@ class InProcessJsonTransport:
 
 
 class LocalRpcClient:
-    """Learner-facing client with no direct reference to service state."""
+    """Learner-facing client with an enforced identity and execution gate."""
 
-    def __init__(self, transport: JsonTransport) -> None:
+    def __init__(self, transport: JsonTransport, *, expected_kind: EnvironmentKind) -> None:
         self._transport = transport
+        self._expected_kind = expected_kind
+        self._active_ticks: dict[str, int] = {}
+        self._legal_actions: dict[str, LegalActionSet] = {}
+        health = self._read_health()
+        require_safe_service_identity(health, expected_kind)
+        self._environment = health.environment
+        self._health = health
 
     def health(self) -> HealthResponse:
-        return HealthResponse.from_dict(self._call("health", {}))
+        return self._require_live_service()
 
     def reset(self, request: ResetRequest) -> ResetResponse:
-        return ResetResponse.from_dict(self._call("reset", request.to_dict()))
+        self._require_live_service()
+        try:
+            response = ResetResponse.from_dict(self._call("reset", request.to_dict()))
+        except ContractValidationError as error:
+            raise RpcError("INVALID_RESET_RESPONSE", str(error)) from error
+        if response.environment != self._environment:
+            self._close_without_gate(response.episode_id, "identity_changed")
+            raise ServiceIdentityError("IDENTITY_CHANGED", "reset response environment differs from health identity")
+        if not response.legal_actions.actions:
+            self._close_without_gate(response.episode_id, "empty_legal_actions")
+            raise RpcError("EMPTY_LEGAL_ACTIONS", "nonterminal reset response has no legal actions")
+        self._active_ticks[response.episode_id] = response.tick
+        self._legal_actions[response.episode_id] = response.legal_actions
+        return response
 
     def step(self, request: StepRequest) -> StepResponse:
-        return StepResponse.from_dict(self._call("step", request.to_dict()))
+        if request.episode_id not in self._active_ticks:
+            raise RpcError("NO_ACTIVE_SESSION", "step requires an active reset session")
+        try:
+            self._require_live_service()
+        except (ContractValidationError, RpcError):
+            self._close_without_gate(request.episode_id, "service_gate_failed")
+            raise
+        expected_tick = self._active_ticks[request.episode_id]
+        if request.expected_tick != expected_tick:
+            self._close_without_gate(request.episode_id, "stale_tick")
+            raise RpcError("STALE_TICK", "step expected_tick does not match the client session tick")
+        if not self._legal_actions[request.episode_id].contains(request.action):
+            self._close_without_gate(request.episode_id, "illegal_action")
+            raise RpcError("ILLEGAL_ACTION", "step action is outside the current legal action set")
+        try:
+            response = StepResponse.from_dict(self._call("step", request.to_dict()))
+        except ContractValidationError as error:
+            self._close_without_gate(request.episode_id, "invalid_step_response")
+            raise RpcError("INVALID_STEP_RESPONSE", str(error)) from error
+        except RpcError:
+            self._close_without_gate(request.episode_id, "step_rpc_error")
+            raise
+        if response.tick != expected_tick + 1:
+            self._close_without_gate(request.episode_id, "tick_mismatch")
+            raise RpcError("TICK_MISMATCH", "step response tick is not monotonic")
+        if not (response.terminal or response.truncated) and not response.legal_actions.actions:
+            self._close_without_gate(request.episode_id, "empty_legal_actions")
+            raise RpcError("EMPTY_LEGAL_ACTIONS", "nonterminal step response has no legal actions")
+        if response.terminal or response.truncated:
+            self._active_ticks.pop(request.episode_id, None)
+            self._legal_actions.pop(request.episode_id, None)
+        else:
+            self._active_ticks[request.episode_id] = response.tick
+            self._legal_actions[request.episode_id] = response.legal_actions
+        return response
 
     def close(self, episode_id: str, stop_reason: str) -> CloseResponse:
-        return CloseResponse.from_dict(self._call("close", {"episode_id": episode_id, "stop_reason": stop_reason}))
+        try:
+            response = CloseResponse.from_dict(
+                self._call("close", {"episode_id": episode_id, "stop_reason": stop_reason})
+            )
+        except ContractValidationError as error:
+            raise RpcError("INVALID_CLOSE_RESPONSE", str(error)) from error
+        self._active_ticks.pop(episode_id, None)
+        self._legal_actions.pop(episode_id, None)
+        if response.episode_id != episode_id:
+            raise RpcError("CLOSE_EPISODE_MISMATCH", "close response episode_id does not match request")
+        return response
+
+    def _read_health(self) -> HealthResponse:
+        try:
+            return HealthResponse.from_dict(self._call("health", {}))
+        except ContractValidationError as error:
+            raise RpcError("INVALID_HEALTH_RESPONSE", str(error)) from error
+
+    def _require_live_service(self) -> HealthResponse:
+        health = self._read_health()
+        require_safe_service_identity(health, self._expected_kind)
+        if health.environment != self._environment:
+            raise ServiceIdentityError("IDENTITY_CHANGED", "environment identity changed after client construction")
+        self._health = health
+        return health
+
+    def _close_without_gate(self, episode_id: str, stop_reason: str) -> None:
+        try:
+            self._call("close", {"episode_id": episode_id, "stop_reason": stop_reason})
+        except RpcError:
+            pass
+        finally:
+            self._active_ticks.pop(episode_id, None)
+            self._legal_actions.pop(episode_id, None)
 
     def _call(self, method: str, payload: JsonObject) -> object:
-        raw_response = self._transport.request(
-            json.dumps(
-                {"protocol_version": PROTOCOL_VERSION, "method": method, "payload": payload},
-                allow_nan=False,
-                separators=(",", ":"),
-                sort_keys=True,
+        try:
+            raw_response = self._transport.request(
+                json.dumps(
+                    {"protocol_version": PROTOCOL_VERSION, "method": method, "payload": payload},
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
             )
-        )
+        except TransportError:
+            raise
+        except (BrokenPipeError, EOFError, OSError, TimeoutError) as error:
+            raise TransportError("TRANSPORT_FAILURE", "service transport failed") from error
         try:
             response = cast(object, json.loads(raw_response))
         except json.JSONDecodeError as error:

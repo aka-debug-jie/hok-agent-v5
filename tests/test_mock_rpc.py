@@ -2,14 +2,25 @@ from __future__ import annotations
 
 import pytest
 
-from hok_agent.contracts import EnvironmentKind, ResetRequest, StepRequest
+from hok_agent.artifacts.hashing import sha256_json
+from hok_agent.contracts import (
+    EnvironmentIdentity,
+    EnvironmentKind,
+    HealthResponse,
+    LicenseStatus,
+    ResetRequest,
+    StepRequest,
+)
 from hok_agent.envs import InProcessJsonTransport, LocalRpcClient, LocalRpcServer, MockEnvironment
 from hok_agent.envs.mock import select_deterministic_smoke_action
 from hok_agent.envs.rpc import RpcError, ServiceIdentityError, require_safe_service_identity
 
 
 def _client() -> LocalRpcClient:
-    return LocalRpcClient(InProcessJsonTransport(LocalRpcServer(MockEnvironment(max_steps_per_episode=12))))
+    return LocalRpcClient(
+        InProcessJsonTransport(LocalRpcServer(MockEnvironment(max_steps_per_episode=12))),
+        expected_kind=EnvironmentKind.MOCK,
+    )
 
 
 def _play(seed: int) -> str:
@@ -81,3 +92,37 @@ def test_rpc_rejects_stale_tick_and_identity_mismatch() -> None:
             )
         )
     assert caught.value.code == "STALE_TICK"
+    assert client.close(reset.episode_id, "after_stale_tick").already_closed is True
+
+
+def test_client_rejects_service_kind_during_construction() -> None:
+    transport = InProcessJsonTransport(LocalRpcServer(MockEnvironment(max_steps_per_episode=12)))
+    with pytest.raises(ServiceIdentityError) as caught:
+        LocalRpcClient(transport, expected_kind=EnvironmentKind.PIXELARENA)
+    assert caught.value.code == "IDENTITY_MISMATCH"
+
+
+class _UnlicensedGameCoreLikeMock(MockEnvironment):
+    def health(self) -> HealthResponse:
+        return HealthResponse(
+            protocol_version=1,
+            environment=EnvironmentIdentity(
+                schema_version=1,
+                environment_kind=EnvironmentKind.HOK_GAMECORE,
+                service_version="test-service",
+                sdk_version="test-sdk",
+                gamecore_build="test-build",
+                mapping_hash=sha256_json({"test": "unlicensed"}),
+            ),
+            license_status=LicenseStatus.UNKNOWN,
+            supported_modes=("1v1",),
+            supported_heroes=("test",),
+            ready=True,
+        )
+
+
+def test_client_rejects_unlicensed_gamecore_during_construction() -> None:
+    transport = InProcessJsonTransport(LocalRpcServer(_UnlicensedGameCoreLikeMock(max_steps_per_episode=12)))
+    with pytest.raises(ServiceIdentityError) as caught:
+        LocalRpcClient(transport, expected_kind=EnvironmentKind.HOK_GAMECORE)
+    assert caught.value.code == "LICENSE_NOT_VALID"

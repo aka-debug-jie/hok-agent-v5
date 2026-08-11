@@ -9,8 +9,8 @@
 - 当前状态：`IN_PROGRESS`
 - 当前 promotion：`无 checkpoint 可晋升`
 - 真实客户端边界：`READ_ONLY_SHADOW_ONLY`
-- GameCore 连接状态：`UNKNOWN / 需要现场预检`
-- GameCore 许可证状态：`UNKNOWN / 不得假设已获得`
+- GameCore 连接状态：`WAITING_EXTERNAL / 未发现项目内 hok_env checkout，未进行真实服务握手`
+- GameCore 许可证状态：`WAITING_EXTERNAL / 未提供路径，未读取任何许可证内容`
 
 ## 1. 已冻结决定
 
@@ -51,9 +51,9 @@
 
 | 项目 | 状态 | 处理 |
 |---|---|---|
-| GameCore license | 未确认 | 实际检查；缺失则标记 `WAITING_EXTERNAL` |
-| GameCore binaries | 未确认 | 不提交 Git；按上游条款获取 |
-| 支持系统 | 未确认 | 现场确认 Windows/WSL/Docker |
+| GameCore license | `WAITING_EXTERNAL` | 用户/授权方提供路径；不得上传、读取或猜测内容 |
+| GameCore binaries | `WAITING_EXTERNAL` | 按上游条款获取；不下载或提交二进制 |
+| 支持系统 | Linux + Docker daemon 已预检 | 真实服务接入时再现场确认兼容模式 |
 | 可并行实例数 | 未测 | M1 吞吐 benchmark |
 | upstream hero/action schema | 未冻结 | 接通后生成 adapter snapshot |
 
@@ -61,8 +61,8 @@
 
 | 里程碑 | 状态 | 下一门 |
 |---|---|---|
-| M0 Legacy freeze + V5 bootstrap | `READY` | repo、schema、mock、CI 完成 |
-| M1 GameCore adapter + throughput | `BLOCKED_BY_M0` | 100 episodes 稳定、0 协议错误 |
+| M0 Legacy freeze + V5 bootstrap | `IN_PROGRESS` | 补齐独立 service process 与 client 强制 fail-closed gate |
+| M1 GameCore adapter + throughput | `BLOCKED_BY_M0` | M0 完成后仍需获授权的 GameCore、license 与真实 health/reset/step/close 握手 |
 | M2 1v1 BC baseline | `LOCKED` | M1 通过 |
 | M3 1v1 PPO + fixed eval | `LOCKED` | BC 闭环基线通过 |
 | M4 League + multi-hero | `LOCKED` | 1v1 PPO promotion |
@@ -89,3 +89,25 @@
 ```
 
 不得用“基本完成”“应该通过”替代真实结果。
+
+## 6. TASK-000 实际记录
+
+日期：`2026-08-11`
+
+任务：`TASK-000 REPOSITORY_AND_ENVIRONMENT_BOOTSTRAP`
+
+状态：`IN_PROGRESS（补齐 service isolation 与 fail-closed gate）`
+
+变更文件：新建 Python 3.11+ 包、typed contracts、deterministic mock、JSON RPC stub、artifact verifier、CLI、tests、CI、preflight 与 M0 报告；详见 `reports/m0/M0_ACCEPTANCE_REPORT.md`。
+
+运行命令：Ruff、strict mypy、pytest、`env-smoke --episodes 100`、`env-benchmark --episodes 100`、`verify-artifact`、`safety-scan`、`preflight --probe-upstream`。
+
+验证结果：此前 mock 100/100 complete；现因独立审阅发现 service isolation 与 client gate 缺口，M0 不以该结果结案，修复后重新验证。
+
+生成 artifact：`artifacts/runs/m0-mock-smoke-20260811T084847Z/`（被 Git 忽略）；runtime source commit=`1aa2ba3ae83e4d93a1d1c5ec46e8f250deb126cf`。
+
+已知风险：mock 仅证明基础设施；尚无 GameCore 二进制、许可证、真实 schema、真实服务握手或任何策略能力证据。
+
+外部操作：未下载 GameCore，未读取许可证，未修改 legacy，未对真实客户端发送动作。
+
+下一任务：完成 TASK-000 的 isolation/gate 修复并重新验收；之后转入 `TASK-005 EXTERNAL_ACCESS_WAITING + TRAINING_INFRASTRUCTURE_ON_MOCK/MINI`。

@@ -30,9 +30,8 @@ from hok_agent.contracts import (
     StepRequest,
 )
 from hok_agent.contracts.types import JsonValue
-from hok_agent.envs import InProcessJsonTransport, LocalRpcClient, LocalRpcServer, MockEnvironment
+from hok_agent.envs import LocalRpcClient, ProcessJsonTransport
 from hok_agent.envs.mock import select_deterministic_smoke_action
-from hok_agent.envs.rpc import require_safe_service_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,8 +160,9 @@ def _git_state(repo_root: Path) -> tuple[str, bool]:
     return value, bool(dirty.stdout.strip())
 
 
-def _new_mock_client(max_steps: int) -> LocalRpcClient:
-    return LocalRpcClient(InProcessJsonTransport(LocalRpcServer(MockEnvironment(max_steps_per_episode=max_steps))))
+def _new_mock_client(max_steps: int) -> tuple[LocalRpcClient, ProcessJsonTransport]:
+    transport = ProcessJsonTransport.start_mock(max_steps_per_episode=max_steps)
+    return LocalRpcClient(transport, expected_kind=EnvironmentKind.MOCK), transport
 
 
 def _run_episode(client: LocalRpcClient, *, index: int, seed: int, max_steps: int) -> EpisodeRow:
@@ -233,7 +233,6 @@ def _write_episode_rows(path: Path, rows: list[EpisodeRow]) -> None:
 
 def _environment_document(client: LocalRpcClient) -> dict[str, JsonValue]:
     health = client.health()
-    require_safe_service_identity(health, EnvironmentKind.MOCK)
     return {
         "kind": "mock",
         "service_version": health.environment.service_version,
@@ -252,13 +251,19 @@ def run_mock_smoke(config_path: Path, *, episodes_override: int | None = None) -
     episodes, seed_start, max_steps, output_root = _config_values(config_path, episodes_override)
     run_id = _new_run_id("m0-mock-smoke")
     run_dir = output_root / run_id
-    client = _new_mock_client(max_steps)
-    environment = _environment_document(client)
-    rows = [
-        _run_episode(client, index=index, seed=seed_start + index, max_steps=max_steps) for index in range(episodes)
-    ]
-    repeat_client = _new_mock_client(max_steps)
-    first_replay = _run_episode(repeat_client, index=0, seed=seed_start, max_steps=max_steps).replay_hash
+    client, transport = _new_mock_client(max_steps)
+    try:
+        environment = _environment_document(client)
+        rows = [
+            _run_episode(client, index=index, seed=seed_start + index, max_steps=max_steps) for index in range(episodes)
+        ]
+    finally:
+        transport.close()
+    repeat_client, repeat_transport = _new_mock_client(max_steps)
+    try:
+        first_replay = _run_episode(repeat_client, index=0, seed=seed_start, max_steps=max_steps).replay_hash
+    finally:
+        repeat_transport.close()
     deterministic_replay = rows[0].replay_hash == first_replay
     episodes_path = run_dir / "episodes.jsonl"
     _write_episode_rows(episodes_path, rows)
@@ -378,16 +383,19 @@ def run_mock_benchmark(config_path: Path, *, episodes: int) -> dict[str, object]
 
     config_path = config_path.resolve()
     _, seed_start, max_steps, output_root = _config_values(config_path, episodes)
-    client = _new_mock_client(max_steps)
-    _environment_document(client)
-    durations: list[float] = []
-    start = time.perf_counter()
-    rows: list[EpisodeRow] = []
-    for index in range(episodes):
-        before = time.perf_counter()
-        rows.append(_run_episode(client, index=index, seed=seed_start + index, max_steps=max_steps))
-        durations.append(time.perf_counter() - before)
-    elapsed = time.perf_counter() - start
+    client, transport = _new_mock_client(max_steps)
+    try:
+        _environment_document(client)
+        durations: list[float] = []
+        start = time.perf_counter()
+        rows: list[EpisodeRow] = []
+        for index in range(episodes):
+            before = time.perf_counter()
+            rows.append(_run_episode(client, index=index, seed=seed_start + index, max_steps=max_steps))
+            durations.append(time.perf_counter() - before)
+        elapsed = time.perf_counter() - start
+    finally:
+        transport.close()
     steps = sum(row.steps for row in rows)
     report = {
         "schema_version": 1,

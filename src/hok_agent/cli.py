@@ -72,7 +72,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "verify-artifact":
             root = args.root.resolve()
             schema = args.schema or _default_schema(args.path, root)
-            verification = verify_artifact(args.path, schema)
+            verification = verify_artifact(args.path, schema, repo_root=root)
             _print_document(verification.to_dict())
             return 0 if verification.passed else 1
         if args.command == "safety-scan":

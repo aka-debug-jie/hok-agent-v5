@@ -172,6 +172,9 @@ ACTOR_DENYLIST = frozenset(
         "truth",
         "teacher",
         "reward",
+        "legal",
+        "legal_action",
+        "legal_actions",
         "legal_mask",
         "privileged",
         "entity_id",
@@ -186,7 +189,7 @@ def assert_actor_mapping_safe(value: Mapping[str, JsonValue], field: str) -> Non
 
     for key, nested_value in value.items():
         normalized = key.casefold().replace("-", "_").replace(" ", "_")
-        if normalized in ACTOR_DENYLIST:
+        if normalized in ACTOR_DENYLIST or normalized.startswith("legal_"):
             raise ContractValidationError(f"{field}.{key} is not permitted in Actor input")
         if isinstance(nested_value, dict):
             assert_actor_mapping_safe(nested_value, f"{field}.{key}")
@@ -664,6 +667,8 @@ class ResetResponse:
     def __post_init__(self) -> None:
         if not self.episode_id or self.tick != self.observation.tick:
             raise ContractValidationError("reset response episode/tick mismatch")
+        if not self.legal_actions.actions:
+            raise ContractValidationError("reset response legal actions must not be empty")
         _sha256(self.replay_identity, "reset_response.replay_identity")
 
     def to_dict(self) -> JsonObject:
@@ -759,6 +764,8 @@ class StepResponse:
                 raise ContractValidationError("terminal step requires outcome")
         elif self.outcome is not None:
             raise ContractValidationError("nonterminal step must not include outcome")
+        if not (self.terminal or self.truncated) and not self.legal_actions.actions:
+            raise ContractValidationError("nonterminal step legal actions must not be empty")
         _sha256(self.replay_hash, "step_response.replay_hash")
 
     def to_dict(self) -> JsonObject:

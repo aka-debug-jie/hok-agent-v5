@@ -17,7 +17,8 @@
     "algorithm",
     "seeds",
     "safety",
-    "artifacts"
+    "artifacts",
+    "manifest_hash"
   ],
   "properties": {
     "schema_version": {

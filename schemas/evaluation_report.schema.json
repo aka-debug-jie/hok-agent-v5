@@ -16,7 +16,8 @@
     "engineering",
     "gate",
     "disposition",
-    "safety"
+    "safety",
+    "report_hash"
   ],
   "properties": {
     "schema_version": {
@@ -220,5 +221,41 @@
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "environment"
+        ],
+        "properties": {
+          "environment": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "mock"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "disposition": {
+            "const": "DIAGNOSTIC_ONLY"
+          },
+          "gate": {
+            "properties": {
+              "pass": {
+                "const": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
