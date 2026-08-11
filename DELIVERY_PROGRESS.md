@@ -133,3 +133,25 @@
 外部阻塞：GameCore binary、license 接入方式、获授权范围与真实 service 启动方式均未在 Git 外提供；preflight 仍为 `WAITING_EXTERNAL`。远程 upstream 探测可达（HTTP 200），但项目内未发现 checkout；未读取 license 内容、未记录 license 路径、未进行真实握手。
 
 下一任务：等待上述外部输入；外部授权证据、明确 service 方式和许可证接入方式齐全后，以新的隔离 transport/service factory 执行 TASK-010 preflight。不得以 mock 或 service 自报 runtime `valid` 代替授权。
+
+## 8. TASK-005 legacy 配置约定接入记录
+
+日期：`2026-08-11`
+
+任务：按 legacy 的非敏感配置约定接入 V5，不迁移 legacy 的真实客户端、设备或训练设置。
+
+状态：`IMPLEMENTED / WAITING_EXTERNAL`。
+
+变更文件：所有 V5 YAML 根级固定为 `version: 1`；新增 `configs/runtime_inputs_v1.yaml`；`env-smoke`、`preflight` 和 `validate-config` 使用项目内 `configs/` 默认路径；Makefile 延续 `SYSTEM_PYTHON`/`VENV` 可覆盖约定。runtime YAML 只允许三个环境变量名，不能保存路径值、许可证、密钥、授权状态或 lock。
+
+运行命令：`make check PYTHON=.venv/bin/python`；`make validate PYTHON=.venv/bin/python`；`.venv/bin/python -m hok_agent env-smoke --episodes 100`；两次 `verify-artifact`；`.venv/bin/python -m hok_agent preflight --root . --output reports/m0/upstream_gamecore_preflight.json --probe-upstream`。
+
+验证结果：Ruff、strict mypy（20 source files）、pytest（42 passed）和 safety scan（75 files，0 finding）均通过。配置验证确认 4 份 YAML 与 2 份 JSON schema 有效；未知 `version: 2` 会被拒绝。mock 100/100 complete，`terminal_rate=1.0`、deterministic replay=true、protocol/action-decode/illegal/replay errors 均为 0；新 manifest 和 evaluation report 的 schema、self-hash 与 artifact hash 均有效。runtime source commit=`e575f4f77d9bdaa63cc8d1b452288814a4807f3a`，`dirty=false`。
+
+生成 artifact：`artifacts/runs/m0-mock-smoke-20260811T103131Z/`（Git 忽略）；run manifest hash=`sha256:cca7ed475a44796dee0e3c46aabea7f44b5d4a0cc0f57aa2e4321d2a8edf5606`；evaluation report hash=`sha256:59f02a8e699031cd728420bf7ba0442318e6669a77b1d6143be6adb93f7a45f4`。
+
+外部操作：只读检查 legacy 的 YAML/CLI/Make 约定；未修改 legacy，未迁移 V4 checkpoint/K96、设备设置或真实客户端脚本。upstream 可达（HTTP 200），但项目内未发现 `hok_env` checkout；GameCore 与 license 均未提供，未读取 license 内容、未记录路径值、未执行真实 handshake。
+
+已知风险：legacy 没有可复用的 GameCore/license/service 配置，因此不能凭“配置一致”推断外部授权。当前 preflight 仍为 `WAITING_EXTERNAL`。
+
+下一任务：等待 Git 外的获授权 GameCore、license 接入方式和明确的服务启动/协议资料；随后按 TASK-010 只在隔离 service 中执行真实 health/reset/step/close preflight。
