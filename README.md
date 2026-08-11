@@ -86,6 +86,7 @@ V5 将问题拆成三条可独立验收的路线：
 ```text
 make check
 make validate
+make integrity
 python -m hok_agent env-smoke
 python -m hok_agent env-benchmark --episodes 100
 python -m hok_agent preflight --probe-upstream

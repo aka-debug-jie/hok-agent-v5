@@ -13,6 +13,7 @@ from hok_agent.config import validate_config_tree
 from hok_agent.contracts import LicenseStatus
 from hok_agent.control_plane import ControlledOperation, ExternalAccessDenied, ExternalAccessGate
 from hok_agent.evaluation.smoke import run_mock_benchmark, run_mock_smoke
+from hok_agent.package_integrity import PackageIntegrityError, check_manifest, write_manifest
 from hok_agent.preflight import collect_preflight, write_preflight
 from hok_agent.safety import SafetyViolation, scan_repository
 
@@ -64,6 +65,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate = subcommands.add_parser("validate-config", help="validate versioned YAML and JSON schemas")
     validate.add_argument("--config-dir", type=Path, default=Path("configs"))
+
+    package_integrity = subcommands.add_parser(
+        "package-integrity",
+        help="check package manifest for source-only integrity",
+    )
+    package_integrity.add_argument("--root", type=Path, default=Path("."))
+    package_integrity.add_argument(
+        "--write",
+        action="store_true",
+        help="rewrite PACKAGE_MANIFEST.json using current tree snapshot",
+    )
 
     access_gate = subcommands.add_parser(
         "access-gate",
@@ -130,6 +142,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             for message in validate_config_tree(args.config_dir.resolve()):
                 print(message)
             return 0
+        if args.command == "package-integrity":
+            root = args.root.resolve()
+            if args.write:
+                manifest_path = write_manifest(root)
+                _print_document({"manifest_path": str(manifest_path), "mode": "write"})
+                return 0
+            integrity_result = check_manifest(root)
+            _print_document(integrity_result.to_dict())
+            return 0 if integrity_result.passed else 1
         if args.command == "access-gate":
             gate = ExternalAccessGate.from_yaml(args.config)
             operation = ControlledOperation(args.operation)
@@ -146,7 +167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ExternalAccessDenied as error:
         print(f"error [{error.code}]: {error}", file=sys.stderr)
         return 2
-    except (ArtifactVerificationError, SafetyViolation, ValueError, OSError) as error:
+    except (ArtifactVerificationError, SafetyViolation, PackageIntegrityError, ValueError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
     raise AssertionError(f"unhandled command {args.command}")

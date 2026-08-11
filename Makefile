@@ -3,7 +3,7 @@ VENV ?= .venv
 VENV_PYTHON := $(VENV)/bin/python
 PYTHON ?= $(if $(wildcard $(VENV_PYTHON)),$(VENV_PYTHON),$(SYSTEM_PYTHON))
 
-.PHONY: install lint typecheck test safety check validate env-smoke env-benchmark preflight
+.PHONY: install lint typecheck test safety check validate integrity env-smoke env-benchmark preflight
 
 install:
 	$(PYTHON) -m pip install -e ".[dev]"
@@ -20,7 +20,7 @@ test:
 safety:
 	$(PYTHON) -m hok_agent safety-scan --root .
 
-check: lint typecheck test safety
+check: lint typecheck test safety integrity
 
 validate:
 	$(PYTHON) -m hok_agent validate-config --config-dir configs
@@ -33,3 +33,6 @@ env-benchmark:
 
 preflight:
 	$(PYTHON) -m hok_agent preflight --probe-upstream
+
+integrity:
+	$(PYTHON) -m hok_agent package-integrity --root .

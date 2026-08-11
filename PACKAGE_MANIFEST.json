@@ -1,165 +1,347 @@
 {
-  "package": "hok-agent-v5-starter",
-  "version": "v5.0-bootstrap-1",
-  "created_date": "2026-08-11",
-  "file_count_excluding_manifest": 25,
-  "validation": {
-    "yaml": {
-      "eval_suite_1v1_v1.yaml": "ok",
-      "program_v1.yaml": "ok",
-      "run_smoke_v1.yaml": "ok"
-    },
-    "json": {
-      "evaluation_report.schema.json": "ok",
-      "run_manifest.schema.json": "ok"
-    },
-    "json_schema_meta": "ok",
-    "markdown": {
-      "AGENTS.md": "ok",
-      "AUTOMATION_RUNBOOK.md": "ok",
-      "CODEX_START_PROMPT.md": "ok",
-      "DATA_AND_ARTIFACT_CONTRACT.md": "ok",
-      "DECISION_LOG.md": "ok",
-      "DELIVERY_PROGRESS.md": "ok",
-      "ENVIRONMENT_CONTRACT.md": "ok",
-      "EVALUATION_PROMOTION.md": "ok",
-      "LEGACY_MIGRATION_PLAN.md": "ok",
-      "MILESTONES.md": "ok",
-      "POLICY_ARCHITECTURE.md": "ok",
-      "PROGRAM_CHARTER.md": "ok",
-      "README.md": "ok",
-      "REFERENCES.md": "ok",
-      "RISK_REGISTER.md": "ok",
-      "SAFETY_BOUNDARIES.md": "ok",
-      "TASK_000_BOOTSTRAP.md": "ok",
-      "TRAINING_CONTRACT.md": "ok"
-    }
-  },
   "files": [
     {
-      "path": ".gitignore",
-      "bytes": 460,
-      "sha256": "sha256:3e5847313c284ba74167abe747c95ce74665d08fbbbd4b537e06814d90db6566"
+      "bytes": 410,
+      "path": ".github/workflows/ci.yml",
+      "sha256": "sha256:7f455688e8a3047e2460e0a74ce1bade08f80bb8f4f44f0ac67f6424b2a185d4"
     },
     {
-      "path": "AGENTS.md",
+      "bytes": 551,
+      "path": ".gitignore",
+      "sha256": "sha256:a024690635733ad874dee4a82a030e3891e42c73d269afa9c50bb4998a3f6ddf"
+    },
+    {
       "bytes": 4326,
+      "path": "AGENTS.md",
       "sha256": "sha256:f103fa68a79c254e9ae730feb0fa030add0f7cdc49ef3c368bd9e8215b04da6a"
     },
     {
+      "bytes": 4500,
       "path": "AUTOMATION_RUNBOOK.md",
-      "bytes": 4006,
-      "sha256": "sha256:bb4f74749cb1b8c3185ee65a9b0181ae3efc5aa93a82f0463600d14dbebc7bc6"
+      "sha256": "sha256:3b1c85e633df1ccc265077989ffb8bbeed31c2b7e2895d402d7dc68b0563c857"
     },
     {
-      "path": "CODEX_START_PROMPT.md",
       "bytes": 4853,
+      "path": "CODEX_START_PROMPT.md",
       "sha256": "sha256:a52f49267910b9d3d865e65cd740d9cc75d392cfff5c820c5ce8aef04625c4fa"
     },
     {
-      "path": "DATA_AND_ARTIFACT_CONTRACT.md",
       "bytes": 4326,
+      "path": "DATA_AND_ARTIFACT_CONTRACT.md",
       "sha256": "sha256:80b9954732c389d39d088f4a42bbb59406e2b567082365afb2cf51d4fb12ac51"
     },
     {
-      "path": "DECISION_LOG.md",
       "bytes": 1064,
+      "path": "DECISION_LOG.md",
       "sha256": "sha256:fc0cc9606ceefcc607111d1073624d13c930bfad7d1ae2dd4030ba3415f7ce15"
     },
     {
+      "bytes": 10879,
       "path": "DELIVERY_PROGRESS.md",
-      "bytes": 2847,
-      "sha256": "sha256:72ccb03ed0978c0c05ce4d0cac80d4c36fb052fbca55f6f46ff65a2091f2d6df"
+      "sha256": "sha256:d3951ba88da2a9bc266290882c190f909e8aee4c9f3057e1c5c86f9081012efe"
     },
     {
+      "bytes": 6419,
       "path": "ENVIRONMENT_CONTRACT.md",
-      "bytes": 5324,
-      "sha256": "sha256:50d83590399214a43e4e9c6448b5d1651ba320c4cc83c6c97e85efbacf4a43ee"
+      "sha256": "sha256:de5d9e4f4660dd18bfacc0e75447e9be22e3d056e23c7ca673f46c4cdaf7f628"
     },
     {
-      "path": "EVALUATION_PROMOTION.md",
       "bytes": 4923,
+      "path": "EVALUATION_PROMOTION.md",
       "sha256": "sha256:1d6562f7eadf15894d946f6d8bbcf40a906c32462293e94754e362945cf1772c"
     },
     {
-      "path": "LEGACY_MIGRATION_PLAN.md",
       "bytes": 2630,
+      "path": "LEGACY_MIGRATION_PLAN.md",
       "sha256": "sha256:4d89f434e2c550e1de7e2e948867a9d2f166b629ff3445a461ce30d940534c28"
     },
     {
-      "path": "MILESTONES.md",
       "bytes": 8070,
+      "path": "MILESTONES.md",
       "sha256": "sha256:4f722e44f19238bd447bdaf1850016010fa2c8527996ddceb452671056af2700"
     },
     {
-      "path": "POLICY_ARCHITECTURE.md",
+      "bytes": 851,
+      "path": "Makefile",
+      "sha256": "sha256:0e4da122767f023f8a47c31460177aea182ee7ea3286adf436b2837332bc2c0b"
+    },
+    {
       "bytes": 4549,
+      "path": "POLICY_ARCHITECTURE.md",
       "sha256": "sha256:0a9f4f872dcdaee4e0a5689ac1eaf9cbaf6b692177e2d6e510ee534a21a10a23"
     },
     {
-      "path": "PROGRAM_CHARTER.md",
       "bytes": 3769,
+      "path": "PROGRAM_CHARTER.md",
       "sha256": "sha256:c9e76677836368d3496460c0d15cf212702869c6d13422bb04b43ce46b92e754"
     },
     {
-      "path": "PROMPT_V5_BOOTSTRAP.txt",
       "bytes": 4360,
+      "path": "PROMPT_V5_BOOTSTRAP.txt",
       "sha256": "sha256:0b633a4377e0c0f16f13bcf8d5e5528f75de59cf508909160d3407d3b888f7f0"
     },
     {
+      "bytes": 5061,
       "path": "README.md",
-      "bytes": 3975,
-      "sha256": "sha256:77c4cce7595df2aaa067a6987a7f1cd36a3be183622a3a49943d4d432ec4771c"
+      "sha256": "sha256:a7bee38016b36110ef3dc7f4ed6003bafd8bd98b4eafa8354c74790329492709"
     },
     {
-      "path": "REFERENCES.md",
       "bytes": 2119,
+      "path": "REFERENCES.md",
       "sha256": "sha256:c49f07427b6b6231c06c2600ef77d82071ed0301512a6b1b56468614be13480b"
     },
     {
-      "path": "RISK_REGISTER.md",
       "bytes": 3214,
+      "path": "RISK_REGISTER.md",
       "sha256": "sha256:90d798bb422bd65377b80189cd3e035f2fcfe7d636f3620890755b8ddde0868a"
     },
     {
-      "path": "SAFETY_BOUNDARIES.md",
       "bytes": 4114,
+      "path": "SAFETY_BOUNDARIES.md",
       "sha256": "sha256:34be236706076ed1dccec0f3c6ea8fbeb3a6ddcffcd4c864ee278853a8132ffb"
     },
     {
-      "path": "TASK_000_BOOTSTRAP.md",
       "bytes": 3994,
+      "path": "TASK_000_BOOTSTRAP.md",
       "sha256": "sha256:4f6f62abd71b2e330a574dd2b7e8fa8632b668b8470670f5058d0e458b6f917c"
     },
     {
-      "path": "TRAINING_CONTRACT.md",
+      "bytes": 3119,
+      "path": "TASK_005_EXTERNAL_ACCESS_WAITING.md",
+      "sha256": "sha256:8287d580f4f53db5d91a59de8650cb3ab0a9d9b064a802b00eb8d7633158e60a"
+    },
+    {
       "bytes": 4914,
+      "path": "TRAINING_CONTRACT.md",
       "sha256": "sha256:06c11f389bc6104a246bba82f621b17eeda8252c47244fdfbca96e93c1e2c163"
     },
     {
+      "bytes": 1453,
       "path": "configs/eval_suite_1v1_v1.yaml",
-      "bytes": 1323,
-      "sha256": "sha256:6319ba01b889aba09fc0bf463388c20c00decd27555bab60b7fb44bae7bc775c"
+      "sha256": "sha256:0817b3b48054273e82705201ed4105c9573f6d42b115d25687bdf48484dc58b5"
     },
     {
+      "bytes": 2087,
       "path": "configs/program_v1.yaml",
-      "bytes": 1871,
-      "sha256": "sha256:34e75881d79f4aef78b34c1b2b76624c6fc4b2c2001af9ef744af43634fefdb2"
+      "sha256": "sha256:00d783b9648f10ecca8f96685a9a1377593028cd5d216a5ff4ab2143cd3bf305"
     },
     {
+      "bytes": 704,
       "path": "configs/run_smoke_v1.yaml",
-      "bytes": 692,
-      "sha256": "sha256:4379e4f373213c346ade3555a0b13395a7bd3edfb6f28af10779d8d44d6c14b2"
+      "sha256": "sha256:3224744059e5bdfefa6915881e2526a7a55d6248e4565bc503c0c150bb1c3cd9"
     },
     {
+      "bytes": 358,
+      "path": "configs/runtime_inputs_v1.yaml",
+      "sha256": "sha256:90e09e6f1f570f6f3e7354422237bdb8e4179508488ed705f4dcf8aad6233ead"
+    },
+    {
+      "bytes": 1007,
+      "path": "pyproject.toml",
+      "sha256": "sha256:4ed1d46db66077145165b3bc449af4037c853e3d8699c15767d0f8c19b4be103"
+    },
+    {
+      "bytes": 5997,
+      "path": "reports/m0/M0_ACCEPTANCE_REPORT.md",
+      "sha256": "sha256:372f22bc59e49484f259317dee1b0fa21ae9bc6bda0fca63a1e77be96a808c89"
+    },
+    {
+      "bytes": 1674,
+      "path": "reports/m0/upstream_gamecore_preflight.json",
+      "sha256": "sha256:c5ba74943c711b0e910c5c21a1e7ab06f1e50a4494612ceac52f0234f22bf20e"
+    },
+    {
+      "bytes": 6176,
       "path": "schemas/evaluation_report.schema.json",
-      "bytes": 4743,
-      "sha256": "sha256:b642d97c64415c9b3f90a5f12674b1e9aaccce886fef45b2a505b8e30b6574ae"
+      "sha256": "sha256:c991ce3061115fd166aad4209df0d1f6161c6036d1ff6e316e091a7099ecc7a1"
     },
     {
+      "bytes": 6298,
       "path": "schemas/run_manifest.schema.json",
-      "bytes": 5070,
-      "sha256": "sha256:eead441372328abaac87d3d48edced67ee812cf4431529b89c552e550ddf013b"
+      "sha256": "sha256:1b52453b9f7a04ff8148b0ad4030c4d686c3beab651aedf84c32e6fc370601c0"
+    },
+    {
+      "bytes": 577,
+      "path": "services/hok_gamecore/README.md",
+      "sha256": "sha256:64aeee5dc2fedfc98169d96c2ab42be8b09dea44358ed854091627aeb7dd4b79"
+    },
+    {
+      "bytes": 349,
+      "path": "services/hok_gamecore/protocol/README.md",
+      "sha256": "sha256:aa7d21a505039b08e9d1b68f46d6ed286caca8316c2e80b21718897895eff8b0"
+    },
+    {
+      "bytes": 463,
+      "path": "services/hok_gamecore/server_stub/server.py",
+      "sha256": "sha256:78368ef06cda4f56334def5b811cddb359b77001805a3d8fe55cdf26f2f405c9"
+    },
+    {
+      "bytes": 96,
+      "path": "src/hok_agent/__init__.py",
+      "sha256": "sha256:f357608bc0c7e108102075f324283c1896d8ffd4277a65af645fdcc104427656"
+    },
+    {
+      "bytes": 88,
+      "path": "src/hok_agent/__main__.py",
+      "sha256": "sha256:8749e343ca02f2feedfaf2514a9b9b35d6a58effff48521d7d868372eac37736"
+    },
+    {
+      "bytes": 7901,
+      "path": "src/hok_agent/cli.py",
+      "sha256": "sha256:e5555d8be20b66d824b7c6a4c84ed0cd735b2adca6b13805bbcacad0a9b4db04"
+    },
+    {
+      "bytes": 3237,
+      "path": "src/hok_agent/config.py",
+      "sha256": "sha256:ad0d3e6036b7dd1da82792b3acea2f90664bd3bbe539e03e9d33880be993b989"
+    },
+    {
+      "bytes": 839,
+      "path": "src/hok_agent/contracts/__init__.py",
+      "sha256": "sha256:ff662588a9165ec5f4a3146fa5a2293485aa8d4a4f36789dd55351593131666a"
+    },
+    {
+      "bytes": 37240,
+      "path": "src/hok_agent/contracts/types.py",
+      "sha256": "sha256:153b1d6146f1fc79b91ceb2c7faea055ef84223456ca226d3ea82cb3afe599de"
+    },
+    {
+      "bytes": 5453,
+      "path": "src/hok_agent/control_plane.py",
+      "sha256": "sha256:ce581c9c464385036ad3a6b361f547f2a662f57b0c3656ece4ecc6bbd8744ff0"
+    },
+    {
+      "bytes": 418,
+      "path": "src/hok_agent/envs/__init__.py",
+      "sha256": "sha256:d637194a321308f6637aa503c43f1c819689e7074b9f16311ec21088aae565a0"
+    },
+    {
+      "bytes": 1001,
+      "path": "src/hok_agent/envs/base.py",
+      "sha256": "sha256:cf70b11e26aad2499ab8c447c3809b09bb88169dad67303e24ac5523f8dbcdc7"
+    },
+    {
+      "bytes": 12337,
+      "path": "src/hok_agent/envs/mock.py",
+      "sha256": "sha256:3a2487a6972249208bd7a385e12fc593e37454992cf01d6f8267f99e5b883508"
+    },
+    {
+      "bytes": 4149,
+      "path": "src/hok_agent/envs/process_transport.py",
+      "sha256": "sha256:75c061e3b491c1bae69563ef42e35edc663e2ce9093862c29c750a2149dc5730"
+    },
+    {
+      "bytes": 17219,
+      "path": "src/hok_agent/envs/rpc.py",
+      "sha256": "sha256:241293c9a08059d5d22cfc21820a541aeb78441d6e5b5697cebdd6c296fa72b4"
+    },
+    {
+      "bytes": 55,
+      "path": "src/hok_agent/evaluation/__init__.py",
+      "sha256": "sha256:1af89046c7b64561e9f452277b0bc23fc73675260b4a5da777f0c946874e1ec2"
+    },
+    {
+      "bytes": 16033,
+      "path": "src/hok_agent/evaluation/smoke.py",
+      "sha256": "sha256:637c4dd4ebb8a323588232becf7a6abe43ad5a84567083b09943dc25f1f17419"
+    },
+    {
+      "bytes": 11132,
+      "path": "src/hok_agent/package_integrity.py",
+      "sha256": "sha256:49c1f985ab0e80c241322d26003632481f273713144498532a88e03bc6014cfa"
+    },
+    {
+      "bytes": 8430,
+      "path": "src/hok_agent/preflight.py",
+      "sha256": "sha256:f480e9cb0aa37b6f06f0cff3d231521b7f1a8aad49b8aa03ec220b5b93ee5b2a"
+    },
+    {
+      "bytes": 170,
+      "path": "src/hok_agent/safety/__init__.py",
+      "sha256": "sha256:12dfb394468ec7d1515edd10b7999999da4cb86d7f2c4aaec3b351d7b2d76667"
+    },
+    {
+      "bytes": 341,
+      "path": "src/hok_agent/safety/forbidden_terms.json",
+      "sha256": "sha256:a2d3f07c622870db3b259987a08cc98a11d6a928bb507b144e9d1d395896ea07"
+    },
+    {
+      "bytes": 6492,
+      "path": "src/hok_agent/safety/scan.py",
+      "sha256": "sha256:346030547c3d7e923103ccbbfc7d1bb8c7c42f27a708064b867c87462df220de"
+    },
+    {
+      "bytes": 796,
+      "path": "tests/test_access_gate_cli.py",
+      "sha256": "sha256:09863d60d65c534006427cbe039d3908badc7127cf893632778d749d0184b7be"
+    },
+    {
+      "bytes": 614,
+      "path": "tests/test_artifacts.py",
+      "sha256": "sha256:6430b4381969be293edad39edd9a3f209f997e7749c5e6a81e030aa5ad9deac7"
+    },
+    {
+      "bytes": 655,
+      "path": "tests/test_benchmark.py",
+      "sha256": "sha256:1c6bfb47dcc3d2efafa0e7e6fade92b21e8dddf92422ad6fc6ee0a86df4dc1a1"
+    },
+    {
+      "bytes": 1529,
+      "path": "tests/test_config_validation.py",
+      "sha256": "sha256:d6bdda4e00c871089601fdd840378add916d9813f184b7e4286c9e46a6d36957"
+    },
+    {
+      "bytes": 1663,
+      "path": "tests/test_contracts.py",
+      "sha256": "sha256:e18438a562f21bf81f82c658a37d184dda83280201fe4d6c503ac09b12523a3e"
+    },
+    {
+      "bytes": 12488,
+      "path": "tests/test_evaluation_verification.py",
+      "sha256": "sha256:b25ce37a1b0c10e5887d7e2573b7ddaf2ee5a21e2aca83bea36aaf188b2436eb"
+    },
+    {
+      "bytes": 4709,
+      "path": "tests/test_mock_rpc.py",
+      "sha256": "sha256:a3a434702f0669848b22b1299613e55d6980b35889f0889b0d919a483b7b0558"
+    },
+    {
+      "bytes": 5435,
+      "path": "tests/test_package_integrity.py",
+      "sha256": "sha256:a5623fe0befa7255145ad29d1ec529a273f3f5e7da7dff113b1607b80db95431"
+    },
+    {
+      "bytes": 4369,
+      "path": "tests/test_preflight.py",
+      "sha256": "sha256:d23f7a16877182eda78be1831257d34365af486172d3cea9ddec1675faa3a981"
+    },
+    {
+      "bytes": 1566,
+      "path": "tests/test_process_rpc.py",
+      "sha256": "sha256:1f232dce1bf190041f4b92be16b6021a2c30a28f3bfb068b221fe1efe4bc96c6"
+    },
+    {
+      "bytes": 4748,
+      "path": "tests/test_rpc_adversarial.py",
+      "sha256": "sha256:de36bd309158c1f050988e5d8a0b2d4a8077316e1cc1e9733b2714c9b03eb20c"
+    },
+    {
+      "bytes": 1840,
+      "path": "tests/test_safety.py",
+      "sha256": "sha256:4fa24f235704a716420e3f1a73b8921c38ad5e71d399f463e0718344b46b4742"
+    },
+    {
+      "bytes": 693,
+      "path": "tests/test_server_stub.py",
+      "sha256": "sha256:0374b6ff40dc282d28be702fdb8107fbce05fae0188ccbef6c7b2fd7a038525e"
+    },
+    {
+      "bytes": 6632,
+      "path": "tests/test_task005_control_plane.py",
+      "sha256": "sha256:46ac22dd82be17bc000a08f311bdf3dc653a871fe4d01373062643478ef28063"
     }
-  ]
+  ],
+  "manifest_version": "1",
+  "package": "hok-agent-v5-starter",
+  "self_hash": "sha256:dc174edca4c16190d37d9603b7caf4210c3fe153fd8338d7ed497c1f13f17010"
 }

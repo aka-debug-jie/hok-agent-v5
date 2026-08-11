@@ -5,7 +5,7 @@
 
 - 最后更新：`2026-08-11`
 - 当前阶段：`V5-M1-EXTERNAL-ACCESS-WAITING`
-- 当前任务：`TASK-005 EXTERNAL_ACCESS_WAITING / MOCK-ONLY CONTROL PLANE`
+- 当前任务：`TASK-005-PACKAGE-INTEGRITY-01 / MOCK-ONLY CONTROL PLANE`
 - 当前状态：`WAITING_EXTERNAL`
 - 当前 promotion：`无 checkpoint 可晋升`
 - 真实客户端边界：`READ_ONLY_SHADOW_ONLY`
@@ -155,3 +155,17 @@
 已知风险：legacy 没有可复用的 GameCore/license/service 配置，因此不能凭“配置一致”推断外部授权。当前 preflight 仍为 `WAITING_EXTERNAL`。
 
 下一任务：等待 Git 外的获授权 GameCore、license 接入方式和明确的服务启动/协议资料；随后按 TASK-010 只在隔离 service 中执行真实 health/reset/step/close preflight。
+
+## 9. TASK-005-PACKAGE-INTEGRITY-01 启动记录
+
+日期：`2026-08-11`
+
+状态：`IN_PROGRESS / WAITING_EXTERNAL`。
+
+范围：基于 legacy 已完成的 source-only delivery integrity 模式，修复 V5 `PACKAGE_MANIFEST.json` 的文件集合与 hash 漂移，并把只读校验接入本地检查。只实现 V5 原生 checker 与机械篡改测试；不复制 legacy 代码，不迁移模型、checkpoint、K96、训练缓存、设备配置或真实客户端路径。
+
+输入 authority：legacy 根台账、只读安全合同、source-only integrity 脚本和 V5 当前 `PACKAGE_MANIFEST.json`。legacy 的旧顶层 manifest/validation report 已过期，不能用于能力结论。
+
+明确不做：不运行训练、不生成 checkpoint、不连接 GameCore、不读取 license、不连接手机、不改变 `WAITING_EXTERNAL` 或任何 control-plane lock。
+
+验收预期：manifest self-hash、文件集合、逐文件 size/hash 与安全相对路径均 fail-closed；新增、删除、篡改、重复或路径穿越均被拒绝；`make check` 通过。
