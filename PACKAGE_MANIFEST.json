@@ -36,9 +36,9 @@
       "sha256": "sha256:fc0cc9606ceefcc607111d1073624d13c930bfad7d1ae2dd4030ba3415f7ce15"
     },
     {
-      "bytes": 14426,
+      "bytes": 17698,
       "path": "DELIVERY_PROGRESS.md",
-      "sha256": "sha256:ebc47ae17131b56c92c425dd9f63c6aada6671cbd87703e458e882fe0d483343"
+      "sha256": "sha256:bdced40b7db38f0ccc160cf99c489a471edb0f7e32d10d4563f76e1c1f43e87e"
     },
     {
       "bytes": 7047,
@@ -113,7 +113,7 @@
     {
       "bytes": 1387,
       "path": "TASK_005_MOCK_REPLAY_01.md",
-      "sha256": "sha256:4b8809dafd01400d56436526ddf5eec8f8f4ccab6ff352bf4654e0b7077ff590"
+      "sha256": "sha256:e250782922b8918cb03dd51f8aba098177ab61a290b3b8350dde7e598e95ef62"
     },
     {
       "bytes": 4914,
@@ -373,5 +373,5 @@
   ],
   "manifest_version": "1",
   "package": "hok-agent-v5-starter",
-  "self_hash": "sha256:737a5fae7a5fb65752601c73e1b97756a381cc2faa8745a94f7c05eea908b932"
+  "self_hash": "sha256:a8e913bd51b3b21cbf61f3360f172a3d7dee3509c4e10d8d05376dacbd2f547d"
 }

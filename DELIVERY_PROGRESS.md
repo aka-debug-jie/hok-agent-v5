@@ -5,7 +5,7 @@
 
 - 最后更新：`2026-08-11`
 - 当前阶段：`V5-M1-EXTERNAL-ACCESS-WAITING`
-- 当前任务：`TASK-005-MOCK-PUBLIC-TRACE-01 / MOCK-ONLY CONTROL PLANE`
+- 当前任务：`TASK-005 EXTERNAL_ACCESS_WAITING / MOCK-ONLY CONTROL PLANE`
 - 当前状态：`WAITING_EXTERNAL`
 - 当前 promotion：`无 checkpoint 可晋升`
 - 真实客户端边界：`READ_ONLY_SHADOW_ONLY`
@@ -47,13 +47,13 @@
 - 真实客户端动作；
 - 旧 v4.x 继续训练。
 
-## 2.1 当前进行中：mock public transition trace
+## 2.1 已完成：mock public transition trace
 
-状态：`IN_PROGRESS / WAITING_EXTERNAL`。
+状态：`IMPLEMENTED / WAITING_EXTERNAL`。
 
 范围：为 deterministic mock 增加独立、公开字段限定的逐 transition 诊断 trace 与 fresh-process 重放/篡改验证。该 trace 不是训练 replay、不是 GameCore/ABS replay、不能保存 reward、teacher、truth、privileged state、legal mask、内部 replay identity/hash 或真实客户端数据。
 
-固定边界：只接受内建 mock profile；不接受 GameCore、许可证、手机、control-plane 或任意外部 service 参数；输出固定标记为 `mock`、`formal=false`、`DIAGNOSTIC_ONLY`。
+固定边界：只接受内建 mock profile；不接受 GameCore、许可证、手机、control-plane 或任意外部 service 参数；输出固定标记为 `mock`、`formal=false`、`capability_claim=none`，且不是 evaluation report。
 
 验收目标：trace 自哈希、逐行 hash chain、公开 observation hash、factorized action、tick/terminal/truncated/public outcome 的 fresh-process exact replay，以及篡改拒绝。mock 成功仍只证明基础设施。
 
@@ -191,3 +191,25 @@ legacy 只读审阅结论：唯一 current-state authority 是 legacy `DELIVERY_
 外部操作与阻塞：未运行训练、未生成 checkpoint、未连接 GameCore 或手机、未读取 license、未修改 legacy。GameCore/license/service 方式仍未提供，控制面和所有外部操作继续为 `WAITING_EXTERNAL`。
 
 下一任务：保持 TASK-005 waiting；未来有意改变 V5 受控源码时，先显式运行 `package-integrity --write`，再运行 `make check`。只有 Git 外的获授权 GameCore、license 接入方式和服务协议资料齐全后，才进入 TASK-010 的隔离 service preflight。
+
+## 10. TASK-005-MOCK-PUBLIC-TRACE-01 实际记录
+
+日期：`2026-08-11`
+
+任务：`TASK-005-MOCK-PUBLIC-TRACE-01 / public-only mock diagnostic trace`
+
+状态：`DONE（mock 基础设施切片）/ WAITING_EXTERNAL`。trace 不是训练 replay、canonical GameCore/ABS replay、formal evaluation 或 promotion 证据。
+
+变更文件：`TASK_005_MOCK_REPLAY_01.md`、`DATA_AND_ARTIFACT_CONTRACT.md`、`ENVIRONMENT_CONTRACT.md`、`schemas/mock_public_replay.schema.json`、`src/hok_agent/contracts/mock_replay.py`、`src/hok_agent/evaluation/mock_replay.py`、CLI、generic artifact verifier、tests 和使用说明。只复用了 legacy 的 canonical hash、append-only row chain 与 fresh-process replay 思想；未复用 legacy replay、reward、teacher、truth、entity ID、K96、模型、checkpoint 或训练 journal。
+
+运行命令：`make check PYTHON=.venv/bin/python`；focused `pytest`（mock replay/RPC/contracts）；`validate-config`；`mock-replay-record --output artifacts/runs/task005-mock-public-trace-20260811T111700Z/mock_public_replay.json --seed 101 --side blue --max-steps 12`；对应 `mock-replay-verify` 与 `verify-artifact`；`env-smoke --episodes 100`。
+
+验证结果：全量 `make check` 通过：Ruff、strict mypy（23 source files）、pytest（64 passed）、safety scan（83 files，0 finding）和 package integrity（74/74 controlled files）均通过。focused replay/RPC/contracts suite `25 passed`，3 份 JSON schema 与 4 份 YAML 有效。record 与 fresh verify 使用不同 child PID（412/415），2 条 transition 完整终局；artifact self-hash/schema 通过。测试还覆盖同 seed/profile 字节一致、exclusive-create、rehashed action 篡改、私密字段、非公开 target、行链/终局/tick 篡改、控制面不得触发和 verifier 不改输入。
+
+生成 artifact：`artifacts/runs/task005-mock-public-trace-20260811T111700Z/mock_public_replay.json`（Git 忽略），artifact hash=`sha256:0db29e47552678b2393283e88a9a7b9cbc9e9a34ec2b54eead0c0bbcfa049c32`，file hash=`sha256:3daf6c9e3002abca47d6982a95c839463798cb4426336373d1f6a254bf0bae97`。100 局 mock artifact：`artifacts/runs/m0-mock-smoke-20260811T111656Z/`，`100/100` complete、terminal rate=`1.0`、deterministic replay=`true`、protocol/action-decode/illegal/replay errors=`0`；runtime source commit=`fc395707e25bee0482e5792a82e2d18203ca674c`，`dirty=false`。
+
+已知风险：自哈希只证明内容完整性，不证明作者身份；攻击者能重算全部 hash 时可形成另一个形式有效的 mock trace。trace 也不保存 reward、legal mask、privileged state 或 raw observation，故不能代替训练/正式 replay 要求。
+
+外部操作与阻塞：未读取或连接 GameCore/license，未调用 external control-plane，未连接手机或真实商业客户端，未修改 legacy。GameCore binary、license 接入方式、外部授权证据、真实 service 协议仍未提供；状态继续为 `WAITING_EXTERNAL`。
+
+下一任务：保持 `TASK-005 EXTERNAL_ACCESS_WAITING`，等待 Git 外的获授权 GameCore、license 接入方式和 service 启动/协议资料；齐全后先进入 `TASK-010` 的隔离 service preflight。不得以本 trace 或 mock smoke 替代该输入。

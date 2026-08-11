@@ -3,7 +3,7 @@
 ## 状态
 
 - 阶段：`M1` 前置等待期
-- 当前状态：`IN_PROGRESS / WAITING_EXTERNAL`
+- 当前状态：`IMPLEMENTED / WAITING_EXTERNAL`
 - 环境：仅内建 deterministic `mock`
 
 ## 目标
