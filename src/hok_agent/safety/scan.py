@@ -61,6 +61,8 @@ _REQUIRED_GITIGNORE = {
     "*.abs",
     "*.mp4",
     "*.pt",
+    "*.key",
+    "*.pem",
 }
 _EXECUTABLE_SUFFIXES = {".py", ".sh", ".yml", ".yaml"}
 
@@ -112,9 +114,29 @@ def _scan_restricted_filenames(root: Path) -> list[ScanFinding]:
     for path in root.rglob("*"):
         if any(part in ignored_roots for part in path.relative_to(root).parts):
             continue
-        if path.is_file() and path.name.casefold() in restricted:
+        restricted_suffix = path.suffix.casefold() in {".key", ".pem"}
+        if path.is_file() and (path.name.casefold() in restricted or restricted_suffix):
             findings.append(ScanFinding("restricted_filename", str(path.relative_to(root)), path.name))
     return findings
+
+
+def _iter_secret_scan_files(root: Path) -> Iterable[Path]:
+    excluded_roots = {
+        ".git",
+        ".venv",
+        "artifacts",
+        "datasets",
+        "checkpoints",
+        "replays",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+    }
+    for path in root.rglob("*"):
+        if not path.is_file() or any(part in excluded_roots for part in path.relative_to(root).parts):
+            continue
+        yield path
 
 
 def scan_repository(root: Path) -> SafetyScanResult:
@@ -127,7 +149,8 @@ def scan_repository(root: Path) -> SafetyScanResult:
     excluded_self = Path(__file__).resolve()
     findings = _scan_gitignore(root) + _scan_restricted_filenames(root)
     scanned_files = 0
-    for path in _iter_executable_files(root):
+    executable_paths = tuple(_iter_executable_files(root))
+    for path in executable_paths:
         if path.resolve() == excluded_self:
             continue
         scanned_files += 1
@@ -141,6 +164,18 @@ def scan_repository(root: Path) -> SafetyScanResult:
             for term in terms:
                 if term.casefold() in lowered:
                     findings.append(ScanFinding(category, str(path.relative_to(root)), "prohibited executable term"))
+        for rule, pattern in _SECRET_PATTERNS.items():
+            if pattern.search(text):
+                findings.append(ScanFinding(rule, str(path.relative_to(root)), "secret-shaped token detected"))
+    executable_set = {path.resolve() for path in executable_paths}
+    for path in _iter_secret_scan_files(root):
+        if path.resolve() in executable_set:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        scanned_files += 1
         for rule, pattern in _SECRET_PATTERNS.items():
             if pattern.search(text):
                 findings.append(ScanFinding(rule, str(path.relative_to(root)), "secret-shaped token detected"))
