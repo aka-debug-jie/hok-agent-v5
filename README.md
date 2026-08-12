@@ -51,6 +51,20 @@ directories. They fail closed until the required 12 sessions, sealed audit, and 
 labels exist. V7 has an independent CPU smoke and a separate CUDA acceptance command; it
 never changes the six-class Shadow vocabulary.
 
+```bash
+make shadow-live-smoke
+make alignment-smoke
+make temporal-smoke
+make rich-smoke
+make accept-v7  # formal RTX 4090 gate; never run in CI
+```
+
+The current V5 code is deliberately framework-only: it can exercise the source renderer,
+session split, shard, SimSiam, pseudo-label, Mean Teacher, and blind-audit contracts, but it
+cannot write a formal `release.json`. Artifact-path provenance and the supplied sealed data
+must be implemented and verified before release writing is enabled. Consequently V6 remains
+fail-closed and emits only `ABSTAIN` in the current delivery.
+
 ## Frozen V5/V6 evidence contract
 
 - Real-video action training uses zero human action labels.
@@ -60,7 +74,8 @@ never changes the six-class Shadow vocabulary.
 - SimSiam adapts shallow encoder layers; pseudo labels require source/student, view, temporal,
   and OOD agreement; Mean Teacher runs once.
 - Two blinded annotators audit 500 clips: 300 for V5 frame advice and 200 reserved for V6.
-  Audit labels produce evidence and `release.json` only; they never train or tune the model.
+  Audit labels may produce release evidence only after the missing path-bound gate exists;
+  they never train or tune the model.
 - V6 may use 300 session-isolated keyframes for hero centers/visibility and HUD status, but
   these are not action labels.
 
@@ -69,7 +84,8 @@ never changes the six-class Shadow vocabulary.
 Rich V2 is an independent `pixelarena-rich-1v1-v2` 15x7 single-lane simulator with eight
 movement directions, minions, tower/crystal objectives, respawn, basic attack, directional
 dash/projectile skills, and one target skill. It uses snapshot-based simultaneous resolution
-and a dedicated renderer/model hash. Its Actor predicts factor heads; legal domains are
+for move intents and aggregated post-move combat resolution, plus a dedicated renderer/model
+hash. Its Actor predicts factor heads; legal domains are
 consulted only at execution. V1/V3 renderers, models, hashes, and traces remain byte-stable.
 
 ## Maximum claim

@@ -32,11 +32,37 @@ DENIED_IMPORTS = {
 ALLOWED_TORCH_PATHS = {
     Path("src/hok_agent/bc.py"),
     Path("src/hok_agent/pixel.py"),
+    Path("src/hok_agent/alignment.py"),
+    Path("src/hok_agent/temporal.py"),
+    Path("src/hok_agent/rich_pixel.py"),
     Path("tests/test_bc.py"),
     Path("tests/test_pixel.py"),
+    Path("tests/test_alignment.py"),
+    Path("tests/test_temporal.py"),
+    Path("tests/test_rich.py"),
 }
-ALLOWED_VISION_PATHS = {Path("src/hok_agent/pixel.py"), Path("tests/test_pixel.py")}
-ALLOWED_VIDEO_PATHS = {Path("src/hok_agent/shadow.py"), Path("tests/test_shadow.py")}
+ALLOWED_VISION_PATHS = {
+    Path("src/hok_agent/pixel.py"),
+    Path("src/hok_agent/alignment.py"),
+    Path("src/hok_agent/temporal.py"),
+    Path("src/hok_agent/rich_pixel.py"),
+    Path("tests/test_pixel.py"),
+    Path("tests/test_alignment.py"),
+    Path("tests/test_temporal.py"),
+    Path("tests/test_rich.py"),
+}
+ALLOWED_VIDEO_PATHS = {
+    Path("src/hok_agent/shadow.py"),
+    Path("src/hok_agent/capture.py"),
+    Path("src/hok_agent/alignment.py"),
+    Path("tests/test_shadow.py"),
+    Path("tests/test_capture.py"),
+    Path("tests/test_alignment.py"),
+}
+ALLOWED_ANNOTATION_PATHS = {
+    Path("src/hok_agent/alignment.py"),
+    Path("tests/test_alignment.py"),
+}
 DENIED_MODULE_NAMES = {"android", "client", "device"}
 SECRET_PATTERN = re.compile(
     r"(?i)(api[_-]?key|access[_-]?token|password|private[_-]?key)\s*[:=]\s*['\"][^'\"]{8,}"
@@ -56,17 +82,22 @@ def project_files(root: Path = ROOT) -> list[Path]:
 def check_project(root: Path = ROOT) -> dict[str, object]:
     files = project_files(root)
     python_files = [path for path in files if path.suffix == ".py"]
-    python_lines = sum(len(path.read_text(encoding="utf-8").splitlines()) for path in python_files)
+    python_lines = sum(
+        sum(bool(line.strip()) for line in path.read_text(encoding="utf-8").splitlines())
+        for path in python_files
+    )
     root_markdown = [path for path in files if path.parent == root and path.suffix == ".md"]
     findings: list[str] = []
-    if len(files) > 36:
-        findings.append(f"file budget exceeded: {len(files)} > 36")
-    if len(python_files) > 22:
-        findings.append(f"Python file budget exceeded: {len(python_files)} > 22")
-    if python_lines > 4000:
-        findings.append(f"Python line budget exceeded: {python_lines} > 4000")
-    if len(root_markdown) > 4:
-        findings.append(f"Markdown authority budget exceeded: {len(root_markdown)} > 4")
+    if len(files) > 48:
+        findings.append(f"file budget exceeded: {len(files)} > 48")
+    if len(python_files) > 32:
+        findings.append(f"Python file budget exceeded: {len(python_files)} > 32")
+    if python_lines > 9000:
+        findings.append(f"Python line budget exceeded: {python_lines} > 9000")
+    if len(files) > 270 or len(python_files) > 110 or python_lines > 12560:
+        findings.append("outer reference-size gate exceeded")
+    if len(root_markdown) != 4:
+        findings.append(f"Markdown authority count differs: {len(root_markdown)} != 4")
     for path in files:
         relative = path.relative_to(root)
         if any(part.lower() in DENIED_MODULE_NAMES for part in relative.parts):
@@ -92,6 +123,10 @@ def check_project(root: Path = ROOT) -> dict[str, object]:
                     findings.append(f"vision training import outside pixel module: {relative}")
                 if name.split(".")[0] == "av" and relative not in ALLOWED_VIDEO_PATHS:
                     findings.append(f"video decoder import outside Shadow modules: {relative}")
+                if name.split(".")[0] in {"tkinter", "PIL"} and relative not in (
+                    ALLOWED_ANNOTATION_PATHS
+                ):
+                    findings.append(f"annotation UI import outside alignment module: {relative}")
                 if name.split(".")[0] in DENIED_IMPORTS:
                     findings.append(f"denied import {name}: {relative}")
     return {

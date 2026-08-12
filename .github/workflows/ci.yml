@@ -18,3 +18,7 @@ jobs:
       - run: make accept
       - run: make accept-v2
       - run: make pixel-smoke
+      - run: make shadow-live-smoke
+      - run: make alignment-smoke
+      - run: make temporal-smoke
+      - run: make rich-smoke

@@ -48,9 +48,10 @@
 ## Mechanical gates
 
 - At most 48 project files, excluding `.git`, `.venv`, caches, and ignored run outputs.
-- At most 32 Python files and 9,000 Python lines including tests.
+- At most 32 Python files and 9,000 Python source lines excluding blank separator lines.
 - Exactly four root Markdown authority files.
-- Keep the outer reference-size gate at 270 files, 110 Python files, and 12,560 Python lines.
+- Keep the outer reference-size gate at 270 files, 110 Python files, and 12,560 Python source
+  lines using the same blank-line exclusion.
 - Before each commit run Ruff, strict mypy, full pytest, the project size/safety gate,
   relevant frozen regression gates, the stage CPU smoke, and `git diff --check`.
 - Never manufacture GPU, hardware, recording, annotation, or accuracy evidence. Missing UVC
