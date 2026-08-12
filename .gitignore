@@ -4,49 +4,22 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.coverage
-htmlcov/
-dist/
 build/
+dist/
 *.egg-info/
 .env
 .env.*
-!.env.example
-
-# Secrets and licenses
 secrets/
 licenses/
-license.dat
-*.key
-*.pem
-
-# Restricted upstream binaries
 gamecore/
-gamecore-*/
-ABSTOOL*/
-*.exe
-*.dll
-
-# Runtime artifacts
-artifacts/
-!src/hok_agent/artifacts/
-!src/hok_agent/artifacts/**
-src/hok_agent/artifacts/__pycache__/
 datasets/
 checkpoints/
-replays/
-reports/runtime/
-logs/
-*.abs
-*.mp4
-*.mkv
-*.avi
+weights/
+videos/
+traces/
+artifacts/
+reports/
 *.pt
 *.pth
 *.onnx
-*.engine
-
-# IDE / OS
-.vscode/
-.idea/
-.DS_Store
+*.mp4

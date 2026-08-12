@@ -1,3 +1,3 @@
-"""HoK-Agent V5: authorized-environment research infrastructure only."""
+"""Minimal project-owned PixelArena package."""
 
 __version__ = "0.1.0"

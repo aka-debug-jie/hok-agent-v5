@@ -1,42 +1,30 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hok-agent-v5"
+name = "hok-agent"
 version = "0.1.0"
-description = "Safety-bounded PixelArena MOBA research agent and read-only coach"
-readme = "README.md"
+description = "Minimal deterministic project-owned PixelArena research slice"
 requires-python = ">=3.11"
-dependencies = [
-  "jsonschema>=4.23",
-  "PyYAML>=6.0",
-]
+dependencies = []
 
 [project.optional-dependencies]
-dev = [
-  "mypy>=1.13",
-  "pytest>=8.3",
-  "ruff>=0.8",
-  "types-PyYAML>=6.0",
-]
+dev = ["mypy>=1.10", "pytest>=8.0", "ruff>=0.5"]
 
 [project.scripts]
 hok-agent = "hok_agent.cli:main"
-
-[tool.setuptools]
-package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-q"
 testpaths = ["tests"]
 
 [tool.ruff]
+line-length = 100
 target-version = "py311"
-line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
@@ -45,9 +33,3 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 python_version = "3.11"
 strict = true
 files = ["src"]
-warn_unreachable = true
-warn_unused_ignores = true
-
-[[tool.mypy.overrides]]
-module = ["yaml", "jsonschema", "jsonschema.*"]
-ignore_missing_imports = true

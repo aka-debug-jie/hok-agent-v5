@@ -1,5 +1,3 @@
-"""Safety-bounded command line entry points for bootstrap and control-plane checks."""
-
 from __future__ import annotations
 
 import argparse
@@ -8,197 +6,50 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from hok_agent.artifacts.verification import ArtifactVerificationError, verify_artifact
-from hok_agent.config import validate_config_tree
-from hok_agent.contracts import LicenseStatus
-from hok_agent.control_plane import ControlledOperation, ExternalAccessDenied, ExternalAccessGate
-from hok_agent.evaluation.mock_replay import record_mock_public_replay, verify_mock_public_replay
-from hok_agent.evaluation.smoke import run_mock_benchmark, run_mock_smoke
-from hok_agent.package_integrity import PackageIntegrityError, check_manifest, write_manifest
-from hok_agent.preflight import collect_preflight, write_preflight
-from hok_agent.safety import SafetyViolation, scan_repository
+from hok_agent.replay import ReplayError, accept_minimal_v1, record_episode, verify_trace
+from hok_agent.safety import check_project
+from hok_agent.service import ServiceError
+
+POLICIES = ("null", "random", "scripted")
 
 
-def _print_document(document: object) -> None:
-    print(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True))
-
-
-def _default_schema(path: Path, root: Path) -> Path | None:
-    if path.name == "run_manifest.json":
-        return root / "schemas" / "run_manifest.schema.json"
-    if path.name == "evaluation_report.json":
-        return root / "schemas" / "evaluation_report.schema.json"
-    if path.name == "mock_public_replay.json":
-        return root / "schemas" / "mock_public_replay.schema.json"
-    return None
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="hok-agent", description="HoK-Agent V5 infrastructure CLI")
-    subcommands = parser.add_subparsers(dest="command", required=True)
-
-    smoke = subcommands.add_parser("env-smoke", help="run the deterministic mock E0 smoke")
-    smoke.add_argument("--config", type=Path, default=Path("configs/run_smoke_v1.yaml"))
-    smoke.add_argument("--episodes", type=int, default=None)
-
-    benchmark = subcommands.add_parser("env-benchmark", help="benchmark only the deterministic mock")
-    benchmark.add_argument("--config", type=Path, default=Path("configs/run_smoke_v1.yaml"))
-    benchmark.add_argument("--episodes", type=int, default=100)
-
-    replay_record = subcommands.add_parser(
-        "mock-replay-record",
-        help="record one public-only diagnostic trace from the deterministic mock",
-    )
-    replay_record.add_argument("--output", type=Path, required=True)
-    replay_record.add_argument("--seed", type=int, default=101)
-    replay_record.add_argument("--side", choices=("blue", "red"), default="blue")
-    replay_record.add_argument("--max-steps", type=int, default=12)
-
-    replay_verify = subcommands.add_parser(
-        "mock-replay-verify",
-        help="replay a public-only mock diagnostic trace in a fresh mock process",
-    )
-    replay_verify.add_argument("path", type=Path)
-
-    verify = subcommands.add_parser("verify-artifact", help="verify a self-hashed JSON artifact")
-    verify.add_argument("path", type=Path)
-    verify.add_argument("--schema", type=Path, default=None)
-    verify.add_argument("--root", type=Path, default=Path("."))
-
-    safety = subcommands.add_parser("safety-scan", help="scan executable surfaces and Git ignore rules")
-    safety.add_argument("--root", type=Path, default=Path("."))
-
-    preflight = subcommands.add_parser("preflight", help="perform a non-invasive upstream/GameCore preflight")
-    preflight.add_argument("--root", type=Path, default=Path("."))
-    preflight.add_argument("--output", type=Path, default=Path("reports/m0/upstream_gamecore_preflight.json"))
-    preflight.add_argument("--gamecore-path", type=Path, default=None)
-    preflight.add_argument("--license-path", type=Path, default=None)
-    preflight.add_argument(
-        "--runtime-config",
-        type=Path,
-        default=Path("configs/runtime_inputs_v1.yaml"),
-        help="versioned YAML containing only non-secret environment-variable names",
-    )
-    preflight.add_argument("--probe-upstream", action="store_true")
-
-    validate = subcommands.add_parser("validate-config", help="validate versioned YAML and JSON schemas")
-    validate.add_argument("--config-dir", type=Path, default=Path("configs"))
-
-    package_integrity = subcommands.add_parser(
-        "package-integrity",
-        help="check package manifest for source-only integrity",
-    )
-    package_integrity.add_argument("--root", type=Path, default=Path("."))
-    package_integrity.add_argument(
-        "--write",
-        action="store_true",
-        help="rewrite PACKAGE_MANIFEST.json using current tree snapshot",
-    )
-
-    access_gate = subcommands.add_parser(
-        "access-gate",
-        help="check a sensitive GameCore operation without connecting to any service",
-    )
-    access_gate.add_argument("--config", type=Path, default=Path("configs/program_v1.yaml"))
-    access_gate.add_argument(
-        "--operation",
-        required=True,
-        choices=[operation.value for operation in ControlledOperation],
-    )
-    access_gate.add_argument(
-        "--runtime-license-status",
-        required=True,
-        choices=[status.value for status in LicenseStatus],
-        help="service-reported metadata only; this is not external authorization evidence",
-    )
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="hok-agent")
+    commands = parser.add_subparsers(dest="command", required=True)
+    record = commands.add_parser("record", help="record one public PixelArena trace")
+    record.add_argument("--blue", choices=POLICIES, default="scripted")
+    record.add_argument("--red", choices=POLICIES, default="null")
+    record.add_argument("--seed", type=int, default=101)
+    record.add_argument("--output", type=Path, required=True)
+    replay = commands.add_parser("replay", help="replay and verify a trace")
+    replay.add_argument("path", type=Path)
+    accept = commands.add_parser("accept-minimal-v1", help="run the complete minimal gate")
+    accept.add_argument("--seed", type=int, default=101)
+    accept.add_argument("--output-dir", type=Path)
+    commands.add_parser("check", help="run size and static safety gates")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    args = _parser().parse_args(argv)
     try:
-        if args.command == "env-smoke":
-            if args.episodes is not None and args.episodes < 1:
-                raise ValueError("--episodes must be at least 1")
-            result = run_mock_smoke(args.config, episodes_override=args.episodes)
-            _print_document(result.to_dict())
-            return 0 if result.passed else 1
-        if args.command == "env-benchmark":
-            if args.episodes < 1:
-                raise ValueError("--episodes must be at least 1")
-            _print_document(run_mock_benchmark(args.config, episodes=args.episodes))
-            return 0
-        if args.command == "mock-replay-record":
-            _print_document(
-                record_mock_public_replay(
-                    args.output,
-                    seed=args.seed,
-                    side=args.side,
-                    max_steps_per_episode=args.max_steps,
-                ).to_dict()
-            )
-            return 0
-        if args.command == "mock-replay-verify":
-            _print_document(verify_mock_public_replay(args.path).to_dict())
-            return 0
-        if args.command == "verify-artifact":
-            root = args.root.resolve()
-            schema = args.schema or _default_schema(args.path, root)
-            verification = verify_artifact(args.path, schema, repo_root=root)
-            _print_document(verification.to_dict())
-            return 0 if verification.passed else 1
-        if args.command == "safety-scan":
-            scan_result = scan_repository(args.root)
-            _print_document(scan_result.to_dict())
-            return 0 if scan_result.passed else 1
-        if args.command == "preflight":
-            root = args.root.resolve()
-            output = args.output if args.output.is_absolute() else root / args.output
-            runtime_config = (
-                args.runtime_config
-                if args.runtime_config.is_absolute()
-                else root / args.runtime_config
-            )
-            report = collect_preflight(
-                root,
-                gamecore_path=args.gamecore_path,
-                license_path=args.license_path,
-                runtime_config=runtime_config,
-                probe_upstream=args.probe_upstream,
-            )
-            write_preflight(output, report)
-            _print_document({"output": str(output), **report})
-            return 0
-        if args.command == "validate-config":
-            for message in validate_config_tree(args.config_dir.resolve()):
-                print(message)
-            return 0
-        if args.command == "package-integrity":
-            root = args.root.resolve()
-            if args.write:
-                manifest_path = write_manifest(root)
-                _print_document({"manifest_path": str(manifest_path), "mode": "write"})
-                return 0
-            integrity_result = check_manifest(root)
-            _print_document(integrity_result.to_dict())
-            return 0 if integrity_result.passed else 1
-        if args.command == "access-gate":
-            gate = ExternalAccessGate.from_yaml(args.config)
-            operation = ControlledOperation(args.operation)
-            license_status = LicenseStatus(args.runtime_license_status)
-            gate.require(operation, runtime_license_status=license_status)
-            _print_document(
-                {
-                    "operation": operation.value,
-                    "runtime_license_status": license_status.value,
-                    "status": "ALLOWED_BY_LOCAL_CONTROL_PLANE",
-                }
-            )
-            return 0
-    except ExternalAccessDenied as error:
-        print(f"error [{error.code}]: {error}", file=sys.stderr)
+        if args.command == "record":
+            result = record_episode(args.output, args.blue, args.red, args.seed)
+        elif args.command == "replay":
+            result = verify_trace(args.path)
+        elif args.command == "accept-minimal-v1":
+            static = check_project()
+            if not static["passed"]:
+                raise ValueError(f"static checks failed: {static['findings']}")
+            result = accept_minimal_v1(args.seed, args.output_dir)
+            result["static_checks"] = static
+        else:
+            result = check_project()
+            if not result["passed"]:
+                print(json.dumps(result, indent=2, sort_keys=True))
+                return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    except (OSError, ValueError, ReplayError, ServiceError) as exc:
+        print(json.dumps({"status": "FAILED", "error": str(exc)}), file=sys.stderr)
         return 2
-    except (ArtifactVerificationError, SafetyViolation, PackageIntegrityError, ValueError, OSError) as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 2
-    raise AssertionError(f"unhandled command {args.command}")
