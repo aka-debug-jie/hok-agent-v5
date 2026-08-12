@@ -20,7 +20,7 @@ weights, assets, and platform-specific setup are not reused.
 
 ## Active delivery
 
-`MINIMAL-V3-PIXEL-BC` is in progress. It adds one deterministic renderer, one
+`MINIMAL-V3-PIXEL-BC` is complete. It adds one deterministic renderer, one
 ResNet-18-from-scratch model family, one bounded behavior-cloning run, and at most one
 DAgger acquisition pass. It does not add PPO, DQN, GRU, Transformer, a general training
 framework, multiple archetypes, or 3v3.
@@ -29,13 +29,17 @@ The Actor is RGB-only. Structured state is confined to PixelArena, the determini
 teacher, rendering, and evaluation. Legal actions never enter the model encoder or
 `forward`; they are used only for teacher selection, audit, and execution.
 
-The formal command will be:
+The formal command is:
 
 ```bash
-python -m hok_agent accept-pixel-v3 \
+make install
+env -u LD_LIBRARY_PATH .venv/bin/python -m hok_agent accept-pixel-v3 \
   --device cuda \
   --output-dir runs/pixel-v3-v1
 ```
+
+The host exports an unrelated CUDA 12.0 library path. The command removes that inherited
+path so the pinned Torch 2.5.1 CUDA 12.1 wheel resolves only its project-local runtime.
 
 CPU CI uses `python -m hok_agent accept-pixel-v3 --smoke --device cpu`, which is a
 non-promoting lifecycle check and not performance evidence.

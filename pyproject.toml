@@ -5,13 +5,19 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hok-agent"
 version = "0.1.0"
-description = "Minimal deterministic project-owned PixelArena research slice"
+description = "Compact RGB-only agent for the project-owned PixelArena"
 requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
 dev = ["mypy>=1.10", "pytest>=8.0", "ruff>=0.5"]
 bc = ["numpy>=1.26,<3", "torch>=2.4,<3"]
+vision = [
+    "numpy>=1.26,<3",
+    "safetensors>=0.4,<1",
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+]
 
 [project.scripts]
 hok-agent = "hok_agent.cli:main"

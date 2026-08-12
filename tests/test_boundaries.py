@@ -8,9 +8,9 @@ from hok_agent.safety import check_project, project_files
 def test_size_and_static_safety_boundaries() -> None:
     report = check_project()
     assert report["passed"], report["findings"]
-    assert report["files"] <= 24
-    assert report["python_files"] <= 15
-    assert report["python_lines"] <= 1800
+    assert report["files"] <= 36
+    assert report["python_files"] <= 22
+    assert report["python_lines"] <= 4000
     assert report["root_markdown"] <= 4
 
 

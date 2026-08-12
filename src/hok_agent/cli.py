@@ -30,6 +30,12 @@ def _parser() -> argparse.ArgumentParser:
         "accept-minimal-v2-bc", help="run the CPU structured behavior-cloning gate"
     )
     accept_v2.add_argument("--output-dir", type=Path, required=True)
+    accept_v3 = commands.add_parser(
+        "accept-pixel-v3", help="run the RGB-only PixelArena behavior-cloning gate"
+    )
+    accept_v3.add_argument("--device", choices=("cpu", "cuda"), required=True)
+    accept_v3.add_argument("--output-dir", type=Path)
+    accept_v3.add_argument("--smoke", action="store_true")
     commands.add_parser("check", help="run size and static safety gates")
     return parser
 
@@ -51,6 +57,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             from hok_agent.bc import accept_minimal_v2
 
             result = accept_minimal_v2(args.output_dir)
+        elif args.command == "accept-pixel-v3":
+            from hok_agent.pixel import accept_pixel_v3
+
+            result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         else:
             result = check_project()
             if not result["passed"]:
