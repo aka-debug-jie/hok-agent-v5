@@ -4,7 +4,7 @@ RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
 
 install:
 	$(PYTHON) -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
-	$(RUN_PYTHON) -m pip install -e '.[dev,bc,vision]'
+	$(RUN_PYTHON) -m pip install -e '.[dev,bc,vision,shadow]'
 
 lint:
 	$(RUN_PYTHON) -m ruff check src tests

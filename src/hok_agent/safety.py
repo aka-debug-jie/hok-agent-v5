@@ -36,6 +36,7 @@ ALLOWED_TORCH_PATHS = {
     Path("tests/test_pixel.py"),
 }
 ALLOWED_VISION_PATHS = {Path("src/hok_agent/pixel.py"), Path("tests/test_pixel.py")}
+ALLOWED_VIDEO_PATHS = {Path("src/hok_agent/shadow.py"), Path("tests/test_shadow.py")}
 DENIED_MODULE_NAMES = {"android", "client", "device"}
 SECRET_PATTERN = re.compile(
     r"(?i)(api[_-]?key|access[_-]?token|password|private[_-]?key)\s*[:=]\s*['\"][^'\"]{8,}"
@@ -89,6 +90,8 @@ def check_project(root: Path = ROOT) -> dict[str, object]:
                     ALLOWED_VISION_PATHS
                 ):
                     findings.append(f"vision training import outside pixel module: {relative}")
+                if name.split(".")[0] == "av" and relative not in ALLOWED_VIDEO_PATHS:
+                    findings.append(f"video decoder import outside Shadow modules: {relative}")
                 if name.split(".")[0] in DENIED_IMPORTS:
                     findings.append(f"denied import {name}: {relative}")
     return {

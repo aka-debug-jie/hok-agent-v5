@@ -7,8 +7,9 @@
 - A 128x128 public renderer, scripted/tactical teachers, RGB-only policy training,
   offline evaluation, replay, and bounded DAgger inside PixelArena.
 - CPU CI smoke and a pinned single-GPU formal training run on the local RTX 4090.
-- A future, separately reviewed Shadow Coach that consumes user-provided or
-  privacy-reviewed commercial-client video and emits advice on the host only.
+- Offline Shadow analysis of a user-provided or privacy-reviewed local recording. The
+  uncalibrated V3 hypothesis may be logged, but commercial footage always yields
+  `ABSTAIN`; only JSON diagnostics are written.
 
 ## Never part of the executable action surface
 
@@ -18,6 +19,8 @@
   anti-cheat detection/evasion, or automated real matches.
 - Online learning, reward adaptation, policy promotion, or action execution against a
   commercial client.
+- Camera indices, device nodes, URIs, network streams, symbolic links, or live capture in
+  the V4 Shadow input boundary.
 - GameCore assumptions, license probing, unknown binary/weight downloads, or external
   authorization gates.
 
@@ -42,3 +45,7 @@ GameCore equivalence, transfer, and commercial-client control explicitly false. 
 three reference repositories are architectural references only. No source, weights,
 coordinates, action maps, screenshots, assets, device identifiers, or control setup are
 copied into this project.
+
+The V4 Shadow path stores neither input paths nor frames, thumbnails, audio, or video.
+Its six-class output is a raw PixelArena-model hypothesis, not commercial-client advice;
+`advisory_action` remains `ABSTAIN` until a separately specified real-domain validation.

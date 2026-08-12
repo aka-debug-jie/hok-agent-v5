@@ -1,14 +1,14 @@
 # Delivery Progress
 
 - Last update: 2026-08-12
-- Current task: `MINIMAL-V3-PIXEL-BC`
+- Current task: `MINIMAL-V4-SHADOW-READONLY`
 - Status: `COMPLETE`
 - Product Actor input: `RGB_ONLY`
 - Closed-loop environment: `PIXELARENA_ONLY`
 - Commercial-client action output: `false`
 - HoK capability claim: `false`
 - GameCore equivalence claim: `false`
-- Next task: `NOT_SELECTED`; no automatic transition to PPO or broader scope
+- Next task: privacy-reviewed recording validation; no direct phone connection is required
 
 ## Delivered route
 
@@ -22,6 +22,49 @@ dataset, three-seed ResNet-18 behavior cloning, a sealed negative-control/test g
 an execution-boundary legal filter, and at most one acquisition-only DAgger round. This
 delivery adds no PPO, recurrent model, Transformer, general RL framework, multi-archetype,
 3v3, GameCore, or commercial-client control path.
+
+## V4 read-only Shadow status
+
+V4 adds one narrow offline path: a non-symlink local recording is opened read-only,
+decoded by PyAV 15.1.0, resized to the frozen 128x128 RGB contract, and passed to the
+strictly loaded V3 safetensors model. It publishes exactly `predictions.jsonl` and
+`summary.json` through a same-parent atomic rename. No input path, frame, image, audio,
+or video is persisted.
+
+The decoder binds each suffix to a fixed container demuxer and passes an empty nested
+protocol whitelist. Input and model are opened once with `O_NOFOLLOW`, verified by
+`fstat`, and reused through checked descriptors. The promoted V3 SHA-256 is mandatory,
+and sampling is bounded to 30-frame stride and 300 retained frames.
+
+Commercial-domain predictions are explicitly raw model hypotheses. Every row has
+`advisory_action=ABSTAIN`, reason `UNVALIDATED_COMMERCIAL_DOMAIN`, and
+`control_output=false`; the summary fixes real-domain validation, promotion eligibility,
+commercial-client action output, and HoK capability to false. URI, numeric camera,
+`/dev`, directory, symlink, and FIFO inputs are rejected before decoding.
+
+Observed V4 commands and results:
+
+```text
+pip install -e '.[dev,bc,vision,shadow]'        -> PASSED (PyAV 15.1.0)
+make check                                      -> PASSED (45 tests)
+make accept                                     -> PASSED
+accept-minimal-v2-bc                            -> PASSED
+make pixel-smoke                                -> PASSED, non-promoting
+shadow-video generated local MP4, CPU, 3 frames -> PASSED, 3 ABSTAIN / 0 advice
+git diff --check                                -> PASSED
+```
+
+- Project gate: 30 files, 21 Python files, 3,969 Python lines, four root Markdown files
+- Generated source SHA-256: `cae2a16164b1fbfdbdabf157bbe4f312cf4bdd838b6660147724c4a50a7ebe9b`
+- Frozen model SHA-256: `df511e9b19327886da359400055dcc99aad6520a495c6d5e0495031c86b44eed`
+- Predictions SHA-256: `82fbedd5056a4084941eac42294415bb60e6ca11bc0dd0f7233f01e43f7cbbef`
+- Summary SHA-256: `431461b877292feeb20821ef69fa92ec6c35d33619484562ae6958ce6222047a`
+- V4 feature commit: the commit containing this ledger; resolve with `git rev-parse HEAD`
+
+The V4 smoke used generated local pixels, not a phone or commercial-client recording.
+It proves only decoder/model/output isolation. A privacy-reviewed recording is the next
+input needed to measure domain mismatch; even then, this route remains read-only and
+cannot emit or execute a commercial-client action.
 
 ## Final V3 status
 

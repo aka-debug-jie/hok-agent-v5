@@ -36,6 +36,15 @@ def _parser() -> argparse.ArgumentParser:
     accept_v3.add_argument("--device", choices=("cpu", "cuda"), required=True)
     accept_v3.add_argument("--output-dir", type=Path)
     accept_v3.add_argument("--smoke", action="store_true")
+    shadow = commands.add_parser(
+        "shadow-video", help="analyze one local recording without client control"
+    )
+    shadow.add_argument("--input", required=True)
+    shadow.add_argument("--model", required=True)
+    shadow.add_argument("--output-dir", type=Path, required=True)
+    shadow.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+    shadow.add_argument("--sample-every", type=int, default=5)
+    shadow.add_argument("--max-frames", type=int, default=300)
     commands.add_parser("check", help="run size and static safety gates")
     return parser
 
@@ -61,6 +70,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             from hok_agent.pixel import accept_pixel_v3
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
+        elif args.command == "shadow-video":
+            from hok_agent.shadow import analyze_video
+
+            result = analyze_video(
+                args.input,
+                args.model,
+                args.output_dir,
+                args.device,
+                args.sample_every,
+                args.max_frames,
+            )
         else:
             result = check_project()
             if not result["passed"]:

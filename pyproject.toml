@@ -18,6 +18,7 @@ vision = [
     "torch==2.5.1",
     "torchvision==0.20.1",
 ]
+shadow = ["av==15.1.0"]
 
 [project.scripts]
 hok-agent = "hok_agent.cli:main"

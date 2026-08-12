@@ -1,9 +1,10 @@
-# HoK-Agent Pixel V3
+# HoK-Agent Pixel V4
 
 This repository has one product goal: train a compact visual policy that consumes only
 project-owned PixelArena RGB frames and emits the existing six abstract 1v1 actions.
-Closed-loop actions run only inside PixelArena. A commercial client may later provide
-read-only video for a separately reviewed coach, but it never receives automated input.
+Closed-loop actions run only inside PixelArena. The V4 Shadow path accepts a
+privacy-reviewed local recording for offline diagnosis, always abstains on that
+unvalidated domain, and never sends automated input.
 
 ```text
 PixelArena public state -> deterministic 128x128 RGB renderer
@@ -20,7 +21,20 @@ weights, assets, and platform-specific setup are not reused.
 
 ## Active delivery
 
-`MINIMAL-V3-PIXEL-BC` is complete. It adds one deterministic renderer, one
+`MINIMAL-V4-SHADOW-READONLY` adds one offline bridge from a local recording to the
+frozen V3 RGB Actor. It writes only `predictions.jsonl` and `summary.json`; every
+commercial-domain row has `advisory_action=ABSTAIN`, because no real-domain calibration
+has been established. It accepts no camera, URI, device node, live stream, or phone
+control surface.
+
+```bash
+python -m hok_agent shadow-video \
+  --input /absolute/path/to/privacy-reviewed-recording.mp4 \
+  --model runs/pixel-v3-v1/model-seed-0.safetensors \
+  --output-dir runs/shadow-v4-recording-001
+```
+
+`MINIMAL-V3-PIXEL-BC` remains complete and frozen. It adds one deterministic renderer, one
 ResNet-18-from-scratch model family, one bounded behavior-cloning run, and at most one
 DAgger acquisition pass. It does not add PPO, DQN, GRU, Transformer, a general training
 framework, multiple archetypes, or 3v3.
@@ -53,10 +67,11 @@ non-promoting lifecycle check and not performance evidence.
 
 ## Maximum claim
 
-After the V3 formal gate actually passes, the maximum claim is that an RGB-only visual
+The maximum capability claim remains that an RGB-only visual
 imitation policy completes fixed abstract 1v1 tasks in the project-owned PixelArena.
-No result establishes Honor of Kings, GameCore, commercial-client control, transfer,
-or environment-external capability.
+V4 additionally proves only that a local recording can be decoded and passed through
+that frozen model without any client action output. It does not establish useful real
+client advice, Honor of Kings ability, GameCore equivalence, transfer, or automation.
 
 The active source gate is deliberately small: at most 36 project files, 22 Python files,
 4,000 Python lines including tests, and these four root Markdown authority files.
