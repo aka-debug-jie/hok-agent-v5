@@ -3,27 +3,31 @@
 `DELIVERY_PROGRESS.md` is the only current-state ledger. Read it, `README.md`, and
 `BOUNDARIES.md` before changing this repository.
 
-## Implementation rules
+## Active implementation rules
 
-- Build only the smallest runnable slice described in the ledger.
-- Closed-loop actions are allowed only inside the project-owned PixelArena.
-- The commercial client is outside the executable surface. Never add device input,
-  client control, account automation, hooks, protocol access, or evasion features.
-- GameCore is unavailable and is not a dependency or active integration track.
-- Use abstract archetypes and rules. Do not copy game heroes, skills, values, assets,
-  code, weights, action maps, or device configuration from reference projects.
-- Keep legal actions separate from actor-facing observations. Persist public replay
-  data only; do not introduce privileged, teacher, truth, or training-only fields.
-- Baselines are test drivers, not learned agents. Do not claim HoK ability, training
-  readiness, win-rate performance, or transfer to a real client.
+- Build only `MINIMAL-V3-PIXEL-BC`: one renderer, one ResNet-18 model family, one
+  bounded BC run, and at most one DAgger acquisition pass.
+- Preserve Minimal V1 and V2 as secondary regression baselines. Do not present the
+  structured MLP as the product Actor.
+- The V3 Actor is RGB-only. Legal actions and structured observations must not enter
+  its `forward` method.
+- Closed-loop actions are allowed only inside project-owned PixelArena. The commercial
+  client remains read-only and outside this delivery.
+- Do not add PPO, DQN, recurrent/Transformer policy code, a model registry, distributed
+  training, multiple archetypes, 3v3, device input, hooks, protocol access, or evasion.
+- Do not copy source, weights, data, coordinates, assets, or device setup from reference
+  projects.
 
-## Size gates
+## Mechanical gates
 
-- Minimal V2: at most 24 project files, excluding `.git`, `.venv`, caches, and output.
-- Minimal V2: at most 15 Python files and 1,800 total Python lines, including tests.
-- At most four root Markdown authority files.
-- Base PixelArena is standard-library only. Torch is optional and may appear only in
-  `bc.py` and its focused test; V2 is CPU-only.
+- At most 36 project files, excluding `.git`, `.venv`, caches, and ignored run outputs.
+- At most 22 Python files and 4,000 total Python lines including tests.
+- Exactly four root Markdown authority files.
+- Base PixelArena import remains free of Torch/torchvision. ML imports are allowed only
+  in the structured BC module, the pixel training module, and their focused tests.
+- `torchvision` and `safetensors` are permitted only for the pixel model path. Device,
+  network, shell-runner, and client-control imports remain denied.
 
-Run `make check`, both minimal acceptance commands, and record only observed results in
-`DELIVERY_PROGRESS.md` before marking the task complete.
+Before completion, run `make check`, both frozen baseline gates, CPU pixel smoke, the
+pinned CUDA formal acceptance, and `git diff --check`. Record only observed results and
+hashes in `DELIVERY_PROGRESS.md`.

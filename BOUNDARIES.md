@@ -1,40 +1,44 @@
 # Boundaries
 
-## Allowed now
+## Allowed execution surfaces
 
-- Deterministic closed-loop actions inside the project-owned PixelArena process.
-- Abstract 1v1 rules, NULL/random/scripted test policies, public trace recording,
-  replay, tests, and local static checks.
-- CPU-only supervised imitation of the scripted policy from ten public structured
-  PixelArena features. Torch is optional and isolated to the BC module.
-- Standard-library local multiprocessing with no network or device capability.
+- Deterministic structured and RGB closed-loop actions inside the project-owned
+  PixelArena process.
+- A 128x128 public renderer, scripted/tactical teachers, RGB-only policy training,
+  offline evaluation, replay, and bounded DAgger inside PixelArena.
+- CPU CI smoke and a pinned single-GPU formal training run on the local RTX 4090.
+- A future, separately reviewed Shadow Coach that consumes user-provided or
+  privacy-reviewed commercial-client video and emits advice on the host only.
 
-## Never part of this executable project
+## Never part of the executable action surface
 
-- Phone or commercial-client input by ADB, scrcpy control, minitouch, HID/UHID,
-  uinput, Accessibility, macros, or mechanical input.
+- Commercial-client or phone input through ADB, scrcpy control, minitouch, HID/UHID,
+  uinput, Accessibility, macros, mechanical input, or account automation.
 - Root, hooks, injection, memory/process inspection, protocol interception or changes,
-  anti-cheat detection, evasion, account automation, or automated real matches.
-- Online learning, reward adaptation, or action execution against a commercial client.
-- GameCore assumptions, license probing, binary download, or external authorization gates.
+  anti-cheat detection/evasion, or automated real matches.
+- Online learning, reward adaptation, policy promotion, or action execution against a
+  commercial client.
+- GameCore assumptions, license probing, unknown binary/weight downloads, or external
+  authorization gates.
 
-A future Shadow Coach may consume user-provided, privacy-reviewed video or replay data
-and emit advice on the host only. It must remain separately reviewed and read-only.
+## Actor, data, and legal actions
 
-## Data and claims
+The V3 Actor accepts only RGB tensors. It receives no public-state dictionary, legal
+mask, reward, teacher identity, truth, privileged value, account, device, or training
+entity identifier. Structured public state may be used before rendering and in the
+teacher/evaluator, but it is not an Actor input.
 
-Actor-facing observations contain public abstract state only. Legal actions are separate
-from the model input and are consulted only during evaluation audit or execution. The
-Minimal V1 trace contains actions, public state hashes, public events, terminal state,
-and outcome. The Minimal V2 dataset contains pre-action public observations and executed
-scripted actions. Neither contains legal-action sets, accounts, devices, images, rewards,
-teacher/truth state, privileged state, or training-only entity identifiers.
+The persisted pixel dataset may contain uint8 frames, executed action labels, episode
+group hashes, ticks, render seeds, split/source codes, and frame hashes. It must not
+persist legal sets, rewards, raw structured observations, truth, or privileged state.
+Legal actions are transient and may be used only for teacher choice, loss-side audit,
+and the final execution filter. Raw model predictions and filter corrections are
+reported separately.
 
-All outputs use `claim_scope=pixelarena_engineering`, with HoK capability and GameCore
-equivalence explicitly false. V2 demonstrates supervised imitation only under the fixed
-PixelArena rules; it does not establish environment-seed generalization, policy
-superiority, RL readiness, transfer, or real-client capability.
+## Claims and reference isolation
 
-The three public reference repositories are design references only. No source, weights,
-coordinates, action maps, assets, or device setup are copied. In particular, the absence
-of an explicit license in a reference repository is treated as no permission to reuse it.
+All outputs remain within a PixelArena engineering scope, with HoK capability,
+GameCore equivalence, transfer, and commercial-client control explicitly false. The
+three reference repositories are architectural references only. No source, weights,
+coordinates, action maps, screenshots, assets, device identifiers, or control setup are
+copied into this project.

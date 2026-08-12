@@ -1,71 +1,58 @@
-# HoK-Agent Minimal V2
+# HoK-Agent Pixel V3
 
-This repository now has one goal: a small, deterministic, project-owned 1v1 lane
-environment called PixelArena. It exposes a local process lifecycle, three non-learning
-policies, public JSONL recording, exact action replay, and one CPU behavior-cloning
-experiment.
-
-It is not an Honor of Kings implementation, bot, or capability claim. No GameCore is
-available or required. No real phone or commercial client is connected by this project.
-
-## Runnable slice
+This repository has one product goal: train a compact visual policy that consumes only
+project-owned PixelArena RGB frames and emits the existing six abstract 1v1 actions.
+Closed-loop actions run only inside PixelArena. A commercial client may later provide
+read-only video for a separately reviewed coach, but it never receives automated input.
 
 ```text
-PixelArena state -> legal actions -> NULL/random/scripted action
-                 -> local health/reset/step/close service
-                 -> public JSONL trace -> fresh-process replay
-
-public pre-action state -> fixed 10 features -> 10x32x6 tanh MLP
-                        -> raw prediction -> execution-boundary legal mask
+PixelArena public state -> deterministic 128x128 RGB renderer
+                         -> ResNet-18 visual policy -> six action logits
+                         -> execution-boundary legal filter -> PixelArena step
 ```
 
-The fixed abstract ruleset has two sides, one lane, one tower and one crystal per side.
-An episode ends when a crystal is destroyed or the tick limit is reached. Actions are
-factorized into macro, type, target, direction, skill, upgrade, and auxiliary fields.
-Legal actions are returned at the execution boundary and are not part of observations.
-
-## Commands
-
-```bash
-.venv/bin/python -m pip install -e '.[dev,bc]'
-make check
-.venv/bin/python -m hok_agent accept-minimal-v1 --seed 101
-.venv/bin/python -m hok_agent accept-minimal-v2-bc \
-  --output-dir runs/minimal-v2-bc-v1
-.venv/bin/python -m hok_agent record \
-  --blue scripted --red null --seed 101 --output /tmp/blue.jsonl
-.venv/bin/python -m hok_agent replay /tmp/blue.jsonl
-.venv/bin/python -m hok_agent check
-```
-
-The V1 gate runs scripted play from both sides, a seeded random episode, and
-fresh-process replay checks. The V2 gate collects 256 scripted-versus-random episodes,
-deduplicates and splits public observations, trains three 550-parameter CPU models, and
-evaluates raw predictions before applying legal actions only at the execution boundary.
-If the output directory exists when the command starts, it refuses to modify it. A run
-is built in a sibling temporary directory and then published by one atomic rename with:
-
-- `dataset.jsonl`
-- `model-seed-0.json`, `model-seed-1.json`, and `model-seed-2.json`
-- `report.json`
-
-The maximum valid claim after both gates pass is:
-
-> Under the fixed project-owned PixelArena rules, a small supervised CPU model can
-> imitate the scripted test policy from ten public structured features.
-
-## Why this is intentionally small
-
-The project learned the useful structural lesson from
+The design extends the useful common shape of
 [ResnetGPT](https://github.com/FengQuanLi/ResnetGPT),
 [WZCQ](https://github.com/FengQuanLi/WZCQ), and
-[wzry_ai](https://github.com/myBoris/wzry_ai): prove one short end-to-end path before
-building a platform. Their real-device control code is specifically not reused.
+[wzry_ai](https://github.com/myBoris/wzry_ai): visual observation, trainable policy,
+structured action, and replayable runner. Their device-control code, coordinates,
+weights, assets, and platform-specific setup are not reused.
 
-The mechanical 10x ceiling uses the smallest value observed per metric: 270 files
-(WZCQ: 27), 110 Python files and 12,560 Python lines (wzry_ai: 11 and 1,256).
-This repository applies a much stricter Minimal V2 budget of 24 files, 15 Python files,
-and 1,800 Python lines including tests.
+## Active delivery
 
-Recurrent RL, multiple abstract archetypes, 3v3, rendered pixels, and a separately
-reviewed real-client read-only coach remain future work. None is implemented here.
+`MINIMAL-V3-PIXEL-BC` is in progress. It adds one deterministic renderer, one
+ResNet-18-from-scratch model family, one bounded behavior-cloning run, and at most one
+DAgger acquisition pass. It does not add PPO, DQN, GRU, Transformer, a general training
+framework, multiple archetypes, or 3v3.
+
+The Actor is RGB-only. Structured state is confined to PixelArena, the deterministic
+teacher, rendering, and evaluation. Legal actions never enter the model encoder or
+`forward`; they are used only for teacher selection, audit, and execution.
+
+The formal command will be:
+
+```bash
+python -m hok_agent accept-pixel-v3 \
+  --device cuda \
+  --output-dir runs/pixel-v3-v1
+```
+
+CPU CI uses `python -m hok_agent accept-pixel-v3 --smoke --device cpu`, which is a
+non-promoting lifecycle check and not performance evidence.
+
+## Frozen baselines
+
+- Minimal V1: deterministic PixelArena lifecycle, NULL/random/scripted policies, public
+  JSONL trace, fresh-process replay, and tamper rejection.
+- Minimal V2: a 550-parameter structured MLP that imitates the scripted policy. It
+  remains a reproducible teacher/baseline, not the product Actor.
+
+## Maximum claim
+
+After the V3 formal gate actually passes, the maximum claim is that an RGB-only visual
+imitation policy completes fixed abstract 1v1 tasks in the project-owned PixelArena.
+No result establishes Honor of Kings, GameCore, commercial-client control, transfer,
+or environment-external capability.
+
+The active source gate is deliberately small: at most 36 project files, 22 Python files,
+4,000 Python lines including tests, and these four root Markdown authority files.
