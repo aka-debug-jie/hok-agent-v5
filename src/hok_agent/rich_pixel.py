@@ -189,13 +189,11 @@ def _render_seeds(group: str, variants: int) -> tuple[int, ...]:
 
 
 def _teacher_episode(
-    seed: int, side: Side, tower_drill: bool | None = None
+    seed: int, side: Side
 ) -> tuple[str, tuple[TraceStep, ...], str, bool]:
     arena = RichPixelArena()
     arena.reset(seed)
-    teacher = RichTeacherPolicy(
-        tower_drill=seed % 5 == 0 or seed == 71 if tower_drill is None else tower_drill
-    )
+    teacher = RichTeacherPolicy()
     opponent = RichRandomPolicy(seed, "red" if side == "blue" else "blue")
     steps: list[TraceStep] = []
     while not arena.state.terminal:
@@ -253,6 +251,7 @@ def collect_rich_data(
     variant_rows: list[int] = []
     split_rows: list[int] = []
     hashes: list[bytes] = []
+    semantic_labels: dict[str, tuple[int, int, int, int, int]] = {}
     episodes: list[EpisodeSpec] = []
     for seed, side, group, steps, outcome, completed in records:
         seeds = _render_seeds(group, variants)
@@ -260,12 +259,15 @@ def collect_rich_data(
             EpisodeSpec(seed, side, group, assignments[group], seeds, outcome, completed)
         )
         for step in steps:
+            label = _indices(_ego_action(step.action, cast(Side, step.observation["side"])))
+            semantic_hash = _sha(render(step.observation, 0).tobytes())
+            previous = semantic_labels.setdefault(semantic_hash, label)
+            if previous != label:
+                raise RichPixelError("same semantic RGB frame has conflicting action labels")
             for variant, render_seed in enumerate(seeds):
                 frame = render(step.observation, render_seed)
                 frames.append(frame)
-                labels.append(
-                    _indices(_ego_action(step.action, cast(Side, step.observation["side"])))
-                )
+                labels.append(label)
                 templates.append(step.template)
                 groups.append(group.encode())
                 ticks.append(step.tick)

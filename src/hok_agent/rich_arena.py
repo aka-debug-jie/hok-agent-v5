@@ -338,9 +338,8 @@ class RichRandomPolicy:
 class RichTeacherPolicy:
     """Deterministic causal policy: it receives only side, tick and the current legal domain."""
 
-    def __init__(self, start_tick: int = 0, *, tower_drill: bool = False) -> None:
+    def __init__(self, start_tick: int = 0) -> None:
         self._tick = start_tick
-        self._tower_drill = tower_drill
 
     def select(
         self,
@@ -384,6 +383,7 @@ class RichTeacherPolicy:
                         return projectile
         if observation is not None and cast(int, observation["enemy_tower_health"]) > 0:
             own = cast(dict[str, int], observation["self_position"])
+            opponent = cast(dict[str, int], observation["opponent_position"])
             tower_x = 13 if side == "blue" else 1
             own_minions = cast(list[dict[str, int]], observation[f"{side}_minions"])
             retreat = dash_action("west" if side == "blue" else "east")
@@ -391,15 +391,17 @@ class RichTeacherPolicy:
                 abs(item["x"] - tower_x) + abs(item["y"] - 3) <= 4 for item in own_minions
             )
             advance = move_action(forward)
+            tower_distance = abs(own["x"] - tower_x)
+            defender_far = abs(opponent["x"] - tower_x) > 3
             if (
                 cast(int, observation["enemy_tower_health"]) <= 4
-                and (tanking_soon or self._tower_drill)
-                and abs(own["x"] - tower_x) > 1
+                and (tanking_soon or defender_far)
+                and tower_distance > 1
                 and advance in legal
             ):
                 return advance
-            if abs(own["x"] - tower_x) <= 4 and not tanking_soon:
-                if abs(own["x"] - tower_x) <= TOWER_RANGE and retreat in legal:
+            if tower_distance <= 4 and not tanking_soon:
+                if tower_distance <= TOWER_RANGE and retreat in legal:
                     return retreat
                 targeted = skill3_action()
                 if targeted in legal:
@@ -434,7 +436,6 @@ class RichTeacherPolicy:
             if match is not None:
                 return match
         return wait_action()
-
 
 def make_rich_policy(
     name: str, seed: int, side: Side

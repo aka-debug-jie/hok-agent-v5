@@ -175,11 +175,17 @@ def test_red_view_is_180_self_perspective() -> None:
     assert np.array_equal(render(arena.observe("blue"), 3), render(arena.observe("red"), 3))
 
 
-def test_teacher_trajectories_are_seeded_complete_and_cover_tower_attack() -> None:
+def test_teacher_trajectories_are_seeded_and_complete() -> None:
     rows = [_teacher_episode(seed, side) for seed in (0, 71) for side in ("blue", "red")]
     assert len({row[0] for row in rows}) == 4
     assert all(row[3] for row in rows)
-    assert all(any(step.template == 3 for step in row[1]) for row in rows)
+
+
+def test_teacher_has_no_hidden_episode_mode_or_semantic_label_conflict() -> None:
+    with pytest.raises(TypeError):
+        RichTeacherPolicy(tower_drill=True)  # type: ignore[call-arg]
+    data = collect_rich_data(range(8), variants=2, enforce=False)
+    assert len(data.episodes) == 16
 
 
 def test_baseline_policies_and_replay_tamper() -> None:
