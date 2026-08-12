@@ -32,7 +32,7 @@ commercial recording, capture card, or live device.
 | V4 live Shadow | `FRAMEWORK_IMPLEMENTED` | 10-minute 1080p60 UVC / 10 Hz run | `READY_FOR_HARDWARE` |
 | V5 Visual Alignment | `NON_PROMOTING_FRAMEWORK_IMPLEMENTED` | 12 sessions + path-bound gate + 300-clip sealed audit | `WAITING_DATA_AND_RELEASE_GATE` |
 | V6 Temporal Coach | `FAIL_CLOSED_FRAMEWORK_IMPLEMENTED` | V6 checkpoint + 300 tracking frames + 200-clip audit | `WAITING_DATA_AND_RELEASE_BINDING` |
-| V7 Rich PixelArena V2 | `CORE_RENDERER_TRAINER_IMPLEMENTED` | three-seed CUDA classification/closed-loop/latency | `FORMAL_NOT_PASSED` |
+| V7 Rich PixelArena V2 | `CORE_RENDERER_TRAINER_IMPLEMENTED` | three-seed CUDA classification/closed-loop/latency | `FORMAL_FAILED_CONTROLS_OR_CLOSED_LOOP` |
 
 The missing capture node, recordings, and labels do not block contracts, simulated-source
 tests, CPU smokes, annotation tooling, or Rich PixelArena. They do block any live throughput,
@@ -88,7 +88,16 @@ fresh-process exact replay/tamper rejection, and RTX 4090 forward p95 at most 10
 - The single post-fix retry reached seed-0 sealed classification and failed its frozen
   threshold. No run directory or PASSED report was retained. Review then found and fixed
   red-side 180-degree self-view labels still using world directions; current ego-direction
-  code has passed static/unit/CPU smoke gates but has not received another CUDA formal run.
+  code passed static/unit/CPU smoke gates.
+- The explicitly requested post-ego-direction RTX 4090 rerun used `make accept-v7` and
+  started from clean Git HEAD
+  `3f6c0a848dd92ffc60a9e4ed83e00679bc5a7956`. Preflight `make check` passed with 84 tests
+  and the V7 CPU smoke passed. All three training seeds passed sealed classification, after
+  which the combined negative-control/closed-loop hard gate failed. The latency gate was
+  not reached. The failure path removed its temporary directory, so no model, dataset,
+  `report.json`, or PASSED artifact was retained. Because the current exception combines
+  controls and all three closed-loop reports, the exact failing submetric is not recoverable
+  from this run and must not be guessed.
 - The original project shell exposed a conflicting CUDA library path. Direct pytest
   collection failed on `libcusparse`/`nvJitLink`; all Make targets now run with
   `LD_LIBRARY_PATH` unset and the pinned project Torch 2.5.1 environment passed.
@@ -107,9 +116,12 @@ fresh-process exact replay/tamper rejection, and RTX 4090 forward p95 at most 10
    disabled.
 3. `V6-RELEASE-BINDING`: train/save a V6 checkpoint and bind the 300-frame tracking and
    200-clip temporal audits; current advice intentionally remains all-`ABSTAIN`.
-4. `V7-CUDA-RERUN-AFTER-EGO-DIRECTION-FIX`: perform a new three-seed formal run; a capability
-   claim is forbidden until all classification, closed-loop, replay, control, and latency
-   gates pass and a five-file run directory exists.
+4. `V7-FAILED-EVIDENCE-REPORT`: make the formal failure path atomically retain a
+   `status=FAILED` diagnostic report containing all three classification reports, negative
+   controls, and each seed's closed-loop submetrics; do not retain promotable models and do
+   not lower thresholds. Then diagnose and fix the actual failing submetric before another
+   formal rerun. A capability claim remains forbidden until every gate passes and a five-file
+   PASSED run directory exists.
 
 Current maximum claim: the repository contains runnable, tested V4–V7 implementation
 frameworks and project-owned Rich PixelArena rules/rendering/data/training code. It does not
