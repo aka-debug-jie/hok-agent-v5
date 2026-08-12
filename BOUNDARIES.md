@@ -5,6 +5,8 @@
 - Deterministic closed-loop actions inside the project-owned PixelArena process.
 - Abstract 1v1 rules, NULL/random/scripted test policies, public trace recording,
   replay, tests, and local static checks.
+- CPU-only supervised imitation of the scripted policy from ten public structured
+  PixelArena features. Torch is optional and isolated to the BC module.
 - Standard-library local multiprocessing with no network or device capability.
 
 ## Never part of this executable project
@@ -21,13 +23,17 @@ and emit advice on the host only. It must remain separately reviewed and read-on
 
 ## Data and claims
 
-Actor-facing observations contain public abstract state only. Legal actions are separate.
-The Minimal V1 trace contains actions, public state hashes, public events, terminal state,
-and outcome; it contains no account, device, image, teacher, truth, private reward, or
-training identifier.
+Actor-facing observations contain public abstract state only. Legal actions are separate
+from the model input and are consulted only during evaluation audit or execution. The
+Minimal V1 trace contains actions, public state hashes, public events, terminal state,
+and outcome. The Minimal V2 dataset contains pre-action public observations and executed
+scripted actions. Neither contains legal-action sets, accounts, devices, images, rewards,
+teacher/truth state, privileged state, or training-only entity identifiers.
 
 All outputs use `claim_scope=pixelarena_engineering`, with HoK capability and GameCore
-equivalence explicitly false. Results cannot be transferred across those scopes.
+equivalence explicitly false. V2 demonstrates supervised imitation only under the fixed
+PixelArena rules; it does not establish environment-seed generalization, policy
+superiority, RL readiness, transfer, or real-client capability.
 
 The three public reference repositories are design references only. No source, weights,
 coordinates, action maps, assets, or device setup are copied. In particular, the absence

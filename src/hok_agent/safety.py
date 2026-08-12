@@ -14,6 +14,7 @@ EXCLUDED = {
     "__pycache__",
     "artifacts",
     "reports",
+    "runs",
     "build",
     "dist",
 }
@@ -27,9 +28,9 @@ DENIED_IMPORTS = {
     "win32gui",
     "subprocess",
     "socket",
-    "torch",
     "torchvision",
 }
+ALLOWED_TORCH_PATHS = {Path("src/hok_agent/bc.py"), Path("tests/test_bc.py")}
 DENIED_MODULE_NAMES = {"android", "client", "device", "vision"}
 SECRET_PATTERN = re.compile(
     r"(?i)(api[_-]?key|access[_-]?token|password|private[_-]?key)\s*[:=]\s*['\"][^'\"]{8,}"
@@ -52,12 +53,12 @@ def check_project(root: Path = ROOT) -> dict[str, object]:
     python_lines = sum(len(path.read_text(encoding="utf-8").splitlines()) for path in python_files)
     root_markdown = [path for path in files if path.parent == root and path.suffix == ".md"]
     findings: list[str] = []
-    if len(files) > 22:
-        findings.append(f"file budget exceeded: {len(files)} > 22")
-    if len(python_files) > 14:
-        findings.append(f"Python file budget exceeded: {len(python_files)} > 14")
-    if python_lines > 1400:
-        findings.append(f"Python line budget exceeded: {python_lines} > 1400")
+    if len(files) > 24:
+        findings.append(f"file budget exceeded: {len(files)} > 24")
+    if len(python_files) > 15:
+        findings.append(f"Python file budget exceeded: {len(python_files)} > 15")
+    if python_lines > 1800:
+        findings.append(f"Python line budget exceeded: {python_lines} > 1800")
     if len(root_markdown) > 4:
         findings.append(f"Markdown authority budget exceeded: {len(root_markdown)} > 4")
     for path in files:
@@ -77,6 +78,8 @@ def check_project(root: Path = ROOT) -> dict[str, object]:
             elif isinstance(node, ast.ImportFrom) and node.module:
                 names = [node.module]
             for name in names:
+                if name.split(".")[0] == "torch" and relative not in ALLOWED_TORCH_PATHS:
+                    findings.append(f"torch outside BC module: {relative}")
                 if name.split(".")[0] in DENIED_IMPORTS:
                     findings.append(f"denied import {name}: {relative}")
     return {

@@ -19,10 +19,11 @@
 
 ## Size gates
 
-- At most 22 project files, excluding `.git`, `.venv`, caches, and generated output.
-- At most 14 Python files and 1,400 total Python lines, including tests.
+- Minimal V2: at most 24 project files, excluding `.git`, `.venv`, caches, and output.
+- Minimal V2: at most 15 Python files and 1,800 total Python lines, including tests.
 - At most four root Markdown authority files.
-- Python standard library only at runtime; `pytest`, Ruff, and mypy are development tools.
+- Base PixelArena is standard-library only. Torch is optional and may appear only in
+  `bc.py` and its focused test; V2 is CPU-only.
 
-Run `make check` and `python -m hok_agent accept-minimal-v1 --seed 101` before marking
-the task complete. Record only observed results in `DELIVERY_PROGRESS.md`.
+Run `make check`, both minimal acceptance commands, and record only observed results in
+`DELIVERY_PROGRESS.md` before marking the task complete.

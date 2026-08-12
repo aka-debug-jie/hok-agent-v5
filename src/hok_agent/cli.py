@@ -26,6 +26,10 @@ def _parser() -> argparse.ArgumentParser:
     accept = commands.add_parser("accept-minimal-v1", help="run the complete minimal gate")
     accept.add_argument("--seed", type=int, default=101)
     accept.add_argument("--output-dir", type=Path)
+    accept_v2 = commands.add_parser(
+        "accept-minimal-v2-bc", help="run the CPU structured behavior-cloning gate"
+    )
+    accept_v2.add_argument("--output-dir", type=Path, required=True)
     commands.add_parser("check", help="run size and static safety gates")
     return parser
 
@@ -43,6 +47,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ValueError(f"static checks failed: {static['findings']}")
             result = accept_minimal_v1(args.seed, args.output_dir)
             result["static_checks"] = static
+        elif args.command == "accept-minimal-v2-bc":
+            from hok_agent.bc import accept_minimal_v2
+
+            result = accept_minimal_v2(args.output_dir)
         else:
             result = check_project()
             if not result["passed"]:
