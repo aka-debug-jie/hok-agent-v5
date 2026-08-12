@@ -33,6 +33,8 @@ from hok_agent.rich_pixel import (
     RichPixelActor,
     _decode_legal_template,
     _ego_action,
+    _formal_failure_report,
+    _publish_failed_report,
     _teacher_episode,
     collect_rich_data,
     load_dataset,
@@ -245,3 +247,62 @@ def test_red_self_view_uses_ego_direction_labels() -> None:
     red_ego = _ego_action(west, "red")
     assert red_ego.direction == "east"
     assert _ego_action(red_ego, "red") == west
+
+
+def test_failed_formal_report_retains_only_nonpromoting_diagnostics(tmp_path: Path) -> None:
+    data = collect_rich_data(range(1), variants=2, enforce=False)
+    runs = [{"seed": seed, "test_passed": True} for seed in (0, 1, 2)]
+    controls: dict[str, object] = {
+        "passed": False,
+        "evaluated_seed": 0,
+        "joint_accuracy_drop": {"black": 0.5, "mismatched": 0.1},
+        "checks": {
+            "black_joint_accuracy_drop_over_0_20": True,
+            "mismatch_joint_accuracy_drop_over_0_20": False,
+        },
+        "failed_checks": ["mismatch_joint_accuracy_drop_over_0_20"],
+    }
+    closed = [
+        {
+            "training_seed": seed,
+            "passed": seed != 1,
+            "null_completion": 1.0,
+            "random_completion": 0.9,
+            "blue_red_completion_gap": 0.1 if seed == 1 else 0.0,
+            "raw_illegal_rate": 0.0,
+            "correction_rate": 0.0,
+            "executed_illegal": 0,
+            "checks": {
+                "blue_red_gap_at_most_0_05": seed != 1,
+            },
+            "failed_checks": [] if seed != 1 else ["blue_red_gap_at_most_0_05"],
+        }
+        for seed in (0, 1, 2)
+    ]
+    report = _formal_failure_report(
+        data,
+        runs,
+        controls,
+        closed,
+        {"verified": True},
+        0,
+        {"python": "test", "torch": "test", "device": "test"},
+    )
+    requested = tmp_path / "rich-v7-v1"
+    failed = _publish_failed_report(requested, report)
+
+    assert not requested.exists()
+    assert failed.parent == requested.parent
+    assert failed.name.startswith("rich-v7-v1.failed-")
+    assert {path.name for path in failed.iterdir()} == {"report.json"}
+    loaded = json.loads((failed / "report.json").read_text(encoding="utf-8"))
+    assert loaded["status"] == "FAILED"
+    assert loaded["promotion_eligible"] is False
+    assert loaded["models_retained"] is False
+    assert loaded["files"] == {}
+    assert [row["training_seed"] for row in loaded["closed_loop"]] == [0, 1, 2]
+    assert loaded["selected_evaluation_seed"] == loaded["controls"]["evaluated_seed"] == 0
+    assert loaded["failed_checks"] == [
+        "controls.mismatch_joint_accuracy_drop_over_0_20",
+        "closed_loop.seed_1.blue_red_gap_at_most_0_05",
+    ]

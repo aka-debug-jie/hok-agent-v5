@@ -842,11 +842,21 @@ def _closed_loop_gate(actor: RichPixelActor, device: torch.device) -> dict[str, 
         for side in ("blue", "red")
     ]
     teacher_rate = sum(teacher_rows) / len(teacher_rows)
+    side_gap = abs(side_rates["blue"] - side_rates["red"])
+    checks = {
+        "null_completion_at_least_0_95": rate["null"] >= 0.95,
+        "random_completion_at_least_0_90": rate["random"] >= 0.90,
+        "random_at_least_0_95_teacher": rate["random"] >= 0.95 * teacher_rate,
+        "blue_red_gap_at_most_0_05": side_gap <= 0.05,
+        "raw_illegal_at_most_0_02": raw <= 0.02,
+        "mask_correction_at_most_0_02": corrections <= 0.02,
+        "executed_illegal_zero": executed == 0,
+    }
     passed = (
         rate["null"] >= 0.95
         and rate["random"] >= 0.90
         and rate["random"] >= 0.95 * teacher_rate
-        and abs(side_rates["blue"] - side_rates["red"]) <= 0.05
+        and side_gap <= 0.05
         and raw <= 0.02
         and corrections <= 0.02
         and executed == 0
@@ -856,16 +866,19 @@ def _closed_loop_gate(actor: RichPixelActor, device: torch.device) -> dict[str, 
         "null_completion": rate["null"],
         "random_completion": rate["random"],
         "side_completion": side_rates,
+        "blue_red_completion_gap": side_gap,
         "matched_teacher_completion": teacher_rate,
         "raw_illegal_rate": raw,
         "correction_rate": corrections,
         "executed_illegal": executed,
+        "checks": checks,
+        "failed_checks": [name for name, accepted in checks.items() if not accepted],
         "rows": rows,
     }
 
 
 def _controls(
-    actor: RichPixelActor, data: RichPixelData, device: torch.device
+    actor: RichPixelActor, data: RichPixelData, device: torch.device, evaluated_seed: int
 ) -> dict[str, object]:
     indices = np.flatnonzero(data.splits == SPLITS["test"])
     actual = _metrics(actor, data, indices, device)
@@ -880,17 +893,92 @@ def _controls(
         mismatch_metrics = _metrics(actor, data, indices, device)
     finally:
         data.frames = original
-    passed = cast(float, black_metrics["joint_accuracy"]) + 0.20 < cast(
-        float, actual["joint_accuracy"]
-    ) and cast(float, mismatch_metrics["joint_accuracy"]) + 0.20 < cast(
-        float, actual["joint_accuracy"]
-    )
+    actual_joint = cast(float, actual["joint_accuracy"])
+    black_drop = actual_joint - cast(float, black_metrics["joint_accuracy"])
+    mismatch_drop = actual_joint - cast(float, mismatch_metrics["joint_accuracy"])
+    checks = {
+        "black_joint_accuracy_drop_over_0_20": black_drop > 0.20,
+        "mismatch_joint_accuracy_drop_over_0_20": mismatch_drop > 0.20,
+    }
+    passed = cast(float, black_metrics["joint_accuracy"]) + 0.20 < actual_joint and cast(
+        float, mismatch_metrics["joint_accuracy"]
+    ) + 0.20 < actual_joint
     return {
         "passed": passed,
+        "evaluated_seed": evaluated_seed,
+        "domain": "synthetic_pixelarena",
         "actual": actual,
         "black": black_metrics,
-        "mismatched_real_frames": mismatch_metrics,
+        "mismatched_frames": mismatch_metrics,
+        "joint_accuracy_drop": {"black": black_drop, "mismatched": mismatch_drop},
+        "checks": checks,
+        "failed_checks": [name for name, accepted in checks.items() if not accepted],
     }
+
+
+def _formal_failure_report(
+    data: RichPixelData,
+    runs: list[dict[str, object]],
+    controls: dict[str, object],
+    closed: list[dict[str, object]],
+    replay: dict[str, object],
+    best: int,
+    runtime: dict[str, str],
+) -> dict[str, object]:
+    failed_checks = [
+        f"controls.{name}" for name in cast(list[str], controls["failed_checks"])
+    ]
+    for item in closed:
+        seed = cast(int, item["training_seed"])
+        failed_checks.extend(
+            f"closed_loop.seed_{seed}.{name}"
+            for name in cast(list[str], item["failed_checks"])
+        )
+    return {
+        "kind": "rich_pixel_v7_formal_report_v2",
+        "status": "FAILED",
+        "disposition": "NON_PROMOTING_DIAGNOSTIC",
+        "failed_stage": "controls_or_closed_loop",
+        "failed_checks": failed_checks,
+        "error": "control or closed-loop formal threshold failed",
+        "promotion_eligible": False,
+        "claim_scope": "pixelarena_engineering",
+        "hok_capability_claim": False,
+        "config_hash": data.config.digest,
+        "renderer_hash": RENDERER_HASH,
+        "action_hash": ACTION_HASH,
+        "training_hash": TRAINING_HASH,
+        "dataset": dataset_summary(data),
+        "training_runs": runs,
+        "selected_evaluation_seed": TRAINING_SEEDS[best],
+        "selection_rule": "minimum_best_validation_loss",
+        "controls": controls,
+        "closed_loop": closed,
+        "fresh_process_replay": replay,
+        "latency": {"status": "NOT_RUN", "reason": "prior_formal_gate_failed"},
+        "files": {},
+        "retained_artifacts": ["report.json"],
+        "models_retained": False,
+        "runtime": runtime,
+    }
+
+
+def _publish_failed_report(output: Path, report: dict[str, object]) -> Path:
+    failed = output.with_name(f"{output.name}.failed-{time.time_ns()}")
+    temporary = Path(tempfile.mkdtemp(prefix=f".{failed.name}.tmp-", dir=output.parent))
+    try:
+        (temporary / "report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        if {path.name for path in temporary.iterdir()} != {"report.json"}:
+            raise RichPixelError("failed-report atomic directory field set mismatch")
+        temporary.rename(failed)
+    except Exception:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+        raise
+    return failed
 
 
 def _latency(actor: RichPixelActor, device: torch.device) -> dict[str, object]:
@@ -1012,10 +1100,33 @@ def accept_rich_pixel(
             range(3),
             key=lambda index: cast(float, runs[index]["best_validation_loss"]),
         )
-        controls = _controls(actors[best], data, torch.device("cuda:0"))
-        closed = [_closed_loop_gate(actor, torch.device("cuda:0")) for actor in actors]
+        controls = _controls(
+            actors[best], data, torch.device("cuda:0"), TRAINING_SEEDS[best]
+        )
+        closed = []
+        for seed, actor in zip(TRAINING_SEEDS, actors, strict=True):
+            result = _closed_loop_gate(actor, torch.device("cuda:0"))
+            result["training_seed"] = seed
+            closed.append(result)
         if not bool(controls["passed"]) or not all(bool(item["passed"]) for item in closed):
-            raise RichPixelError("control or closed-loop formal threshold failed")
+            failed_report = _formal_failure_report(
+                data,
+                runs,
+                controls,
+                closed,
+                replay,
+                best,
+                {
+                    "python": platform.python_version(),
+                    "torch": torch.__version__,
+                    "device": torch.cuda.get_device_name(0),
+                },
+            )
+            failed_output = _publish_failed_report(output, failed_report)
+            raise RichPixelError(
+                "control or closed-loop formal threshold failed; "
+                f"status=FAILED report retained at {failed_output / 'report.json'}"
+            )
         latency = _latency(actors[best], torch.device("cuda:0"))
         if cast(float, latency["p95_ms"]) > 10.0:
             raise RichPixelError("formal CUDA forward p95 exceeds 10 ms")
@@ -1063,5 +1174,6 @@ def accept_rich_pixel(
         temporary.rename(output)
         return report
     except Exception:
-        shutil.rmtree(temporary)
+        if temporary.exists():
+            shutil.rmtree(temporary)
         raise
