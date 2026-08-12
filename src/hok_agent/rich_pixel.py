@@ -36,6 +36,7 @@ from hok_agent.rich_arena import (
     RichTeacherPolicy,
     Side,
     canonical_actions,
+    ego_action,
     record_rich_trace,
     verify_rich_trace,
 )
@@ -160,25 +161,7 @@ def _indices(action: FactorizedAction) -> tuple[int, int, int, int, int]:
 
 
 def _ego_action(action: FactorizedAction, side: Side) -> FactorizedAction:
-    if side == "blue" or action.direction == "none":
-        return action
-    opposite = {
-        "north": "south",
-        "south": "north",
-        "west": "east",
-        "east": "west",
-        "northwest": "southeast",
-        "northeast": "southwest",
-        "southwest": "northeast",
-        "southeast": "northwest",
-    }
-    return FactorizedAction(
-        action.macro,
-        action.action_type,
-        action.target,
-        opposite[action.direction],
-        action.skill,
-    )
+    return ego_action(action, side)
 
 
 def _group_splits(groups: Sequence[str], formal: bool) -> dict[str, int]:

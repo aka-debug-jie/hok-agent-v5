@@ -143,6 +143,15 @@ def test_minion_spawn_every_six_ticks_and_tower_prefers_minion() -> None:
     assert arena.state.blue_minions and arena.state.blue_minions[0].health == 1
 
 
+def test_minion_same_target_intents_cancel_symmetrically() -> None:
+    arena = RichPixelArena()
+    arena.reset(0)
+    arena.state.blue_minions = [Minion(6, 2, 3, "blue")]
+    arena.state.red_minions = [Minion(8, 2, 3, "red")]
+    arena.step(arena.legal_actions("blue")[0], arena.legal_actions("red")[0])
+    assert (arena.state.blue_minions[0].x, arena.state.red_minions[0].x) == (6, 8)
+
+
 def test_renderer_determinism_and_mutation() -> None:
     arena = RichPixelArena()
     arena.reset(3)
@@ -247,6 +256,49 @@ def test_red_self_view_uses_ego_direction_labels() -> None:
     red_ego = _ego_action(west, "red")
     assert red_ego.direction == "east"
     assert _ego_action(red_ego, "red") == west
+
+
+def test_teacher_vs_null_is_blue_red_frame_and_action_symmetric() -> None:
+    blue_arena, red_arena = RichPixelArena(), RichPixelArena()
+    blue_arena.reset(0)
+    red_arena.reset(0)
+    blue_teacher, red_teacher = RichTeacherPolicy(), RichTeacherPolicy()
+    null = RichNullPolicy()
+    for tick in range(blue_arena.config.max_ticks):
+        blue_observation = blue_arena.observe("blue")
+        red_observation = red_arena.observe("red")
+        assert np.array_equal(render(blue_observation, 0), render(red_observation, 0))
+        blue = blue_teacher.select(
+            "blue", blue_arena.legal_actions("blue"), tick, blue_observation
+        )
+        red = red_teacher.select("red", red_arena.legal_actions("red"), tick, red_observation)
+        assert blue == _ego_action(red, "red")
+        blue_arena.step(blue, null.select("red", blue_arena.legal_actions("red")))
+        red_arena.step(null.select("blue", red_arena.legal_actions("blue")), red)
+        assert blue_arena.state.terminal == red_arena.state.terminal
+        if blue_arena.state.terminal:
+            break
+    assert blue_arena.state.outcome == "blue_win_crystal_destroyed"
+    assert red_arena.state.outcome == "red_win_crystal_destroyed"
+
+
+def test_seeded_random_is_ego_symmetric() -> None:
+    blue_arena, red_arena = RichPixelArena(), RichPixelArena()
+    blue_arena.reset(19)
+    red_arena.reset(19)
+    blue_random = RichRandomPolicy(19, "blue")
+    red_random = RichRandomPolicy(19, "red")
+    for _ in range(32):
+        blue = blue_random.select("blue", blue_arena.legal_actions("blue"))
+        red = red_random.select("red", red_arena.legal_actions("red"))
+        assert blue == _ego_action(red, "red")
+        blue_arena.step(blue, RichNullPolicy().select("red", blue_arena.legal_actions("red")))
+        red_arena.step(RichNullPolicy().select("blue", red_arena.legal_actions("blue")), red)
+        assert np.array_equal(
+            render(blue_arena.observe("blue"), 3), render(red_arena.observe("red"), 3)
+        )
+        if blue_arena.state.terminal:
+            break
 
 
 def test_failed_formal_report_retains_only_nonpromoting_diagnostics(tmp_path: Path) -> None:

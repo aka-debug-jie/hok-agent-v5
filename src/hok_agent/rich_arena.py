@@ -24,7 +24,8 @@ BASIC_RANGE, BASIC_DAMAGE = 1, 2
 SKILL1_RANGE, SKILL1_DAMAGE, SKILL1_COOLDOWN = 2, 0, 4
 SKILL2_RANGE, SKILL2_DAMAGE, SKILL2_COOLDOWN = 4, 3, 3
 SKILL3_RANGE, SKILL3_DAMAGE, SKILL3_COOLDOWN = 3, 4, 6
-MINION_HP, MINION_DAMAGE, MINION_BATCH, MINION_SPAWN_EVERY_TICKS = 3, 1, 2, 6
+MINION_HP, MINION_DAMAGE, MINION_RANGE = 3, 1, 2
+MINION_BATCH, MINION_SPAWN_EVERY_TICKS = 2, 6
 MAX_TICKS = 96
 BLUE_START, RED_START = (2, 3), (12, 3)
 BLUE_TOWER, RED_TOWER = (1, 3), (13, 3)
@@ -166,6 +167,28 @@ def canonical_actions() -> tuple[FactorizedAction, ...]:
     return tuple(result)
 
 
+def ego_action(action: FactorizedAction, side: Side) -> FactorizedAction:
+    if side == "blue" or action.direction == "none":
+        return action
+    opposite = {
+        "north": "south",
+        "south": "north",
+        "west": "east",
+        "east": "west",
+        "northwest": "southeast",
+        "northeast": "southwest",
+        "southwest": "northeast",
+        "southeast": "northwest",
+    }
+    return FactorizedAction(
+        action.macro,
+        action.action_type,
+        action.target,
+        opposite[action.direction],
+        action.skill,
+    )
+
+
 def action_factor_index(action: FactorizedAction) -> int:
     if action.upgrade != "none" or action.auxiliary != 0:
         raise ValueError("wire requires upgrade=none and auxiliary=0")
@@ -223,8 +246,10 @@ class ArenaConfig:
     skill3_cooldown: int = SKILL3_COOLDOWN
     minion_health: int = MINION_HP
     minion_damage: int = MINION_DAMAGE
+    minion_range: int = MINION_RANGE
     minion_spawn_every_ticks: int = MINION_SPAWN_EVERY_TICKS
     minion_batch: int = MINION_BATCH
+    minion_movement: str = "simultaneous-intents-same-target-cancel-v1"
     max_ticks: int = MAX_TICKS
     blue_start: tuple[int, int] = BLUE_START
     red_start: tuple[int, int] = RED_START
@@ -295,7 +320,8 @@ class RichNullPolicy:
 
 class RichRandomPolicy:
     def __init__(self, seed: int, side: Side) -> None:
-        self._rng = Random(seed * 2 + (side == "red"))
+        del side
+        self._rng = Random(seed)
 
     def select(
         self,
@@ -304,8 +330,9 @@ class RichRandomPolicy:
         tick: int | None = None,
         observation: dict[str, object] | None = None,
     ) -> FactorizedAction:
-        del side, tick, observation
-        return self._rng.choice(legal)
+        del tick, observation
+        ordered = sorted(legal, key=lambda action: action_factor_index(ego_action(action, side)))
+        return self._rng.choice(ordered)
 
 
 class RichTeacherPolicy:
@@ -341,8 +368,11 @@ class RichTeacherPolicy:
             if abs(own["x"] - tower_x) > 4:
                 for item in sorted(
                     enemy_minions,
-                    key=lambda value: abs(value["x"] - own["x"])
-                    + abs(value["y"] - own["y"]),
+                    key=lambda value: (
+                        abs(value["x"] - own["x"]) + abs(value["y"] - own["y"]),
+                        value["x"] if side == "blue" else BOARD_WIDTH - 1 - value["x"],
+                        value["y"] if side == "blue" else BOARD_HEIGHT - 1 - value["y"],
+                    ),
                 ):
                     dx, dy = item["x"] - own["x"], item["y"] - own["y"]
                     if max(abs(dx), abs(dy)) > 4 or dx == 0 and dy == 0:
@@ -622,14 +652,21 @@ class RichPixelArena:
                 self.state.red.x, self.state.red.y = rd
 
     def _move_minions(self) -> None:
+        intents: list[tuple[Minion, Side, tuple[int, int]]] = []
+        destination_sides: defaultdict[tuple[int, int], set[Side]] = defaultdict(set)
         for side in ("blue", "red"):
+            owner: Side = "blue" if side == "blue" else "red"
             direction = 1 if side == "blue" else -1
-            enemy = _opposite(side)
+            enemy = _opposite(owner)
             occupied = {(m.x, m.y) for m in self._minions(enemy)} | {self._pos(enemy)}
-            for minion in self._minions(side):
+            for minion in self._minions(owner):
                 point = (minion.x + direction, minion.y)
                 if _valid(point) and point not in occupied:
-                    minion.x, minion.y = point
+                    intents.append((minion, owner, point))
+                    destination_sides[point].add(owner)
+        for minion, _side, point in intents:
+            if len(destination_sides[point]) == 1:
+                minion.x, minion.y = point
 
     def _line_target(self, side: Side, direction: str) -> Damage | None:
         enemy, (dx, dy), origin = _opposite(side), _VECTOR[direction], self._pos(side)
@@ -647,6 +684,17 @@ class RichPixelArena:
             if self._tower_hp(enemy) == 0 and self._crystal_pos(enemy) == point:
                 return "crystal", enemy, -1
         return None
+
+    def _minion_target_key(
+        self, owner: Side, origin: tuple[int, int], index: int
+    ) -> tuple[int, int, int, int]:
+        minion = self._minions(_opposite(owner))[index]
+        return (
+            _dist(origin, (minion.x, minion.y)),
+            minion.x if owner == "blue" else BOARD_WIDTH - 1 - minion.x,
+            minion.y if owner == "blue" else BOARD_HEIGHT - 1 - minion.y,
+            index,
+        )
 
     def _hero_combat(
         self,
@@ -667,10 +715,12 @@ class RichPixelArena:
             elif action.target == "enemy_crystal":
                 target = ("crystal", enemy, -1)
             else:
-                candidates = [
-                    (i, _dist(origin, (m.x, m.y))) for i, m in enumerate(self._minions(enemy))
-                ]
-                target = ("minion", enemy, min(candidates, key=lambda item: item[1])[0])
+                candidates = range(len(self._minions(enemy)))
+                target = (
+                    "minion",
+                    enemy,
+                    min(candidates, key=lambda index: self._minion_target_key(side, origin, index)),
+                )
         elif action.skill == "skill2":
             target, amount = self._line_target(side, action.direction), self.config.skill2_damage
         elif action.skill == "skill3":
@@ -686,12 +736,21 @@ class RichPixelArena:
             for index, minion in enumerate(self._minions(owner)):
                 origin = (minion.x, minion.y)
                 nearby = [
-                    (i, _dist(origin, (m.x, m.y)))
+                    i
                     for i, m in enumerate(self._minions(enemy))
-                    if _dist(origin, (m.x, m.y)) <= 1
+                    if _dist(origin, (m.x, m.y)) <= self.config.minion_range
                 ]
                 if nearby:
-                    target: Damage = ("minion", enemy, min(nearby, key=lambda item: item[1])[0])
+                    target: Damage = (
+                        "minion",
+                        enemy,
+                        min(
+                            nearby,
+                            key=lambda target_index: self._minion_target_key(
+                                owner, origin, target_index
+                            ),
+                        ),
+                    )
                 elif self._hero(enemy).health > 0 and _dist(origin, self._pos(enemy)) <= 1:
                     target = ("hero", enemy, -1)
                 elif self._tower_hp(enemy) > 0 and _dist(origin, self._tower_pos(enemy)) <= 1:
@@ -711,12 +770,21 @@ class RichPixelArena:
                 continue
             origin = self._tower_pos(owner)
             nearby = [
-                (i, _dist(origin, (m.x, m.y)))
+                i
                 for i, m in enumerate(self._minions(enemy))
                 if _dist(origin, (m.x, m.y)) <= self.config.tower_range
             ]
             if nearby:
-                target: Damage = ("minion", enemy, min(nearby, key=lambda item: item[1])[0])
+                target = (
+                    "minion",
+                    enemy,
+                    min(
+                        nearby,
+                        key=lambda target_index: self._minion_target_key(
+                            owner, origin, target_index
+                        ),
+                    ),
+                )
             elif (
                 self._hero(enemy).health > 0
                 and _dist(origin, self._pos(enemy)) <= self.config.tower_range
