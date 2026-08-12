@@ -8,6 +8,7 @@ import platform
 import sys
 import tempfile
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from random import Random
@@ -607,19 +608,34 @@ def infer_rgb_frames(
     model_path: Path, frames: np.ndarray, device_name: str
 ) -> tuple[list[int], list[float], int]:
     """Run the frozen RGB Actor without exposing Torch at the Shadow boundary."""
-    if frames.ndim != 4 or frames.shape[1:] != (128, 128, 3) or frames.dtype != np.uint8:
-        raise PixelError("RGB inference expects uint8 NHWC 128x128 frames")
+    predict, seed = open_rgb_predictor(model_path, device_name)
+    predictions, confidences = predict(frames)
+    return predictions, confidences, seed
+
+
+def open_rgb_predictor(
+    model_path: Path, device_name: str
+) -> tuple[Callable[[np.ndarray], tuple[list[int], list[float]]], int]:
+    """Load one RGB Actor and return a reusable RGB-only batch predictor."""
+    if device_name not in {"cpu", "cuda"}:
+        raise PixelError("device must be cpu or cuda")
     if device_name == "cuda" and not torch.cuda.is_available():
         raise PixelError("CUDA requested but unavailable")
     device = torch.device(device_name)
     actor, seed = load_model(model_path)
     actor.to(device).eval()
-    with torch.no_grad():
-        probabilities = torch.softmax(actor(_normalize(frames, device)), dim=1)
-    if not bool(torch.isfinite(probabilities).all()):
-        raise PixelError("pixel model produced non-finite probabilities")
-    confidence, prediction = probabilities.max(dim=1)
-    return prediction.cpu().tolist(), confidence.cpu().tolist(), seed
+
+    def predict(frames: np.ndarray) -> tuple[list[int], list[float]]:
+        if frames.ndim != 4 or frames.shape[1:] != (128, 128, 3) or frames.dtype != np.uint8:
+            raise PixelError("RGB inference expects uint8 NHWC 128x128 frames")
+        with torch.no_grad():
+            probabilities = torch.softmax(actor(_normalize(frames, device)), dim=1)
+        if not bool(torch.isfinite(probabilities).all()):
+            raise PixelError("pixel model produced non-finite probabilities")
+        confidence, prediction = probabilities.max(dim=1)
+        return prediction.cpu().tolist(), confidence.cpu().tolist()
+
+    return predict, seed
 
 
 def _choose_action(
