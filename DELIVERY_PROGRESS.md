@@ -32,7 +32,7 @@ commercial recording, capture card, or live device.
 | V4 live Shadow | `FRAMEWORK_IMPLEMENTED` | 10-minute 1080p60 UVC / 10 Hz run | `READY_FOR_HARDWARE` |
 | V5 Visual Alignment | `NON_PROMOTING_FRAMEWORK_IMPLEMENTED` | 12 sessions + path-bound gate + 300-clip sealed audit | `WAITING_DATA_AND_RELEASE_GATE` |
 | V6 Temporal Coach | `FAIL_CLOSED_FRAMEWORK_IMPLEMENTED` | V6 checkpoint + 300 tracking frames + 200-clip audit | `WAITING_DATA_AND_RELEASE_BINDING` |
-| V7 Rich PixelArena V2 | `CORE_RENDERER_TRAINER_IMPLEMENTED` | three-seed CUDA classification/closed-loop/latency | `FORMAL_FAILED_CONTROLS_OR_CLOSED_LOOP` |
+| V7 Rich PixelArena V2 | `COMPLETE` | three-seed CUDA classification/closed-loop/replay/latency | `FORMAL_PASSED` |
 
 The missing capture node, recordings, and labels do not block contracts, simulated-source
 tests, CPU smokes, annotation tooling, or Rich PixelArena. They do block any live throughput,
@@ -71,17 +71,16 @@ fresh-process exact replay/tamper rejection, and RTX 4090 forward p95 at most 10
 - V4 live implementation commit: `b8af9607d6dd38a2c66b0552b3411aa0f452faf8`.
 - V5 alignment framework commit: `2f1b29d85711f828dc092cb0b6b19a3291c87412`.
 - V6 fail-closed temporal framework commit: `f9e9a7f642890720a2cd2c635cb366f5f633b028`.
-- V7 implementation, shared CLI/CI gates, and this ledger are the current Git `HEAD`.
-- `make check`: Ruff passed; strict mypy passed for 18 source files; `84 passed`; project
-  gate passed with 40 files, 31 Python files, 8,217 nonblank Python source lines, and four
+- V7 failure-evidence commit: `cc10c8e`; side-symmetric RichArena commit: `669824d`;
+  observable-teacher/data-contract commit: `c6794738caa14c469a7f12033814ec1b7206c9a0`.
+- `make check`: Ruff passed; strict mypy passed for 18 source files; `89 passed`; project
+  gate passed with 40 files, 31 Python files, 8,485 nonblank Python source lines, and four
   root Markdown files.
 - Frozen regressions: V1 acceptance passed; V2 three-seed structured BC passed; V3 CPU
   smoke passed. V4 capture tests passed `7/7`; V5 contract smoke passed with no release;
   V6 smoke emitted only `ABSTAIN`; V7 CPU smoke passed with five factor heads.
-- V7 trajectory-only preflight (no frame materialization/training): 512/512 unique complete
-  public trajectories, 466/512 teacher crystal completions (`91.015625%`), and minimum
-  per-split transition count for every syntax template of fit/acquisition/validation/test
-  = `114/43/22/28`; two render variants would double these sample counts.
+- Final V7 trajectory/data result: 512/512 unique public trajectory groups, two render
+  variants, 57,120 RGB samples, and 504/512 teacher crystal completions (`98.4375%`).
 - First authorized host RTX 4090 V7 formal attempt reached seed-0 validation but failed with
   `CUDNN_STATUS_EXECUTION_FAILED` because validation was sent as one unbounded batch. The
   code now validates in fixed 256-frame batches.
@@ -89,15 +88,46 @@ fresh-process exact replay/tamper rejection, and RTX 4090 forward p95 at most 10
   threshold. No run directory or PASSED report was retained. Review then found and fixed
   red-side 180-degree self-view labels still using world directions; current ego-direction
   code passed static/unit/CPU smoke gates.
-- The explicitly requested post-ego-direction RTX 4090 rerun used `make accept-v7` and
-  started from clean Git HEAD
-  `3f6c0a848dd92ffc60a9e4ed83e00679bc5a7956`. Preflight `make check` passed with 84 tests
-  and the V7 CPU smoke passed. All three training seeds passed sealed classification, after
-  which the combined negative-control/closed-loop hard gate failed. The latency gate was
-  not reached. The failure path removed its temporary directory, so no model, dataset,
-  `report.json`, or PASSED artifact was retained. Because the current exception combines
-  controls and all three closed-loop reports, the exact failing submetric is not recoverable
-  from this run and must not be guessed.
+- The diagnostic failure path was then changed to atomically retain only a non-promoting
+  `status=FAILED` report. The first retained failure
+  `runs/rich-v7-v1.failed-1786545699790441608/report.json`
+  (SHA-256 `475779f9a930d614053edbfb4da2957ddd54562bcaededbf28eb6edce5215ebd`)
+  exposed the red-side NULL failure and side gaps. The root cause was sequential blue-first
+  minion movement and non-ego random/tie ordering; commit `669824d` changed these to
+  simultaneous, side-symmetric rules and added mirrored episode tests.
+- The second retained failure
+  `runs/rich-v7-v1.failed-1786547313268648597/report.json`
+  (SHA-256 `5a9bdeb57062f220e021cfb1ed63f0a13e119007cd17d31cc24ccde03c9a0550`)
+  passed side symmetry but seed 2 achieved random completion `0.90` against a matched
+  teacher `0.95`, narrowly missing the frozen relative gate. Diagnosis found a hidden
+  episode-seed teacher mode that gave conflicting labels to identical semantic RGB frames.
+  Commit `c679473` removed that unobservable input, made the tactic depend only on visible
+  public state, and added a zero-conflicting-label collection gate. Data definition, model
+  architecture, training seeds, and thresholds were not relaxed.
+- Final `make accept-v7` started from clean code commit
+  `c6794738caa14c469a7f12033814ec1b7206c9a0` and passed on
+  `NVIDIA GeForce RTX 4090`, Python 3.11.15, Torch 2.5.1+cu121. The retained run is
+  `runs/rich-v7-v1`; its `report.json` SHA-256 is
+  `873df770673366fcc9e965d33239b157c2309c059976d82ff258b48cf89416bf`.
+- Sealed test joint/balanced accuracy for seeds 0/1/2 was respectively
+  `0.997281/0.998851`, `0.994449/0.993821`, and `0.998641/0.999601`; every seed and every
+  frozen classification gate passed. The selected validation-loss seed was 2.
+- Closed-loop NULL completion for seeds 0/1/2 was `1.00/1.00/1.00`; random completion was
+  `1.00/0.95/1.00`; matched teacher completion was `1.00` for all three. Blue/red completion
+  was `1.00/1.00`, `0.95/0.95`, and `1.00/1.00`, so every side gap was zero. Raw illegal and
+  mask-correction rates were `0/0`, `0.003846/0.003846`, and `0/0`; executed illegal actions
+  were zero for every seed.
+- Negative controls passed: selected seed 2 actual joint accuracy `0.998641`, black-frame
+  joint accuracy `0.240825`, mismatched-frame joint accuracy `0.153829`; drops were
+  `0.757816` and `0.844812`. Fresh spawned-process replay verified 71 ticks and terminal
+  outcome; config, action, and event tampering were all rejected. RTX 4090 batch-1 FP32
+  forward p95 was `3.548 ms` against the frozen `10 ms` limit.
+- The final run directory contains exactly five files. Recorded and independently recomputed
+  SHA-256 values are: dataset
+  `4f97f3cfc74b534ef4a159004b21d4b31c9167740bd59914df37aecc5c0390cd`, seed-0 model
+  `112081cac1c0c9a3629e78647f4f568ecf40bab95e34c08e22aee58a18653324`, seed-1 model
+  `592770cb38350037c37194b86c23f89afb9bcbc3a69918bd9797d56099825170`, and seed-2 model
+  `ca3ac0bd1f6265911b08de2cd4ee496ae01f89a46a1f1ebf8ea1ff02801b3f3c`.
 - The original project shell exposed a conflicting CUDA library path. Direct pytest
   collection failed on `libcusparse`/`nvJitLink`; all Make targets now run with
   `LD_LIBRARY_PATH` unset and the pinned project Torch 2.5.1 environment passed.
@@ -116,15 +146,12 @@ fresh-process exact replay/tamper rejection, and RTX 4090 forward p95 at most 10
    disabled.
 3. `V6-RELEASE-BINDING`: train/save a V6 checkpoint and bind the 300-frame tracking and
    200-clip temporal audits; current advice intentionally remains all-`ABSTAIN`.
-4. `V7-FAILED-EVIDENCE-REPORT`: make the formal failure path atomically retain a
-   `status=FAILED` diagnostic report containing all three classification reports, negative
-   controls, and each seed's closed-loop submetrics; do not retain promotable models and do
-   not lower thresholds. Then diagnose and fix the actual failing submetric before another
-   formal rerun. A capability claim remains forbidden until every gate passes and a five-file
-   PASSED run directory exists.
+4. V7 has no remaining frozen acceptance blocker. Further RichArena changes require a new
+   versioned ruleset, new data, and a fresh acceptance run rather than changing this result.
 
-Current maximum claim: the repository contains runnable, tested V4–V7 implementation
-frameworks and project-owned Rich PixelArena rules/rendering/data/training code. It does not
-yet establish live-capture performance, real-domain advice accuracy, a released temporal
-coach, or a passed Rich PixelArena learned policy. It establishes no Honor of Kings,
-GameCore, commercial-client automation, or out-of-environment capability.
+Current maximum claim: the project-owned Rich PixelArena V2 RGB-only factorized ResNet-18
+behavior-cloning agents passed the frozen three-seed RTX 4090 classification, negative-control,
+closed-loop, replay/tamper, side-symmetry, illegal-action, and latency gates. V4 live hardware,
+V5 real-domain alignment, and V6 released temporal advice remain externally blocked or
+fail-closed. This establishes no Honor of Kings, GameCore, commercial-client automation, or
+out-of-environment capability.
