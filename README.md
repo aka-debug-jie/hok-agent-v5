@@ -66,7 +66,8 @@ The external tree contains `datasets/`, `checkpoints/`, `runs/`, `cache/`, `audi
 and formal run directories go there. Raw recordings remain in their existing E-drive folder;
 manifests store only anonymous hashes and artifact basenames. Existing frozen local `runs/`
 evidence is not moved automatically. `storage-preflight` fails if the selected filesystem is
-not mounted read-write; `storage-init` never remounts a disk or changes permissions.
+not mounted read-write; run it from the host shell because a sandbox may expose the same host
+mount as read-only. `storage-init` never remounts a disk or changes permissions.
 
 ```bash
 make shadow-live-smoke
