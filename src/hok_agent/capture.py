@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from __future__ import annotations
 
 import contextlib
@@ -20,14 +21,7 @@ import numpy as np
 from hok_agent import pixel, shadow
 
 SCHEMA = "pixelarena-shadow-live-v1"
-ACTION_LABELS = (
-    "wait",
-    "forward",
-    "backward",
-    "attack_hero",
-    "attack_tower",
-    "attack_crystal",
-)
+ACTION_LABELS = ("wait", "forward", "backward", "attack_hero", "attack_tower", "attack_crystal")
 DENIED_ROOTS = (Path("/proc"), Path("/sys"))
 
 
@@ -175,13 +169,7 @@ def _latest_frame_get(target: queue.Queue[FrameRecord]) -> FrameRecord | None:
             return latest
 
 
-def _producer_from_injection(
-    source: FrameSource,
-    output: queue.Queue[FrameRecord],
-    stop: threading.Event,
-    done: threading.Event,
-    errors: list[BaseException],
-) -> threading.Thread:
+def _producer_from_injection(source: FrameSource, output: queue.Queue[FrameRecord], stop: threading.Event, done: threading.Event, errors: list[BaseException]) -> threading.Thread:
     def _run() -> None:
         try:
             for timestamp, frame in _iter_injected_source(source):
@@ -198,31 +186,13 @@ def _producer_from_injection(
     return thread
 
 
-def _producer_from_device(
-    device: Path,
-    capture_size: tuple[int, int],
-    source_report: dict[str, object],
-    output: queue.Queue[FrameRecord],
-    stop: threading.Event,
-    done: threading.Event,
-    errors: list[BaseException],
-    fps: int,
-) -> threading.Thread:
+def _producer_from_device(device: Path, capture_size: tuple[int, int], source_report: dict[str, object], output: queue.Queue[FrameRecord], stop: threading.Event, done: threading.Event, errors: list[BaseException], fps: int) -> threading.Thread:
     width, height = capture_size
 
     def _run() -> None:
-        options = {
-            "input_format": "v4l2",
-            "framerate": str(fps),
-            "video_size": f"{width}x{height}",
-        }
+        options = {"input_format": "v4l2", "framerate": str(fps), "video_size": f"{width}x{height}"}
         try:
-            with av.open(
-                str(device),
-                mode="r",
-                format="video4linux2",
-                options=options,
-            ) as container:
+            with av.open(str(device), mode="r", format="video4linux2", options=options) as container:
                 if not container.streams.video:
                     raise CaptureError("device has no video stream")
                 stream = container.streams.video[0]
@@ -238,11 +208,7 @@ def _producer_from_device(
                     if stop.is_set():
                         return
                     captured_at = time.monotonic()
-                    if (
-                        source_report["average_rate"] is None
-                        and frame.pts is not None
-                        and frame.time_base is not None
-                    ):
+                    if source_report["average_rate"] is None and frame.pts is not None and frame.time_base is not None:
                         current_ts = float(frame.pts * frame.time_base)
                         if previous_ts is not None:
                             delta = current_ts - previous_ts
@@ -268,28 +234,10 @@ def _producer_from_device(
 
 def _metrics(values: list[float]) -> MetricReport:
     if not values:
-        return {
-            "count": 0,
-            "min_ms": 0.0,
-            "max_ms": 0.0,
-            "mean_ms": 0.0,
-            "p50_ms": 0.0,
-            "p90_ms": 0.0,
-            "p95_ms": 0.0,
-            "p99_ms": 0.0,
-        }
+        return {"count": 0, "min_ms": 0.0, "max_ms": 0.0, "mean_ms": 0.0, "p50_ms": 0.0, "p90_ms": 0.0, "p95_ms": 0.0, "p99_ms": 0.0}
     ordered = sorted(values)
     arr = np.array(values, dtype=np.float64)
-    return {
-        "count": len(values),
-        "min_ms": float(ordered[0]),
-        "max_ms": float(ordered[-1]),
-        "mean_ms": float(arr.mean()),
-        "p50_ms": float(np.quantile(arr, 0.50)),
-        "p90_ms": float(np.quantile(arr, 0.90)),
-        "p95_ms": float(np.quantile(arr, 0.95)),
-        "p99_ms": float(np.quantile(arr, 0.99)),
-    }
+    return {"count": len(values), "min_ms": float(ordered[0]), "max_ms": float(ordered[-1]), "mean_ms": float(arr.mean()), "p50_ms": float(np.quantile(arr, 0.50)), "p90_ms": float(np.quantile(arr, 0.90)), "p95_ms": float(np.quantile(arr, 0.95)), "p99_ms": float(np.quantile(arr, 0.99))}
 
 
 def _validate_frozen_model(path: Path) -> str:
@@ -299,9 +247,7 @@ def _validate_frozen_model(path: Path) -> str:
     return model_sha256
 
 
-def _load_frozen_predictor(
-    path: Path, device: str
-) -> tuple[Callable[[np.ndarray], tuple[list[int], list[float]]], int, str]:
+def _load_frozen_predictor(path: Path, device: str) -> tuple[Callable[[np.ndarray], tuple[list[int], list[float]]], int, str]:
     with shadow._open_checked(path) as handle:
         model_sha256 = shadow._sha_handle(handle)
         if model_sha256 != shadow.FROZEN_V3_MODEL_SHA256:
@@ -311,20 +257,7 @@ def _load_frozen_predictor(
     return predict, seed, model_sha256
 
 
-def run_shadow_live(
-    input_device: str | None,
-    model_raw: str,
-    output_dir: Path,
-    *,
-    device: str = "cpu",
-    capture_size: str = "1920x1080",
-    capture_fps: int = 60,
-    infer_hz: int = 10,
-    max_frames: int | None = None,
-    run_seconds: float | None = None,
-    frame_source: FrameSource | None = None,
-    event_sink: EventSink | None = None,
-) -> dict[str, object]:
+def run_shadow_live(input_device: str | None, model_raw: str, output_dir: Path, *, device: str = "cpu", capture_size: str = "1920x1080", capture_fps: int = 60, infer_hz: int = 10, max_frames: int | None = None, run_seconds: float | None = None, frame_source: FrameSource | None = None, event_sink: EventSink | None = None) -> dict[str, object]:
     if max_frames is not None and max_frames < 0:
         raise CaptureError("max_frames must be >= 0")
     if run_seconds is not None and run_seconds <= 0:
@@ -342,9 +275,7 @@ def run_shadow_live(
     predict, model_seed, model_sha256 = _load_frozen_predictor(model, device)
     output = _validate_output(output_dir)
     size = _parse_size(capture_size)
-    device_path = (
-        _validate_capture_device(input_device) if frame_source is None else None
-    )
+    device_path = _validate_capture_device(input_device) if frame_source is None else None
 
     frame_queue: queue.Queue[FrameRecord] = queue.Queue(maxsize=1)
     stop = threading.Event()
@@ -363,16 +294,7 @@ def run_shadow_live(
     else:
         if device_path is None:
             raise CaptureError("validated capture device is unavailable")
-        producer = _producer_from_device(
-            device_path,
-            size,
-            source_report,
-            frame_queue,
-            stop,
-            done,
-            errors,
-            capture_fps,
-        )
+        producer = _producer_from_device(device_path, size, source_report, frame_queue, stop, done, errors, capture_fps)
 
     interval = 1.0 / float(infer_hz)
     next_tick = time.monotonic()
@@ -410,19 +332,7 @@ def run_shadow_live(
         inference_ms = (inference_done - inference_start) * 1000.0
         on_time_events.append(inference_ms)
 
-        row: dict[str, object] = {
-            "schema_version": SCHEMA,
-            "sequence": len(rows),
-            "source_frame_timestamp": captured_at,
-            "frame_sha256": hashlib.sha256(frame.tobytes()).hexdigest(),
-            "raw_model_hypothesis": ACTION_LABELS[int(predictions[0])],
-            "confidence": round(float(confidences[0]), 8),
-            "advisory_action": "ABSTAIN",
-            "abstain_reason": "UNVALIDATED_COMMERCIAL_DOMAIN",
-            "control_output": False,
-            "queue_delay_ms": round((inference_start - captured_at) * 1000.0, 4),
-            "inference_ms": round(inference_ms, 4),
-        }
+        row: dict[str, object] = {"schema_version": SCHEMA, "sequence": len(rows), "source_frame_timestamp": captured_at, "frame_sha256": hashlib.sha256(frame.tobytes()).hexdigest(), "raw_model_hypothesis": ACTION_LABELS[int(predictions[0])], "confidence": round(float(confidences[0]), 8), "advisory_action": "ABSTAIN", "abstain_reason": "UNVALIDATED_COMMERCIAL_DOMAIN", "control_output": False, "queue_delay_ms": round((inference_start - captured_at) * 1000.0, 4), "inference_ms": round(inference_ms, 4)}
         if event_sink is not None:
             event_sink(row)
         terminal_done = time.monotonic()
@@ -437,9 +347,7 @@ def run_shadow_live(
 
     inference_metrics = _metrics(on_time_events)
     end_to_end_metrics = _metrics(latency_ms)
-    on_time_ratio = (
-        on_time_ticks / schedule_ticks if schedule_ticks else 0.0
-    )
+    on_time_ratio = on_time_ticks / schedule_ticks if schedule_ticks else 0.0
     source_is_simulated = bool(source_report["is_simulated"])
     raw_width = source_report.get("actual_width", 0)
     raw_height = source_report.get("actual_height", 0)
@@ -447,33 +355,13 @@ def run_shadow_live(
     stream_height = raw_height if isinstance(raw_height, int) else 0
     stream_rate = source_report.get("average_rate")
     formal_stream_match = False
-    if (
-        not source_is_simulated
-        and stream_width == 1920
-        and stream_height == 1080
-        and isinstance(stream_rate, (int, float))
-        and math.isclose(float(stream_rate), 60.0, rel_tol=0.05, abs_tol=0.5)
-    ):
+    if not source_is_simulated and stream_width == 1920 and stream_height == 1080 and isinstance(stream_rate, (int, float)) and math.isclose(float(stream_rate), 60.0, rel_tol=0.05, abs_tol=0.5):
         formal_stream_match = True
 
     if len(rows) == 0:
         status = "FAILED"
         disposition = "LIVE_SHADOW_FAILED"
-    elif (
-        not source_is_simulated
-        and size == (1920, 1080)
-        and capture_fps == 60
-        and infer_hz == 10
-        and run_seconds is not None
-        and math.isclose(run_seconds, 600.0, rel_tol=0.0, abs_tol=1e-9)
-        and elapsed_seconds >= run_seconds
-        and schedule_ticks >= int(run_seconds * infer_hz)
-        and len(rows) / schedule_ticks >= 0.99
-        and on_time_ratio >= 0.99
-        and end_to_end_metrics["p95_ms"] <= 100.0
-        and formal_stream_match
-        and event_sink is not None
-    ):
+    elif not source_is_simulated and size == (1920, 1080) and capture_fps == 60 and infer_hz == 10 and run_seconds is not None and math.isclose(run_seconds, 600.0, rel_tol=0.0, abs_tol=1e-9) and elapsed_seconds >= run_seconds and schedule_ticks >= int(run_seconds * infer_hz) and len(rows) / schedule_ticks >= 0.99 and on_time_ratio >= 0.99 and end_to_end_metrics["p95_ms"] <= 100.0 and formal_stream_match and event_sink is not None:
         status = "FORMAL_PASSED"
         disposition = "FORMAL_LIVE_SHADOW"
     else:
@@ -499,38 +387,13 @@ def run_shadow_live(
         "analyzed_frames": len(rows),
         "abstain_count": len(rows),
         "advisory_count": 0,
-        "schedule": {
-            "target_infer_hz": infer_hz,
-            "target_interval_s": interval,
-            "target_ticks": schedule_ticks,
-            "actual_infer_ticks": len(rows),
-            "elapsed_seconds": round(elapsed_seconds, 6),
-            "inference_coverage": round(
-                len(rows) / schedule_ticks if schedule_ticks else 0.0, 6
-            ),
-            "terminal_output_enabled": event_sink is not None,
-        },
-        "on_time": {
-            "late_ticks": schedule_ticks - on_time_ticks,
-            "on_time_ticks": on_time_ticks,
-            "on_time_ratio": round(on_time_ratio, 6),
-        },
-        "latency": {
-            "capture_to_terminal_ms": end_to_end_metrics,
-            "inference_ms": inference_metrics,
-        },
+        "schedule": {"target_infer_hz": infer_hz, "target_interval_s": interval, "target_ticks": schedule_ticks, "actual_infer_ticks": len(rows), "elapsed_seconds": round(elapsed_seconds, 6), "inference_coverage": round(len(rows) / schedule_ticks if schedule_ticks else 0.0, 6), "terminal_output_enabled": event_sink is not None},
+        "on_time": {"late_ticks": schedule_ticks - on_time_ticks, "on_time_ticks": on_time_ticks, "on_time_ratio": round(on_time_ratio, 6)},
+        "latency": {"capture_to_terminal_ms": end_to_end_metrics, "inference_ms": inference_metrics},
         "capture_size": f"{size[0]}x{size[1]}",
         "source": {
             "is_simulated": source_is_simulated,
-            **(
-                {
-                    "stream_width": stream_width,
-                    "stream_height": stream_height,
-                    "stream_average_rate": stream_rate,
-                }
-                if stream_width and stream_height
-                else {"stream_average_rate": stream_rate}
-            ),
+            **({"stream_width": stream_width, "stream_height": stream_height, "stream_average_rate": stream_rate} if stream_width and stream_height else {"stream_average_rate": stream_rate}),
         },
     }
 
@@ -538,10 +401,7 @@ def run_shadow_live(
         staging = Path(temporary)
         events_path = staging / "events.jsonl"
         summary_path = staging / "summary.json"
-        events_path.write_text(
-            "".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows),
-            encoding="utf-8",
-        )
+        events_path.write_text("".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows), encoding="utf-8")
         summary_text = json.dumps(summary, indent=2, sort_keys=True) + "\n"
         summary_path.write_text(summary_text, encoding="utf-8")
         staging.rename(output)

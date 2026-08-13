@@ -34,12 +34,8 @@ def test_scripted_legal_path_reaches_both_objectives() -> None:
     for _ in range(arena.config.max_ticks):
         legal = arena.legal_actions("blue")
         action = next(
-            (
-                candidate
-                for target in ("enemy_crystal", "enemy_tower")
-                for candidate in legal
-                if candidate.target == target
-            ),
+            (candidate for target in ("enemy_crystal", "enemy_tower") for candidate in legal
+             if candidate.target == target),
             next(candidate for candidate in legal if candidate.action_type == "move"),
         )
         targets.add(action.target)

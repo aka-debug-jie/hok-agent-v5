@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from __future__ import annotations
 
 import hashlib
@@ -27,48 +28,16 @@ from hok_agent.policies import NullPolicy, RandomPolicy, TacticalTeacher
 from hok_agent.renderer import RENDERER_HASH, RENDERER_ID, render
 from hok_agent.safety import check_project
 
-ACTIONS = (
-    ("wait", "none", "none"),
-    ("move", "none", "forward"),
-    ("move", "none", "backward"),
-    ("attack", "enemy_hero", "none"),
-    ("attack", "enemy_tower", "none"),
-    ("attack", "enemy_crystal", "none"),
-)
+ACTIONS = (("wait", "none", "none"), ("move", "none", "forward"), ("move", "none", "backward"), ("attack", "enemy_hero", "none"), ("attack", "enemy_tower", "none"), ("attack", "enemy_crystal", "none"))
 ACTION_INDEX = {action: index for index, action in enumerate(ACTIONS)}
-ACTION_HASH = hashlib.sha256(
-    json.dumps(ACTIONS, separators=(",", ":")).encode("utf-8")
-).hexdigest()
+ACTION_HASH = hashlib.sha256(json.dumps(ACTIONS, separators=(",", ":")).encode("utf-8")).hexdigest()
 SPLITS = {"fit": 0, "acquisition": 1, "validation": 2, "test": 3}
 SPLIT_NAMES = {value: key for key, value in SPLITS.items()}
-DATA_KEYS = {
-    "frames",
-    "actions",
-    "group_ids",
-    "ticks",
-    "render_seeds",
-    "splits",
-    "frame_hashes",
-    "sources",
-}
+DATA_KEYS = {"frames", "actions", "group_ids", "ticks", "render_seeds", "splits", "frame_hashes", "sources"}
 MODEL_SCHEMA = "pixelarena-rgb-resnet18-v1"
 TRAINING_SEEDS = (0, 1, 2)
-TRAINING_CONFIG = {
-    "architecture": "torchvision-resnet18-weights-none-6",
-    "optimizer": "AdamW",
-    "learning_rate": 1e-3,
-    "weight_decay": 1e-4,
-    "batch_size": 128,
-    "max_epochs": 50,
-    "validation_patience": 8,
-    "schedule": "cosine",
-    "class_weight": "inverse_sqrt_frequency",
-    "augmentation": "deterministic_color_scale_and_translation_le2px",
-    "precision": "float32",
-}
-TRAINING_HASH = hashlib.sha256(
-    json.dumps(TRAINING_CONFIG, sort_keys=True, separators=(",", ":")).encode("utf-8")
-).hexdigest()
+TRAINING_CONFIG = {"architecture": "torchvision-resnet18-weights-none-6", "optimizer": "AdamW", "learning_rate": 1e-3, "weight_decay": 1e-4, "batch_size": 128, "max_epochs": 50, "validation_patience": 8, "schedule": "cosine", "class_weight": "inverse_sqrt_frequency", "augmentation": "deterministic_color_scale_and_translation_le2px", "precision": "float32"}
+TRAINING_HASH = hashlib.sha256(json.dumps(TRAINING_CONFIG, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 class PixelError(ValueError):
@@ -191,24 +160,10 @@ def _teacher_episode(seed: int, side: Side) -> EpisodeTrace:
         action = _action_index(selected)
         steps.append(TraceStep(observation, action, _legal_mask(selected_legal), arena.state.tick))
         response = arena.step(blue, red)
-        identity.append(
-            {
-                "public_state": response["observation"],
-                "blue_action": blue.to_dict(),
-                "red_action": red.to_dict(),
-                "events": response["events"],
-            }
-        )
+        identity.append({"public_state": response["observation"], "blue_action": blue.to_dict(), "red_action": red.to_dict(), "events": response["events"]})
     group = _sha_bytes(_canonical({"side": side, "trajectory": identity}).encode("utf-8"))
     expected = f"{side}_win_crystal_destroyed"
-    return EpisodeTrace(
-        seed,
-        side,
-        group,
-        tuple(steps),
-        arena.state.outcome,
-        arena.state.outcome == expected,
-    )
+    return EpisodeTrace(seed, side, group, tuple(steps), arena.state.outcome, arena.state.outcome == expected)
 
 
 def _group_splits(groups: set[str]) -> dict[str, int]:
@@ -238,14 +193,8 @@ def _render_seeds(group_id: str, variants: int) -> tuple[int, ...]:
     return tuple((base + variant * 1_000_003) % (2**31 - 1) for variant in range(variants))
 
 
-def collect_pixel_data(
-    episode_seeds: range = range(128), variants: int = 2, enforce: bool = True
-) -> PixelData:
-    traces = [
-        _teacher_episode(seed, side)
-        for seed in episode_seeds
-        for side in ("blue", "red")
-    ]
+def collect_pixel_data(episode_seeds: range = range(128), variants: int = 2, enforce: bool = True) -> PixelData:
+    traces = [_teacher_episode(seed, side) for seed in episode_seeds for side in ("blue", "red")]
     assignments = _group_splits({trace.group_id for trace in traces})
     frames: list[np.ndarray] = []
     actions: list[int] = []
@@ -259,17 +208,7 @@ def collect_pixel_data(
     for trace in traces:
         split = assignments[trace.group_id]
         render_seeds = _render_seeds(trace.group_id, variants)
-        episodes.append(
-            EpisodeSpec(
-                trace.seed,
-                trace.side,
-                trace.group_id,
-                split,
-                render_seeds,
-                trace.outcome,
-                trace.completed,
-            )
-        )
+        episodes.append(EpisodeSpec(trace.seed, trace.side, trace.group_id, split, render_seeds, trace.outcome, trace.completed))
         for step in trace.steps:
             for render_seed in render_seeds:
                 frame = render(step.observation, render_seed)
@@ -281,19 +220,7 @@ def collect_pixel_data(
                 splits.append(split)
                 hashes.append(_sha_bytes(frame.tobytes()).encode("ascii"))
                 legal.append(step.legal)
-    data = PixelData(
-        np.stack(frames),
-        np.asarray(actions, dtype=np.uint8),
-        np.asarray(groups, dtype="S64"),
-        np.asarray(ticks, dtype=np.uint16),
-        np.asarray(seeds, dtype=np.int64),
-        np.asarray(splits, dtype=np.uint8),
-        np.asarray(hashes, dtype="S64"),
-        np.zeros(len(frames), dtype=np.uint8),
-        np.asarray(legal, dtype=np.bool_),
-        episodes,
-        PixelArena().config,
-    )
+    data = PixelData(np.stack(frames), np.asarray(actions, dtype=np.uint8), np.asarray(groups, dtype="S64"), np.asarray(ticks, dtype=np.uint16), np.asarray(seeds, dtype=np.int64), np.asarray(splits, dtype=np.uint8), np.asarray(hashes, dtype="S64"), np.zeros(len(frames), dtype=np.uint8), np.asarray(legal, dtype=np.bool_), episodes, PixelArena().config)
     if enforce:
         _validate_collection(data)
     return data
@@ -320,39 +247,13 @@ def _validate_collection(data: PixelData) -> None:
 
 def dataset_summary(data: PixelData) -> dict[str, object]:
     split_counts = Counter(data.splits.tolist())
-    class_by_split = {
-        name: {
-            str(action): int(np.sum(data.actions[data.splits == code] == action))
-            for action in range(len(ACTIONS))
-        }
-        for name, code in SPLITS.items()
-    }
-    return {
-        "episodes": len(data.episodes),
-        "teacher_crystal_completion": sum(episode.completed for episode in data.episodes)
-        / len(data.episodes),
-        "samples": len(data.frames),
-        "trajectory_groups": len(set(data.group_ids.tolist())),
-        "split_counts": {SPLIT_NAMES[key]: value for key, value in sorted(split_counts.items())},
-        "class_counts_by_split": class_by_split,
-        "frame_shape": list(data.frames.shape[1:]),
-        "frame_dtype": str(data.frames.dtype),
-    }
+    class_by_split = {name: {str(action): int(np.sum(data.actions[data.splits == code] == action)) for action in range(len(ACTIONS))} for name, code in SPLITS.items()}
+    return {"episodes": len(data.episodes), "teacher_crystal_completion": sum(episode.completed for episode in data.episodes) / len(data.episodes), "samples": len(data.frames), "trajectory_groups": len(set(data.group_ids.tolist())), "split_counts": {SPLIT_NAMES[key]: value for key, value in sorted(split_counts.items())}, "class_counts_by_split": class_by_split, "frame_shape": list(data.frames.shape[1:]), "frame_dtype": str(data.frames.dtype)}
 
 
 def write_dataset(path: Path, data: PixelData) -> None:
     with path.open("wb") as handle:
-        np.savez_compressed(
-            handle,
-            frames=data.frames,
-            actions=data.actions,
-            group_ids=data.group_ids,
-            ticks=data.ticks,
-            render_seeds=data.render_seeds,
-            splits=data.splits,
-            frame_hashes=data.frame_hashes,
-            sources=data.sources,
-        )
+        np.savez_compressed(handle, frames=data.frames, actions=data.actions, group_ids=data.group_ids, ticks=data.ticks, render_seeds=data.render_seeds, splits=data.splits, frame_hashes=data.frame_hashes, sources=data.sources)
         handle.flush()
         os.fsync(handle.fileno())
 
@@ -362,16 +263,7 @@ def load_dataset(path: Path) -> dict[str, np.ndarray]:
         if set(archive.files) != DATA_KEYS:
             raise PixelError("invalid pixel dataset fields")
         values = {name: archive[name].copy() for name in archive.files}
-    expected = {
-        "frames": np.dtype(np.uint8),
-        "actions": np.dtype(np.uint8),
-        "group_ids": np.dtype("S64"),
-        "ticks": np.dtype(np.uint16),
-        "render_seeds": np.dtype(np.int64),
-        "splits": np.dtype(np.uint8),
-        "frame_hashes": np.dtype("S64"),
-        "sources": np.dtype(np.uint8),
-    }
+    expected = {"frames": np.dtype(np.uint8), "actions": np.dtype(np.uint8), "group_ids": np.dtype("S64"), "ticks": np.dtype(np.uint16), "render_seeds": np.dtype(np.int64), "splits": np.dtype(np.uint8), "frame_hashes": np.dtype("S64"), "sources": np.dtype(np.uint8)}
     count = len(values["actions"])
     if values["frames"].shape != (count, 128, 128, 3):
         raise PixelError("invalid pixel frame shape")
@@ -392,10 +284,7 @@ def load_dataset(path: Path) -> dict[str, np.ndarray]:
         previous = group_to_split.setdefault(group, int(split))
         if previous != split:
             raise PixelError("trajectory group crosses dataset splits")
-    expected_hashes = np.asarray(
-        [_sha_bytes(frame.tobytes()).encode("ascii") for frame in values["frames"]],
-        dtype="S64",
-    )
+    expected_hashes = np.asarray([_sha_bytes(frame.tobytes()).encode("ascii") for frame in values["frames"]], dtype="S64")
     if not bool(np.array_equal(expected_hashes, values["frame_hashes"])):
         raise PixelError("pixel frame hash mismatch")
     return values
@@ -418,14 +307,7 @@ def _augment(batch: torch.Tensor, seed: int, epoch: int, batch_index: int) -> to
     return shifted.mul(rng.uniform(0.9, 1.1)).clamp_(-1.0, 1.0)
 
 
-def _metric_arrays(
-    actor: PixelActor,
-    frames: np.ndarray,
-    labels: np.ndarray,
-    legal: np.ndarray,
-    device: torch.device,
-    batch_size: int = 256,
-) -> dict[str, object]:
+def _metric_arrays(actor: PixelActor, frames: np.ndarray, labels: np.ndarray, legal: np.ndarray, device: torch.device, batch_size: int = 256) -> dict[str, object]:
     predictions: list[int] = []
     loss_sum = 0.0
     actor.eval()
@@ -438,47 +320,19 @@ def _metric_arrays(
             loss_sum += float(nn.functional.cross_entropy(logits, y, reduction="sum").item())
             predictions.extend(int(value) for value in logits.argmax(dim=1).cpu().tolist())
     predicted = np.asarray(predictions, dtype=np.int64)
-    recalls = {
-        str(action): float(np.mean(predicted[labels == action] == action))
-        if bool(np.any(labels == action))
-        else 0.0
-        for action in range(len(ACTIONS))
-    }
+    recalls = {str(action): float(np.mean(predicted[labels == action] == action)) if bool(np.any(labels == action)) else 0.0 for action in range(len(ACTIONS))}
     illegal = int(np.sum(~legal[np.arange(len(predicted)), predicted]))
-    return {
-        "cross_entropy": loss_sum / len(labels),
-        "exact_accuracy": float(np.mean(predicted == labels)),
-        "balanced_accuracy": sum(recalls.values()) / len(recalls),
-        "per_class_recall": recalls,
-        "raw_illegal_top1_rate": illegal / len(labels),
-        "mask_correction_rate": illegal / len(labels),
-        "executed_illegal_actions": 0,
-    }
+    return {"cross_entropy": loss_sum / len(labels), "exact_accuracy": float(np.mean(predicted == labels)), "balanced_accuracy": sum(recalls.values()) / len(recalls), "per_class_recall": recalls, "raw_illegal_top1_rate": illegal / len(labels), "mask_correction_rate": illegal / len(labels), "executed_illegal_actions": 0}
 
 
-def _split_metrics(
-    actor: PixelActor, data: PixelData, split: int, device: torch.device
-) -> dict[str, object]:
+def _split_metrics(actor: PixelActor, data: PixelData, split: int, device: torch.device) -> dict[str, object]:
     selected = np.flatnonzero(data.splits == split)
-    return _metric_arrays(
-        actor,
-        data.frames[selected],
-        data.actions[selected],
-        data.legal[selected],
-        device,
-    )
+    return _metric_arrays(actor, data.frames[selected], data.actions[selected], data.legal[selected], device)
 
 
 def _classification_pass(metrics: dict[str, object]) -> bool:
     recalls = cast(dict[str, float], metrics["per_class_recall"])
-    return (
-        cast(float, metrics["exact_accuracy"]) >= 0.95
-        and cast(float, metrics["balanced_accuracy"]) >= 0.90
-        and min(recalls.values()) >= 0.80
-        and cast(float, metrics["raw_illegal_top1_rate"]) <= 0.01
-        and cast(float, metrics["mask_correction_rate"]) <= 0.01
-        and cast(int, metrics["executed_illegal_actions"]) == 0
-    )
+    return cast(float, metrics["exact_accuracy"]) >= 0.95 and cast(float, metrics["balanced_accuracy"]) >= 0.90 and min(recalls.values()) >= 0.80 and cast(float, metrics["raw_illegal_top1_rate"]) <= 0.01 and cast(float, metrics["mask_correction_rate"]) <= 0.01 and cast(int, metrics["executed_illegal_actions"]) == 0
 
 
 def _configure_determinism(seed: int, device: torch.device) -> None:
@@ -490,14 +344,7 @@ def _configure_determinism(seed: int, device: torch.device) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def train_actor(
-    data: PixelData,
-    seed: int,
-    device: torch.device,
-    epochs: int = 50,
-    batch_size: int = 128,
-    patience: int = 8,
-) -> tuple[PixelActor, dict[str, object]]:
+def train_actor(data: PixelData, seed: int, device: torch.device, epochs: int = 50, batch_size: int = 128, patience: int = 8) -> tuple[PixelActor, dict[str, object]]:
     _configure_determinism(seed, device)
     actor = PixelActor().to(device)
     if sum(parameter.numel() for parameter in actor.parameters()) > 12_000_000:
@@ -526,21 +373,13 @@ def train_actor(
             torch.autograd.backward(loss)
             optimizer.step()
         scheduler.step()
-        metrics = _metric_arrays(
-            actor,
-            data.frames[validation],
-            data.actions[validation],
-            data.legal[validation],
-            device,
-        )
+        metrics = _metric_arrays(actor, data.frames[validation], data.actions[validation], data.legal[validation], device)
         loss_value = cast(float, metrics["cross_entropy"])
         if loss_value < best_loss - 1e-7:
             best_loss = loss_value
             best_epoch = epoch
             stale = 0
-            best_state = {
-                key: value.detach().cpu().clone() for key, value in actor.state_dict().items()
-            }
+            best_state = {key: value.detach().cpu().clone() for key, value in actor.state_dict().items()}
         else:
             stale += 1
         if stale >= patience:
@@ -548,28 +387,11 @@ def train_actor(
     actor.load_state_dict(best_state)
     actor.to(device).eval()
     validation_metrics = _split_metrics(actor, data, SPLITS["validation"], device)
-    return actor, {
-        "seed": seed,
-        "epochs": best_epoch,
-        "validation": validation_metrics,
-        "validation_passed": _classification_pass(validation_metrics),
-    }
+    return actor, {"seed": seed, "epochs": best_epoch, "validation": validation_metrics, "validation_passed": _classification_pass(validation_metrics)}
 
 
 def _model_metadata(config: ArenaConfig, seed: int) -> dict[str, str]:
-    return {
-        "schema_version": MODEL_SCHEMA,
-        "arena_config_hash": config.digest,
-        "renderer_contract_hash": RENDERER_HASH,
-        "action_vocabulary_hash": ACTION_HASH,
-        "architecture": "torchvision-resnet18-weights-none-6",
-        "training_contract_hash": TRAINING_HASH,
-        "training_seed": str(seed),
-        "claim_scope": "pixelarena_engineering",
-        "hok_capability_claim": "false",
-        "gamecore_equivalence_claim": "false",
-        "normalization": "x/127.5-1",
-    }
+    return {"schema_version": MODEL_SCHEMA, "arena_config_hash": config.digest, "renderer_contract_hash": RENDERER_HASH, "action_vocabulary_hash": ACTION_HASH, "architecture": "torchvision-resnet18-weights-none-6", "training_contract_hash": TRAINING_HASH, "training_seed": str(seed), "claim_scope": "pixelarena_engineering", "hok_capability_claim": "false", "gamecore_equivalence_claim": "false", "normalization": "x/127.5-1"}
 
 
 def save_model(path: Path, actor: PixelActor, config: ArenaConfig, seed: int) -> None:
@@ -604,18 +426,14 @@ def load_model(path: Path, config: ArenaConfig | None = None) -> tuple[PixelActo
     return actor, seed
 
 
-def infer_rgb_frames(
-    model_path: Path, frames: np.ndarray, device_name: str
-) -> tuple[list[int], list[float], int]:
+def infer_rgb_frames(model_path: Path, frames: np.ndarray, device_name: str) -> tuple[list[int], list[float], int]:
     """Run the frozen RGB Actor without exposing Torch at the Shadow boundary."""
     predict, seed = open_rgb_predictor(model_path, device_name)
     predictions, confidences = predict(frames)
     return predictions, confidences, seed
 
 
-def open_rgb_predictor(
-    model_path: Path, device_name: str
-) -> tuple[Callable[[np.ndarray], tuple[list[int], list[float]]], int]:
+def open_rgb_predictor(model_path: Path, device_name: str) -> tuple[Callable[[np.ndarray], tuple[list[int], list[float]]], int]:
     """Load one RGB Actor and return a reusable RGB-only batch predictor."""
     if device_name not in {"cpu", "cuda"}:
         raise PixelError("device must be cpu or cuda")
@@ -638,35 +456,17 @@ def open_rgb_predictor(
     return predict, seed
 
 
-def _choose_action(
-    actor: PixelActor,
-    observation: dict[str, object],
-    legal: tuple[FactorizedAction, ...],
-    render_seed: int,
-    device: torch.device,
-) -> tuple[FactorizedAction, int, int]:
+def _choose_action(actor: PixelActor, observation: dict[str, object], legal: tuple[FactorizedAction, ...], render_seed: int, device: torch.device) -> tuple[FactorizedAction, int, int]:
     frame = render(observation, render_seed)
     with torch.no_grad():
         logits = actor(_normalize(frame[None, ...], device))[0]
     raw = int(logits.argmax().item())
     legal_by_index = {_action_index(action): action for action in legal}
     selected_index = max(legal_by_index, key=lambda index: float(logits[index]))
-    return (
-        legal_by_index[selected_index],
-        int(raw not in legal_by_index),
-        int(raw != selected_index),
-    )
+    return (legal_by_index[selected_index], int(raw not in legal_by_index), int(raw != selected_index))
 
 
-def _actor_episode(
-    actor: PixelActor,
-    seed: int,
-    side: Side,
-    opponent_name: str,
-    render_seed: int,
-    device: torch.device,
-    collect_teacher_labels: bool = False,
-) -> tuple[Rollout, list[tuple[np.ndarray, int, tuple[bool, ...], int]], str]:
+def _actor_episode(actor: PixelActor, seed: int, side: Side, opponent_name: str, render_seed: int, device: torch.device, collect_teacher_labels: bool = False) -> tuple[Rollout, list[tuple[np.ndarray, int, tuple[bool, ...], int]], str]:
     arena = PixelArena()
     arena.reset(seed)
     other: Side = "red" if side == "blue" else "blue"
@@ -683,17 +483,8 @@ def _actor_episode(
         actor_legal = blue_legal if side == "blue" else red_legal
         if collect_teacher_labels:
             label = teacher.select(side, actor_legal, arena.state.tick)
-            collected.append(
-                (
-                    render(observation, render_seed),
-                    _action_index(label),
-                    _legal_mask(actor_legal),
-                    arena.state.tick,
-                )
-            )
-        selected, invalid, corrected = _choose_action(
-            actor, observation, actor_legal, render_seed, device
-        )
+            collected.append((render(observation, render_seed), _action_index(label), _legal_mask(actor_legal), arena.state.tick))
+        selected, invalid, corrected = _choose_action(actor, observation, actor_legal, render_seed, device)
         raw_illegal += invalid
         corrections += corrected
         if side == "blue":
@@ -703,113 +494,46 @@ def _actor_episode(
             blue = opponent.select("blue", blue_legal)
             red = selected
         response = arena.step(blue, red)
-        identity.append(
-            {
-                "public_state": response["observation"],
-                "blue_action": blue.to_dict(),
-                "red_action": red.to_dict(),
-                "events": response["events"],
-            }
-        )
+        identity.append({"public_state": response["observation"], "blue_action": blue.to_dict(), "red_action": red.to_dict(), "events": response["events"]})
         steps += 1
     group = _sha_bytes(_canonical({"side": side, "trajectory": identity}).encode("utf-8"))
     expected = f"{side}_win_crystal_destroyed"
-    return (
-        Rollout(
-            seed,
-            side,
-            render_seed,
-            opponent_name,
-            arena.state.outcome,
-            arena.state.terminal,
-            arena.state.outcome == expected,
-            steps,
-            raw_illegal,
-            corrections,
-        ),
-        collected,
-        group,
-    )
+    return (Rollout(seed, side, render_seed, opponent_name, arena.state.outcome, arena.state.terminal, arena.state.outcome == expected, steps, raw_illegal, corrections), collected, group)
 
 
 def _rollout_document(rollout: Rollout) -> dict[str, object]:
-    return {
-        "seed": rollout.seed,
-        "side": rollout.side,
-        "render_seed": rollout.render_seed,
-        "opponent": rollout.opponent,
-        "outcome": rollout.outcome,
-        "terminal": rollout.terminal,
-        "completed": rollout.completed,
-        "steps": rollout.steps,
-        "raw_illegal": rollout.raw_illegal,
-        "mask_corrections": rollout.corrections,
-        "executed_illegal": 0,
-    }
+    return {"seed": rollout.seed, "side": rollout.side, "render_seed": rollout.render_seed, "opponent": rollout.opponent, "outcome": rollout.outcome, "terminal": rollout.terminal, "completed": rollout.completed, "steps": rollout.steps, "raw_illegal": rollout.raw_illegal, "mask_corrections": rollout.corrections, "executed_illegal": 0}
 
 
-def _acquisition(
-    actor: PixelActor, data: PixelData, device: torch.device
-) -> tuple[dict[str, object], list[tuple[np.ndarray, int, tuple[bool, ...], int, str, int]]]:
+def _acquisition(actor: PixelActor, data: PixelData, device: torch.device) -> tuple[dict[str, object], list[tuple[np.ndarray, int, tuple[bool, ...], int, str, int]]]:
     specs = [episode for episode in data.episodes if episode.split == SPLITS["acquisition"]]
     rollouts: list[Rollout] = []
     dagger: list[tuple[np.ndarray, int, tuple[bool, ...], int, str, int]] = []
     for spec in specs:
         render_seed = spec.render_seeds[0]
-        rollout, collected, group = _actor_episode(
-            actor, spec.seed, spec.side, "random", render_seed, device, True
-        )
+        rollout, collected, group = _actor_episode(actor, spec.seed, spec.side, "random", render_seed, device, True)
         rollouts.append(rollout)
         fit_group = _sha_bytes(f"dagger:{group}".encode("ascii"))
-        dagger.extend(
-            (frame, action, legal, tick, fit_group, render_seed)
-            for frame, action, legal, tick in collected
-        )
+        dagger.extend((frame, action, legal, tick, fit_group, render_seed) for frame, action, legal, tick in collected)
     actor_rate = sum(row.completed for row in rollouts) / len(rollouts)
     teacher_rate = sum(spec.completed for spec in specs) / len(specs)
     total_steps = sum(row.steps for row in rollouts)
     correction_rate = sum(row.corrections for row in rollouts) / total_steps
-    return {
-        "episodes": len(rollouts),
-        "actor_completion": actor_rate,
-        "teacher_completion": teacher_rate,
-        "relative_completion": actor_rate / teacher_rate if teacher_rate else 0.0,
-        "mask_correction_rate": correction_rate,
-        "triggered": actor_rate < 0.95 * teacher_rate or correction_rate > 0.01,
-    }, dagger
+    return {"episodes": len(rollouts), "actor_completion": actor_rate, "teacher_completion": teacher_rate, "relative_completion": actor_rate / teacher_rate if teacher_rate else 0.0, "mask_correction_rate": correction_rate, "triggered": actor_rate < 0.95 * teacher_rate or correction_rate > 0.01}, dagger
 
 
-def _append_dagger(
-    data: PixelData,
-    samples: list[tuple[np.ndarray, int, tuple[bool, ...], int, str, int]],
-) -> PixelData:
+def _append_dagger(data: PixelData, samples: list[tuple[np.ndarray, int, tuple[bool, ...], int, str, int]]) -> PixelData:
     frames = np.stack([sample[0] for sample in samples])
     actions = np.asarray([sample[1] for sample in samples], dtype=np.uint8)
     groups = np.asarray([sample[4].encode("ascii") for sample in samples], dtype="S64")
     ticks = np.asarray([sample[3] for sample in samples], dtype=np.uint16)
     render_seeds = np.asarray([sample[5] for sample in samples], dtype=np.int64)
-    hashes = np.asarray(
-        [_sha_bytes(frame.tobytes()).encode("ascii") for frame in frames], dtype="S64"
-    )
+    hashes = np.asarray([_sha_bytes(frame.tobytes()).encode("ascii") for frame in frames], dtype="S64")
     legal = np.asarray([sample[2] for sample in samples], dtype=np.bool_)
-    return PixelData(
-        np.concatenate((data.frames, frames)),
-        np.concatenate((data.actions, actions)),
-        np.concatenate((data.group_ids, groups)),
-        np.concatenate((data.ticks, ticks)),
-        np.concatenate((data.render_seeds, render_seeds)),
-        np.concatenate((data.splits, np.full(len(samples), SPLITS["fit"], dtype=np.uint8))),
-        np.concatenate((data.frame_hashes, hashes)),
-        np.concatenate((data.sources, np.ones(len(samples), dtype=np.uint8))),
-        np.concatenate((data.legal, legal)),
-        data.episodes,
-        data.config,
-    )
+    return PixelData(np.concatenate((data.frames, frames)), np.concatenate((data.actions, actions)), np.concatenate((data.group_ids, groups)), np.concatenate((data.ticks, ticks)), np.concatenate((data.render_seeds, render_seeds)), np.concatenate((data.splits, np.full(len(samples), SPLITS["fit"], dtype=np.uint8))), np.concatenate((data.frame_hashes, hashes)), np.concatenate((data.sources, np.ones(len(samples), dtype=np.uint8))), np.concatenate((data.legal, legal)), data.episodes, data.config)
 
 
-def _train_all(
-    data: PixelData, device: torch.device, epochs: int = 50
-) -> tuple[list[PixelActor], list[dict[str, object]]]:
+def _train_all(data: PixelData, device: torch.device, epochs: int = 50) -> tuple[list[PixelActor], list[dict[str, object]]]:
     actors: list[PixelActor] = []
     runs: list[dict[str, object]] = []
     for seed in TRAINING_SEEDS:
@@ -827,9 +551,7 @@ def _closed_loop_gate(actor: PixelActor, device: torch.device) -> dict[str, obje
             side: Side = side_name
             render_seed = 2_000_000 + seed * 2 + (0 if side == "blue" else 1)
             for opponent in ("null", "random"):
-                rollout, _, _ = _actor_episode(
-                    actor, seed, side, opponent, render_seed, device, False
-                )
+                rollout, _, _ = _actor_episode(actor, seed, side, opponent, render_seed, device, False)
                 document = _rollout_document(rollout)
                 if opponent == "random":
                     teacher = _teacher_episode(seed, side)
@@ -840,34 +562,12 @@ def _closed_loop_gate(actor: PixelActor, device: torch.device) -> dict[str, obje
     random_rows = [row for row in rows if row["opponent"] == "random"]
     random_rate = sum(bool(row["completed"]) for row in random_rows) / len(random_rows)
     teacher_rate = sum(teacher_completed) / len(teacher_completed)
-    side_rates = {
-        side: sum(bool(row["completed"]) for row in random_rows if row["side"] == side)
-        / sum(row["side"] == side for row in random_rows)
-        for side in ("blue", "red")
-    }
+    side_rates = {side: sum(bool(row["completed"]) for row in random_rows if row["side"] == side) / sum(row["side"] == side for row in random_rows) for side in ("blue", "red")}
     total_steps = sum(cast(int, row["steps"]) for row in rows)
     raw_rate = sum(cast(int, row["raw_illegal"]) for row in rows) / total_steps
     correction_rate = sum(cast(int, row["mask_corrections"]) for row in rows) / total_steps
-    passed = (
-        all(bool(row["terminal"]) for row in rows)
-        and all(bool(row["completed"]) for row in null_rows)
-        and random_rate >= 0.90
-        and random_rate >= 0.95 * teacher_rate
-        and abs(side_rates["blue"] - side_rates["red"]) <= 0.05
-        and raw_rate <= 0.01
-        and correction_rate <= 0.01
-    )
-    return {
-        "passed": passed,
-        "null_completion": sum(bool(row["completed"]) for row in null_rows) / len(null_rows),
-        "random_completion": random_rate,
-        "matched_teacher_completion": teacher_rate,
-        "random_completion_by_side": side_rates,
-        "raw_illegal_rate": raw_rate,
-        "mask_correction_rate": correction_rate,
-        "executed_illegal_actions": 0,
-        "rows": rows,
-    }
+    passed = all(bool(row["terminal"]) for row in rows) and all(bool(row["completed"]) for row in null_rows) and random_rate >= 0.90 and random_rate >= 0.95 * teacher_rate and abs(side_rates["blue"] - side_rates["red"]) <= 0.05 and raw_rate <= 0.01 and correction_rate <= 0.01
+    return {"passed": passed, "null_completion": sum(bool(row["completed"]) for row in null_rows) / len(null_rows), "random_completion": random_rate, "matched_teacher_completion": teacher_rate, "random_completion_by_side": side_rates, "raw_illegal_rate": raw_rate, "mask_correction_rate": correction_rate, "executed_illegal_actions": 0, "rows": rows}
 
 
 def _mismatched_frames(frames: np.ndarray, labels: np.ndarray) -> np.ndarray:
@@ -885,14 +585,8 @@ def _controls(actor: PixelActor, data: PixelData, device: torch.device) -> dict[
     labels = data.actions[selected]
     legal = data.legal[selected]
     black = _metric_arrays(actor, np.zeros_like(frames), labels, legal, device)
-    mismatch = _metric_arrays(
-        actor, _mismatched_frames(frames, labels), labels, legal, device
-    )
-    return {
-        "black_frames": black,
-        "mismatched_frames": mismatch,
-        "passed": not _classification_pass(black) and not _classification_pass(mismatch),
-    }
+    mismatch = _metric_arrays(actor, _mismatched_frames(frames, labels), labels, legal, device)
+    return {"black_frames": black, "mismatched_frames": mismatch, "passed": not _classification_pass(black) and not _classification_pass(mismatch)}
 
 
 def _latency(actor: PixelActor, device: torch.device) -> dict[str, object]:
@@ -914,15 +608,7 @@ def _latency(actor: PixelActor, device: torch.device) -> dict[str, object]:
             end.synchronize()
             elapsed.append(float(start.elapsed_time(end)))  # type: ignore[no-untyped-call]
     p95 = float(np.percentile(np.asarray(elapsed), 95))
-    return {
-        "batch": 1,
-        "dtype": "float32",
-        "warmup": 100,
-        "measurements": 1000,
-        "scope": "normalized_cuda_tensor_forward_only",
-        "p95_ms": p95,
-        "passed": p95 <= 10.0,
-    }
+    return {"batch": 1, "dtype": "float32", "warmup": 100, "measurements": 1000, "scope": "normalized_cuda_tensor_forward_only", "p95_ms": p95, "passed": p95 <= 10.0}
 
 
 def _sha(path: Path) -> str:
@@ -956,16 +642,7 @@ def _smoke() -> dict[str, object]:
         save_model(model_path, actor, data.config, 0)
         loaded_actor, loaded_seed = load_model(model_path, data.config)
         logits = loaded_actor(_normalize(data.frames[:1], device))
-    return {
-        "status": "PASSED",
-        "disposition": "NON_PROMOTING_CPU_SMOKE",
-        "samples": len(data.frames),
-        "dataset_arrays": sorted(loaded_data),
-        "model_seed": loaded_seed,
-        "logits_shape": list(logits.shape),
-        "parameters": sum(parameter.numel() for parameter in actor.parameters()),
-        "training": training,
-    }
+    return {"status": "PASSED", "disposition": "NON_PROMOTING_CPU_SMOKE", "samples": len(data.frames), "dataset_arrays": sorted(loaded_data), "model_seed": loaded_seed, "logits_shape": list(logits.shape), "parameters": sum(parameter.numel() for parameter in actor.parameters()), "training": training}
 
 
 def accept_pixel_v3(output: Path | None, device_name: str, smoke: bool) -> dict[str, object]:
@@ -986,20 +663,9 @@ def accept_pixel_v3(output: Path | None, device_name: str, smoke: bool) -> dict[
     device = torch.device("cuda:0")
     stage = "collect"
     evidence: dict[str, object] = {}
-    base = {
-        "kind": "minimal_v3_pixel_bc_report_v1",
-        "claim_scope": "pixelarena_engineering",
-        "hok_capability_claim": False,
-        "gamecore_equivalence_claim": False,
-        "commercial_client_action_output": False,
-        "actor_input": "rgb_only",
-    }
+    base = {"kind": "minimal_v3_pixel_bc_report_v1", "claim_scope": "pixelarena_engineering", "hok_capability_claim": False, "gamecore_equivalence_claim": False, "commercial_client_action_output": False, "actor_input": "rgb_only"}
     try:
-        if (
-            not torch.__version__.startswith("2.5.1")
-            or not torchvision_version.startswith("0.20.1")
-            or torch.version.cuda != "12.1"
-        ):
+        if not torch.__version__.startswith("2.5.1") or not torchvision_version.startswith("0.20.1") or torch.version.cuda != "12.1":
             raise PixelError("formal runtime requires Torch 2.5.1, torchvision 0.20.1, CUDA 12.1")
         device_identity = torch.cuda.get_device_name(0)
         if "RTX 4090" not in device_identity:
@@ -1019,15 +685,7 @@ def accept_pixel_v3(output: Path | None, device_name: str, smoke: bool) -> dict[
             raise PixelError("one or more initial models failed the validation gate")
         initial_training = [dict(run) for run in training]
         evidence["initial_training_runs"] = initial_training
-        best_index = min(
-            range(len(training)),
-            key=lambda index: float(
-                cast(
-                    float,
-                    cast(dict[str, object], training[index]["validation"])["cross_entropy"],
-                )
-            ),
-        )
+        best_index = min(range(len(training)), key=lambda index: float(cast(float, cast(dict[str, object], training[index]["validation"])["cross_entropy"])))
         stage = "acquisition"
         acquisition_before, dagger_samples = _acquisition(actors[best_index], data, device)
         evidence["acquisition_before"] = acquisition_before
@@ -1039,15 +697,7 @@ def accept_pixel_v3(output: Path | None, device_name: str, smoke: bool) -> dict[
             actors, training = _train_all(data, device)
             if not all(bool(run["validation_passed"]) for run in training):
                 raise PixelError("one or more DAgger models failed the validation gate")
-            best_index = min(
-                range(len(training)),
-                key=lambda index: float(
-                    cast(
-                        float,
-                        cast(dict[str, object], training[index]["validation"])["cross_entropy"],
-                    )
-                ),
-            )
+            best_index = min(range(len(training)), key=lambda index: float(cast(float, cast(dict[str, object], training[index]["validation"])["cross_entropy"])))
             write_dataset(dataset_path, data)
             load_dataset(dataset_path)
         acquisition_after, _ = _acquisition(actors[best_index], data, device)
@@ -1086,38 +736,7 @@ def accept_pixel_v3(output: Path | None, device_name: str, smoke: bool) -> dict[
             model_hashes[path.name] = _sha(path)
         best_model = f"model-seed-{TRAINING_SEEDS[best_index]}.safetensors"
         stage = "report"
-        report = {
-            **base,
-            "status": "PASSED",
-            "environment_identity": data.config.identity,
-            "arena_config_hash": data.config.digest,
-            "renderer": {"identity": RENDERER_ID, "hash": RENDERER_HASH},
-            "action_vocabulary": [list(action) for action in ACTIONS],
-            "action_vocabulary_hash": ACTION_HASH,
-            "dataset": dataset_summary(data),
-            "training_contract": {"hash": TRAINING_HASH, **TRAINING_CONFIG},
-            "initial_training_runs": initial_training,
-            "training_runs": training,
-            "best_model": best_model,
-            "dagger": {
-                "rounds": dagger_rounds,
-                "acquisition_before": acquisition_before,
-                "acquisition_after": acquisition_after,
-            },
-            "controls": controls,
-            "closed_loop": closed_loop,
-            "latency": latency,
-            "runtime": {
-                "python": platform.python_version(),
-                "torch": torch.__version__,
-                "torchvision": torchvision_version,
-                "cuda_runtime": torch.version.cuda,
-                "device": device_identity,
-                "platform": platform.platform(),
-            },
-            "files": {"dataset.npz": _sha(dataset_path), **model_hashes},
-            "static_checks": static_checks,
-        }
+        report = {**base, "status": "PASSED", "environment_identity": data.config.identity, "arena_config_hash": data.config.digest, "renderer": {"identity": RENDERER_ID, "hash": RENDERER_HASH}, "action_vocabulary": [list(action) for action in ACTIONS], "action_vocabulary_hash": ACTION_HASH, "dataset": dataset_summary(data), "training_contract": {"hash": TRAINING_HASH, **TRAINING_CONFIG}, "initial_training_runs": initial_training, "training_runs": training, "best_model": best_model, "dagger": {"rounds": dagger_rounds, "acquisition_before": acquisition_before, "acquisition_after": acquisition_after}, "controls": controls, "closed_loop": closed_loop, "latency": latency, "runtime": {"python": platform.python_version(), "torch": torch.__version__, "torchvision": torchvision_version, "cuda_runtime": torch.version.cuda, "device": device_identity, "platform": platform.platform()}, "files": {"dataset.npz": _sha(dataset_path), **model_hashes}, "static_checks": static_checks}
         _write_json(temporary / "report.json", report)
         _publish(temporary, output)
         return report
@@ -1125,17 +744,7 @@ def accept_pixel_v3(output: Path | None, device_name: str, smoke: bool) -> dict[
         for child in temporary.iterdir():
             if child.is_file():
                 child.unlink()
-        failure = {
-            **base,
-            "status": "FAILED",
-            "stage": stage,
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-            "python": sys.version.split()[0],
-            "torch": torch.__version__,
-            "torchvision": torchvision_version,
-            "evidence": evidence,
-        }
+        failure = {**base, "status": "FAILED", "stage": stage, "error_type": type(exc).__name__, "error": str(exc), "python": sys.version.split()[0], "torch": torch.__version__, "torchvision": torchvision_version, "evidence": evidence}
         _write_json(temporary / "report.json", failure)
         _publish(temporary, output)
         raise PixelError(f"Pixel V3 failed at {stage}; report: {output / 'report.json'}") from exc

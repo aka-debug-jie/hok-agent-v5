@@ -8,6 +8,5 @@ def test_baselines_are_deterministic_test_drivers() -> None:
     assert ScriptedPolicy().select("blue", legal) == move_action("forward")
     first = RandomPolicy(9, "blue")
     second = RandomPolicy(9, "blue")
-    assert [first.select("blue", legal) for _ in range(20)] == [
-        second.select("blue", legal) for _ in range(20)
-    ]
+    assert [first.select("blue", legal) for _ in range(20)] == [second.select("blue", legal)
+                                                               for _ in range(20)]

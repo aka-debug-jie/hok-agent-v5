@@ -12,22 +12,12 @@ DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "configs/pixelarena_1v1_v
 
 @dataclass(frozen=True)
 class ArenaConfig:
-    identity: str
-    ruleset: str
-    lane_min: int
-    lane_max: int
-    blue_start: int
-    red_start: int
-    blue_tower: int
-    red_tower: int
-    blue_crystal: int
-    red_crystal: int
-    hero_health: int
-    tower_health: int
-    crystal_health: int
-    basic_damage: int
-    attack_range: int
-    max_ticks: int
+    identity: str; ruleset: str  # noqa: E702
+    lane_min: int; lane_max: int  # noqa: E702
+    blue_start: int; red_start: int; blue_tower: int; red_tower: int  # noqa: E702
+    blue_crystal: int; red_crystal: int  # noqa: E702
+    hero_health: int; tower_health: int; crystal_health: int  # noqa: E702
+    basic_damage: int; attack_range: int; max_ticks: int  # noqa: E702
 
     @classmethod
     def load(cls, path: Path = DEFAULT_CONFIG) -> ArenaConfig:
@@ -42,13 +32,9 @@ class ArenaConfig:
 
 @dataclass(frozen=True)
 class FactorizedAction:
-    macro: str
-    action_type: str
-    target: str = "none"
-    direction: str = "none"
-    skill: str = "none"
-    upgrade: str = "none"
-    auxiliary: int = 0
+    macro: str; action_type: str  # noqa: E702
+    target: str = "none"; direction: str = "none"; skill: str = "none"  # noqa: E702
+    upgrade: str = "none"; auxiliary: int = 0  # noqa: E702
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -56,18 +42,14 @@ class FactorizedAction:
     @classmethod
     def from_dict(cls, raw: dict[str, object]) -> FactorizedAction:
         return cls(
-            macro=str(raw["macro"]),
-            action_type=str(raw["action_type"]),
-            target=str(raw["target"]),
-            direction=str(raw["direction"]),
-            skill=str(raw["skill"]),
-            upgrade=str(raw["upgrade"]),
+            macro=str(raw["macro"]), action_type=str(raw["action_type"]),
+            target=str(raw["target"]), direction=str(raw["direction"]),
+            skill=str(raw["skill"]), upgrade=str(raw["upgrade"]),
             auxiliary=int(cast(int, raw["auxiliary"])),
         )
 
 
-def wait_action() -> FactorizedAction:
-    return FactorizedAction("hold", "wait")
+def wait_action() -> FactorizedAction: return FactorizedAction("hold", "wait")  # noqa: E704
 
 
 def move_action(direction: str) -> FactorizedAction:
@@ -81,17 +63,11 @@ def attack_action(target: str) -> FactorizedAction:
 
 @dataclass
 class ArenaState:
-    tick: int
-    blue_position: int
-    red_position: int
-    blue_health: int
-    red_health: int
-    blue_tower_health: int
-    red_tower_health: int
-    blue_crystal_health: int
-    red_crystal_health: int
-    terminal: bool = False
-    outcome: str = "ongoing"
+    tick: int; blue_position: int; red_position: int  # noqa: E702
+    blue_health: int; red_health: int  # noqa: E702
+    blue_tower_health: int; red_tower_health: int  # noqa: E702
+    blue_crystal_health: int; red_crystal_health: int  # noqa: E702
+    terminal: bool = False; outcome: str = "ongoing"  # noqa: E702
 
 
 def observation_hash(observation: dict[str, object]) -> str:
@@ -101,22 +77,14 @@ def observation_hash(observation: dict[str, object]) -> str:
 
 class PixelArena:
     def __init__(self, config_path: Path = DEFAULT_CONFIG) -> None:
-        self.config = ArenaConfig.load(config_path)
-        self.seed = 0
+        self.config = ArenaConfig.load(config_path); self.seed = 0  # noqa: E702
         self.state = self._initial_state()
 
     def _initial_state(self) -> ArenaState:
         c = self.config
         return ArenaState(
-            0,
-            c.blue_start,
-            c.red_start,
-            c.hero_health,
-            c.hero_health,
-            c.tower_health,
-            c.tower_health,
-            c.crystal_health,
-            c.crystal_health,
+            0, c.blue_start, c.red_start, c.hero_health, c.hero_health,
+            c.tower_health, c.tower_health, c.crystal_health, c.crystal_health,
         )
 
     def health(self) -> dict[str, object]:
@@ -125,14 +93,12 @@ class PixelArena:
             "ruleset": self.config.ruleset,
             "config_hash": self.config.digest,
             "claim_scope": "pixelarena_engineering",
-            "hok_capability_claim": False,
-            "gamecore_equivalence_claim": False,
+            "hok_capability_claim": False, "gamecore_equivalence_claim": False,
             "capabilities": {"network": False, "device": False, "external_client": False},
         }
 
     def reset(self, seed: int) -> dict[str, object]:
-        self.seed = seed
-        self.state = self._initial_state()
+        self.seed = seed; self.state = self._initial_state()  # noqa: E702
         return self._response([])
 
     def observe(self, side: Side) -> dict[str, object]:
@@ -178,17 +144,13 @@ class PixelArena:
             actions.append(attack_action("enemy_hero"))
         if enemy_tower_health > 0 and abs(position - enemy_tower_position) <= c.attack_range:
             actions.append(attack_action("enemy_tower"))
-        if (
-            enemy_tower_health <= 0
-            and enemy_crystal_health > 0
-            and abs(position - enemy_crystal_position) <= c.attack_range
-        ):
+        if (enemy_tower_health <= 0 and enemy_crystal_health > 0
+                and abs(position - enemy_crystal_position) <= c.attack_range):
             actions.append(attack_action("enemy_crystal"))
         return tuple(actions)
 
-    def step(
-        self, blue_action: FactorizedAction, red_action: FactorizedAction
-    ) -> dict[str, object]:
+    def step(self, blue_action: FactorizedAction,
+             red_action: FactorizedAction) -> dict[str, object]:
         if self.state.terminal:
             raise ValueError("episode already ended")
         if blue_action not in self.legal_actions("blue"):
@@ -196,10 +158,8 @@ class PixelArena:
         if red_action not in self.legal_actions("red"):
             raise ValueError("illegal red action")
         events: list[str] = []
-        self._move("blue", blue_action, events)
-        self._move("red", red_action, events)
-        self._attack("blue", blue_action, events)
-        self._attack("red", red_action, events)
+        self._move("blue", blue_action, events); self._move("red", red_action, events)  # noqa: E702
+        self._attack("blue", blue_action, events); self._attack("red", red_action, events)  # noqa: E702
         self.state.tick += 1
         self._finish(events)
         return self._response(events)
@@ -212,8 +172,7 @@ class PixelArena:
             delta *= -1
         key = f"{side}_position"
         position = cast(int, getattr(self.state, key)) + delta
-        setattr(self.state, key, position)
-        events.append(f"{side}:move:{position}")
+        setattr(self.state, key, position); events.append(f"{side}:move:{position}")  # noqa: E702
 
     def _attack(self, side: Side, action: FactorizedAction, events: list[str]) -> None:
         if action.action_type != "attack":
@@ -253,7 +212,5 @@ class PixelArena:
                 side: [action.to_dict() for action in self.legal_actions(side)]
                 for side in ("blue", "red")
             },
-            "events": events,
-            "terminal": self.state.terminal,
-            "outcome": self.state.outcome,
+            "events": events, "terminal": self.state.terminal, "outcome": self.state.outcome,
         }

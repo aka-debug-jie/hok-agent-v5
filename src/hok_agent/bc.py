@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from __future__ import annotations
 
 import hashlib
@@ -18,41 +19,11 @@ from torch import nn
 from hok_agent.arena import ArenaConfig, FactorizedAction, PixelArena, Side, observation_hash
 from hok_agent.policies import NullPolicy, RandomPolicy, ScriptedPolicy
 
-FEATURES = (
-    "tick",
-    "side",
-    "self_position",
-    "opponent_position",
-    "self_health",
-    "opponent_health",
-    "own_tower_health",
-    "enemy_tower_health",
-    "own_crystal_health",
-    "enemy_crystal_health",
-)
-ACTIONS = (
-    ("wait", "none", "none"),
-    ("move", "none", "forward"),
-    ("move", "none", "backward"),
-    ("attack", "enemy_hero", "none"),
-    ("attack", "enemy_tower", "none"),
-    ("attack", "enemy_crystal", "none"),
-)
+FEATURES = ("tick", "side", "self_position", "opponent_position", "self_health", "opponent_health", "own_tower_health", "enemy_tower_health", "own_crystal_health", "enemy_crystal_health")
+ACTIONS = (("wait", "none", "none"), ("move", "none", "forward"), ("move", "none", "backward"), ("attack", "enemy_hero", "none"), ("attack", "enemy_tower", "none"), ("attack", "enemy_crystal", "none"))
 ACTION_INDEX = {value: index for index, value in enumerate(ACTIONS)}
 TRAINING_SEEDS = (0, 1, 2)
-MODEL_KEYS = {
-    "kind",
-    "claim_scope",
-    "hok_capability_claim",
-    "gamecore_equivalence_claim",
-    "environment_identity",
-    "config_hash",
-    "feature_names",
-    "action_vocabulary",
-    "architecture",
-    "training_seed",
-    "weights",
-}
+MODEL_KEYS = {"kind", "claim_scope", "hok_capability_claim", "gamecore_equivalence_claim", "environment_identity", "config_hash", "feature_names", "action_vocabulary", "architecture", "training_seed", "weights"}
 
 
 class BCError(ValueError):
@@ -96,13 +67,7 @@ def _action_document(index: int) -> dict[str, object]:
     macro = "hold" if action_type == "wait" else "advance"
     if action_type == "attack":
         macro = "siege" if target in {"enemy_tower", "enemy_crystal"} else "engage"
-    return FactorizedAction(
-        macro,
-        action_type,
-        target=target,
-        direction=direction,
-        skill="basic" if action_type == "attack" else "none",
-    ).to_dict()
+    return FactorizedAction(macro, action_type, target=target, direction=direction, skill="basic" if action_type == "attack" else "none").to_dict()
 
 
 def _feature_vector(observation: dict[str, object], config: ArenaConfig) -> list[float]:
@@ -164,11 +129,7 @@ def collect_dataset() -> Dataset:
     for action, samples in by_action.items():
         samples.sort(key=lambda sample: sample.digest)
         train_end, validation_end = int(len(samples) * 0.70), int(len(samples) * 0.85)
-        partitions = (
-            ("train", samples[:train_end]),
-            ("validation", samples[train_end:validation_end]),
-            ("test", samples[validation_end:]),
-        )
+        partitions = (("train", samples[:train_end]), ("validation", samples[train_end:validation_end]), ("test", samples[validation_end:]))
         if any(not partition for _, partition in partitions):
             raise BCError(f"action {action} cannot populate every split")
         for split, partition in partitions:
@@ -202,53 +163,29 @@ def _dataset_header(dataset: Dataset) -> dict[str, object]:
 
 def write_dataset(path: Path, dataset: Dataset) -> None:
     documents = [_dataset_header(dataset)]
-    documents.extend(
-        {
-            "sample_hash": sample.digest,
-            "split": sample.split,
-            "observation": sample.observation,
-            "action": _action_document(sample.action),
-        }
-        for sample in dataset.samples
-    )
+    documents.extend({"sample_hash": sample.digest, "split": sample.split, "observation": sample.observation, "action": _action_document(sample.action)} for sample in dataset.samples)
     _write(path, "".join(_json(row) + "\n" for row in documents))
 
 
 def _tensors(dataset: Dataset, split: str) -> tuple[torch.Tensor, torch.Tensor, list[Sample]]:
     samples = [sample for sample in dataset.samples if sample.split == split]
-    features = torch.tensor(
-        [_feature_vector(sample.observation, dataset.config) for sample in samples],
-        dtype=torch.float32,
-    )
+    features = torch.tensor([_feature_vector(sample.observation, dataset.config) for sample in samples], dtype=torch.float32)
     labels = torch.tensor([sample.action for sample in samples], dtype=torch.long)
     return features, labels, samples
 
 
-def _metrics(
-    actor: StructuredActor, features: torch.Tensor, labels: torch.Tensor, samples: list[Sample]
-) -> dict[str, float]:
+def _metrics(actor: StructuredActor, features: torch.Tensor, labels: torch.Tensor, samples: list[Sample]) -> dict[str, float]:
     with torch.no_grad():
         logits = actor(features)
         predictions = logits.argmax(dim=1)
         loss = nn.functional.cross_entropy(logits, labels).item()
     accuracy = (predictions == labels).float().mean().item()
     classes = sorted(set(labels.tolist()))
-    balanced = sum(
-        (predictions[labels == label] == label).float().mean().item() for label in classes
-    ) / len(classes)
+    balanced = sum((predictions[labels == label] == label).float().mean().item() for label in classes) / len(classes)
     counts = Counter(labels.tolist())
     majority = max(counts.values()) / len(labels)
-    illegal = sum(
-        int(prediction) not in sample.legal
-        for prediction, sample in zip(predictions.tolist(), samples, strict=True)
-    ) / len(samples)
-    return {
-        "cross_entropy": loss,
-        "exact_accuracy": accuracy,
-        "balanced_accuracy": balanced,
-        "majority_accuracy": majority,
-        "illegal_top1_rate": illegal,
-    }
+    illegal = sum(int(prediction) not in sample.legal for prediction, sample in zip(predictions.tolist(), samples, strict=True)) / len(samples)
+    return {"cross_entropy": loss, "exact_accuracy": accuracy, "balanced_accuracy": balanced, "majority_accuracy": majority, "illegal_top1_rate": illegal}
 
 
 def train_one(dataset: Dataset, seed: int) -> tuple[StructuredActor, dict[str, object]]:
@@ -282,20 +219,8 @@ def train_one(dataset: Dataset, seed: int) -> tuple[StructuredActor, dict[str, o
     test = _metrics(actor, test_x, test_y, test_samples)
     test["initial_cross_entropy"] = initial_test_ce
     test["cross_entropy_ratio"] = test["cross_entropy"] / initial_test_ce
-    passed = (
-        test["cross_entropy_ratio"] <= 0.50
-        and test["exact_accuracy"] >= 0.90
-        and test["balanced_accuracy"] >= 0.85
-        and test["exact_accuracy"] >= test["majority_accuracy"] + 0.20
-        and test["illegal_top1_rate"] <= 0.05
-    )
-    return actor, {
-        "seed": seed,
-        "epochs": best_epoch,
-        "validation_cross_entropy": best_loss,
-        "test": test,
-        "passed": passed,
-    }
+    passed = test["cross_entropy_ratio"] <= 0.50 and test["exact_accuracy"] >= 0.90 and test["balanced_accuracy"] >= 0.85 and test["exact_accuracy"] >= test["majority_accuracy"] + 0.20 and test["illegal_top1_rate"] <= 0.05
+    return actor, {"seed": seed, "epochs": best_epoch, "validation_cross_entropy": best_loss, "test": test, "passed": passed}
 
 
 def _model_document(actor: StructuredActor, dataset: Dataset, seed: int) -> dict[str, object]:
@@ -336,15 +261,10 @@ def _strict_equal(actual: object, expected: object) -> bool:
     if type(actual) is not type(expected):
         return False
     if isinstance(expected, dict):
-        return set(cast(dict[object, object], actual)) == set(expected) and all(
-            _strict_equal(cast(dict[object, object], actual)[key], value)
-            for key, value in expected.items()
-        )
+        return set(cast(dict[object, object], actual)) == set(expected) and all(_strict_equal(cast(dict[object, object], actual)[key], value) for key, value in expected.items())
     if isinstance(expected, list):
         actual_list = cast(list[object], actual)
-        return len(actual_list) == len(expected) and all(
-            _strict_equal(left, right) for left, right in zip(actual_list, expected, strict=True)
-        )
+        return len(actual_list) == len(expected) and all(_strict_equal(left, right) for left, right in zip(actual_list, expected, strict=True))
     return bool(actual == expected)
 
 
@@ -384,29 +304,15 @@ def load_model(path: Path, config: ArenaConfig | None = None) -> tuple[Structure
     if type(raw["training_seed"]) is not int:
         raise BCError("invalid training seed")
     weights = raw["weights"]
-    if not isinstance(weights, dict) or set(weights) != {
-        "hidden.weight",
-        "hidden.bias",
-        "output.weight",
-        "output.bias",
-    }:
+    if not isinstance(weights, dict) or set(weights) != {"hidden.weight", "hidden.bias", "output.weight", "output.bias"}:
         raise BCError("invalid weight fields")
     actor = StructuredActor()
-    actor.load_state_dict(
-        {
-            "hidden.weight": _numeric(weights["hidden.weight"], (32, 10)),
-            "hidden.bias": _numeric(weights["hidden.bias"], (32,)),
-            "output.weight": _numeric(weights["output.weight"], (6, 32)),
-            "output.bias": _numeric(weights["output.bias"], (6,)),
-        }
-    )
+    actor.load_state_dict({"hidden.weight": _numeric(weights["hidden.weight"], (32, 10)), "hidden.bias": _numeric(weights["hidden.bias"], (32,)), "output.weight": _numeric(weights["output.weight"], (6, 32)), "output.bias": _numeric(weights["output.bias"], (6,))})
     actor.eval()
     return actor, int(raw["training_seed"])
 
 
-def _closed_loop(
-    actor: StructuredActor, learned_side: Side, config: ArenaConfig
-) -> dict[str, object]:
+def _closed_loop(actor: StructuredActor, learned_side: Side, config: ArenaConfig) -> dict[str, object]:
     arena = PixelArena()
     arena.reset(101)
     null = NullPolicy()

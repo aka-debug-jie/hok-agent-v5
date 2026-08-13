@@ -25,14 +25,11 @@ def test_public_jsonl_replays_in_a_fresh_process_and_rejects_tamper(tmp_path: Pa
         verify_trace(trace)
 
 
-@pytest.mark.parametrize(
-    ("location", "key", "value", "message"),
-    [
-        (0, "hok_capability_claim", True, "claim metadata"),
-        (0, "teacher", "hidden", "header fields"),
-        (1, "reward", 1.0, "transition fields"),
-    ],
-)
+@pytest.mark.parametrize(("location", "key", "value", "message"), [
+    (0, "hok_capability_claim", True, "claim metadata"),
+    (0, "teacher", "hidden", "header fields"),
+    (1, "reward", 1.0, "transition fields"),
+])
 def test_replay_rejects_claim_changes_and_non_public_fields(
     tmp_path: Path, location: int, key: str, value: object, message: str
 ) -> None:
@@ -45,16 +42,13 @@ def test_replay_rejects_claim_changes_and_non_public_fields(
         verify_trace(trace)
 
 
-@pytest.mark.parametrize(
-    ("location", "key", "value", "message"),
-    [
-        (0, "seed", [101], "header types"),
-        (0, "seed", 101.9, "header types"),
-        (0, "hok_capability_claim", 0, "header types"),
-        (1, "blue_action", list("abcdefg"), "action fields"),
-        (1, "events", "not-a-list", "transition types"),
-    ],
-)
+@pytest.mark.parametrize(("location", "key", "value", "message"), [
+    (0, "seed", [101], "header types"),
+    (0, "seed", 101.9, "header types"),
+    (0, "hok_capability_claim", 0, "header types"),
+    (1, "blue_action", list("abcdefg"), "action fields"),
+    (1, "events", "not-a-list", "transition types"),
+])
 def test_replay_rejects_wrong_json_types(
     tmp_path: Path, location: int, key: str, value: object, message: str
 ) -> None:

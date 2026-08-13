@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from __future__ import annotations
 
 import hashlib
@@ -15,21 +16,8 @@ from hok_agent.pixel import infer_rgb_frames
 
 SCHEMA = "pixelarena-shadow-diagnostic-v1"
 FROZEN_V3_MODEL_SHA256 = "df511e9b19327886da359400055dcc99aad6520a495c6d5e0495031c86b44eed"
-VIDEO_FORMATS = {
-    ".avi": "avi",
-    ".mkv": "matroska",
-    ".mov": "mov",
-    ".mp4": "mov",
-    ".webm": "matroska",
-}
-ACTION_LABELS = (
-    "wait",
-    "forward",
-    "backward",
-    "attack_hero",
-    "attack_tower",
-    "attack_crystal",
-)
+VIDEO_FORMATS = {".avi": "avi", ".mkv": "matroska", ".mov": "mov", ".mp4": "mov", ".webm": "matroska"}
+ACTION_LABELS = ("wait", "forward", "backward", "attack_hero", "attack_tower", "attack_crystal")
 DENIED_ROOTS = (Path("/dev"), Path("/proc"), Path("/sys"))
 
 
@@ -97,9 +85,7 @@ def _output_path(raw: Path) -> Path:
     return parent / raw.name
 
 
-def _decode_video(
-    source: BinaryIO, container_format: str, sample_every: int, max_frames: int
-) -> tuple[np.ndarray, list[tuple[int, int | None]], int]:
+def _decode_video(source: BinaryIO, container_format: str, sample_every: int, max_frames: int) -> tuple[np.ndarray, list[tuple[int, int | None]], int]:
     if not 1 <= sample_every <= 30 or not 1 <= max_frames <= 300:
         raise ShadowError("sample-every must be 1..30 and max-frames must be 1..300")
     images: list[np.ndarray] = []
@@ -107,12 +93,7 @@ def _decode_video(
     decoded = 0
     try:
         source.seek(0)
-        with av.open(
-            source,
-            mode="r",
-            format=container_format,
-            options={"protocol_whitelist": ""},
-        ) as container:
+        with av.open(source, mode="r", format=container_format, options={"protocol_whitelist": ""}) as container:
             if not container.streams.video:
                 raise ShadowError("video contains no video stream")
             for index, frame in enumerate(container.decode(video=0)):
@@ -131,14 +112,7 @@ def _decode_video(
     return np.stack(images), positions, decoded
 
 
-def analyze_video(
-    video_raw: str,
-    model_raw: str,
-    output_raw: Path,
-    device: str = "cpu",
-    sample_every: int = 5,
-    max_frames: int = 300,
-) -> dict[str, object]:
+def analyze_video(video_raw: str, model_raw: str, output_raw: Path, device: str = "cpu", sample_every: int = 5, max_frames: int = 300) -> dict[str, object]:
     """Analyze a local recording without producing a commercial-client action."""
     video = _local_regular_file(video_raw, set(VIDEO_FORMATS))
     model = _local_regular_file(model_raw, {".safetensors"})
@@ -149,43 +123,19 @@ def analyze_video(
         model_hash = _sha_handle(model_source)
         if model_hash != FROZEN_V3_MODEL_SHA256:
             raise ShadowError("model is not the frozen promoted V3 checkpoint")
-        frames, positions, decoded = _decode_video(
-            source, VIDEO_FORMATS[video.suffix.lower()], sample_every, max_frames
-        )
+        frames, positions, decoded = _decode_video(source, VIDEO_FORMATS[video.suffix.lower()], sample_every, max_frames)
         model_fd = Path(f"/proc/self/fd/{model_source.fileno()}")
         predictions, confidences, model_seed = infer_rgb_frames(model_fd, frames, device)
         after = os.fstat(source.fileno())
     rows = []
-    for sequence, ((source_frame, pts), prediction, confidence, frame) in enumerate(
-        zip(positions, predictions, confidences, frames, strict=True)
-    ):
-        rows.append(
-            {
-                "schema_version": SCHEMA,
-                "sequence": sequence,
-                "source_frame": source_frame,
-                "pts": pts,
-                "frame_sha256": hashlib.sha256(frame.tobytes()).hexdigest(),
-                "raw_model_hypothesis": ACTION_LABELS[prediction],
-                "confidence": round(float(confidence), 8),
-                "advisory_action": "ABSTAIN",
-                "abstain_reason": "UNVALIDATED_COMMERCIAL_DOMAIN",
-                "control_output": False,
-            }
-        )
-    if (before.st_ino, before.st_size, before.st_mtime_ns) != (
-        after.st_ino,
-        after.st_size,
-        after.st_mtime_ns,
-    ):
+    for sequence, ((source_frame, pts), prediction, confidence, frame) in enumerate(zip(positions, predictions, confidences, frames, strict=True)):
+        rows.append({"schema_version": SCHEMA, "sequence": sequence, "source_frame": source_frame, "pts": pts, "frame_sha256": hashlib.sha256(frame.tobytes()).hexdigest(), "raw_model_hypothesis": ACTION_LABELS[prediction], "confidence": round(float(confidence), 8), "advisory_action": "ABSTAIN", "abstain_reason": "UNVALIDATED_COMMERCIAL_DOMAIN", "control_output": False})
+    if (before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_ino, after.st_size, after.st_mtime_ns):
         raise ShadowError("input changed during analysis")
     with tempfile.TemporaryDirectory(prefix=f".{output.name}-", dir=output.parent) as temporary:
         staging = Path(temporary)
         predictions_path = staging / "predictions.jsonl"
-        predictions_path.write_text(
-            "".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows),
-            encoding="utf-8",
-        )
+        predictions_path.write_text("".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows), encoding="utf-8")
         summary: dict[str, object] = {
             "schema_version": SCHEMA,
             "status": "PASSED",
@@ -205,8 +155,6 @@ def analyze_video(
             "hok_capability_claim": False,
             "gamecore_equivalence_claim": False,
         }
-        (staging / "summary.json").write_text(
-            json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        (staging / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         staging.rename(output)
     return summary

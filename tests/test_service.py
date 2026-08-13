@@ -11,11 +11,8 @@ def test_spawned_service_lifecycle_and_capabilities() -> None:
         health = first.health()
         assert health["identity"] == "pixelarena-structured-1v1-v1"
         assert health["claim_scope"] == "pixelarena_engineering"
-        assert health["capabilities"] == {
-            "network": False,
-            "device": False,
-            "external_client": False,
-        }
+        assert health["capabilities"] == {"network": False, "device": False,
+                                          "external_client": False}
         assert health["process_id"] != second.health()["process_id"]
         reset = first.reset(5)
         assert reset["outcome"] == "ongoing"
