@@ -59,11 +59,13 @@ make rich-smoke
 make accept-v7  # formal RTX 4090 gate; never run in CI
 ```
 
-The current V5 code is deliberately framework-only: it can exercise the source renderer,
-session split, shard, SimSiam, pseudo-label, Mean Teacher, and blind-audit contracts, but it
-cannot write a formal `release.json`. Artifact-path provenance and the supplied sealed data
-must be implemented and verified before release writing is enabled. Consequently V6 remains
-fail-closed and emits only `ABSTAIN` in the current delivery.
+The current V5 code is deliberately non-promoting. It strictly reloads and cross-checks the
+session manifest, source corpus/model, target shards, filtered pseudo labels, adapted model,
+one-round EMA model, ledger, and sealed audit from file paths. It still cannot write or load a
+formal `release.json`: an independent source-corpus producer and numeric representation-
+collapse thresholds are not yet frozen. V6 has strict checkpoint and 300/200-evidence
+contracts, but the unavailable V5 release keeps every supported TemporalCoach/CLI output at
+`ABSTAIN`.
 
 ## Frozen V5/V6 evidence contract
 
@@ -74,10 +76,9 @@ fail-closed and emits only `ABSTAIN` in the current delivery.
 - SimSiam adapts shallow encoder layers; pseudo labels require source/student, view, temporal,
   and OOD agreement; Mean Teacher runs once.
 - Two blinded annotators audit 500 clips: 300 for V5 frame advice and 200 reserved for V6.
-  Audit labels may produce release evidence only after the missing path-bound gate exists;
-  they never train or tune the model.
+  Audit labels enter diagnostics only; they never train or tune the model.
 - V6 may use 300 session-isolated keyframes for hero centers/visibility and HUD status, but
-  these are not action labels.
+  these are not action labels. Their frozen split is 180 train, 60 dev, and 60 sealed test.
 
 ## Rich PixelArena V2
 

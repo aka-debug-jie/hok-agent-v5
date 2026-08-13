@@ -1,8 +1,8 @@
 # Delivery Progress
 
-- Last update: 2026-08-12
-- Current task: `COMPACT-V4-V7-IMPLEMENTATION`
-- Status: `PARTIAL_DELIVERY`
+- Last update: 2026-08-13
+- Current task: `V4-V6-PRE-DATA-CLOSURE`
+- Status: `PRE_DATA_IMPLEMENTATION_COMPLETE`
 - Product Actor input: `RGB_ONLY`
 - Closed-loop environment: `PIXELARENA_ONLY`
 - Commercial-client action output: `false`
@@ -30,8 +30,8 @@ commercial recording, capture card, or live device.
 | stage | implementation | formal external gate | current disposition |
 |---|---|---|---|
 | V4 live Shadow | `FRAMEWORK_IMPLEMENTED` | 10-minute 1080p60 UVC / 10 Hz run | `READY_FOR_HARDWARE` |
-| V5 Visual Alignment | `NON_PROMOTING_FRAMEWORK_IMPLEMENTED` | 12 sessions + path-bound gate + 300-clip sealed audit | `WAITING_DATA_AND_RELEASE_GATE` |
-| V6 Temporal Coach | `FAIL_CLOSED_FRAMEWORK_IMPLEMENTED` | V6 checkpoint + 300 tracking frames + 200-clip audit | `WAITING_DATA_AND_RELEASE_BINDING` |
+| V5 Visual Alignment | `PATH_BOUND_NON_PROMOTING_FRAMEWORK_IMPLEMENTED` | source producer/thresholds + 12 sessions + 300-clip sealed audit | `WAITING_SOURCE_THRESHOLDS_AND_DATA` |
+| V6 Temporal Coach | `PATH_BOUND_FAIL_CLOSED_FRAMEWORK_IMPLEMENTED` | valid V5 release + V6 checkpoint + 300 tracking frames + 200-clip audit | `WAITING_V5_AND_DATA` |
 | V7 Rich PixelArena V2 | `COMPLETE` | three-seed CUDA classification/closed-loop/replay/latency | `FORMAL_PASSED` |
 
 The missing capture node, recordings, and labels do not block contracts, simulated-source
@@ -135,17 +135,31 @@ fresh-process exact replay/tamper rejection, and RTX 4090 forward p95 at most 10
   capture-card availability. No live V4 run was attempted.
 - No real recording manifest, sealed action audit, or tracking-label set has been supplied.
   No V5/V6 real-domain accuracy or advice class is released.
+- 2026-08-13 pre-data closure replaced bare in-memory V5 promotion inputs with strict
+  regular-file manifest/source/target/pseudo/model/ledger/audit loading, persisted the single
+  Mean Teacher EMA model, and fixed formal V5 release creation and loading closed while
+  collapse thresholds remain unspecified. V6 now binds actual artifact paths, exact model
+  metadata, session-isolated 180/60/60 tracking evidence, and the same two blinded reviewers
+  across exactly 200 temporal clips; absent evidence remains `ABSTAIN` without model forward.
+- Pre-data closure checks observed: Ruff passed; strict mypy passed for 18 source files;
+  full pytest `83 passed`; project gate passed with 40 files, 31 Python files, 8,999 nonblank
+  Python lines, and four root Markdown files. V1 and V2 acceptance passed; V3, V5, V6, and V7
+  CPU smokes passed; V4 capture tests passed `7/7`. No hardware, real recording, label, CUDA
+  formal training, or real-domain capability evidence was created in this closure.
 
 ## Remaining blockers and next task
 
 1. `V4-HARDWARE-ACCEPTANCE`: connect a read-only UVC capture card and run the frozen
    10-minute gate; no phone control connection is needed or allowed.
-2. `V5-ARTIFACT-PATH-GATE`: replace framework-only in-memory promotion inputs with strict
-   path-loaded session/source/pseudo/model/audit artifacts, persist the final EMA model, and
-   only then ingest the 12-session recording set. Until then formal release writing stays
-   disabled.
-3. `V6-RELEASE-BINDING`: train/save a V6 checkpoint and bind the 300-frame tracking and
-   200-clip temporal audits; current advice intentionally remains all-`ABSTAIN`.
+2. `V5-SOURCE-AND-DATA`: the strict path chain and final EMA persistence are implemented.
+   A compact independent causal-source producer still needs 165–205 lines, but the frozen
+   9,000-line gate has only single-digit capacity; first replace/compact existing code rather
+   than relaxing the gate. Then freeze numeric collapse thresholds and supply 12 sessions and
+   the 300-clip audit. Formal release writing/loading remains disabled until all are present.
+3. `V6-TRAIN-AND-AUDIT`: checkpoint/release loaders and recomputed raw evidence gates are
+   implemented. Train/save the real checkpoint, then provide session-isolated 180/60/60
+   tracking evidence and the two-reviewer 200-clip temporal audit. Current advice remains
+   all-`ABSTAIN` because no valid V5 release can exist yet.
 4. V7 has no remaining frozen acceptance blocker. Further RichArena changes require a new
    versioned ruleset, new data, and a fresh acceptance run rather than changing this result.
 

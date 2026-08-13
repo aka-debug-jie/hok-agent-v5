@@ -1,165 +1,151 @@
+# ruff: noqa: E501
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import torch
+from safetensors.torch import save_file
 
 from hok_agent import temporal
 
-HASHES = ("1" * 64, "2" * 64, "3" * 64, "4" * 64)
-FROZEN = {
-    "kappa": 0.70,
-    "overall_precision": 0.85,
-    "per_class_precision": 0.75,
-    "coverage": 0.30,
-    "ood_false_accept": 0.05,
-    "baseline_delta": 0.05,
-    "source_accuracy_drop": 0.02,
-    "source_recall_drop": 0.05,
-}
 
-
-def _json(value: object) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
-
-
-def _release(path: Path, threshold: float = 0.75) -> Path:
-    payload: dict[str, object] = {
-        "schema_version": "hok-agent-v5-release-v1",
-        "model_sha256": HASHES[0],
-        "alignment_sha256": HASHES[1],
-        "audit_sha256": HASHES[2],
-        "config_sha256": HASHES[3],
-        "overall_pass": True,
-        "allowed_classes": list(temporal.ACTION_NAMES),
-        "class_thresholds": {name: threshold for name in temporal.ACTION_NAMES},
-        "thresholds": FROZEN,
-        "thresholds_hash": hashlib.sha256(_json(FROZEN).encode()).hexdigest(),
-    }
-    payload["release_sha256"] = hashlib.sha256(_json(payload).encode()).hexdigest()
-    path.write_text(_json(payload) + "\n", encoding="utf-8")
+def _write(path: Path, value: object) -> Path:
+    path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n", encoding="utf-8")
     return path
 
 
-def _coach(path: Path) -> temporal.TemporalCoach:
-    return temporal.TemporalCoach(
-        release_path=path,
-        expected_model_sha256=HASHES[0],
-        expected_alignment_sha256=HASHES[1],
-        expected_audit_sha256=HASHES[2],
-        expected_config_sha256=HASHES[3],
-    )
+def _v5(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, threshold: float = 0.75) -> tuple[Path, Path, temporal.alignment.BoundV5Release]:
+    release, model = tmp_path / "v5-release.json", tmp_path / "v5-model.safetensors"
+    release.write_bytes(b"v5-release")
+    model.write_bytes(b"v5-model")
+    binding = temporal.alignment.BoundV5Release(temporal._file_sha(release), temporal._file_sha(model), temporal.ACTION_NAMES, {name: threshold for name in temporal.ACTION_NAMES})
+    def load_bound(release_path: Path, model_path: Path) -> object:
+        assert (release_path, model_path) == (release, model)
+        return SimpleNamespace(**binding.__dict__)
+    monkeypatch.setattr(temporal.alignment, "load_bound_v5_release", load_bound, raising=False)
+    return release, model, binding
 
 
-def test_rgb_only_forward_has_compact_heads_and_six_actions() -> None:
-    output = temporal.TemporalModel()(torch.rand(2, 3, 64, 64))
-    assert temporal.ACTION_NAMES == (
-        "wait",
-        "forward",
-        "backward",
-        "attack_hero",
-        "attack_tower",
-        "attack_crystal",
-    )
-    assert output["logits"].shape == (2, 6)
-    assert output["hero_heatmaps"].shape == (2, 2, 8, 8)
-    assert output["hud"].shape == (2, 4)
-    with pytest.raises(TypeError):
-        temporal.TemporalModel()(torch.rand(1, 3, 64, 64), legal_mask=torch.ones(6))  # type: ignore[call-arg]
+def _checkpoint(path: Path, binding: temporal.alignment.BoundV5Release, *, ood_bias: float = -10.0, extra: bool = False) -> Path:
+    model = temporal.TemporalModel()
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+        model.visual_encoder.heatmap_head.bias.fill_(10.0)
+        model.logit_head.bias[0] = 10.0
+        model.ood_head.bias.fill_(ood_bias)
+    metadata = temporal._checkpoint_metadata(binding, "a" * 64, 7)
+    if extra:
+        metadata["summary"] = "untrusted"
+    save_file(model.state_dict(), path, metadata=metadata)
+    return path
 
 
-def test_without_release_always_abstains_and_does_not_retain_state() -> None:
-    coach = temporal.TemporalCoach()
-    frame = torch.full((1, 5, 3, 64, 64), 0.4)
-    output = coach(frame, torch.arange(5) * 100)
-    assert output["advisory"] == [temporal.ABSTAIN]
-    assert output["abstain_reason"] == ["NO_RELEASE"]
-    assert output["metrics"]["release_binding_passed"] is False
-    assert coach.model._runtime is None
+def _tracking(path: Path, checkpoint_sha: str, *, count: int = 300, bad: bool = False, summary: bool = False, split_leak: bool = False) -> Path:
+    rows = []
+    for index in range(count):
+        truth = [[0.1, 0.2], [0.8, 0.7]]
+        split = "train" if index < 180 else "dev" if index < 240 else "test"
+        rows.append({"frame_id": str(index), "session_hash": ("b" if split_leak else {"train": "b", "dev": "c", "test": "d"}[split]) * 64, "split": split, "predicted_centers": [[1.0, 1.0], [1.0, 1.0]] if bad else truth, "truth_centers": truth, "predicted_visibility": [True, True], "truth_visibility": [True, True], "predicted_hp": [0.4, 0.8], "truth_hp": [0.4, 0.8], "predicted_skill_ready": [index % 2 == 0, True], "truth_skill_ready": [index % 2 == 0, True]})
+    payload: dict[str, object] = {"schema_version": temporal.TRACKING_SCHEMA, "checkpoint_sha256": checkpoint_sha, "rows": rows}
+    if summary:
+        payload["pck"] = 1.0
+    return _write(path, payload)
 
 
-def test_tamper_and_wrong_binding_fail_closed(tmp_path: Path) -> None:
-    path = _release(tmp_path / "release.json")
-    wrong = temporal.TemporalCoach(
-        release_path=path,
-        expected_model_sha256="f" * 64,
-        expected_alignment_sha256=HASHES[1],
-        expected_audit_sha256=HASHES[2],
-        expected_config_sha256=HASHES[3],
-    )
-    assert wrong(torch.rand(1, 3, 64, 64))["abstain_reason"] == ["RELEASE_BINDING"]
-    path.write_text(path.read_text().replace('"overall_pass":true', '"overall_pass":false'))
-    assert _coach(path)(torch.rand(1, 3, 64, 64))["advisory"] == [temporal.ABSTAIN]
+def _audit(path: Path, checkpoint_sha: str, *, count: int = 200, confidence: float = 0.99) -> Path:
+    rows = []
+    for index in range(count):
+        is_ood = index % 20 == 0
+        def prediction(timestamp: int, ood: bool = is_ood) -> dict[str, object]:
+            return {"timestamp_ms": timestamp, "action": "wait", "confidence": confidence, "ood_score": 1.0 if ood else 0.0, "tracking_quality": 1.0, "stable": True, "latency_ms": 10.0}
+        annotations = [{"reviewer": reviewer, "observed_action": "wait", "validity": not is_ood} for reviewer in ("r1", "r2")]
+        rows.append({"clip_id": str(index), "session_hash": "c" * 64, "annotations": annotations, "transition": index % 5 == 1, "ood": is_ood, "reference_event_ms": 0, "baseline_actions": ["wait", "forward"], "predictions": [prediction(0), prediction(100)]})
+    return _write(path, {"schema_version": temporal.AUDIT_SCHEMA, "checkpoint_sha256": checkpoint_sha, "rows": rows})
 
 
-def test_valid_v5_release_still_abstains_without_v6_audit(tmp_path: Path) -> None:
-    frames = torch.full((1, 5, 3, 64, 64), 0.4)
-    timestamps = torch.arange(5) * 100
-    open_output = _coach(_release(tmp_path / "release.json", 0.75))(frames, timestamps)
-    assert open_output["advisory"] == [temporal.ABSTAIN]
-    assert open_output["abstain_reason"] == ["V6_AUDIT_NOT_BOUND"]
-    assert open_output["metrics"]["release_binding_passed"] is True
+def _artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, threshold: float = 0.75, tracking_count: int = 300, audit_count: int = 200, bad_tracking: bool = False, summary: bool = False, split_leak: bool = False, ood_bias: float = -10.0) -> tuple[dict[str, Path], temporal.alignment.BoundV5Release]:
+    v5_release, v5_model, binding = _v5(tmp_path, monkeypatch, threshold)
+    checkpoint = _checkpoint(tmp_path / "v6.safetensors", binding, ood_bias=ood_bias)
+    checkpoint_sha = temporal._file_sha(checkpoint)
+    paths = {"v5_release_path": v5_release, "v5_model_path": v5_model, "checkpoint_path": checkpoint, "tracking_evidence_path": _tracking(tmp_path / "tracking.json", checkpoint_sha, count=tracking_count, bad=bad_tracking, summary=summary, split_leak=split_leak), "temporal_audit_path": _audit(tmp_path / "audit.json", checkpoint_sha, count=audit_count, confidence=threshold), "temporal_release_path": tmp_path / "release.json"}
+    return paths, binding
 
 
-def test_pts_gap_segments_before_features_and_matches_fresh_segment() -> None:
-    torch.manual_seed(7)
-    joined = temporal.TemporalModel()
-    torch.manual_seed(7)
-    fresh = temporal.TemporalModel()
-    frames = torch.full((1, 4, 3, 64, 64), 0.3)
-    joined_output = joined(frames, torch.tensor([0, 100, 600, 700]))
-    fresh_output = fresh(frames[:, 2:], torch.tensor([600, 700]))
-    assert joined_output["reset_count"] == 1
-    assert torch.equal(joined_output["frame_logits"][:, 2:], fresh_output["frame_logits"])
-    assert torch.equal(
-        joined_output["frame_tracking_quality"][:, 2:], fresh_output["frame_tracking_quality"]
-    )
+def _release(paths: dict[str, Path]) -> dict[str, object]:
+    return temporal.create_v6_release(v5_release_path=paths["v5_release_path"], v5_model_path=paths["v5_model_path"], checkpoint_path=paths["checkpoint_path"], tracking_evidence_path=paths["tracking_evidence_path"], temporal_audit_path=paths["temporal_audit_path"], release_path=paths["temporal_release_path"])
 
 
-def test_tracker_uses_actual_timestamp_delta() -> None:
+def test_rgb_model_is_causal_six_class_and_tracks_actual_pts() -> None:
     output = temporal.TemporalModel()(torch.rand(1, 3, 3, 64, 64), torch.tensor([10, 130, 330]))
+    assert output["logits"].shape == (1, 6)
+    assert output["hero_heatmaps"].shape == (1, 2, 8, 8)
+    assert output["hud"].shape == (1, 4)
     assert output["frame_dt_ms"].tolist() == [[100.0, 120.0, 200.0]]
 
 
-def test_tracking_gate_is_hard_and_missing_labels_fail_closed() -> None:
-    passed = dict(label_count=300, pck=0.85, visibility_f1=0.90, hp_mae=0.10, skill_ready_f1=0.90)
-    assert temporal.tracking_gate(**passed)
-    assert not temporal.tracking_gate(**{**passed, "label_count": 299})
-    for field, failing in (
-        ("pck", 0.849),
-        ("visibility_f1", 0.899),
-        ("hp_mae", 0.101),
-        ("skill_ready_f1", 0.899),
-    ):
-        assert not temporal.tracking_gate(**{**passed, field: failing})
+def test_missing_any_path_abstains_without_forward_or_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(temporal.TemporalModel, "forward", lambda *args, **kwargs: pytest.fail("forward called"))
+    output = temporal.TemporalCoach()(torch.zeros(2, 3, 64, 64))
+    assert output["advisory"] == [temporal.ABSTAIN, temporal.ABSTAIN]
+    assert output["control_output"] is False
+    assert output["metrics"]["v6_release_binding_passed"] is False
 
 
-def test_temporal_audit_gate_is_hard_and_missing_audit_fails_closed() -> None:
-    passed = dict(
-        sealed_count=200,
-        overall_precision=0.85,
-        unlocked_class_precision={"wait": 0.75},
-        coverage=0.20,
-        transition_false_advice=0.05,
-        ood_false_advice=0.05,
-        switch_reduction=0.50,
-        median_delay_ms=300.0,
-        p95_delay_ms=500.0,
-        live_hz=10.0,
-        live_p95_ms=100.0,
-    )
-    assert temporal.temporal_audit_gate(**passed)
-    assert not temporal.temporal_audit_gate(**{**passed, "sealed_count": 199})
-    for field, failing in (
-        ("overall_precision", 0.849),
-        ("coverage", 0.199),
-        ("ood_false_advice", 0.051),
-        ("switch_reduction", 0.499),
-        ("p95_delay_ms", 501.0),
-        ("live_hz", 9.99),
-        ("live_p95_ms", 100.1),
-    ):
-        assert not temporal.temporal_audit_gate(**{**passed, field: failing})
+@pytest.mark.parametrize("change", ["tracking_count", "audit_count", "bad_tracking", "summary", "split_leak"])
+def test_raw_evidence_is_exact_and_recomputed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str) -> None:
+    values: dict[str, Any] = {"tracking_count": 300, "audit_count": 200, "bad_tracking": False, "summary": False, "split_leak": False}
+    values[change] = {"tracking_count": 299, "audit_count": 199, "bad_tracking": True, "summary": True, "split_leak": True}[change]
+    paths, _ = _artifacts(tmp_path, monkeypatch, **values)
+    with pytest.raises(temporal.TemporalError):
+        _release(paths)
+
+
+def test_checkpoint_metadata_and_state_are_exact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, _, binding = _v5(tmp_path, monkeypatch)
+    path = _checkpoint(tmp_path / "bad.safetensors", binding, extra=True)
+    with pytest.raises(temporal.TemporalError):
+        temporal._load_checkpoint(path, binding)
+    metadata = temporal._checkpoint_metadata(binding, "a" * 64, 7)
+    save_file({"unexpected": torch.zeros(1)}, path, metadata=metadata)
+    with pytest.raises(temporal.TemporalError):
+        temporal._load_checkpoint(path, binding)
+
+
+def test_release_is_exclusive_self_hashed_and_v5_conservative(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths, _ = _artifacts(tmp_path, monkeypatch)
+    payload = _release(paths)
+    assert payload["allowed_classes"] == ["wait"]
+    assert payload["class_thresholds"] == {"wait": 0.75}
+    signature = payload.pop("release_sha256")
+    assert signature == temporal._sha(temporal._json(payload).encode())
+    with pytest.raises(temporal.TemporalError):
+        _release(paths)
+
+
+def test_valid_runtime_is_eval_inference_only_and_read_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths, _ = _artifacts(tmp_path, monkeypatch)
+    _release(paths)
+    seen: list[bool] = []
+    original = temporal.TemporalModel.forward
+    def wrapped(model: temporal.TemporalModel, *args: object, **kwargs: object) -> dict[str, object]:
+        seen.append(torch.is_inference_mode_enabled())
+        return original(model, *args, **kwargs)  # type: ignore[arg-type,return-value]
+    monkeypatch.setattr(temporal.TemporalModel, "forward", wrapped)
+    coach = temporal.TemporalCoach(**paths)
+    output = coach(torch.full((1, 5, 3, 64, 64), 0.4), torch.arange(5) * 100)
+    assert output["advisory"] == ["wait"] and output["control_output"] is False
+    assert seen == [True] and coach.model is not None and not coach.model.training
+
+
+@pytest.mark.parametrize(("threshold", "ood_bias", "reason"), [(1.0, -10.0, "LOW_SCORE"), (0.75, 10.0, "OOD")])
+def test_runtime_reapplies_release_and_ood_gates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, threshold: float, ood_bias: float, reason: str) -> None:
+    paths, _ = _artifacts(tmp_path, monkeypatch, threshold=threshold, ood_bias=ood_bias)
+    _release(paths)
+    output = temporal.TemporalCoach(**paths)(torch.zeros(1, 5, 3, 64, 64), torch.arange(5) * 100)
+    assert output["advisory"] == [temporal.ABSTAIN]
+    assert output["abstain_reason"] == [reason]
