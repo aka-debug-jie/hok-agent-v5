@@ -1,8 +1,8 @@
 # Delivery Progress
 
 - Last update: 2026-08-13
-- Current task: `V4-V6-PRE-DATA-CLOSURE`
-- Status: `PRE_DATA_PATH_CLOSURE_COMPLETE`
+- Current task: `V5-REAL-DATA-PRE_INGEST`
+- Status: `CANDIDATE_INVENTORY_COMPLETE_FORMAL_INGEST_BLOCKED`
 - Product Actor input: `RGB_ONLY`
 - Closed-loop environment: `PIXELARENA_ONLY`
 - Commercial-client action output: `false`
@@ -30,12 +30,13 @@ commercial recording, capture card, or live device.
 | stage | implementation | formal external gate | current disposition |
 |---|---|---|---|
 | V4 live Shadow | `FRAMEWORK_IMPLEMENTED` | 10-minute 1080p60 UVC / 10 Hz run | `READY_FOR_HARDWARE` |
-| V5 Visual Alignment | `PATH_BOUND_NON_PROMOTING_FRAMEWORK_IMPLEMENTED` | source producer/thresholds + 12 sessions + 300-clip sealed audit | `WAITING_SOURCE_THRESHOLDS_AND_DATA` |
+| V5 Visual Alignment | `PATH_BOUND_NON_PROMOTING_FRAMEWORK_IMPLEMENTED` | source producer/thresholds + 12 sessions + 300-clip sealed audit | `DATA_CANDIDATES_FOUND_WAITING_SOURCE_THRESHOLDS_AND_CURATION` |
 | V6 Temporal Coach | `PATH_BOUND_FAIL_CLOSED_FRAMEWORK_IMPLEMENTED` | valid V5 release + V6 checkpoint + 300 tracking frames + 200-clip audit | `WAITING_V5_AND_DATA` |
 | V7 Rich PixelArena V2 | `COMPLETE` | three-seed CUDA classification/closed-loop/replay/latency | `FORMAL_PASSED` |
 
-The missing capture node, recordings, and labels do not block contracts, simulated-source
-tests, CPU smokes, annotation tooling, or Rich PixelArena. They do block any live throughput,
+The missing capture node and labels do not block contracts, simulated-source tests, CPU
+smokes, annotation tooling, or Rich PixelArena. Read-only raw recording candidates now exist,
+but privacy/session/overlap curation is incomplete. These gaps still block any live throughput,
 real-domain precision, class release, tracking accuracy, or commercial-video advice claim.
 
 ## Frozen acceptance gates
@@ -133,8 +134,20 @@ fresh-process exact replay/tamper rejection, and RTX 4090 forward p95 at most 10
   `LD_LIBRARY_PATH` unset and the pinned project Torch 2.5.1 environment passed.
 - No `/dev/video*` was visible at planning time; this is not evidence about future host
   capture-card availability. No live V4 run was attempted.
-- No real recording manifest, sealed action audit, or tracking-label set has been supplied.
-  No V5/V6 real-domain accuracy or advice class is released.
+- No formal real-recording manifest, sealed action audit, or tracking-label set has been
+  supplied. No V5/V6 real-domain accuracy or advice class is released.
+- 2026-08-13 read-only E-drive pre-ingest audited 149/149 MP4 containers successfully:
+  134,678.097 seconds (37 h 24 min 38 s), all H.264, with 78 AAC-audio and 71 silent files.
+  Anonymous full-content review confirmed two exact duplicate pairs. Logical organization
+  retains 145 canonical videos of at least five minutes (37.03 h), reserves two short videos,
+  excludes two redundant copies and one promotional JPG, and leaves every split unassigned.
+  Five samples per video decoded 745/745 with no black sample; 27 visually reviewed samples
+  confirmed gameplay and visible UI/name privacy risk. The Git-ignored evidence is
+  `runs/wzry-data-audit-20260813-v1`; `SHA256SUMS` hashes to
+  `f43f6628644007c09a64a17c3d8147fe45a9ef382e908f8735ceed9acded7a29`.
+  Raw files were not changed, copied into Git, or persisted by path. This is not a formal V5
+  manifest: partial overlap/re-encode grouping, privacy masking, independent-session proof,
+  and source-rights documentation remain unresolved.
 - 2026-08-13 pre-data closure replaced bare in-memory V5 promotion inputs with strict
   regular-file manifest/source/target/pseudo/model/ledger/audit loading, persisted the single
   Mean Teacher EMA model, and fixed formal V5 release creation and loading closed while
@@ -154,8 +167,10 @@ fresh-process exact replay/tamper rejection, and RTX 4090 forward p95 at most 10
 2. `V5-SOURCE-AND-DATA`: the strict path chain and final EMA persistence are implemented.
    A compact independent causal-source producer still needs 165–205 lines, but the frozen
    9,000-line gate has only single-digit capacity; first replace/compact existing code rather
-   than relaxing the gate. Then freeze numeric collapse thresholds and supply 12 sessions and
-   the 300-clip audit. Formal release writing/loading remains disabled until all are present.
+   than relaxing the gate. Then freeze numeric collapse thresholds, curate at least 12
+   independent connected components from the audited candidates, create privacy-masked
+   shards, and supply the 300-clip audit. Formal release writing/loading remains disabled
+   until all are present.
 3. `V6-TRAIN-AND-AUDIT`: checkpoint/release loaders and recomputed raw evidence gates are
    implemented. Train/save the real checkpoint, then provide session-isolated 180/60/60
    tracking evidence and the two-reviewer 200-clip temporal audit. Current advice remains
