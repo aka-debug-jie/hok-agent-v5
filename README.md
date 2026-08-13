@@ -51,12 +51,29 @@ directories. They fail closed until the required 12 sessions, sealed audit, and 
 labels exist. V7 has an independent CPU smoke and a separate CUDA acceptance command; it
 never changes the six-class Shadow vocabulary.
 
+Large training storage defaults to `/media/hgdl1012/E/wzry-data/hok-agent-v5` and can be
+overridden without code changes:
+
+```bash
+make storage-show
+make storage-preflight
+make storage-init
+# Optional: make WZRY_DATA_ROOT=/another/local/disk/wzry-data storage-init
+```
+
+The external tree contains `datasets/`, `checkpoints/`, `runs/`, `cache/`, `audit/`, and
+`staging/`. New derived NPZ shards, training datasets, checkpoints, caches, annotation media,
+and formal run directories go there. Raw recordings remain in their existing E-drive folder;
+manifests store only anonymous hashes and artifact basenames. Existing frozen local `runs/`
+evidence is not moved automatically. `storage-preflight` fails if the selected filesystem is
+not mounted read-write; `storage-init` never remounts a disk or changes permissions.
+
 ```bash
 make shadow-live-smoke
 make alignment-smoke
 make temporal-smoke
 make rich-smoke
-make accept-v7  # formal RTX 4090 gate; never run in CI
+make accept-v7  # formal RTX 4090 gate; writes to HOK_RUNS_ROOT, never run in CI
 ```
 
 The current V5 code is deliberately non-promoting. It strictly reloads and cross-checks the

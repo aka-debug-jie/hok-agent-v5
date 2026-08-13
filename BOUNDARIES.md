@@ -34,6 +34,12 @@ stored only in Git-ignored, session-partitioned NPZ shards for V5/V6. Original r
 stay outside the repository. Persisted real-domain records must not contain paths, account
 identifiers, legal masks, rewards, structured state, truth, or privileged fields.
 
+New large derived datasets, caches, checkpoints, audit media, and formal training runs live
+under the external `HOK_LARGE_ROOT`; the default is
+`/media/hgdl1012/E/wzry-data/hok-agent-v5`. Manifests may contain only artifact basenames and
+anonymous hashes, never raw-video locators. Repository symlinks are not a substitute for
+strict regular-file loading. Existing frozen local run evidence is preserved in place.
+
 V3/V5/V6 Actors accept RGB tensors or RGB sequences only. Tracking values used by V6 must
 be produced internally from RGB. A caller cannot supply legal actions, structured state,
 teacher identity, reward, truth, account, or device state. PixelArena legal domains are

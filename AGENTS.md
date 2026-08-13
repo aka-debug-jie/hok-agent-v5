@@ -56,3 +56,9 @@
   relevant frozen regression gates, the stage CPU smoke, and `git diff --check`.
 - Never manufacture GPU, hardware, recording, annotation, or accuracy evidence. Missing UVC
   hardware is `READY_FOR_HARDWARE`; missing recordings/labels remain explicit external waits.
+- Put every new large dataset, derived frame shard, training cache, checkpoint, and formal
+  training run under `HOK_LARGE_ROOT` (default: `/media/hgdl1012/E/wzry-data/hok-agent-v5`).
+  Keep raw recordings in their existing external location, never duplicate them into the
+  repository, and never persist their source locators in manifests. Do not replace strict
+  regular-file inputs with repository symlinks. Existing hash-bound frozen `runs/` evidence
+  stays in place unless an explicit verified migration is separately authorized.

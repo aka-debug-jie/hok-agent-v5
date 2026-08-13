@@ -2,7 +2,7 @@
 
 - Last update: 2026-08-13
 - Current task: `V5-REAL-DATA-PRE_INGEST`
-- Status: `CANDIDATE_INVENTORY_COMPLETE_FORMAL_INGEST_BLOCKED`
+- Status: `CANDIDATE_INVENTORY_COMPLETE_STORAGE_ROUTED_WAITING_E_RW`
 - Product Actor input: `RGB_ONLY`
 - Closed-loop environment: `PIXELARENA_ONLY`
 - Commercial-client action output: `false`
@@ -148,6 +148,18 @@ fresh-process exact replay/tamper rejection, and RTX 4090 forward p95 at most 10
   Raw files were not changed, copied into Git, or persisted by path. This is not a formal V5
   manifest: partial overlap/re-encode grouping, privacy masking, independent-session proof,
   and source-rights documentation remain unresolved.
+- New large training storage is routed through `HOK_LARGE_ROOT`, defaulting to
+  `/media/hgdl1012/E/wzry-data/hok-agent-v5`, with dedicated datasets/checkpoints/runs/cache/
+  audit/staging directories and a fail-closed read-write mount preflight. At configuration
+  time `/dev/sda2` was actually mounted `fuseblk ro` despite an `rw` fstab entry, and a write
+  probe failed with `Read-only file system`. No directory was created and no frozen run was
+  moved. `make storage-show` resolved every large-output root under E; `make -n storage-init
+  accept-v3 accept-v7` preserved that routing; `make storage-preflight` failed as designed;
+  and the post-change `make check` passed Ruff, strict mypy, 83 tests, and the 40-file /
+  31-Python-file / 8,999-line size gate. `make accept pixel-smoke shadow-live-smoke
+  alignment-smoke temporal-smoke rich-smoke` also passed; these were CPU/fail-closed
+  regressions and did not create GPU or hardware evidence. Run `make storage-init` only after
+  the host remounts E read-write.
 - 2026-08-13 pre-data closure replaced bare in-memory V5 promotion inputs with strict
   regular-file manifest/source/target/pseudo/model/ledger/audit loading, persisted the single
   Mean Teacher EMA model, and fixed formal V5 release creation and loading closed while
