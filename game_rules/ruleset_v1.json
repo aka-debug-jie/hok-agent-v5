@@ -1,0 +1,73 @@
+{
+  "schema_version": "hok-agent-game-ruleset-v1",
+  "identity": "standard-5v5-minimal-v1",
+  "scope": "standard_5v5_match_abstraction",
+  "hard_facts": [
+    {
+      "id": "WIN_CRYSTAL_DESTROYED",
+      "statement": "摧毁敌方水晶是正常对局的最终胜利条件。"
+    },
+    {
+      "id": "DEAD_CANNOT_ACT",
+      "statement": "英雄死亡期间不能执行正常移动、攻击或技能动作。"
+    },
+    {
+      "id": "RESPAWN_RETURNS_TO_BASE",
+      "statement": "复活后英雄从己方基地重新进入可行动状态。"
+    },
+    {
+      "id": "LANES_ADVANCE_AUTOMATICALLY",
+      "statement": "三路兵线周期性生成并自动向敌方基地推进。"
+    },
+    {
+      "id": "MINIONS_ENABLE_STRUCTURE_PRESSURE",
+      "statement": "己方兵线进入建筑区域是安全有效推进的重要条件。"
+    },
+    {
+      "id": "TOWERS_ARE_PERSISTENT_OBJECTIVES",
+      "statement": "防御塔被摧毁后形成持续的地图推进优势。"
+    },
+    {
+      "id": "FOG_OF_WAR_EXISTS",
+      "statement": "未显示的敌方单位位置未知，不能解释为单位不存在。"
+    },
+    {
+      "id": "MATCH_POWER_IS_EPISODIC",
+      "statement": "等级、金币和装备属于当前对局内部的成长状态。"
+    }
+  ],
+  "versioned_priors": [
+    {
+      "id": "EARLY_OBJECTIVE_WINDOW",
+      "value": "approximately_4_minutes",
+      "use": "context_feature_only",
+      "verification": "required_before_formal_use"
+    },
+    {
+      "id": "SHADOW_OBJECTIVE_WINDOW",
+      "value": "approximately_10_minutes",
+      "use": "context_feature_only",
+      "verification": "required_before_formal_use"
+    },
+    {
+      "id": "LATE_GAME_OBJECTIVE_WINDOW",
+      "value": "approximately_20_minutes",
+      "use": "context_feature_only",
+      "verification": "required_before_formal_use"
+    },
+    {
+      "id": "EARLY_TOWER_PROTECTION",
+      "value": "stronger_early_than_late",
+      "use": "risk_prior_only",
+      "verification": "required_before_formal_use"
+    }
+  ],
+  "non_goals": [
+    "hard_code_complete_strategy",
+    "encode_hero_specific_combos",
+    "freeze_patch_specific_numeric_damage",
+    "supply_privileged_game_state_to_rgb_actor",
+    "authorize_device_control",
+    "claim_tactical_optimality"
+  ]
+}

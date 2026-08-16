@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  compact-pixel-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[dev,bc,vision,shadow]'
+      - run: make check
+      - run: make accept
+      - run: make accept-v2
+      - run: make pixel-smoke
+      - run: make shadow-live-smoke
+      - run: make alignment-smoke
+      - run: make temporal-smoke
+      - run: make rich-smoke

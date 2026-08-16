@@ -1,0 +1,18 @@
+{
+  "identity": "pixelarena-structured-1v1-v1",
+  "ruleset": "abstract-lane-v1",
+  "lane_min": 0,
+  "lane_max": 10,
+  "blue_start": 2,
+  "red_start": 8,
+  "blue_tower": 1,
+  "red_tower": 9,
+  "blue_crystal": 0,
+  "red_crystal": 10,
+  "hero_health": 6,
+  "tower_health": 4,
+  "crystal_health": 6,
+  "basic_damage": 2,
+  "attack_range": 1,
+  "max_ticks": 32
+}

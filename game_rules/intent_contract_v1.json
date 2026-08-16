@@ -1,0 +1,50 @@
+{
+  "schema_version": "hok-agent-game-intent-contract-v1",
+  "decision_layer": "learned_high_level_intent",
+  "recommended_horizon_seconds": [1.0, 5.0],
+  "intents": [
+    {
+      "id": "ABSTAIN",
+      "description": "信息不足或状态未知时不提出战术动作。"
+    },
+    {
+      "id": "ADVANCE",
+      "description": "沿当前安全路线向前获得空间。"
+    },
+    {
+      "id": "CLEAR_WAVE",
+      "description": "处理可见敌方兵线。"
+    },
+    {
+      "id": "ENGAGE_HERO",
+      "description": "对可见敌方英雄进行局部战斗。"
+    },
+    {
+      "id": "DISENGAGE",
+      "description": "降低接战程度并离开高风险区域。"
+    },
+    {
+      "id": "PUSH_STRUCTURE",
+      "description": "在有推进条件时攻击可见敌方建筑。"
+    },
+    {
+      "id": "DEFEND_STRUCTURE",
+      "description": "处理威胁己方建筑或基地的可见单位。"
+    },
+    {
+      "id": "CONTEST_OBJECTIVE",
+      "description": "围绕可见或可信时间先验中的大型资源行动。"
+    },
+    {
+      "id": "RECALL",
+      "description": "在允许且相对安全时返回基地补给。"
+    }
+  ],
+  "selection": {
+    "model_learned": true,
+    "hard_priority_order": false,
+    "confidence_required": true,
+    "fallback": "ABSTAIN"
+  },
+  "low_level_policy_note": "Intent conditions a learned action policy; it does not map directly to a fixed tap sequence."
+}

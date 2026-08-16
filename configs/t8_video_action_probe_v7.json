@@ -1,0 +1,11 @@
+{
+  "schema_version": "hok-agent-t8-video-action-probe-config-v7",
+  "base_config": "t8_video_action_probe_v6.json",
+  "coverage_scope": "per_split",
+  "minimum_session_fraction_per_combat_class": 0.5,
+  "minimum_train_events_per_combat_class": 50,
+  "minimum_dev_events_per_combat_class": 10,
+  "maximum_ambiguous_group_fraction": 0.1,
+  "visual_review_samples_per_split_class": 4,
+  "promotion_allowed": false
+}

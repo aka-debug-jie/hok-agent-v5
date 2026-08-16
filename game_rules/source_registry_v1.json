@@ -1,0 +1,62 @@
+{
+  "schema_version": "hok-agent-game-rule-sources-v1",
+  "captured_on": "2026-08-16",
+  "provenance": "operator_provided_rule_summary",
+  "independently_verified_in_this_change": false,
+  "usage_policy": {
+    "stable_cross_version_facts": "may_enter_hard_facts_after_review",
+    "patch_specific_values": "context_only_until_reverified",
+    "secondary_sources": "supporting_context_only"
+  },
+  "sources": [
+    {
+      "id": "official_s44",
+      "publisher": "王者荣耀官网",
+      "url": "https://pvp.qq.com/web201706/newsdetail.shtml?tid=802692",
+      "role": "patch_context",
+      "status": "operator_provided_unverified"
+    },
+    {
+      "id": "official_map_beginner",
+      "publisher": "王者荣耀官网",
+      "url": "https://pvp.qq.com/web201605/newsDetail.shtml?tid=487704",
+      "role": "map_and_win_condition",
+      "status": "operator_provided_unverified"
+    },
+    {
+      "id": "official_basic_rules",
+      "publisher": "王者荣耀官网",
+      "url": "https://pvp.qq.com/webplat/info/news_version3/15592/18024/18031/18032/m13041/201606/478636.shtml",
+      "role": "basic_map_resources",
+      "status": "operator_provided_unverified"
+    },
+    {
+      "id": "official_economy",
+      "publisher": "王者荣耀官网",
+      "url": "https://pvp.qq.com/web201706/newsdetail.shtml?tid=579048",
+      "role": "lane_economy",
+      "status": "operator_provided_unverified"
+    },
+    {
+      "id": "official_tower_protection",
+      "publisher": "王者荣耀官网",
+      "url": "https://pvp.qq.com/web202311m/newsdetail/?id=797710&type=news",
+      "role": "versioned_tower_protection",
+      "status": "operator_provided_unverified"
+    },
+    {
+      "id": "official_objectives",
+      "publisher": "王者荣耀官网",
+      "url": "https://pvp.qq.com/web201605/newsDetail.shtml?tid=589911",
+      "role": "objective_timing_context",
+      "status": "operator_provided_unverified"
+    },
+    {
+      "id": "official_vision",
+      "publisher": "王者荣耀官网",
+      "url": "https://pvp.qq.com/web201605/newsDetail.shtml?tid=564523",
+      "role": "vision_and_brush_context",
+      "status": "operator_provided_unverified"
+    }
+  ]
+}

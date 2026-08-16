@@ -1,0 +1,12 @@
+{
+  "schema_version": "hok-agent-t8-video-combat-dataset-config-v2",
+  "probe_config": "t8_video_action_probe_v7.json",
+  "causal_window_frames": 16,
+  "event_frame_included": false,
+  "observation_end_lag_ms": 100,
+  "sample_hz": 10,
+  "allowed_splits": ["train", "dev"],
+  "label_scope": "combat_only",
+  "training_allowed": false,
+  "promotion_allowed": false
+}
