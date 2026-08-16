@@ -14,11 +14,13 @@
 
 - `ruleset_v1.json`：稳定硬事实、版本先验及明确非目标。
 - `observation_contract_v1.json`：允许模型从 RGB 推断的少量状态。
+- `observation_contract_v2.json`：T8-v4 使用的四状态候选视觉约定。
+- `candidate_action_contract_v1.json`：T8-v4 的候选动作派生约定。
 - `intent_contract_v1.json`：高层意图词表及建议决策周期。
 - `state_machine_v1.json`：最小对局阶段与意图约束，不规定具体连招。
 - `source_registry_v1.json`：规则来源和核验状态。
 
-推荐的信息流：
+以下信息流是远期架构，不是 T8-v4 已实现能力：
 
 ```text
 causal RGB
@@ -29,3 +31,17 @@ causal RGB
 ```
 
 `ABSTAIN` 是合法输出。任何低置信度、画面不完整或未知界面都不应由规则层猜测。
+
+T8-v4 当前采用更窄的只读路径（双教师弱监督、零人工标注）：
+
+```text
+causal RGB
+  -> four local visual-cue probabilities
+  -> quality/confidence/stability abstention
+  -> deterministic candidate-action rule
+  -> read-only event log
+```
+
+它只覆盖固定布局、固定技能槽语义的局部视觉线索，不实现本目录 v1 合同中的完整观察、
+高层意图或学习型低层动作策略。完整定义见
+[`docs/T8_V4_PROTOCOL.md`](../docs/T8_V4_PROTOCOL.md)。

@@ -26,6 +26,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 | T8-v1–v2.6 | Historical demonstration, causal-policy, Shadow, and bounded-probe evidence | Local evidence only |
 | T8-v2.7 | `FROZEN_FAILED` | No recollection, threshold changes, or four-class retraining |
 | T8-v3 | Video-state seed-0 pilot failed admission | No replay, Shadow, or device input |
+| T8-v4 | Zero-label contracts and offline implementation present; runtime evidence pending | Read-only Gates 0--2 only |
 
 ## T8-v2.7 freeze
 
@@ -65,6 +66,27 @@ replay correctly rejected the model and created no output. Five-minute read-only
 20-action probe, one-minute run, and five-minute run were not started. T8-v3 device input remains
 zero.
 
+## T8-v4 planned diagnostic lineage
+
+The optimized T8-v4 protocol is frozen in
+[`docs/T8_V4_PROTOCOL.md`](docs/T8_V4_PROTOCOL.md). It learns only
+`main_view_enemy_cue_visible`, `basic_attack_button_visual_enabled`,
+`skill1_button_visual_ready`, and `skill2_button_visual_ready` under one fixed layout and action
+schema. `attack_opportunity`, `target_attackable`, `safe_to_attack`, and skill3 are outside the
+first contract. `candidate_attack_opportunity` is deterministic and means only that minimum visual
+conditions for an offline candidate log are present.
+
+The first cycle uses two independent automatic teachers over the frozen 103 video-train and 23
+video-dev sessions. Only confident, mutually consistent, perturbation-stable outputs enter masked
+diagnostic loss; all other rows remain `uncertain`. No human labels or annotation interface are
+used. Seed 0 compares class prior, time-only,
+last-frame linear, pooled MLP, and the existing causal TCN, then applies gameplay/HUD masks and
+swaps plus temporal controls. Machine contracts and command implementations now exist locally;
+no source-teacher, pseudolabel, training, audit, or passing runtime gate is claimed yet.
+
+T8-v4 remains `control_output=false`. Offline replay, Shadow, and device input are blocked until
+their earlier gates pass under separately frozen evidence.
+
 ## Verification baseline
 
 The release gate is:
@@ -89,5 +111,6 @@ boundary findings, and no checked-in large-data or mobile-private artifacts.
 The project demonstrates reproducible RGB policy research in project-owned PixelArena and
 read-only/strictly bounded mobile-testbed infrastructure. It does not establish commercial-game
 skill, tactical optimality, general transfer, or authorization to control any third-party client.
-The next T8 descendant would require a new label/state contract; it must not be presented as a
-continuation of the failed v2.7 or v3 pilots by threshold relaxation.
+T8-v4 supplies the diagnostic protocol and offline implementation, but not passed runtime evidence.
+It is a separate lineage and must not be presented as a continuation of the failed v2.7 or v3
+pilots by threshold relaxation.

@@ -74,6 +74,12 @@ input admission.
   report is required before offline replay; a passing replay is required before five-minute
   zero-control Shadow; that Shadow is required before the 20-action, one-minute, and five-minute
   input stages. Failure at any gate prohibits all later stages and sends no fallback action.
+- T8-v4 is a new read-only lineage governed by `docs/T8_V4_PROTOCOL.md`. It learns four local
+  visual-cue heads under one fixed layout and action schema. Two independent automatic teachers
+  may produce confidence- and perturbation-gated pseudolabels from the frozen 103/23 train/dev
+  sessions. Accepted labels enter only the masked T8-v4 diagnostic loss; no human labels,
+  annotation UI, or video-test access are allowed. Derived candidate actions are offline logs with
+  `control_output=false`; replay, Shadow, and device input remain closed.
 - Offline synthetic training, unlabeled real-video representation learning, conservative
   pseudo-label research, one Mean Teacher round, and RGB-derived tracking/temporal diagnostics.
 - A future, separately authorized post-training phase may use owner gameplay-quality
@@ -151,10 +157,13 @@ V5/V6 base data, training, validation, model selection, and diagnostics contain 
 provided action, frame, HUD, tracking, or temporal labels. T8 may consume its own automatically
 recorded self-built-test-app dispatched actions or standardized observed touches as
 behavior-cloning targets, but it remains a
-separate dataset, model lineage, evaluation suite, and action boundary. The sole future human annotation is
-an owner judgment of which complete PixelArena game is better (or `TIE`/`UNJUDGEABLE`); it
-must be stored as a separate, versioned post-training preference artifact and is never an
-action target.
+  separate dataset, model lineage, evaluation suite, and action boundary. T8-v4 may additionally
+hold a separately versioned, path-free dual-teacher weak route producing three-value visual-cue
+outputs and frame-interpretability diagnostics. It is evaluation-only: it cannot train or tune a
+model, seed pseudo-labels, supervise an action, or release control. The other permitted human
+annotation is an owner judgment of which complete PixelArena game is better (or `TIE`/`UNJUDGEABLE`);
+it must be stored as a separate, versioned post-training preference artifact and is never an action
+target.
 It may train only a separately versioned offline descendant for PixelArena quality or read-only
 advice calibration.
 

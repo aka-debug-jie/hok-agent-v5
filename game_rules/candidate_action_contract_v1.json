@@ -1,0 +1,12 @@
+{
+  "schema_version": "hok-agent-t8-v4-candidate-action-contract-v1",
+  "candidate_actions": ["candidate_basic_attack", "candidate_skill1", "candidate_skill2", "none"],
+  "learned_actions": [],
+  "derivation": "enemy_cue_and_relevant_button_and_not_action_abstain",
+  "candidate_is_not_safe_valid_or_guaranteed": true,
+  "offline_log_only": true,
+  "control_output": false,
+  "promotion_allowed": false,
+  "device_input_allowed": false,
+  "candidate_action_sha256": "098eb4e556db3a3edb49083dec69d9e73fc873d8fcaffde97d271f8c29e93056"
+}

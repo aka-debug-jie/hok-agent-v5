@@ -292,9 +292,7 @@ def _parser() -> argparse.ArgumentParser:
     video_three_class_pilot.add_argument("--dataset-root", type=Path, required=True)
     video_three_class_pilot.add_argument("--adapter-checkpoint", type=Path, required=True)
     video_three_class_pilot.add_argument("--output-dir", type=Path, required=True)
-    video_three_class_pilot.add_argument(
-        "--device", choices=("cpu", "cuda"), default="cuda"
-    )
+    video_three_class_pilot.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     video_three_class_pilot.add_argument("--batch-size", type=int, default=64)
     video_three_class_pilot.add_argument("--retrospective", action="store_true")
     retrospective_roi = commands.add_parser(
@@ -496,6 +494,66 @@ def _parser() -> argparse.ArgumentParser:
     v3_replay.add_argument("--output-dir", type=Path, required=True)
     v3_replay.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     v3_replay.add_argument("--batch-size", type=int, default=256)
+    v4_contract = commands.add_parser(
+        "t8-v4-contract-check", help="verify the frozen zero-label T8-v4 contracts"
+    )
+    v4_source = commands.add_parser(
+        "t8-v4-source-teacher-train", help="train the independent PixelArena source teacher"
+    )
+    v4_source.add_argument("--adapter-checkpoint", type=Path, required=True)
+    v4_source.add_argument("--layout", type=Path, required=True)
+    v4_source.add_argument("--output-dir", type=Path, required=True)
+    v4_source.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    v4_source.add_argument("--batch-size", type=int, default=64)
+    v4_source.add_argument("--epochs", type=int, choices=(8,), default=8)
+    v4_materialize = commands.add_parser(
+        "t8-v4-pseudolabel-materialize", help="materialize dual-teacher consensus targets"
+    )
+    v4_materialize.add_argument("--feature-root", type=Path, required=True)
+    v4_materialize.add_argument("--target-root", type=Path, required=True)
+    v4_materialize.add_argument("--rule-teacher-report", type=Path, required=True)
+    v4_materialize.add_argument("--source-teacher-model", type=Path, required=True)
+    v4_materialize.add_argument("--source-teacher-report", type=Path, required=True)
+    v4_materialize.add_argument("--layout", type=Path, required=True)
+    v4_materialize.add_argument("--output-dir", type=Path, required=True)
+    v4_materialize.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    v4_materialize.add_argument("--batch-size", type=int, default=256)
+    v4_audit = commands.add_parser(
+        "t8-v4-weak-audit", help="audit anonymous T8-v4 consensus shards and coverage"
+    )
+    v4_audit.add_argument("--dataset-root", type=Path, required=True)
+    v4_audit.add_argument("--output", type=Path, required=True)
+    v4_diagnose = commands.add_parser(
+        "t8-v4-seed0-diagnose", help="run the frozen zero-label model ladder and controls"
+    )
+    v4_diagnose.add_argument("--dataset-root", type=Path, required=True)
+    v4_diagnose.add_argument("--target-root", type=Path, required=True)
+    v4_diagnose.add_argument("--adapter-checkpoint", type=Path, required=True)
+    v4_diagnose.add_argument("--weak-audit-report", type=Path, required=True)
+    v4_diagnose.add_argument("--output-dir", type=Path, required=True)
+    v4_diagnose.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    v4_diagnose.add_argument("--batch-size", type=int, default=256)
+    for command in (v4_contract, v4_source, v4_materialize, v4_audit, v4_diagnose):
+        command.add_argument(
+            "--observation-contract",
+            type=Path,
+            default=Path("game_rules/observation_contract_v2.json"),
+        )
+        command.add_argument(
+            "--candidate-contract",
+            type=Path,
+            default=Path("game_rules/candidate_action_contract_v1.json"),
+        )
+        command.add_argument(
+            "--weak-supervision-contract",
+            type=Path,
+            default=Path("configs/t8_v4_weak_supervision_v1.json"),
+        )
+        command.add_argument(
+            "--experiment-contract",
+            type=Path,
+            default=Path("configs/t8_v4_experiment_plan_v1.json"),
+        )
     t8_evaluate = commands.add_parser(
         "t8-evaluate-offline", help="run the sealed held-out evaluation for the selected T8 model"
     )
@@ -1036,9 +1094,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "t8-v2-live-freeze-split":
             from hok_agent.t8 import freeze_t8_v21_split
 
-            result = freeze_t8_v21_split(
-                dataset_root=args.dataset_root, output_path=args.output
-            )
+            result = freeze_t8_v21_split(dataset_root=args.dataset_root, output_path=args.output)
         elif args.command == "t8-v2-live-pilot-freeze":
             from hok_agent.t8 import freeze_t8_v21_pilot_split
 
@@ -1318,6 +1374,75 @@ def main(argv: Sequence[str] | None = None) -> int:
                 dataset_root=args.dataset_root,
                 model_path=args.model,
                 training_report=args.training_report,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-v4-contract-check":
+            from hok_agent.t8_v4 import verify_t8_v4_contracts
+
+            result = verify_t8_v4_contracts(
+                observation_contract=args.observation_contract,
+                candidate_contract=args.candidate_contract,
+                weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
+            )
+        elif args.command == "t8-v4-source-teacher-train":
+            from hok_agent.t8_v4 import train_t8_v4_source_teacher
+
+            result = train_t8_v4_source_teacher(
+                adapter_checkpoint=args.adapter_checkpoint,
+                layout_path=args.layout,
+                observation_contract=args.observation_contract,
+                candidate_contract=args.candidate_contract,
+                weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+                epochs=args.epochs,
+            )
+        elif args.command == "t8-v4-pseudolabel-materialize":
+            from hok_agent.t8_v4 import materialize_t8_v4_pseudolabels
+
+            result = materialize_t8_v4_pseudolabels(
+                feature_root=args.feature_root,
+                target_root=args.target_root,
+                rule_teacher_report=args.rule_teacher_report,
+                source_teacher_model=args.source_teacher_model,
+                source_teacher_report=args.source_teacher_report,
+                layout_path=args.layout,
+                observation_contract=args.observation_contract,
+                candidate_contract=args.candidate_contract,
+                weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-v4-weak-audit":
+            from hok_agent.t8_v4 import audit_t8_v4_weak_supervision
+
+            result = audit_t8_v4_weak_supervision(
+                dataset_root=args.dataset_root,
+                observation_contract=args.observation_contract,
+                candidate_contract=args.candidate_contract,
+                weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
+                output_path=args.output,
+            )
+        elif args.command == "t8-v4-seed0-diagnose":
+            from hok_agent.t8_v4 import diagnose_t8_v4_seed0
+
+            result = diagnose_t8_v4_seed0(
+                dataset_root=args.dataset_root,
+                target_root=args.target_root,
+                adapter_checkpoint=args.adapter_checkpoint,
+                weak_audit_report=args.weak_audit_report,
+                observation_contract=args.observation_contract,
+                candidate_contract=args.candidate_contract,
+                weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
                 output_dir=args.output_dir,
                 device=args.device,
                 batch_size=args.batch_size,

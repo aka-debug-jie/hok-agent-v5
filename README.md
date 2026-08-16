@@ -168,11 +168,19 @@ positive recall was `0.314075`, normal-minus-shuffled margin was `0.023275`, and
 coverage was `0.039481`. Offline replay rejected the model; video-test, live Shadow, and all T8-v3
 device stages remained unopened. These results are failure evidence, not a released policy.
 
+T8-v4 is the planned read-only diagnostic successor. It narrows the task to four local visual
+cues under one fixed layout and action schema, uses a zero-human dual-teacher weak-supervision
+route, and compares class/time priors, static features, pooled temporal features, and the existing
+causal TCN under spatial and temporal shortcut interventions. Labels never enter training.
+Candidate actions remain offline logs with `control_output=false`. See
+[docs/T8_V4_PROTOCOL.md](docs/T8_V4_PROTOCOL.md).
+
 ## Project documents
 
 - [AGENTS.md](AGENTS.md): implementation authority and module constraints.
 - [BOUNDARIES.md](BOUNDARIES.md): permitted and forbidden execution surfaces.
 - [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md): concise current-state ledger.
+- [docs/T8_V4_PROTOCOL.md](docs/T8_V4_PROTOCOL.md): frozen T8-v4 diagnostic and promotion protocol.
 - [docs/DELIVERY_HISTORY.md](docs/DELIVERY_HISTORY.md): sanitized historical ledger.
 
 ## License

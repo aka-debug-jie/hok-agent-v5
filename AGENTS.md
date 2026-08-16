@@ -20,6 +20,13 @@
   validate it in Shadow, and admit only bounded test-app actions. The execution event is an
   automatically recorded supervision signal, not a manually annotated frame/action label and
   never enters V5/V6 base training.
+- T8-v4 is a separate read-only visual-causality diagnostic lineage. Its first contract learns only
+  `main_view_enemy_cue_visible`, `basic_attack_button_visual_enabled`,
+  `skill1_button_visual_ready`, and `skill2_button_visual_ready` under one fixed layout and action
+  schema. Two independent automatic teachers produce conservative consensus pseudolabels from
+  the frozen 103/23 video train/dev sessions; accepted labels may enter only the masked T8-v4
+  diagnostic loss. No human labels or annotation UI are permitted. Candidate actions are offline
+  logs with `control_output=false`.
 - A future, separately authorized post-training phase may use only owner gameplay-quality
   preferences over completed PixelArena games. It is not part of V5/V6 base training.
 - Preserve V1/V2/V3 and the offline V4 route as frozen regressions. Never overwrite their
@@ -90,6 +97,12 @@
   video-test stays unopened. Offline replay, five-minute zero-control Shadow, and the 20-action,
   one-minute, and five-minute input stages are strictly ordered. A failed gate blocks every later
   stage without threshold changes, retries, or evidence substitution.
+- T8-v4 does not modify T8-v3. It omits learned `attack_opportunity`, derives only
+  offline `candidate_basic_attack`, `candidate_skill1`, and `candidate_skill2` logs, and excludes
+  skill3, target range, attackability, safety, and
+  tactical intent. It must pass label-validity, visual-learnability, temporal-necessity, and
+  evidence-selectivity gates in order. Its first cycle cannot open offline replay, Shadow, or any
+  device-input stage. The authoritative protocol is `docs/T8_V4_PROTOCOL.md`.
 - Never target an unapproved client or account; outside the single pinned T8-v2.1 demonstrator,
   never add scrcpy control, Accessibility, root,
   hooks, injection, memory/process inspection, protocol
@@ -100,12 +113,11 @@
   device. Numeric camera indexes, other device nodes, URIs, and network streams fail closed.
 - V5/V6 base training, validation, model selection, and diagnostic evaluation use no human
   action, frame, HUD, tracking, or temporal labels. Do not collect them for these stages.
-- The only permitted future human label is an owner judgment of completed gameplay quality:
+- The only permitted human label classes are an owner judgment of completed gameplay quality:
   `A_BETTER`, `B_BETTER`, `TIE`, or `UNJUDGEABLE` for a pair of complete, read-only
   PixelArena games. It may be used only in an explicitly authorized, versioned post-training
-  phase after
-  the base model is frozen, and may train only a separately versioned post-training descendant.
-  It is never a per-action target and never unlocks client control.
+  phase after the base model is frozen, and may train only a separately versioned post-training
+  descendant. It is never a per-action target and never unlocks client control.
 - RGB Actors receive RGB only. T8 touch, keyboard, or v2.5 rule decisions are supervision targets during offline
   training and never actor inputs at training or inference. Legal actions and structured state may be used by a
   PixelArena teacher or execution boundary, never by an encoder, temporal hidden state, or
@@ -118,7 +130,7 @@
 - Base PixelArena imports remain free of Torch, torchvision, safetensors, PyAV, OpenCV,
   Tk, and device APIs; CLI imports optional stages lazily.
 - Torch/torchvision/safetensors are allowed only in `bc.py`, `pixel.py`, `alignment.py`,
-  `temporal.py`, `v6_zero.py`, `rich_pixel.py`, `t8.py`, `t8_v3.py`, `t8_shadow.py`, and their
+  `temporal.py`, `v6_zero.py`, `rich_pixel.py`, `t8.py`, `t8_v3.py`, `t8_v4.py`, `t8_shadow.py`, and their
   focused tests.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,
   `v5_data.py`, `mobile_testbed.py`, and focused tests.
