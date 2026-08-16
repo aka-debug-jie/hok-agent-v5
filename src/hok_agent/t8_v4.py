@@ -772,9 +772,9 @@ def materialize_t8_v4_pseudolabels(
                 )
                 labels, accepted, qc = consensus_labels(rule_probability, source_probability)
                 training_mask = _balanced_training_mask(labels, accepted, observation_end, identity)
-                accepted_total += accepted.sum(axis=0)
-                positive_total += ((labels == 1) & (accepted == 1)).sum(axis=0)
-                negative_total += ((labels == 0) & (accepted == 1)).sum(axis=0)
+                accepted_total += accepted.sum(axis=0, dtype=np.int64)
+                positive_total += ((labels == 1) & (accepted == 1)).sum(axis=0, dtype=np.int64)
+                negative_total += ((labels == 0) & (accepted == 1)).sum(axis=0, dtype=np.int64)
                 coverage_total += len(accepted)
                 name = f"{split}-{ordinal:04d}.npz"
                 path = shard_dir / name
@@ -877,8 +877,21 @@ def _verified_pseudolabel_manifest(root: Path) -> dict[str, object]:
         or manifest.get("raw_video_or_source_paths_persisted") is not False
     ):
         raise T8V4Error("T8-v4 pseudolabel manifest identity differs")
-    serialized = json.dumps(manifest, sort_keys=True).lower()
-    if "video-test" in serialized or "source_path" in serialized or "/dev/" in serialized:
+    forbidden_key = {"source_path", "source_root", "device_path", "video_test_path"}
+
+    def forbidden_provenance(value: object) -> bool:
+        if isinstance(value, dict):
+            return any(
+                str(key).lower() in forbidden_key or forbidden_provenance(item)
+                for key, item in value.items()
+            )
+        if isinstance(value, list):
+            return any(forbidden_provenance(item) for item in value)
+        if isinstance(value, str):
+            return value.startswith(("/", "file://")) or "video-test" in value.lower()
+        return False
+
+    if forbidden_provenance(manifest):
         raise T8V4Error("T8-v4 pseudolabel manifest exposes forbidden provenance")
     return manifest
 
@@ -943,6 +956,7 @@ def audit_t8_v4_weak_supervision(
     if train.get("sessions") != 103 or dev.get("sessions") != 23:
         raise T8V4Error("T8-v4 frozen session count differs")
     coverage_values: list[float] = []
+    class_coverage_complete = True
     for split in (train, dev):
         coverage = split.get("coverage_by_head")
         positive = split.get("accepted_positive_by_head")
@@ -956,10 +970,11 @@ def audit_t8_v4_weak_supervision(
             or set(negative) != set(STATE_NAMES)
         ):
             raise T8V4Error("T8-v4 coverage QC differs")
-        if any(int(positive[name]) < 1 or int(negative[name]) < 1 for name in STATE_NAMES):
-            raise T8V4Error("T8-v4 accepted class coverage is incomplete")
+        class_coverage_complete &= all(
+            int(positive[name]) >= 1 and int(negative[name]) >= 1 for name in STATE_NAMES
+        )
         coverage_values.extend(float(coverage[name]) for name in STATE_NAMES)
-    coverage_passed = min(coverage_values) >= 0.15
+    coverage_passed = min(coverage_values) >= 0.15 and class_coverage_complete
     report: dict[str, object] = {
         "schema_version": WEAK_AUDIT_SCHEMA,
         "status": "PASSED" if coverage_passed else "COVERAGE_FAILED",
@@ -968,6 +983,7 @@ def audit_t8_v4_weak_supervision(
         "coverage_by_split": {"train": train["coverage_by_head"], "dev": dev["coverage_by_head"]},
         "minimum_coverage": min(coverage_values),
         "minimum_coverage_required": 0.15,
+        "accepted_class_coverage_complete": class_coverage_complete,
         "accepted_stability": 1.0,
         "minimum_accepted_stability_required": 0.9,
         "teacher_consensus_usable": coverage_passed,
@@ -978,9 +994,33 @@ def audit_t8_v4_weak_supervision(
         "control_output": False,
         "device_input_allowed": False,
     }
+    decision: dict[str, object] | None = None
+    if not coverage_passed:
+        decision = {
+            "schema_version": DECISION_SCHEMA,
+            "human_labels_used": False,
+            "synthetic_teacher_passed": True,
+            "teacher_consensus_usable": False,
+            "rgb_signal_against_weak_targets_demonstrated": False,
+            "spatial_selectivity_demonstrated": False,
+            "temporal_order_adds_value": False,
+            "semantic_accuracy_verified": False,
+            "promotion_allowed": False,
+            "control_output": False,
+            "next_required_action": "repair_rule_teacher_once",
+        }
+        decision["decision_sha256"] = hashlib.sha256(_canonical(decision)).hexdigest()
+        report["decision_sha256"] = decision["decision_sha256"]
     report["report_sha256"] = hashlib.sha256(_canonical(report)).hexdigest()
     destination = _large_new(output_path)
+    decision_path = (
+        _large_new(destination.parent / "decision.json") if decision is not None else None
+    )
     destination.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    if decision is not None and decision_path is not None:
+        decision_path.write_text(
+            json.dumps(decision, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
     return report
 
 

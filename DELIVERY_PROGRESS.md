@@ -26,7 +26,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 | T8-v1–v2.6 | Historical demonstration, causal-policy, Shadow, and bounded-probe evidence | Local evidence only |
 | T8-v2.7 | `FROZEN_FAILED` | No recollection, threshold changes, or four-class retraining |
 | T8-v3 | Video-state seed-0 pilot failed admission | No replay, Shadow, or device input |
-| T8-v4 | Zero-label contracts and offline implementation present; runtime evidence pending | Read-only Gates 0--2 only |
+| T8-v4 | Source teacher passed; first weak audit stopped on incomplete accepted classes | One rule repair allowed; seed-0 blocked |
 
 ## T8-v2.7 freeze
 
@@ -73,16 +73,20 @@ The optimized T8-v4 protocol is frozen in
 `main_view_enemy_cue_visible`, `basic_attack_button_visual_enabled`,
 `skill1_button_visual_ready`, and `skill2_button_visual_ready` under one fixed layout and action
 schema. `attack_opportunity`, `target_attackable`, `safe_to_attack`, and skill3 are outside the
-first contract. `candidate_attack_opportunity` is deterministic and means only that minimum visual
-conditions for an offline candidate log are present.
+first contract. Candidate basic attack, skill1, and skill2 outputs are deterministic offline logs
+only; they do not mean an action is safe, valid, in range, or guaranteed.
 
 The first cycle uses two independent automatic teachers over the frozen 103 video-train and 23
 video-dev sessions. Only confident, mutually consistent, perturbation-stable outputs enter masked
 diagnostic loss; all other rows remain `uncertain`. No human labels or annotation interface are
 used. Seed 0 compares class prior, time-only,
 last-frame linear, pooled MLP, and the existing causal TCN, then applies gameplay/HUD masks and
-swaps plus temporal controls. Machine contracts and command implementations now exist locally;
-no source-teacher, pseudolabel, training, audit, or passing runtime gate is claimed yet.
+swaps plus temporal controls. Machine contracts and command implementations exist locally. The
+PixelArena source teacher passed its frozen synthetic-dev gate on all four heads. The first 103/23
+real-video consensus pass completed with per-head accepted coverage above 0.15 and accepted
+perturbation stability 1.0, but accepted labels did not contain both classes for every head in both
+splits. The weak audit is therefore `COVERAGE_FAILED`, `teacher_consensus_usable=false`, and seed-0
+training was not started. This is weak-supervision evidence, not real-video semantic accuracy.
 
 T8-v4 remains `control_output=false`. Offline replay, Shadow, and device input are blocked until
 their earlier gates pass under separately frozen evidence.
@@ -111,6 +115,8 @@ boundary findings, and no checked-in large-data or mobile-private artifacts.
 The project demonstrates reproducible RGB policy research in project-owned PixelArena and
 read-only/strictly bounded mobile-testbed infrastructure. It does not establish commercial-game
 skill, tactical optimality, general transfer, or authorization to control any third-party client.
-T8-v4 supplies the diagnostic protocol and offline implementation, but not passed runtime evidence.
+T8-v4 supplies the diagnostic protocol, offline implementation, and a preserved failed first weak
+audit. Its one permitted next action is a rule-teacher repair without lowering the 0.80 threshold;
+if class coverage still fails, the lineage closes as insufficient weak-supervision evidence.
 It is a separate lineage and must not be presented as a continuation of the failed v2.7 or v3
 pilots by threshold relaxation.
