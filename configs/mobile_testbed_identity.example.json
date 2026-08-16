@@ -1,0 +1,13 @@
+{
+  "schema_version": "hok-agent-mobile-build-identity-v1",
+  "package": "org.example.owner.testbed",
+  "version_code": 0,
+  "version_name": "REPLACE_ME",
+  "signature_ids": [
+    "REPLACE_ME"
+  ],
+  "base_apk_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "owner_attested_self_built": false,
+  "attested_date": "REPLACE_ME",
+  "identity_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+}

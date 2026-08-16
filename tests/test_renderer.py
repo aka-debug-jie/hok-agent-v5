@@ -1,3 +1,4 @@
+# ruff: noqa: E501, E702
 from __future__ import annotations
 
 from random import Random
@@ -52,16 +53,13 @@ def test_renderer_key_fields_change_pixels() -> None:
     obs = arena.observe("blue")
 
     base = render(obs, 777)
-    hp = dict(obs)
-    hp["self_health"] = hp["self_health"] - 1
+    hp = dict(obs); hp["self_health"] = hp["self_health"] - 1
     hp_frame = render(hp, 777)
 
-    pos = dict(obs)
-    pos["self_position"] = pos["self_position"] + 1
+    pos = dict(obs); pos["self_position"] = pos["self_position"] + 1
     pos_frame = render(pos, 777)
 
-    tick = dict(obs)
-    tick["tick"] = tick["tick"] + 1
+    tick = dict(obs); tick["tick"] = tick["tick"] + 1
     tick_frame = render(tick, 777)
 
     assert not np.array_equal(base, hp_frame)
@@ -70,32 +68,8 @@ def test_renderer_key_fields_change_pixels() -> None:
 
 
 def test_renderer_red_blue_self_perspective() -> None:
-    blue_obs = {
-        "side": "blue",
-        "tick": 5,
-        "max_ticks": 32,
-        "self_position": 2,
-        "opponent_position": 8,
-        "self_health": 6,
-        "opponent_health": 6,
-        "own_tower_health": 4,
-        "enemy_tower_health": 4,
-        "own_crystal_health": 6,
-        "enemy_crystal_health": 6,
-    }
-    red_obs = {
-        "side": "red",
-        "tick": 5,
-        "max_ticks": 32,
-        "self_position": 8,
-        "opponent_position": 2,
-        "self_health": 6,
-        "opponent_health": 6,
-        "own_tower_health": 4,
-        "enemy_tower_health": 4,
-        "own_crystal_health": 6,
-        "enemy_crystal_health": 6,
-    }
+    blue_obs = {"side":"blue","tick":5,"max_ticks":32,"self_position":2,"opponent_position":8,"self_health":6,"opponent_health":6,"own_tower_health":4,"enemy_tower_health":4,"own_crystal_health":6,"enemy_crystal_health":6}
+    red_obs = {"side":"red","tick":5,"max_ticks":32,"self_position":8,"opponent_position":2,"self_health":6,"opponent_health":6,"own_tower_health":4,"enemy_tower_health":4,"own_crystal_health":6,"enemy_crystal_health":6}
     blue_frame = render(blue_obs, 99)
     red_frame = render(red_obs, 99)
     assert np.array_equal(blue_frame, red_frame)
@@ -110,17 +84,14 @@ def test_tactical_teacher_coverage_rollout_terminal_and_crystal_completion() -> 
         arena.reset(_seed)
         blue = TacticalTeacher()
         red = TacticalTeacher()
-        done = False
-        steps = 0
+        done = False; steps = 0
 
         while not done:
             blue_obs = arena.observe("blue")
             red_obs = arena.observe("red")
-            blue_action = blue.select("blue", arena.legal_actions("blue"), _to_tick(blue_obs))
-            red_action = red.select("red", arena.legal_actions("red"), _to_tick(red_obs))
+            blue_action = blue.select("blue", arena.legal_actions("blue"), _to_tick(blue_obs)); red_action = red.select("red", arena.legal_actions("red"), _to_tick(red_obs))
             action_classes.update({_classify(blue_action), _classify(red_action)})
-            result = arena.step(blue_action, red_action)
-            done = bool(result["terminal"])
+            result = arena.step(blue_action, red_action); done = bool(result["terminal"])
             steps += 1
             if steps > 64:
                 break
@@ -137,35 +108,18 @@ def test_tactical_teacher_coverage_rollout_terminal_and_crystal_completion() -> 
 
 def test_tactical_teacher_different_legal_inputs_cover_every_class() -> None:
     policy = TacticalTeacher()
-    base = (
-        wait_action(),
-        move_action("forward"),
-        move_action("backward"),
-        attack_action("enemy_hero"),
-        attack_action("enemy_tower"),
-        attack_action("enemy_crystal"),
-    )
-
-    legal_cases = [
-        (0, (base[0], base[1]), "wait"),
-        (1, (base[0], base[1], base[3]), "enemy_hero"),
-        (3, (base[0], base[1], base[2], base[4]), "backward"),
-        (2, (base[0], base[1], base[5]), "enemy_crystal"),
-        (4, (base[0], base[1], base[4]), "enemy_tower"),
-        (5, (base[0], base[1]), "forward"),
-    ]
+    base = (wait_action(), move_action("forward"), move_action("backward"), attack_action("enemy_hero"), attack_action("enemy_tower"), attack_action("enemy_crystal"))
+    legal_cases = [(0, (base[0], base[1]), "wait"), (1, (base[0], base[1], base[3]), "enemy_hero"), (3, (base[0], base[1], base[2], base[4]), "backward"), (2, (base[0], base[1], base[5]), "enemy_crystal"), (4, (base[0], base[1], base[4]), "enemy_tower"), (5, (base[0], base[1]), "forward")]
 
     policy_hits = set()
 
     for tick, legal, expected in legal_cases:
         result = policy.select("blue", legal, tick)
-        policy_hits.add(_classify(result))
-        assert _classify(result) == expected
+        policy_hits.add(_classify(result)); assert _classify(result) == expected
 
     random = Random(11)
     for _ in range(250):
-        tick, legal, _ = random.choice(legal_cases)
-        policy_hits.add(_classify(policy.select("blue", legal, tick)))
+        tick, legal, _ = random.choice(legal_cases); policy_hits.add(_classify(policy.select("blue", legal, tick)))
 
     assert policy_hits == {
         "wait",

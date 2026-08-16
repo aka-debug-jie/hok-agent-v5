@@ -1,0 +1,22 @@
+{
+  "schema_version": "hok-agent-mobile-layout-v3",
+  "calibration_status": "TEMPLATE_NOT_CALIBRATED",
+  "screen": {
+    "width": 0,
+    "height": 0
+  },
+  "joystick": {
+    "center": null,
+    "radius": null,
+    "forward_vector": null,
+    "move_hold_ms": 0,
+    "skill_hold_ms": 0,
+    "aim_radius": 0
+  },
+  "buttons": {
+    "basic_attack": null,
+    "skill1": null,
+    "skill2": null,
+    "skill3": null
+  }
+}

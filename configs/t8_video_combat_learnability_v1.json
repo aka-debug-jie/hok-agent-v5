@@ -1,0 +1,21 @@
+{
+  "schema_version": "hok-agent-t8-video-combat-learnability-config-v1",
+  "dataset_config": "t8_video_combat_dataset_v2.json",
+  "seed": 0,
+  "epochs": 12,
+  "batch_size": 32,
+  "encoder": "selected_t8_v2_video_adapter_epoch_3_frozen",
+  "temporal_model": "existing_t8_v2_causal_tcn",
+  "optimizer": "adamw",
+  "learning_rate": 0.0003,
+  "weight_decay": 0.0001,
+  "class_weighting": "sqrt_inverse_frequency_capped_at_5",
+  "selection_metric": "dev_weighted_cross_entropy_only",
+  "minimum_dev_macro_f1": 0.55,
+  "minimum_dev_balanced_accuracy": 0.55,
+  "minimum_per_class_recall": 0.30,
+  "minimum_accuracy_above_train_plurality": 0.10,
+  "minimum_normal_minus_shuffled_macro_f1": 0.15,
+  "test_access_allowed": false,
+  "promotion_allowed": false
+}

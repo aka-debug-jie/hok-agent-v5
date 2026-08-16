@@ -1,3 +1,4 @@
+# ruff: noqa: E501, E702
 from __future__ import annotations
 
 import copy
@@ -22,9 +23,7 @@ def _write(path, payload: object) -> None:
 
 
 def test_collect_dataset_contract(dataset: bc.Dataset, tmp_path: Path) -> None:
-    assert dataset.episode_count == 256
-    assert len(dataset.samples) >= 400
-    assert dataset.conflict_count == 0
+    assert dataset.episode_count == 256; assert len(dataset.samples) >= 400; assert dataset.conflict_count == 0
     split_hashes: dict[str, set[str]] = defaultdict(set)
     by_action: dict[int, set[str]] = defaultdict(set)
     for sample in dataset.samples:
@@ -34,10 +33,8 @@ def test_collect_dataset_contract(dataset: bc.Dataset, tmp_path: Path) -> None:
     for left, right in (("train", "validation"), ("train", "test"), ("validation", "test")):
         assert split_hashes[left].isdisjoint(split_hashes[right])
     assert all(len(splits) == 3 for splits in by_action.values())
-    path = tmp_path / "dataset.jsonl"
-    bc.write_dataset(path, dataset)
-    rows = [json.loads(line) for line in path.read_text().splitlines()]
-    assert rows
+    path = tmp_path / "dataset.jsonl"; bc.write_dataset(path, dataset)
+    rows = [json.loads(line) for line in path.read_text().splitlines()]; assert rows
     for row in rows[1:]:
         assert set(row) == {"sample_hash", "split", "observation", "action"}
         assert not {"legal_actions", "reward", "teacher", "truth"} & set(row)
@@ -56,8 +53,7 @@ def test_forward_signature_train0_roundtrip_and_load_model_validation(
     document = copy.deepcopy(bc._model_document(trained, dataset, 0))
     payload = json.loads(json.dumps(document))
     path = tmp_path / "model.json"
-    _write(path, payload)
-    loaded, seed = bc.load_model(path, dataset.config)
+    _write(path, payload); loaded, seed = bc.load_model(path, dataset.config)
     assert seed == 0
     features = bc._feature_vector(dataset.samples[0].observation, dataset.config)
     x = torch.tensor([features], dtype=torch.float32)
@@ -102,13 +98,7 @@ def test_forward_signature_train0_roundtrip_and_load_model_validation(
 def test_accept_minimal_v2_produces_full_report(tmp_path: Path) -> None:
     output = tmp_path / "accept"
     report = bc.accept_minimal_v2(output)
-    expected = {
-        "dataset.jsonl",
-        "model-seed-0.json",
-        "model-seed-1.json",
-        "model-seed-2.json",
-        "report.json",
-    }
+    expected = {"dataset.jsonl", "model-seed-0.json", "model-seed-1.json", "model-seed-2.json", "report.json"}
     produced = {file.name for file in output.iterdir()}
     assert produced == expected
     assert report["status"] == "PASSED"
@@ -124,8 +114,7 @@ def test_accept_minimal_v2_produces_full_report(tmp_path: Path) -> None:
     for name, digest in report["files"].items():
         assert bc._sha(output / name) == digest
 
-    existing = tmp_path / "existing"
-    existing.mkdir()
+    existing = tmp_path / "existing"; existing.mkdir()
     (existing / "marker.txt").write_text("KEEP", encoding="utf-8")
     with pytest.raises(bc.BCError):
         bc.accept_minimal_v2(existing)

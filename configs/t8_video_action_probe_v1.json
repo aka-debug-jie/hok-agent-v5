@@ -1,0 +1,16 @@
+{
+  "schema_version": "hok-agent-t8-video-action-probe-config-v1",
+  "allowed_splits": ["train", "dev"],
+  "sessions_per_split": {"train": 8, "dev": 2},
+  "stored_frame_rotation": "counter_clockwise_90",
+  "content_box_xyxy": [0, 35, 128, 93],
+  "roi_radius_xy": [6, 4],
+  "temporal_difference_quantile": 0.995,
+  "minimum_roi_difference": 18.0,
+  "minimum_roi_to_content_ratio": 1.5,
+  "minimum_brightness_onset": 20.0,
+  "minimum_five_frame_decay": 15.0,
+  "deduplication_frames": 8,
+  "maximum_contact_sheet_candidates": 16,
+  "promotion_allowed": false
+}

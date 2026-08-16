@@ -1,0 +1,52 @@
+{
+  "schema_version": "hok-agent-game-state-machine-v1",
+  "purpose": "minimal_legality_and_fallback_constraints",
+  "states": {
+    "UNKNOWN_SCREEN": {
+      "allowed_intents": ["ABSTAIN"]
+    },
+    "DEAD_OR_RESPAWNING": {
+      "allowed_intents": ["ABSTAIN"]
+    },
+    "ALIVE_NO_CONTACT": {
+      "allowed_intents": ["ABSTAIN", "ADVANCE", "RECALL", "CONTEST_OBJECTIVE"]
+    },
+    "ALIVE_LANE_CONTACT": {
+      "allowed_intents": ["ABSTAIN", "CLEAR_WAVE", "ADVANCE", "DISENGAGE"]
+    },
+    "ALIVE_HERO_CONTACT": {
+      "allowed_intents": ["ABSTAIN", "ENGAGE_HERO", "DISENGAGE", "DEFEND_STRUCTURE"]
+    },
+    "ALIVE_STRUCTURE_CONTACT": {
+      "allowed_intents": ["ABSTAIN", "PUSH_STRUCTURE", "DISENGAGE", "DEFEND_STRUCTURE"]
+    },
+    "BASE_THREAT": {
+      "allowed_intents": ["ABSTAIN", "DEFEND_STRUCTURE", "CLEAR_WAVE", "DISENGAGE"]
+    },
+    "MATCH_ENDED": {
+      "allowed_intents": ["ABSTAIN"]
+    }
+  },
+  "hard_overrides": [
+    {
+      "when": "visibility_quality != sufficient",
+      "intent": "ABSTAIN"
+    },
+    {
+      "when": "life_state in [dead, respawning, unknown]",
+      "intent": "ABSTAIN"
+    },
+    {
+      "when": "match_phase in [ended, unknown]",
+      "intent": "ABSTAIN"
+    }
+  ],
+  "explicitly_not_encoded": [
+    "hero_combo_order",
+    "fixed_lane_rotation",
+    "fixed_target_priority",
+    "fixed_objective_timing_action",
+    "damage_calculation",
+    "equipment_build"
+  ]
+}

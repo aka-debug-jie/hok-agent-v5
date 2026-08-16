@@ -1,4 +1,5 @@
 .venv/
+.local-data/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -9,6 +10,10 @@ dist/
 *.egg-info/
 .env
 .env.*
+configs/*.local.json
+configs/mobile_testbed_identity_v1.json
+configs/mobile_testbed_layout_calibrated_v3.json
+configs/mobile_testbed_layout_v1.json
 secrets/
 licenses/
 gamecore/

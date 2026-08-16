@@ -1,0 +1,43 @@
+{
+  "schema_version": "hok-agent-game-observation-contract-v1",
+  "input": {
+    "modality": "causal_rgb_only",
+    "privileged_state_allowed": false
+  },
+  "outputs": [
+    {
+      "name": "match_phase",
+      "values": ["opening", "lane", "midgame", "lategame", "ended", "unknown"]
+    },
+    {
+      "name": "life_state",
+      "values": ["alive", "dead", "respawning", "unknown"]
+    },
+    {
+      "name": "health_risk",
+      "values": ["safe", "pressured", "critical", "unknown"]
+    },
+    {
+      "name": "engagement",
+      "values": ["no_contact", "minions", "enemy_hero", "structure", "mixed", "unknown"]
+    },
+    {
+      "name": "lane_pressure",
+      "values": ["advancing", "neutral", "defending", "base_threat", "unknown"]
+    },
+    {
+      "name": "skill_availability",
+      "values": ["available", "cooldown", "unreadable"]
+    },
+    {
+      "name": "visibility_quality",
+      "values": ["sufficient", "partial", "unknown_screen"]
+    }
+  ],
+  "required_fields_per_output": ["value", "confidence", "timestamp_ns"],
+  "confidence_policy": {
+    "low_confidence_result": "unknown",
+    "unknown_must_not_be_imputed": true
+  },
+  "training_note": "These values are learned RGB hypotheses, never game truth or actor inputs supplied by a caller."
+}

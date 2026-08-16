@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -19,7 +20,13 @@ from hok_agent import alignment
 
 ACTION_NAMES: tuple[str, ...] = alignment.ACTION_TYPES
 ABSTAIN = "ABSTAIN"
-V6_SCHEMA, CHECKPOINT_SCHEMA, TRACKING_SCHEMA, AUDIT_SCHEMA = "hok-agent-v6-release-v1", "hok-agent-v6-temporal-model-v1", "hok-agent-v6-tracking-evidence-v1", "hok-agent-v6-temporal-audit-v1"
+V6_SCHEMA, CHECKPOINT_SCHEMA, TRACKING_SCHEMA, TRACKING_SPLIT_SCHEMA, AUDIT_SCHEMA = (
+    "hok-agent-v6-release-v1",
+    "hok-agent-v6-temporal-model-v1",
+    "hok-agent-v6-tracking-evidence-v1",
+    "hok-agent-v6-tracking-split-v1",
+    "hok-agent-v6-temporal-audit-v1",
+)
 ARCHITECTURE = "rgb-dual-hero-hud-causal-depthwise-tcn-v1"
 CLAIM_SCOPE = "audited_abstract_host_advice"
 OOD_THRESHOLD, TRACKING_QUALITY_THRESHOLD = 0.05, 0.80
@@ -44,6 +51,31 @@ class _V6Binding:
     release_sha256: str
     allowed_classes: tuple[str, ...]
     class_thresholds: dict[str, float]
+
+
+@dataclass(frozen=True)
+class _V5Binding:
+    release_sha256: str
+    model_sha256: str
+    manifest_sha256: str
+    split_binding_sha256: str
+    pre_ingest_sha256: str
+    session_splits: dict[str, str]
+    allowed_classes: tuple[str, ...]
+    class_thresholds: dict[str, float]
+
+
+@dataclass(frozen=True)
+class _TrackingSplitBinding:
+    sha256: str
+    session_splits: dict[str, str]
+    row_identities: tuple[str, ...]
+    manifest_sha256: str
+    split_binding_sha256: str
+
+    @property
+    def test_sessions(self) -> set[str]:
+        return {session for session, split in self.session_splits.items() if split == "test"}
 
 
 class TemporalError(ValueError):
@@ -98,17 +130,36 @@ def _p95(values: list[float]) -> float:
     return sorted(values)[math.ceil(0.95 * len(values)) - 1]
 
 
-def _load_v5(release_path: Path, model_path: Path) -> alignment.BoundV5Release:
+def _load_v5(
+    release_path: Path, model_path: Path, manifest_path: Path, pre_ingest_path: Path, privacy_context_path: Path,
+    owner_attestation_path: Path, owner_component_confirmation_path: Path, shard_paths: Sequence[Path]
+) -> _V5Binding:
     loader = getattr(alignment, "load_bound_v5_release", None)
     if loader is None:
         raise TemporalError("V5 path binding API is unavailable")
     try:
+        manifest = alignment.load_v5_manifest(manifest_path, pre_ingest_path, privacy_context_path, owner_attestation_path, owner_component_confirmation_path, shard_paths)
         value = loader(release_path, model_path)
-        release_sha, model_sha = value.release_sha256, value.model_sha256
-        allowed, thresholds = value.allowed_classes, value.class_thresholds
+        release_sha = value.release_sha256
+        model_sha = value.model_sha256
+        bound_manifest_sha = value.manifest_sha256
+        split_binding_sha = value.split_binding_sha256
+        manifest_sha = manifest.manifest_sha256
+        actual_split_sha = manifest.split_binding_sha256
+        pre_ingest_sha = manifest.pre_ingest_sha256
+        session_splits = manifest.session_splits
+        allowed = value.allowed_classes
+        thresholds = value.class_thresholds
     except (AttributeError, OSError, TypeError, ValueError) as exc:
-        raise TemporalError("invalid V5 release/model binding") from exc
-    if release_sha != _file_sha(release_path) or model_sha != _file_sha(model_path):
+        raise TemporalError("invalid V5 release/manifest/model binding") from exc
+    if (
+        release_sha != _file_sha(release_path)
+        or model_sha != _file_sha(model_path)
+        or bound_manifest_sha != manifest_sha
+        or split_binding_sha != actual_split_sha
+        or not all(_valid_sha(item) for item in (manifest_sha, split_binding_sha, pre_ingest_sha))
+        or type(session_splits) is not dict
+    ):
         raise TemporalError("V5 binding does not name the actual files")
     if type(allowed) is not tuple or not allowed or len(set(allowed)) != len(allowed):
         raise TemporalError("V5 classes are invalid")
@@ -117,15 +168,22 @@ def _load_v5(release_path: Path, model_path: Path) -> alignment.BoundV5Release:
     parsed = {name: _number(thresholds[name], low=0.75, high=1.0) for name in allowed}
     if any(type(name) is not str or name not in ACTION_NAMES for name in allowed):
         raise TemporalError("V5 class is outside the V6 vocabulary")
-    return alignment.BoundV5Release(release_sha, model_sha, allowed, parsed)
+    splits = dict(session_splits)
+    if not splits or any(not _valid_sha(key) or value not in alignment.SPLITS for key, value in splits.items()):
+        raise TemporalError("V5 manifest session split mapping is invalid")
+    return _V5Binding(release_sha, model_sha, manifest_sha, split_binding_sha, pre_ingest_sha, splits, allowed, parsed)
 
 
-def _checkpoint_metadata(v5: alignment.BoundV5Release, training_artifact_sha256: str, seed: int) -> dict[str, str]:
+def _checkpoint_metadata(v5: _V5Binding, training_artifact_path: Path, tracking_split_path: Path, seed: int) -> dict[str, str]:
     return {
         "schema_version": CHECKPOINT_SCHEMA,
         "v5_release_sha256": v5.release_sha256,
         "v5_model_sha256": v5.model_sha256,
-        "training_artifact_sha256": training_artifact_sha256,
+        "v5_manifest_sha256": v5.manifest_sha256,
+        "v5_split_binding_sha256": v5.split_binding_sha256,
+        "v5_pre_ingest_sha256": v5.pre_ingest_sha256,
+        "training_artifact_sha256": _file_sha(training_artifact_path),
+        "tracking_split_sha256": _file_sha(tracking_split_path),
         "training_contract_hash": TRAINING_CONTRACT_HASH,
         "action_vocabulary_hash": ACTION_HASH,
         "architecture": ARCHITECTURE,
@@ -137,7 +195,7 @@ def _checkpoint_metadata(v5: alignment.BoundV5Release, training_artifact_sha256:
     }
 
 
-def _load_checkpoint(path: Path, v5: alignment.BoundV5Release) -> _Checkpoint:
+def _load_checkpoint(path: Path, v5: _V5Binding, training_artifact_path: Path, tracking_split_path: Path) -> _Checkpoint:
     if path.is_symlink() or not path.is_file() or path.suffix != ".safetensors":
         raise TemporalError("V6 checkpoint path is invalid")
     try:
@@ -145,12 +203,24 @@ def _load_checkpoint(path: Path, v5: alignment.BoundV5Release) -> _Checkpoint:
             metadata = handle.metadata()
     except (OSError, SafetensorError) as exc:
         raise TemporalError("invalid V6 safetensors checkpoint") from exc
-    if metadata is None or set(metadata) != set(_checkpoint_metadata(v5, "0" * 64, 0)):
+    if metadata is None or set(metadata) != set(_checkpoint_metadata(v5, training_artifact_path, tracking_split_path, 0)):
         raise TemporalError("V6 checkpoint metadata fields are not exact")
-    artifact, seed_text = metadata.get("training_artifact_sha256", ""), metadata.get("training_seed", "")
-    if not _valid_sha(artifact) or not seed_text.isdigit() or str(int(seed_text)) != seed_text:
+    artifact, split_hash, seed_text = (
+        metadata.get("training_artifact_sha256", ""),
+        metadata.get("tracking_split_sha256", ""),
+        metadata.get("training_seed", ""),
+    )
+    if (
+        not _valid_sha(artifact)
+        or not _valid_sha(split_hash)
+        or not seed_text.isdigit()
+        or str(int(seed_text)) != seed_text
+    ):
         raise TemporalError("V6 checkpoint provenance is invalid")
-    if metadata != _checkpoint_metadata(v5, artifact, int(seed_text)):
+    expected = _checkpoint_metadata(v5, training_artifact_path, tracking_split_path, int(seed_text))
+    if split_hash != expected["tracking_split_sha256"]:
+        raise TemporalError("V6 checkpoint split binding is unbound")
+    if metadata != expected:
         raise TemporalError("V6 checkpoint contract mismatch")
     model = TemporalModel()
     try:
@@ -182,13 +252,51 @@ def _centers(value: object) -> list[list[float]]:
     return [_float_pair(item) for item in value]
 
 
-def _load_tracking(path: Path, checkpoint_sha256: str) -> _Evidence:
+def _load_tracking_split(path: Path, v5: _V5Binding) -> _TrackingSplitBinding:
+    payload = _load_json(path, _TRACKING_SPLIT_FIELDS, TRACKING_SPLIT_SCHEMA)
+    row_ids = payload["tracking_row_identities"]
+    sessions = payload["session_splits"]
+    if (
+        payload["v5_manifest_sha256"] != v5.manifest_sha256
+        or payload["v5_split_binding_sha256"] != v5.split_binding_sha256
+        or type(row_ids) is not list
+        or type(sessions) is not dict
+        or len(row_ids) != 300
+    ):
+        raise TemporalError("tracking split manifest must be exact and bounded")
+    identities: list[str] = []
+    counts: dict[str, int] = {name: 0 for name in ("train", "dev", "test")}
+    session_splits: dict[str, str] = {}
+    for key, value in sessions.items():
+        if type(key) is not str or not _valid_sha(key):
+            raise TemporalError("tracking split session must be session hash")
+        if type(value) is not str or value not in counts:
+            raise TemporalError("tracking split session split must be train/dev/test")
+        session_splits[key] = value
+
+    for item in row_ids:
+        if type(item) is not str:
+            raise TemporalError("tracking split identities must be string")
+        session, _, frame_id = item.partition(":")
+        if not _valid_sha(session) or not frame_id:
+            raise TemporalError("tracking split identities must be session:frame")
+        if session_splits.get(session) is None:
+            raise TemporalError("tracking split identities must map to declared sessions")
+        counts[session_splits[session]] += 1
+        identities.append(item)
+    if counts != {"train": 180, "dev": 60, "test": 60} or session_splits != v5.session_splits:
+        raise TemporalError("tracking split must bind exactly 300 session identities in 180/60/60")
+    return _TrackingSplitBinding(_file_sha(path), session_splits, tuple(identities), v5.manifest_sha256, v5.split_binding_sha256)
+
+
+def _load_tracking(path: Path, checkpoint_sha256: str, split_binding: _TrackingSplitBinding) -> _Evidence:
     payload = _load_json(path, {"schema_version", "checkpoint_sha256", "rows"}, TRACKING_SCHEMA)
     rows = payload["rows"]
     if payload["checkpoint_sha256"] != checkpoint_sha256 or type(rows) is not list or len(rows) != 300:
         raise TemporalError("tracking evidence must bind exactly 300 rows")
     expected = {"frame_id", "session_hash", "split", "predicted_centers", "truth_centers", "predicted_visibility", "truth_visibility", "predicted_hp", "truth_hp", "predicted_skill_ready", "truth_skill_ready"}
     ids: set[str] = set()
+    evidence_ids = split_binding.row_identities
     split_counts = {name: 0 for name in ("train", "dev", "test")}
     split_sessions: dict[str, set[str]] = {name: set() for name in split_counts}
     distances: list[float] = []
@@ -203,6 +311,11 @@ def _load_tracking(path: Path, checkpoint_sha256: str) -> _Evidence:
         if type(row) is not dict or set(row) != expected or type(row["frame_id"]) is not str or not row["frame_id"] or not _valid_sha(session) or split not in split_counts:
             raise TemporalError("tracking row fields are invalid")
         identity = f"{session}:{row['frame_id']}"
+        if identity not in evidence_ids:
+            raise TemporalError("tracking row is not bound to split manifest")
+        row_split = split_binding.session_splits.get(cast(str, session))
+        if row_split is None or row_split != split:
+            raise TemporalError("tracking row split does not match bound sessions")
         if identity in ids:
             raise TemporalError("tracking rows are not unique")
         ids.add(identity)
@@ -222,6 +335,8 @@ def _load_tracking(path: Path, checkpoint_sha256: str) -> _Evidence:
             true_skill.extend(ts)
     if split_counts != {"train": 180, "dev": 60, "test": 60} or any(split_sessions[a] & split_sessions[b] for a, b in (("train", "dev"), ("train", "test"), ("dev", "test"))):
         raise TemporalError("tracking evidence requires session-isolated 180/60/60 splits")
+    if ids != set(evidence_ids):
+        raise TemporalError("tracking rows must match bound identities exactly")
     if not distances:
         raise TemporalError("tracking PCK has no visible ground truth")
     metrics = {
@@ -243,7 +358,9 @@ def _switches(values: list[str]) -> int:
     return sum(left != right for left, right in zip(values, values[1:], strict=False))
 
 
-def _load_audit(path: Path, checkpoint_sha256: str, allowed: tuple[str, ...], thresholds: dict[str, float]) -> _Evidence:
+def _load_audit(
+    path: Path, checkpoint_sha256: str, allowed: tuple[str, ...], thresholds: dict[str, float], test_sessions: set[str]
+) -> _Evidence:
     payload = _load_json(path, {"schema_version", "checkpoint_sha256", "rows"}, AUDIT_SCHEMA)
     rows = payload["rows"]
     if payload["checkpoint_sha256"] != checkpoint_sha256 or type(rows) is not list or len(rows) != 200:
@@ -259,7 +376,14 @@ def _load_audit(path: Path, checkpoint_sha256: str, allowed: tuple[str, ...], th
     baseline_switches = advice_switches = 0
     reviewer_pairs: set[tuple[str, str]] = set()
     for row in rows:
-        if type(row) is not dict or set(row) != row_fields or type(row["clip_id"]) is not str or not row["clip_id"] or not _valid_sha(row["session_hash"]):
+        if (
+            type(row) is not dict
+            or set(row) != row_fields
+            or type(row["clip_id"]) is not str
+            or not row["clip_id"]
+            or not _valid_sha(row["session_hash"])
+            or row["session_hash"] not in test_sessions
+        ):
             raise TemporalError("temporal audit row fields are invalid")
         identity = f"{row['session_hash']}:{row['clip_id']}"
         if identity in ids or type(row["transition"]) is not bool or type(row["ood"]) is not bool:
@@ -333,17 +457,21 @@ def _load_audit(path: Path, checkpoint_sha256: str, allowed: tuple[str, ...], th
     return _Evidence(_file_sha(path), metrics, eligible)
 
 
-_RELEASE_FIELDS = {"schema_version", "v5_release_sha256", "v5_model_sha256", "checkpoint_sha256", "tracking_evidence_sha256", "temporal_audit_sha256", "training_artifact_sha256", "training_contract_hash", "action_vocabulary_hash", "architecture", "training_seed", "sequence_length", "claim_scope", "control_output", "overall_pass", "allowed_classes", "class_thresholds", "release_sha256"}
+_RELEASE_FIELDS = {"schema_version", "v5_release_sha256", "v5_model_sha256", "v5_manifest_sha256", "v5_split_binding_sha256", "v5_pre_ingest_sha256", "checkpoint_sha256", "tracking_evidence_sha256", "tracking_split_sha256", "temporal_audit_sha256", "training_artifact_sha256", "training_contract_hash", "action_vocabulary_hash", "architecture", "training_seed", "sequence_length", "claim_scope", "control_output", "overall_pass", "allowed_classes", "class_thresholds", "release_sha256"}
+_TRACKING_SPLIT_FIELDS = {"schema_version", "v5_manifest_sha256", "v5_split_binding_sha256", "session_splits", "tracking_row_identities"}
 
 
-def _release_payload(v5: alignment.BoundV5Release, checkpoint: _Checkpoint, tracking: _Evidence, audit: _Evidence) -> dict[str, object]:
-    allowed = audit.allowed_classes
+def _release_payload(v5: _V5Binding, checkpoint: _Checkpoint, tracking_split: _TrackingSplitBinding, tracking: _Evidence, audit: _Evidence) -> dict[str, object]:
     return {
         "schema_version": V6_SCHEMA,
         "v5_release_sha256": v5.release_sha256,
         "v5_model_sha256": v5.model_sha256,
+        "v5_manifest_sha256": v5.manifest_sha256,
+        "v5_split_binding_sha256": v5.split_binding_sha256,
+        "v5_pre_ingest_sha256": v5.pre_ingest_sha256,
         "checkpoint_sha256": checkpoint.sha256,
         "tracking_evidence_sha256": tracking.sha256,
+        "tracking_split_sha256": tracking_split.sha256,
         "temporal_audit_sha256": audit.sha256,
         "training_artifact_sha256": checkpoint.metadata["training_artifact_sha256"],
         "training_contract_hash": TRAINING_CONTRACT_HASH,
@@ -353,23 +481,24 @@ def _release_payload(v5: alignment.BoundV5Release, checkpoint: _Checkpoint, trac
         "sequence_length": 8,
         "claim_scope": CLAIM_SCOPE,
         "control_output": False,
-        "overall_pass": True,
-        "allowed_classes": list(allowed),
-        "class_thresholds": {name: v5.class_thresholds[name] for name in allowed},
+        "overall_pass": False,
+        "allowed_classes": [],
+        "class_thresholds": {},
     }
 
 
-def create_v6_release(*, v5_release_path: Path, v5_model_path: Path, checkpoint_path: Path, tracking_evidence_path: Path, temporal_audit_path: Path, release_path: Path) -> dict[str, object]:
-    paths = (v5_release_path, v5_model_path, checkpoint_path, tracking_evidence_path, temporal_audit_path, release_path)
-    if any(not isinstance(path, Path) for path in paths):
+def create_v6_release(*, v5_release_path: Path, v5_model_path: Path, v5_manifest_path: Path, v5_shard_paths: Sequence[Path], v5_pre_ingest_path: Path, v5_privacy_context_path: Path, v5_owner_attestation_path: Path, v5_owner_component_confirmation_path: Path, training_artifact_path: Path, checkpoint_path: Path, tracking_split_path: Path, tracking_evidence_path: Path, temporal_audit_path: Path, release_path: Path) -> dict[str, object]:
+    paths = (v5_release_path, v5_model_path, v5_manifest_path, v5_pre_ingest_path, v5_privacy_context_path, v5_owner_attestation_path, v5_owner_component_confirmation_path, training_artifact_path, checkpoint_path, tracking_split_path, tracking_evidence_path, temporal_audit_path, release_path)
+    if any(not isinstance(path, Path) for path in paths) or not isinstance(v5_shard_paths, Sequence) or not v5_shard_paths or any(not isinstance(path, Path) for path in v5_shard_paths):
         raise TypeError("V6 release inputs must be pathlib.Path")
-    v5 = _load_v5(v5_release_path, v5_model_path)
-    checkpoint = _load_checkpoint(checkpoint_path, v5)
-    tracking = _load_tracking(tracking_evidence_path, checkpoint.sha256)
-    first = _load_audit(temporal_audit_path, checkpoint.sha256, v5.allowed_classes, v5.class_thresholds)
+    v5 = _load_v5(v5_release_path, v5_model_path, v5_manifest_path, v5_pre_ingest_path, v5_privacy_context_path, v5_owner_attestation_path, v5_owner_component_confirmation_path, v5_shard_paths)
+    checkpoint = _load_checkpoint(checkpoint_path, v5, training_artifact_path, tracking_split_path)
+    split_binding = _load_tracking_split(tracking_split_path, v5)
+    tracking = _load_tracking(tracking_evidence_path, checkpoint.sha256, split_binding)
+    first = _load_audit(temporal_audit_path, checkpoint.sha256, v5.allowed_classes, v5.class_thresholds, split_binding.test_sessions)
     thresholds = {name: v5.class_thresholds[name] for name in first.allowed_classes}
-    audit = _load_audit(temporal_audit_path, checkpoint.sha256, first.allowed_classes, thresholds)
-    payload = _release_payload(v5, checkpoint, tracking, audit)
+    audit = _load_audit(temporal_audit_path, checkpoint.sha256, first.allowed_classes, thresholds, split_binding.test_sessions)
+    payload = _release_payload(v5, checkpoint, split_binding, tracking, audit)
     payload["release_sha256"] = _sha(_json(payload).encode())
     try:
         with release_path.open("x", encoding="utf-8") as handle:
@@ -379,7 +508,9 @@ def create_v6_release(*, v5_release_path: Path, v5_model_path: Path, checkpoint_
     return payload
 
 
-def _load_v6_release(path: Path, v5: alignment.BoundV5Release, checkpoint: _Checkpoint, tracking_path: Path, audit_path: Path) -> _V6Binding:
+def _load_v6_release(
+    path: Path, v5: _V5Binding, checkpoint: _Checkpoint, tracking_path: Path, split_path: Path, audit_path: Path
+) -> _V6Binding:
     payload = _load_json(path, _RELEASE_FIELDS, V6_SCHEMA)
     signature = payload.pop("release_sha256")
     if not _valid_sha(signature) or _sha(_json(payload).encode()) != signature:
@@ -387,8 +518,12 @@ def _load_v6_release(path: Path, v5: alignment.BoundV5Release, checkpoint: _Chec
     fixed = {
         "v5_release_sha256": v5.release_sha256,
         "v5_model_sha256": v5.model_sha256,
+        "v5_manifest_sha256": v5.manifest_sha256,
+        "v5_split_binding_sha256": v5.split_binding_sha256,
+        "v5_pre_ingest_sha256": v5.pre_ingest_sha256,
         "checkpoint_sha256": checkpoint.sha256,
         "tracking_evidence_sha256": _file_sha(tracking_path),
+        "tracking_split_sha256": _file_sha(split_path),
         "temporal_audit_sha256": _file_sha(audit_path),
         "training_artifact_sha256": checkpoint.metadata["training_artifact_sha256"],
         "training_contract_hash": TRAINING_CONTRACT_HASH,
@@ -398,15 +533,14 @@ def _load_v6_release(path: Path, v5: alignment.BoundV5Release, checkpoint: _Chec
         "sequence_length": 8,
         "claim_scope": CLAIM_SCOPE,
         "control_output": False,
-        "overall_pass": True,
+        "overall_pass": False,
     }
     if any(type(payload.get(key)) is not type(value) or payload.get(key) != value for key, value in fixed.items()):
         raise TemporalError("V6 release artifact binding is invalid")
     allowed, thresholds = payload.get("allowed_classes"), payload.get("class_thresholds")
-    if type(allowed) is not list or not allowed or len(set(allowed)) != len(allowed) or not set(allowed).issubset(v5.allowed_classes) or type(thresholds) is not dict or set(thresholds) != set(allowed):
+    if allowed != [] or thresholds != {}:
         raise TemporalError("V6 released classes are invalid")
-    parsed = {name: _number(thresholds[name], low=v5.class_thresholds[name], high=1.0) for name in allowed}
-    return _V6Binding(signature, tuple(allowed), parsed)
+    return _V6Binding(signature, (), {})
 
 
 @dataclass
@@ -716,26 +850,24 @@ class TemporalModel(nn.Module):
 
 
 class TemporalCoach:
-    def __init__(
-        self,
-        *,
-        v5_release_path: Path | None = None,
-        v5_model_path: Path | None = None,
-        checkpoint_path: Path | None = None,
-        tracking_evidence_path: Path | None = None,
-        temporal_audit_path: Path | None = None,
-        temporal_release_path: Path | None = None,
-        device: str = "cpu",
-    ) -> None:
+    def __init__(self, *, v5_release_path: Path | None = None, v5_model_path: Path | None = None, v5_manifest_path: Path | None = None, v5_shard_paths: Sequence[Path] | None = None, v5_pre_ingest_path: Path | None = None, v5_privacy_context_path: Path | None = None, v5_owner_attestation_path: Path | None = None, v5_owner_component_confirmation_path: Path | None = None, training_artifact_path: Path | None = None, checkpoint_path: Path | None = None, tracking_split_path: Path | None = None, tracking_evidence_path: Path | None = None, temporal_audit_path: Path | None = None, temporal_release_path: Path | None = None, device: str = "cpu") -> None:
         self._paths = (
             v5_release_path,
             v5_model_path,
+            v5_manifest_path,
+            v5_pre_ingest_path,
+            v5_privacy_context_path,
+            v5_owner_attestation_path,
+            v5_owner_component_confirmation_path,
+            training_artifact_path,
             checkpoint_path,
+            tracking_split_path,
             tracking_evidence_path,
             temporal_audit_path,
             temporal_release_path,
         )
-        if any(path is not None and not isinstance(path, Path) for path in self._paths):
+        self._v5_shard_paths = tuple(v5_shard_paths) if v5_shard_paths is not None else None
+        if any(path is not None and not isinstance(path, Path) for path in self._paths) or (self._v5_shard_paths is not None and (not self._v5_shard_paths or any(not isinstance(path, Path) for path in self._v5_shard_paths))):
             raise TypeError("TemporalCoach artifacts must be pathlib.Path")
         if type(device) is not str or device not in {"cpu", "cuda"}:
             raise ValueError("device must be cpu or cuda")
@@ -744,6 +876,7 @@ class TemporalCoach:
         self._binding: _V6Binding | None = None
         self._tracking: _Evidence | None = None
         self._audit: _Evidence | None = None
+        self._fingerprint: tuple[str, ...] | None = None
         self._reset_generation = 0
 
     def _clear(self, reason: str) -> None:
@@ -751,27 +884,34 @@ class TemporalCoach:
             self.model.reset(reason)
         self.model = None
         self._binding = self._tracking = self._audit = None
+        self._fingerprint = None
         self._reset_generation += 1
 
     def _preflight(self) -> None:
-        if self.model is not None:
-            return
-        if any(path is None for path in self._paths):
+        v5_release, v5_model, manifest_path, pre_ingest_path, privacy_context_path, owner_attestation_path, owner_confirmation_path, training_artifact_path, checkpoint_path, split_path, tracking_path, audit_path, release_path = self._paths
+        shard_paths = self._v5_shard_paths
+        if v5_release is None or v5_model is None or manifest_path is None or pre_ingest_path is None or privacy_context_path is None or owner_attestation_path is None or owner_confirmation_path is None or training_artifact_path is None or checkpoint_path is None or split_path is None or tracking_path is None or audit_path is None or release_path is None or shard_paths is None:
             raise TemporalError("MISSING_V6_EVIDENCE")
-        v5_release, v5_model, checkpoint_path, tracking_path, audit_path, release_path = self._paths
-        assert v5_release is not None and v5_model is not None and checkpoint_path is not None
-        assert tracking_path is not None and audit_path is not None and release_path is not None
+        required_paths = (v5_release, v5_model, manifest_path, pre_ingest_path, privacy_context_path, owner_attestation_path, owner_confirmation_path, training_artifact_path, checkpoint_path, split_path, tracking_path, audit_path, release_path, *shard_paths)
         if self.device == "cuda" and not torch.cuda.is_available():
             raise TemporalError("DEVICE_UNAVAILABLE")
-        v5 = _load_v5(v5_release, v5_model)
-        checkpoint = _load_checkpoint(checkpoint_path, v5)
-        binding = _load_v6_release(release_path, v5, checkpoint, tracking_path, audit_path)
-        tracking = _load_tracking(tracking_path, checkpoint.sha256)
-        audit = _load_audit(audit_path, checkpoint.sha256, binding.allowed_classes, binding.class_thresholds)
-        if audit.allowed_classes != binding.allowed_classes:
-            raise TemporalError("released class fails recomputed audit")
+        v5 = _load_v5(v5_release, v5_model, manifest_path, pre_ingest_path, privacy_context_path, owner_attestation_path, owner_confirmation_path, shard_paths)
+        checkpoint = _load_checkpoint(checkpoint_path, v5, training_artifact_path, split_path)
+        split_binding = _load_tracking_split(split_path, v5)
+        binding = _load_v6_release(release_path, v5, checkpoint, tracking_path, split_path, audit_path)
+        tracking = _load_tracking(tracking_path, checkpoint.sha256, split_binding)
+        audit = _load_audit(audit_path, checkpoint.sha256, v5.allowed_classes, v5.class_thresholds, split_binding.test_sessions)
+        if binding.allowed_classes or binding.class_thresholds:
+            raise TemporalError("V6 must remain fail-closed while V5 is blocked")
+        fingerprint = tuple(_file_sha(path) for path in required_paths)
+        if self._fingerprint is not None and fingerprint != self._fingerprint:
+            self._clear("ARTIFACT_CHANGED")
+            raise TemporalError("ARTIFACT_CHANGED")
+        if self.model is not None:
+            return
         self.model = checkpoint.model.to(torch.device(self.device)).eval()
         self._binding, self._tracking, self._audit = binding, tracking, audit
+        self._fingerprint = fingerprint
 
     def _failure(self, batch: int, reason: str) -> dict[str, Any]:
         self._clear(reason)
@@ -783,6 +923,31 @@ class TemporalCoach:
             "reset_generation": self._reset_generation,
         }
 
+    @staticmethod
+    def _abstain_output(
+        batch: int,
+        reason: str,
+        *,
+        passed: bool,
+        binding: _V6Binding | None,
+        tracking: _Evidence | None,
+        audit: _Evidence | None,
+        reset_generation: int,
+    ) -> dict[str, Any]:
+        return {
+            "advisory": [ABSTAIN] * batch,
+            "abstain_reason": [reason] * batch,
+            "control_output": False,
+            "metrics": {
+                "release_binding_passed": passed,
+                "v6_release_binding_passed": passed,
+                "release_sha256": binding.release_sha256 if binding is not None else "",
+                "tracking": tracking.metrics if tracking is not None else {},
+                "temporal_audit": audit.metrics if audit is not None else {},
+            },
+            "reset_generation": reset_generation,
+        }
+
     def __call__(
         self, rgb: Tensor, timestamps_ms: Tensor | int | float | None = None
     ) -> dict[str, Any]:
@@ -791,31 +956,21 @@ class TemporalCoach:
         batch = int(rgb.shape[0])
         try:
             self._preflight()
-        except TemporalError as exc:
+            assert self.model is not None and self._binding is not None
+            assert self._tracking is not None and self._audit is not None
+            with torch.inference_mode():
+                cast(dict[str, Any], self.model(rgb.to(self.device), timestamps_ms))
+        except (TemporalError, alignment.AlignmentError, OSError, RuntimeError, SafetensorError) as exc:
             return self._failure(batch, str(exc))
-        assert self.model is not None and self._binding is not None
-        assert self._tracking is not None and self._audit is not None
-        with torch.inference_mode():
-            output = cast(dict[str, Any], self.model(rgb.to(self.device), timestamps_ms))
-        logits = output["logits"]
-        confidence = torch.softmax(logits, 1).max(1).values
-        for index, action in enumerate(output["advisory"]):
-            if action == ABSTAIN:
-                continue
-            gated = _runtime_advice(action, float(confidence[index]), float(output["ood"][index]), float(output["tracking_quality"][index]), True, self._binding.allowed_classes, self._binding.class_thresholds)
-            if gated == ABSTAIN:
-                if action not in self._binding.allowed_classes:
-                    output["abstain_reason"][index] = "CLASS_NOT_RELEASED"
-                elif confidence[index] < self._binding.class_thresholds[action]:
-                    output["abstain_reason"][index] = "LOW_SCORE"
-                elif output["ood"][index] > OOD_THRESHOLD:
-                    output["abstain_reason"][index] = "OOD"
-                else:
-                    output["abstain_reason"][index] = "LOW_QUALITY"
-            output["advisory"][index] = gated
-        output["control_output"] = False
-        output["metrics"].update({"release_binding_passed": True, "v6_release_binding_passed": True, "release_sha256": self._binding.release_sha256, "tracking": self._tracking.metrics, "temporal_audit": self._audit.metrics})
-        return output
+        return self._abstain_output(
+            batch,
+            alignment.COLLAPSE_BLOCK,
+            passed=True,
+            binding=self._binding,
+            tracking=self._tracking,
+            audit=self._audit,
+            reset_generation=self._reset_generation,
+        )
 
 
 def cpu_smoke() -> dict[str, object]:
