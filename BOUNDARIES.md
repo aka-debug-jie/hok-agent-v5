@@ -99,6 +99,11 @@ input admission.
   four fixed combat buttons in the owner testbed. It uses a Git-ignored execution layout and may
   not expose coordinates. Movement, swipe/aim, target selection, arbitrary commands, and model
   decisions are forbidden. Two 60-second, five-per-button repeats are the frozen maximum evidence.
+- The visual combat arbiter may use only cooldown-aware round-robin selection among the same four
+  fixed taps. Skills require a confirmed cooldown and recovery before rearming; basic attack uses
+  only the global interval. Its frozen evidence is one 60-second and one five-minute run. Movement,
+  aim/swipe, target selection, enemy interpretation, arbitrary commands, and model control remain
+  forbidden.
 - Offline synthetic training, unlabeled real-video representation learning, conservative
   pseudo-label research, one Mean Teacher round, and RGB-derived tracking/temporal diagnostics.
 - A future, separately authorized post-training phase may use owner gameplay-quality

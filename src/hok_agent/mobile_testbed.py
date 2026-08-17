@@ -55,6 +55,9 @@ BASIC_RULE_SMOKE_SCHEMA = "hok-agent-basic-rule-read-only-smoke-v1"
 BASIC_RULE_PROBE_SCHEMA = "hok-agent-basic-rule-bounded-probe-v1"
 SYNCHRONOUS_COMBAT_CONTRACT_SCHEMA = "hok-agent-synchronous-combat-probe-contract-v1"
 SYNCHRONOUS_COMBAT_PROBE_SCHEMA = "hok-agent-synchronous-combat-probe-v1"
+VISUAL_COMBAT_ARBITER_CONTRACT_SCHEMA = "hok-agent-visual-combat-arbiter-contract-v1"
+VISUAL_COMBAT_ARBITER_5M_CONTRACT_SCHEMA = "hok-agent-visual-combat-arbiter-5m-contract-v1"
+VISUAL_COMBAT_ARBITER_SCHEMA = "hok-agent-visual-combat-arbiter-v1"
 TOUCH_CALIBRATION_SCHEMA = "hok-agent-mobile-touch-calibration-v2"
 LAYOUT_SCHEMA = "hok-agent-mobile-layout-v3"
 MOBILE_BUILD_IDENTITY_SCHEMA = "hok-agent-mobile-build-identity-v1"
@@ -4247,21 +4250,30 @@ def _combat_rule_probabilities(
     hud = _rgb_teacher_views(frame)[2].astype(np.float32) / 255.0
     result: dict[str, float] = {}
     for index, ability in enumerate(ABILITIES[1:4]):
-        point = layout.buttons[ability]
-        if point is None:
-            raise MobileTestbedError(f"combat rule ROI {ability} is unavailable")
-        center_x = round((point[0] - 0.52) / 0.48 * 127)
-        center_y = round((point[1] - 0.30) / 0.70 * 127)
-        x0, x1 = max(0, center_x - 6), min(128, center_x + 7)
-        y0, y1 = max(0, center_y - 5), min(128, center_y + 6)
-        if x0 >= x1 or y0 >= y1:
-            raise MobileTestbedError(f"combat rule ROI {ability} is invalid")
-        patch = hud[y0:y1, x0:x1]
-        maximum, minimum = patch.max(axis=2), patch.min(axis=2)
-        score = 0.55 * float(maximum.mean()) + 0.45 * float((maximum - minimum).mean())
+        score = _combat_visual_score_from_hud(hud, layout, ability)
         normalized = (score - calibration.medians[index]) / calibration.scales[index]
         result[ability] = float(1.0 / (1.0 + math.exp(-4.0 * normalized)))
     return result
+
+
+def _combat_visual_score_from_hud(hud: np.ndarray, layout: Layout, ability: str) -> float:
+    point = layout.buttons[ability]
+    if point is None:
+        raise MobileTestbedError(f"combat rule ROI {ability} is unavailable")
+    center_x = round((point[0] - 0.52) / 0.48 * 127)
+    center_y = round((point[1] - 0.30) / 0.70 * 127)
+    x0, x1 = max(0, center_x - 6), min(128, center_x + 7)
+    y0, y1 = max(0, center_y - 5), min(128, center_y + 6)
+    if x0 >= x1 or y0 >= y1:
+        raise MobileTestbedError(f"combat rule ROI {ability} is invalid")
+    patch = hud[y0:y1, x0:x1]
+    maximum, minimum = patch.max(axis=2), patch.min(axis=2)
+    return 0.55 * float(maximum.mean()) + 0.45 * float((maximum - minimum).mean())
+
+
+def _combat_visual_score(frame: np.ndarray, layout: Layout, ability: str) -> float:
+    hud = _rgb_teacher_views(frame)[2].astype(np.float32) / 255.0
+    return _combat_visual_score_from_hud(hud, layout, ability)
 
 
 def _basic_rule_probability(
@@ -4668,6 +4680,290 @@ def run_synchronous_combat_probe(
         "total_executed_actions": sum(counts.values()),
         "maximum_actions_per_button": maximum,
         "synchronous_acknowledged_actions": sender.sent,
+        "unexpected_actions": 0,
+        "failure": failure,
+        "raw_frames_persisted": False,
+        "coordinates_persisted": False,
+        "control_output": sender.sent > 0,
+    }
+    summary["summary_sha256"] = _summary_identity(summary)
+    _publish(output, rows, summary)
+    return summary
+
+
+def _visual_combat_arbiter_contract(
+    path: Path,
+) -> tuple[dict[str, object], str, dict[str, int]]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MobileTestbedError("visual combat arbiter contract is unavailable") from exc
+    if not isinstance(value, dict):
+        raise MobileTestbedError("visual combat arbiter contract is invalid")
+    supplied = value.get("contract_sha256")
+    unsigned = {key: item for key, item in value.items() if key != "contract_sha256"}
+    digest = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    schema = value.get("schema_version")
+    common: dict[str, object] = {
+        "action_vocabulary": ["skill1", "skill2", "skill3", "basic_attack"],
+        "infer_hz": 5,
+        "stream_fps": 30,
+        "warmup_seconds": 3.0,
+        "minimum_global_action_interval_ms": 1500,
+        "minimum_actions_per_button": 1,
+        "absolute_ready_probability": 0.75,
+        "skill3_cooldown_ratio": 0.75,
+        "skill3_ready_ratio": 0.9,
+        "positive_confirmation_frames": 3,
+        "cooldown_confirmation_frames": 3,
+        "minimum_screen_mean": 8.0,
+        "minimum_screen_standard_deviation": 5.0,
+        "selection_rule": "round_robin_first_visually_admitted",
+        "synchronous_adb_required": True,
+        "movement_allowed": False,
+        "aim_allowed": False,
+        "target_selection_allowed": False,
+        "testbed_owner_authorized": True,
+    }
+    if schema == VISUAL_COMBAT_ARBITER_CONTRACT_SCHEMA:
+        expected = {
+            **common,
+            "schema_version": schema,
+            "run_seconds": 60.0,
+            "maximum_total_actions": 20,
+            "maximum_actions_per_button": 10,
+        }
+        maximum = {name: 10 for name in cast(list[str], common["action_vocabulary"])}
+    elif schema == VISUAL_COMBAT_ARBITER_5M_CONTRACT_SCHEMA:
+        expected = {
+            **common,
+            "schema_version": schema,
+            "run_seconds": 300.0,
+            "maximum_total_actions": 60,
+            "maximum_actions": {
+                "basic_attack": 30,
+                "skill1": 10,
+                "skill2": 10,
+                "skill3": 10,
+            },
+            "minimum_skill3_ready_baseline": 0.55,
+        }
+        maximum = cast(dict[str, int], expected["maximum_actions"])
+    else:
+        raise MobileTestbedError("visual combat arbiter contract schema differs")
+    if supplied != digest or any(value.get(key) != item for key, item in expected.items()):
+        raise MobileTestbedError("visual combat arbiter contract differs")
+    return value, digest, maximum
+
+
+def run_visual_combat_arbiter(
+    *,
+    serial: str,
+    video_node: Path,
+    contract_path: Path,
+    teacher_report: Path,
+    visual_layout_path: Path,
+    execution_layout_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract, contract_sha, maximum = _visual_combat_arbiter_contract(contract_path)
+    _require_mobile_input_identity()
+    output = _new_large_output(output_dir)
+    guard = _open_device_guard(serial)
+    visual_layout, visual_layout_sha = load_layout(visual_layout_path)
+    execution_layout, execution_layout_sha = load_layout(execution_layout_path)
+    if (
+        (guard.width, guard.height) != (visual_layout.width, visual_layout.height)
+        or (guard.width, guard.height) != (execution_layout.width, execution_layout.height)
+        or any(execution_layout.buttons[name] is None for name in ABILITIES[1:])
+    ):
+        raise MobileTestbedError("visual combat arbiter layouts differ from display")
+    calibration = load_rgb_teacher_calibration(teacher_report, visual_layout_sha)
+    stream = ScrcpyV4L2(guard.serial, video_node, cast(int, contract["stream_fps"]))
+    sender = SynchronousAdbInput(guard)
+    watchdog = GuardWatchdog(guard)
+    actions = cast(list[str], contract["action_vocabulary"])
+    counts = Counter({action: 0 for action in actions})
+    stable = Counter({action: 0 for action in actions})
+    low = Counter({action: 0 for action in actions})
+    high = Counter({action: 0 for action in actions})
+    armed = {action: True for action in actions}
+    release_seen = {action: False for action in actions}
+    rows: list[dict[str, object]] = []
+    total = 0
+    pointer = 0
+    failure: str | None = None
+    run_seconds = cast(float, contract["run_seconds"])
+    infer_hz = cast(int, contract["infer_hz"])
+    baseline3: float | None = None
+    started = next_due = last_action = 0.0
+    try:
+        stream.start()
+        watchdog.start()
+        started = next_due = time.monotonic()
+        warmup: list[float] = []
+        while time.monotonic() - started < cast(float, contract["warmup_seconds"]):
+            now = time.monotonic()
+            if now < next_due:
+                time.sleep(min(next_due - now, 0.01))
+                continue
+            next_due += 1 / infer_hz
+            watchdog.ensure_fresh()
+            warmup.append(_combat_visual_score(stream.frame(), visual_layout, "skill3"))
+        baseline3 = float(np.median(warmup))
+        minimum_baseline = contract.get("minimum_skill3_ready_baseline")
+        if isinstance(minimum_baseline, (int, float)) and baseline3 < float(minimum_baseline):
+            raise MobileTestbedError("skill3 was not ready during arbiter warmup")
+        last_action = started - cast(int, contract["minimum_global_action_interval_ms"]) / 1000
+        while time.monotonic() - started < run_seconds:
+            now = time.monotonic()
+            if now < next_due:
+                time.sleep(min(next_due - now, 0.01))
+                continue
+            next_due += 1 / infer_hz
+            watchdog.ensure_fresh()
+            frame = stream.frame()
+            model_frame = _model_frame(frame)
+            screen_valid = bool(
+                float(model_frame.mean()) >= cast(float, contract["minimum_screen_mean"])
+                and float(model_frame.std())
+                >= cast(float, contract["minimum_screen_standard_deviation"])
+            )
+            probabilities = _combat_rule_probabilities(frame, visual_layout, calibration)
+            skill3_ratio = _combat_visual_score(frame, visual_layout, "skill3") / baseline3
+            ready = {
+                "basic_attack": probabilities["basic_attack"]
+                >= cast(float, contract["absolute_ready_probability"]),
+                "skill1": probabilities["skill1"]
+                >= cast(float, contract["absolute_ready_probability"]),
+                "skill2": probabilities["skill2"]
+                >= cast(float, contract["absolute_ready_probability"]),
+                "skill3": skill3_ratio >= cast(float, contract["skill3_ready_ratio"]),
+            }
+            cooling = {
+                "skill1": probabilities["skill1"]
+                < cast(float, contract["absolute_ready_probability"]),
+                "skill2": probabilities["skill2"]
+                < cast(float, contract["absolute_ready_probability"]),
+                "skill3": skill3_ratio < cast(float, contract["skill3_cooldown_ratio"]),
+            }
+            for action in actions:
+                stable[action] = stable[action] + 1 if screen_valid and ready[action] else 0
+            for action in ("skill1", "skill2", "skill3"):
+                if armed[action]:
+                    continue
+                low[action] = low[action] + 1 if cooling[action] else 0
+                if low[action] >= cast(int, contract["cooldown_confirmation_frames"]):
+                    release_seen[action] = True
+                if release_seen[action]:
+                    high[action] = high[action] + 1 if ready[action] else 0
+                if release_seen[action] and high[action] >= cast(
+                    int, contract["positive_confirmation_frames"]
+                ):
+                    armed[action] = True
+                    release_seen[action] = False
+                    low[action] = high[action] = 0
+            selected: str | None = None
+            sent = False
+            now = time.monotonic()
+            if (
+                total < cast(int, contract["maximum_total_actions"])
+                and now - last_action
+                >= cast(int, contract["minimum_global_action_interval_ms"]) / 1000
+            ):
+                for offset in range(len(actions)):
+                    index = (pointer + offset) % len(actions)
+                    action = actions[index]
+                    admitted = bool(
+                        stable[action] >= cast(int, contract["positive_confirmation_frames"])
+                        and counts[action] < maximum[action]
+                        and (action == "basic_attack" or armed[action])
+                    )
+                    if admitted:
+                        selected = action
+                        pointer = (index + 1) % len(actions)
+                        break
+                if selected is not None:
+                    sent = _execute_action(
+                        FactorizedAction(ability=selected),
+                        execution_layout,
+                        guard.width,
+                        guard.height,
+                        sender.send,
+                    )
+                if sent and selected is not None:
+                    counts[selected] += 1
+                    total += 1
+                    last_action = now
+                    if selected != "basic_attack":
+                        armed[selected] = False
+                        release_seen[selected] = False
+                        low[selected] = high[selected] = 0
+            rows.append(
+                {
+                    "schema_version": VISUAL_COMBAT_ARBITER_SCHEMA,
+                    "sequence": len(rows),
+                    "frame_sha256": hashlib.sha256(model_frame.tobytes()).hexdigest(),
+                    "screen_valid": screen_valid,
+                    "probabilities": {
+                        **{name: round(probabilities[name], 8) for name in actions[:2]},
+                        "skill3_ratio": round(skill3_ratio, 8),
+                        "basic_attack": round(probabilities["basic_attack"], 8),
+                    },
+                    "selected_action": selected,
+                    "cooldown_state": {
+                        name: {
+                            "armed": armed[name],
+                            "release_seen": release_seen[name],
+                        }
+                        for name in ("skill1", "skill2", "skill3")
+                    },
+                    "input_sent": sent,
+                    "synchronous_acknowledged": sent,
+                    "label_source": "synchronous_executed_action" if sent else "wait",
+                    "rejection_reason": (
+                        "EXECUTED"
+                        if sent
+                        else "ACTION_CAP"
+                        if total >= cast(int, contract["maximum_total_actions"])
+                        else "INVALID_SCREEN"
+                        if not screen_valid
+                        else "NO_VISUALLY_ADMITTED_ACTION"
+                    ),
+                }
+            )
+    except Exception as exc:
+        failure = str(exc)
+    finally:
+        watchdog.stop()
+        stream.close()
+    minimum = cast(int, contract["minimum_actions_per_button"])
+    strict = bool(
+        failure is None
+        and len(rows) >= int(run_seconds * infer_hz * 0.95)
+        and sender.sent == total
+        and total > 0
+        and all(minimum <= counts[action] <= maximum[action] for action in actions)
+    )
+    summary: dict[str, object] = {
+        "schema_version": VISUAL_COMBAT_ARBITER_SCHEMA,
+        "status": "PASSED" if strict else "FAILED",
+        "strict_passed": strict,
+        "contract_sha256": contract_sha,
+        "visual_layout_sha256": visual_layout_sha,
+        "execution_layout_sha256": execution_layout_sha,
+        "teacher_report_sha256": calibration.report_sha256,
+        "duration_seconds": round(time.monotonic() - started, 8) if started else 0.0,
+        "inference_cycles": len(rows),
+        "executed_action_counts": dict(counts),
+        "total_executed_actions": total,
+        "maximum_total_actions": contract["maximum_total_actions"],
+        "synchronous_acknowledged_actions": sender.sent,
+        "skill3_ready_baseline": None if baseline3 is None else round(baseline3, 8),
+        "round_robin_selection": True,
+        "cooldown_release_required_for_skills": True,
         "unexpected_actions": 0,
         "failure": failure,
         "raw_frames_persisted": False,

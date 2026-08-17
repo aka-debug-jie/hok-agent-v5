@@ -200,6 +200,12 @@ five times, with 20/20 synchronous acknowledgements and zero unexpected actions 
 deterministic owner-testbed result; it is not model-driven gameplay and does not include movement,
 aiming, or target selection.
 
+The subsequent visual combat arbiter replaced the fixed button schedule with cooldown-aware
+round-robin selection. Its 60-second gate executed 20 actions and its five-minute gate executed 58;
+every command was synchronously acknowledged and owner-observed as normal. Skills must visibly
+enter cooldown and recover before rearming. See
+[docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md](docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md).
+
 ## Project documents
 
 - [AGENTS.md](AGENTS.md): implementation authority and module constraints.
@@ -208,6 +214,7 @@ aiming, or target selection.
 - [docs/T8_V4_PROTOCOL.md](docs/T8_V4_PROTOCOL.md): frozen T8-v4 diagnostic and promotion protocol.
 - [docs/T8_V5_ROI_PROTOCOL.md](docs/T8_V5_ROI_PROTOCOL.md): T8-v5 isolated-ROI evidence gate.
 - [docs/T8_BASIC_MVP_PROTOCOL.md](docs/T8_BASIC_MVP_PROTOCOL.md): deterministic basic-only gates.
+- [docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md](docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md): cooldown-aware four-button arbiter.
 - [docs/DELIVERY_HISTORY.md](docs/DELIVERY_HISTORY.md): sanitized historical ledger.
 
 ## License

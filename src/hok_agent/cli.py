@@ -657,6 +657,17 @@ def _parser() -> argparse.ArgumentParser:
     synchronous_combat.add_argument("--visual-layout", type=Path, required=True)
     synchronous_combat.add_argument("--execution-layout", type=Path, required=True)
     synchronous_combat.add_argument("--output-dir", type=Path, required=True)
+    visual_arbiter = commands.add_parser(
+        "visual-combat-arbiter",
+        help="run the bounded visual cooldown-aware combat arbiter",
+    )
+    visual_arbiter.add_argument("--serial", required=True)
+    visual_arbiter.add_argument("--video-node", type=Path, required=True)
+    visual_arbiter.add_argument("--contract", type=Path, required=True)
+    visual_arbiter.add_argument("--teacher-report", type=Path, required=True)
+    visual_arbiter.add_argument("--visual-layout", type=Path, required=True)
+    visual_arbiter.add_argument("--execution-layout", type=Path, required=True)
+    visual_arbiter.add_argument("--output-dir", type=Path, required=True)
     t8_evaluate = commands.add_parser(
         "t8-evaluate-offline", help="run the sealed held-out evaluation for the selected T8 model"
     )
@@ -1643,6 +1654,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             from hok_agent.mobile_testbed import run_synchronous_combat_probe
 
             result = run_synchronous_combat_probe(
+                serial=args.serial,
+                video_node=args.video_node,
+                contract_path=args.contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "visual-combat-arbiter":
+            from hok_agent.mobile_testbed import run_visual_combat_arbiter
+
+            result = run_visual_combat_arbiter(
                 serial=args.serial,
                 video_node=args.video_node,
                 contract_path=args.contract,

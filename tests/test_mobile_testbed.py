@@ -125,6 +125,22 @@ def test_synchronous_combat_sender_is_acknowledged_tap_only(monkeypatch) -> None
         sender.send("swipe", "1", "2", "3", "4", "100")
 
 
+def test_visual_combat_arbiter_contracts_freeze_staged_caps() -> None:
+    root = Path(__file__).resolve().parents[1]
+    short, _short_hash, short_maximum = mobile_testbed._visual_combat_arbiter_contract(
+        root / "configs/visual_combat_arbiter_v1.json"
+    )
+    long, _long_hash, long_maximum = mobile_testbed._visual_combat_arbiter_contract(
+        root / "configs/visual_combat_arbiter_5m_v1.json"
+    )
+    assert short["run_seconds"] == 60.0
+    assert short["maximum_total_actions"] == 20
+    assert short_maximum == {name: 10 for name in ("skill1", "skill2", "skill3", "basic_attack")}
+    assert long["run_seconds"] == 300.0
+    assert long["maximum_total_actions"] == 60
+    assert long_maximum == {"basic_attack": 30, "skill1": 10, "skill2": 10, "skill3": 10}
+
+
 def test_mobile_input_fails_closed_without_frozen_build_identity(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -1,0 +1,32 @@
+{
+  "schema_version": "hok-agent-visual-combat-arbiter-5m-contract-v1",
+  "action_vocabulary": ["skill1", "skill2", "skill3", "basic_attack"],
+  "run_seconds": 300.0,
+  "infer_hz": 5,
+  "stream_fps": 30,
+  "warmup_seconds": 3.0,
+  "minimum_global_action_interval_ms": 1500,
+  "maximum_total_actions": 60,
+  "maximum_actions": {
+    "basic_attack": 30,
+    "skill1": 10,
+    "skill2": 10,
+    "skill3": 10
+  },
+  "minimum_actions_per_button": 1,
+  "absolute_ready_probability": 0.75,
+  "skill3_cooldown_ratio": 0.75,
+  "skill3_ready_ratio": 0.9,
+  "minimum_skill3_ready_baseline": 0.55,
+  "positive_confirmation_frames": 3,
+  "cooldown_confirmation_frames": 3,
+  "minimum_screen_mean": 8.0,
+  "minimum_screen_standard_deviation": 5.0,
+  "selection_rule": "round_robin_first_visually_admitted",
+  "synchronous_adb_required": true,
+  "movement_allowed": false,
+  "aim_allowed": false,
+  "target_selection_allowed": false,
+  "testbed_owner_authorized": true,
+  "contract_sha256": "249f9506cff720161ba1f6759d6b033da36c61946b17f0d765072b6219b50da7"
+}

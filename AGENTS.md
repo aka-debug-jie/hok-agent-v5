@@ -126,6 +126,10 @@
 - The synchronous combat probe is confined to acknowledged numeric taps for basic attack and the
   three skills in the owner testbed. Two 60-second repeats passed with five actions per button.
   It cannot send movement, swipe/aim, target selection, arbitrary shell input, or model decisions.
+- The visual combat arbiter is governed by `docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md`. It may select
+  only the four fixed combat taps by cooldown-aware round-robin and must synchronously acknowledge
+  every send. Its 60-second and five-minute gates passed. It cannot add movement, aim, target
+  selection, enemy semantics, arbitrary commands, or model decisions without a new contract.
 - Never target an unapproved client or account; outside the single pinned T8-v2.1 demonstrator,
   never add scrcpy control, Accessibility, root,
   hooks, injection, memory/process inspection, protocol
