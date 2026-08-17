@@ -1,0 +1,21 @@
+{
+  "schema_version": "hok-agent-basic-rule-engineering-contract-v1",
+  "action_vocabulary": ["wait", "basic_attack"],
+  "basic_rule_probability_threshold": 0.8,
+  "positive_confirmation_frames": 3,
+  "infer_hz": 5,
+  "stream_fps": 30,
+  "smoke_run_seconds": 20.0,
+  "minimum_smoke_ready_ratio": 0.5,
+  "minimum_period_coverage": 0.95,
+  "maximum_p95_decision_seconds": 0.15,
+  "probe_run_seconds": 45.0,
+  "probe_warmup_seconds": 3.0,
+  "minimum_action_interval_ms": 1500,
+  "maximum_actions": 20,
+  "movement_allowed": false,
+  "skills_allowed": false,
+  "target_selection_allowed": false,
+  "testbed_owner_authorized": true,
+  "contract_sha256": "72e5c2a8a953901cf64a4026e391de059f31e32fdc99eabc8e3f2158c436a934"
+}

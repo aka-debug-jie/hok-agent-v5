@@ -29,6 +29,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 | T8-v4 | `FROZEN_FAILED`: weak targets learnable, spatial-selectivity gate failed | No more repair, training, replay, Shadow, or input |
 | T8-v5 | `FROZEN_FAILED`: only basic passed the per-head ROI gate | No TCN, replay, Shadow, capture, or input |
 | Basic MVP | `FROZEN_FAILED`: offline passed, five-minute Shadow produced zero candidates | No probe or control stage |
+| Basic rule engineering | v2 smoke passed; bounded probe sent 1 tap but saw no visual release | Frozen; no 1/5-minute run |
 
 ## T8-v2.7 freeze
 

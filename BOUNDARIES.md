@@ -91,6 +91,9 @@ input admission.
   Shadow through explicit serial and V4L2 capture. Both stages send zero input. The frozen Shadow
   produced zero candidates and failed, so no repeat, threshold change, 20-action probe, one-minute
   run, or five-minute control contract is permitted.
+- The Basic rule engineering fallback is separately frozen. Its v2 probe required the basic ROI to
+  fall below threshold after every tap before rearming. One tap was dispatched, no release was
+  observed, and the probe failed. No repeat, release-guard removal, or longer control run is allowed.
 - Offline synthetic training, unlabeled real-video representation learning, conservative
   pseudo-label research, one Mean Teacher round, and RGB-derived tracking/temporal diagnostics.
 - A future, separately authorized post-training phase may use owner gameplay-quality

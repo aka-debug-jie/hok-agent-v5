@@ -73,6 +73,33 @@ def _guard(monkeypatch) -> None:
     monkeypatch.setattr(mobile_testbed, "_require_mobile_input_identity", lambda: None)
 
 
+def test_basic_rule_engineering_contract_and_probability(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._basic_rule_contract(
+        root / "configs/basic_rule_engineering_v1.json"
+    )
+    assert contract["maximum_actions"] == 20
+    assert contract["probe_run_seconds"] == 45.0
+    assert len(digest) == 64
+    layout, _layout_sha = mobile_testbed.load_layout(_write_layout(tmp_path))
+    calibration = mobile_testbed.RGBTeacherCalibration(
+        "a" * 64,
+        "b" * 64,
+        0.1,
+        (0.3, 0.3, 0.3),
+        (0.1, 0.1, 0.1),
+    )
+    dark = np.zeros((128, 128, 3), dtype=np.uint8)
+    bright = np.full((128, 128, 3), 255, dtype=np.uint8)
+    assert mobile_testbed._basic_rule_probability(dark, layout, calibration) < 0.2
+    assert mobile_testbed._basic_rule_probability(bright, layout, calibration) > 0.8
+    calibrated, _digest = mobile_testbed._basic_rule_contract(
+        root / "configs/basic_rule_engineering_v2.json"
+    )
+    assert calibrated["basic_rule_probability_threshold"] == 0.75
+    assert calibrated["require_release_between_actions"] is True
+
+
 def test_mobile_input_fails_closed_without_frozen_build_identity(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -372,10 +399,16 @@ def test_type_a_decoder_assigns_stable_logical_slots(monkeypatch) -> None:
     )
     observer = mobile_testbed.TouchObserver("test-1", descriptor)
     observer._decode(
-        StringIO("[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 00000090\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004ff\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_SYN SYN_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 00000230\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004ff\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 0000012c\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004b0\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_SYN SYN_REPORT 00000000\n")
+        StringIO(
+            "[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 00000090\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004ff\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_SYN SYN_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 00000230\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004ff\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 0000012c\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004b0\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_SYN SYN_REPORT 00000000\n"
+        )
     )
     packets = [item for item in iter(lambda: observer.read(0.0), None)]
-    assert [(item.slot, item.tracking_id, item.x, item.y) for item in packets] == [(0, 0, 144, 1279), (0, 0, 300, 1200), (1, 0, 560, 1279)]
+    assert [(item.slot, item.tracking_id, item.x, item.y) for item in packets] == [
+        (0, 0, 144, 1279),
+        (0, 0, 300, 1200),
+        (1, 0, 560, 1279),
+    ]
 
 
 def test_touch_action_mapper_derives_parallel_move_and_skill() -> None:
@@ -838,9 +871,11 @@ def test_inverse_probe_schedule_is_combat_only_balanced_and_bounded() -> None:
     releases = [key for _offset, key, pressed in events if not pressed]
     assert presses == releases
     assert set(presses) == {"f", "1", "2", "3"}
-    assert max(presses.count(key) for key in set(presses)) - min(
-        presses.count(key) for key in set(presses)
-    ) <= 1
+    assert (
+        max(presses.count(key) for key in set(presses))
+        - min(presses.count(key) for key in set(presses))
+        <= 1
+    )
     assert all(0 < offset < 60 for offset, _key, _pressed in events)
 
 
@@ -913,25 +948,19 @@ def test_rgb_teacher_uses_activity_button_margin_and_abstains(tmp_path: Path) ->
     center_x = round((point[0] - 0.52) / 0.48 * 127)
     center_y = round((point[1] - 0.30) / 0.70 * 127)
     current[2, center_y - 3 : center_y + 4, center_x - 3 : center_x + 4, 0] = 255
-    decision = mobile_testbed.rgb_teacher_decision(
-        current, history, layout, calibration
-    )
+    decision = mobile_testbed.rgb_teacher_decision(current, history, layout, calibration)
     assert decision.combat_id == mobile_testbed.ABILITIES.index("skill1")
     assert decision.activity >= calibration.activity_threshold
     assert decision.margin >= mobile_testbed.RGB_TEACHER_MARGIN
     low_activity = current.copy()
     low_activity[1] = 8
-    live_decision = mobile_testbed.rgb_teacher_decision(
-        low_activity, history, layout, calibration
-    )
+    live_decision = mobile_testbed.rgb_teacher_decision(low_activity, history, layout, calibration)
     assert mobile_testbed.RGB_TEACHER_LIVE_ACTIVITY_THRESHOLD <= live_decision.activity < 0.10
     assert live_decision.combat_id == mobile_testbed.ABILITIES.index("skill1")
     enemy = current.copy()
     enemy[1] = 0
     enemy[0, 50, 30:55, 0] = 255
-    enemy_decision = mobile_testbed.rgb_teacher_decision(
-        enemy, history, layout, calibration
-    )
+    enemy_decision = mobile_testbed.rgb_teacher_decision(enemy, history, layout, calibration)
     assert enemy_decision.enemy_cue is True
     assert enemy_decision.enemy_red_row_max >= mobile_testbed.RGB_TEACHER_ENEMY_RED_ROW_MAX
     assert enemy_decision.combat_id == mobile_testbed.ABILITIES.index("skill1")
@@ -939,15 +968,10 @@ def test_rgb_teacher_uses_activity_button_margin_and_abstains(tmp_path: Path) ->
     near_enemy[1] = 0
     near_enemy[0, 50, 30:40, 0] = 255
     assert (
-        mobile_testbed.rgb_teacher_decision(
-            near_enemy, history, layout, calibration
-        ).enemy_cue
+        mobile_testbed.rgb_teacher_decision(near_enemy, history, layout, calibration).enemy_cue
         is False
     )
-    assert (
-        mobile_testbed.rgb_teacher_decision(current, current, layout, calibration).combat_id
-        == 0
-    )
+    assert mobile_testbed.rgb_teacher_decision(current, current, layout, calibration).combat_id == 0
 
 
 def test_rgb_teacher_minimap_navigation_tracks_nearest_red_target() -> None:
@@ -966,8 +990,7 @@ def test_rgb_teacher_writer_stores_one_frame_stream_not_repeated_windows(
 ) -> None:
     output = tmp_path / "session"
     frames = [
-        (index * 100_000_000, np.full((128, 128, 3), index, dtype=np.uint8))
-        for index in range(52)
+        (index * 100_000_000, np.full((128, 128, 3), index, dtype=np.uint8)) for index in range(52)
     ]
     samples = [
         mobile_testbed.RGBTeacherSample(51, 31, 0, 5_100_000_000, 5_200_000_000, -1, 0.0, False),

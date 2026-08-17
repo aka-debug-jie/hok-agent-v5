@@ -187,6 +187,12 @@ completed all 1,500 cycles with low latency but produced zero candidates: the li
 never reached the frozen 0.80 threshold. The route is frozen without a probe or device input. See
 [docs/T8_BASIC_MVP_PROTOCOL.md](docs/T8_BASIC_MVP_PROTOCOL.md).
 
+A final deterministic rule fallback verified that the calibrated basic ROI appeared visually
+ready. The first 0.80 smoke failed on capture variation; one fixed 0.75 engineering calibration
+passed 100/100 cycles. Its bounded probe sent exactly one tap, then the mandatory visual-release
+guard blocked every later tap because the ROI never fell below 0.75. The fallback is frozen with no
+one-minute or five-minute control run.
+
 ## Project documents
 
 - [AGENTS.md](AGENTS.md): implementation authority and module constraints.

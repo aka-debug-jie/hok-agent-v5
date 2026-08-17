@@ -49,15 +49,17 @@ RGB_TEACHER_SCHEMA = "hok-agent-mobile-demonstrate-rgb-teacher-v2.5.1"
 RGB_TEACHER_DATA_SCHEMA = "hok-agent-mobile-demonstrate-rgb-teacher-data-v2"
 RGB_TEACHER_SESSION_SCHEMA = "hok-agent-mobile-demonstrate-rgb-teacher-session-v2"
 RGB_TEACHER_CALIBRATION_SCHEMA = "hok-agent-t8-v2.3-visual-teacher-replay-v1"
+BASIC_RULE_ENGINEERING_CONTRACT_SCHEMA = "hok-agent-basic-rule-engineering-contract-v1"
+BASIC_RULE_ENGINEERING_CONTRACT_V2_SCHEMA = "hok-agent-basic-rule-engineering-contract-v2"
+BASIC_RULE_SMOKE_SCHEMA = "hok-agent-basic-rule-read-only-smoke-v1"
+BASIC_RULE_PROBE_SCHEMA = "hok-agent-basic-rule-bounded-probe-v1"
 TOUCH_CALIBRATION_SCHEMA = "hok-agent-mobile-touch-calibration-v2"
 LAYOUT_SCHEMA = "hok-agent-mobile-layout-v3"
 MOBILE_BUILD_IDENTITY_SCHEMA = "hok-agent-mobile-build-identity-v1"
 MOBILE_BUILD_IDENTITY_DEFAULT_PATH = (
     Path(__file__).resolve().parents[2] / "configs" / "mobile_testbed_identity.local.json"
 )
-ANDROID_PACKAGE_RE = re.compile(
-    r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+"
-)
+ANDROID_PACKAGE_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+")
 DEMONSTRATOR_WINDOW_FRAMES = 8
 DEMONSTRATOR_SAMPLE_HZ = 10
 TOUCH_WINDOW_FRAMES = 16
@@ -163,6 +165,8 @@ def inverse_probe_events(run_seconds: float) -> tuple[tuple[float, str, bool], .
             events.extend(((offset, key, True), (offset + 0.2, key, False)))
             offset += 3.0
     return tuple(events)
+
+
 SERIAL_RE = re.compile(r"[A-Za-z0-9._-]+")
 TOUCH_DEVICE_RE = re.compile(r"/dev/input/event[0-9]+")
 GETEVENT_LINE_RE = re.compile(
@@ -191,7 +195,6 @@ class DeviceGuard:
 
 
 class GuardWatchdog:
-
     def __init__(self, guard: DeviceGuard, interval_seconds: float = 0.1) -> None:
         self._guard = guard
         self._interval_seconds = interval_seconds
@@ -414,7 +417,6 @@ class TouchCalibration:
 
 
 class KeyboardDemonstrator:
-
     def __init__(self, layout: Layout) -> None:
         self._layout = layout
         self._armed = "none"
@@ -459,7 +461,6 @@ class KeyboardDemonstrator:
 
 
 class KeyboardV2Demonstrator:
-
     def __init__(self) -> None:
         self._armed = "none"
         self._hold_ms = KEY_TO_HOLD_MS["j"]
@@ -498,7 +499,6 @@ class KeyboardV2Demonstrator:
 
 
 class TerminalKeyboard:
-
     def __init__(self) -> None:
         self._fd: int | None = None
         self._state: list[int | list[bytes | int]] | None = None
@@ -523,7 +523,6 @@ class TerminalKeyboard:
 
 
 class FocusedKeyboardWindow:
-
     def __init__(self, release_debounce_ms: int = 30) -> None:
         self._release_debounce_ms = release_debounce_ms
         self._root: Any | None = None
@@ -612,9 +611,7 @@ class FocusedKeyboardWindow:
                 self._pressed.remove(key)
                 self._events.append((key, False, time.monotonic_ns()))
 
-        self._pending_release[key] = self._root.after(
-            self._release_debounce_ms, release
-        )
+        self._pending_release[key] = self._root.after(self._release_debounce_ms, release)
 
     def _request_stop(self) -> None:
         self._events.append(("Escape", True, time.monotonic_ns()))
@@ -636,7 +633,6 @@ class FocusedKeyboardWindow:
 
 
 class LiveKeyboardController:
-
     def __init__(self, layout: Layout, width: int, height: int) -> None:
         self._layout = layout
         self._width = width
@@ -705,10 +701,14 @@ class LiveKeyboardController:
             if movement != self._movement:
                 center = _point(self._width, self._height, *self._layout.joystick_center)
                 if self._movement == "wait" and movement != "wait":
-                    operations.append(TouchOperation(ANDROID_ACTION_DOWN, JOYSTICK_POINTER_ID, *center))
+                    operations.append(
+                        TouchOperation(ANDROID_ACTION_DOWN, JOYSTICK_POINTER_ID, *center)
+                    )
                 if movement == "wait":
                     operations.append(
-                        TouchOperation(ANDROID_ACTION_UP, JOYSTICK_POINTER_ID, *self._joystick_position)
+                        TouchOperation(
+                            ANDROID_ACTION_UP, JOYSTICK_POINTER_ID, *self._joystick_position
+                        )
                     )
                     self._joystick_position = center
                 else:
@@ -801,7 +801,13 @@ def scripted_key_reader(
 ) -> Callable[[float], str | None]:
     if type(seed) is not int or not 0.25 <= interval_seconds <= 30.0:
         raise MobileTestbedError("scripted demonstrator bounds are invalid")
-    templates = [*(tuple(key) for key in KEY_TO_MOVEMENT), ("s",), ("f",), ("k", "f"), ("l", "1", "w")]
+    templates = [
+        *(tuple(key) for key in KEY_TO_MOVEMENT),
+        ("s",),
+        ("f",),
+        ("k", "f"),
+        ("l", "1", "w"),
+    ]
     templates.extend(
         (ability, direction) for ability in ("1", "2", "3") for direction in KEY_TO_MOVEMENT
     )
@@ -832,7 +838,6 @@ def scripted_key_reader(
 
 
 class AdbInputPipe:
-
     def __init__(self, serial: str) -> None:
         self._process = subprocess.Popen(
             ("adb", "-s", serial, "shell"),
@@ -947,9 +952,7 @@ def _mobile_build_identity() -> dict[str, object]:
     return payload
 
 
-def _verify_mobile_build_identity(
-    serial: str, identity: dict[str, object] | None = None
-) -> str:
+def _verify_mobile_build_identity(serial: str, identity: dict[str, object] | None = None) -> str:
     identity = _mobile_build_identity() if identity is None else identity
     package = cast(str, identity["package"])
     output = _run_adb(serial, "shell", "dumpsys", "package", package, text=True)
@@ -1027,7 +1030,6 @@ def discover_touch_devices(serial: str) -> tuple[TouchDescriptor, ...]:
 
 
 class TouchObserver:
-
     def __init__(self, serial: str, descriptor: TouchDescriptor) -> None:
         self._serial, self.descriptor = _validate_serial(serial), descriptor
         self._process: subprocess.Popen[str] | None = None
@@ -1132,11 +1134,30 @@ class TouchObserver:
                     assigned: dict[int, tuple[int | None, int, int]] = {}
                     unused = set(active)
                     for identifier, current_x, current_y in report:
-                        slot = min(unused, key=lambda item: (active[item][1] - current_x) ** 2 + (active[item][2] - current_y) ** 2, default=None)
-                        if slot is not None and ((active[slot][1] - current_x) / self.descriptor.max_x) ** 2 + ((active[slot][2] - current_y) / self.descriptor.max_y) ** 2 > 0.16:
+                        slot = min(
+                            unused,
+                            key=lambda item: (
+                                (active[item][1] - current_x) ** 2
+                                + (active[item][2] - current_y) ** 2
+                            ),
+                            default=None,
+                        )
+                        if (
+                            slot is not None
+                            and ((active[slot][1] - current_x) / self.descriptor.max_x) ** 2
+                            + ((active[slot][2] - current_y) / self.descriptor.max_y) ** 2
+                            > 0.16
+                        ):
                             slot = None
                         if slot is None:
-                            slot = next((item for item in range(self.descriptor.max_slots) if item not in assigned and item not in active), None)
+                            slot = next(
+                                (
+                                    item
+                                    for item in range(self.descriptor.max_slots)
+                                    if item not in assigned and item not in active
+                                ),
+                                None,
+                            )
                         if slot is None:
                             raise MobileTestbedError("Type-A report exceeds confirmed touch slots")
                         unused.discard(slot)
@@ -1144,11 +1165,11 @@ class TouchObserver:
                     for slot in sorted(unused):
                         _, old_x, old_y = active[slot]
                         self._packets.put(TouchPacket(received_ns, slot, None, old_x, old_y))
-                    for slot, (current_identifier, current_x, current_y) in sorted(assigned.items()):
+                    for slot, (current_identifier, current_x, current_y) in sorted(
+                        assigned.items()
+                    ):
                         self._packets.put(
-                            TouchPacket(
-                                received_ns, slot, current_identifier, current_x, current_y
-                            )
+                            TouchPacket(received_ns, slot, current_identifier, current_x, current_y)
                         )
                     active, report = assigned, []
         except BaseException as exc:  # pragma: no cover - hardware stream failure
@@ -1636,9 +1657,7 @@ def _model_frame(frame: np.ndarray) -> np.ndarray:
     return frame[rows[:, None], cols[None, :], :]
 
 
-def load_rgb_teacher_calibration(
-    path: Path, layout_sha256: str
-) -> RGBTeacherCalibration:
+def load_rgb_teacher_calibration(path: Path, layout_sha256: str) -> RGBTeacherCalibration:
     try:
         data = path.read_bytes()
         report = json.loads(data)
@@ -1683,9 +1702,7 @@ def load_rgb_teacher_calibration(
     )
 
 
-def _rgb_teacher_crop(
-    frame: np.ndarray, box: tuple[int, int, int, int]
-) -> np.ndarray:
+def _rgb_teacher_crop(frame: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
     x0, y0, x1, y1 = box
     rows = np.linspace(y0, y1 - 1, 128).astype(np.int64)
     cols = np.linspace(x0, x1 - 1, 128).astype(np.int64)
@@ -1712,10 +1729,7 @@ def rgb_teacher_decision(
     if current.shape != (3, 128, 128, 3) or history.shape != current.shape:
         raise MobileTestbedError("RGB teacher views are invalid")
     activity = float(
-        np.mean(
-            np.abs(current[1].astype(np.float32) - history[1].astype(np.float32))
-        )
-        / 255.0
+        np.mean(np.abs(current[1].astype(np.float32) - history[1].astype(np.float32))) / 255.0
     )
     hud = current[2].astype(np.float32) / 255.0
     scores: list[float] = []
@@ -1731,9 +1745,7 @@ def rgb_teacher_decision(
             raise MobileTestbedError("RGB teacher button ROI is invalid")
         patch = hud[y0:y1, x0:x1]
         maximum, minimum = patch.max(axis=2), patch.min(axis=2)
-        scores.append(
-            float(0.55 * maximum.mean() + 0.45 * (maximum - minimum).mean())
-        )
+        scores.append(float(0.55 * maximum.mean() + 0.45 * (maximum - minimum).mean()))
     normalized = tuple(
         (score - calibration.medians[index]) / calibration.scales[index]
         for index, score in enumerate(scores)
@@ -1752,8 +1764,7 @@ def rgb_teacher_decision(
     combat_id = (
         order[0] + 1
         if (
-            activity
-            >= min(calibration.activity_threshold, RGB_TEACHER_LIVE_ACTIVITY_THRESHOLD)
+            activity >= min(calibration.activity_threshold, RGB_TEACHER_LIVE_ACTIVITY_THRESHOLD)
             and margin >= RGB_TEACHER_MARGIN
         )
         or enemy_cue
@@ -1961,7 +1972,6 @@ def _execute_action(
 
 
 class ScrcpyV4L2:
-
     def __init__(self, serial: str, node: Path, max_fps: int) -> None:
         self._serial, self._node, self._max_fps = serial, node, max_fps
         self._process: subprocess.Popen[bytes] | None = None
@@ -2056,7 +2066,6 @@ def _recv_exact(connection: socket.socket, size: int) -> bytes:
 
 
 class ScrcpyControlSession:
-
     def __init__(
         self,
         serial: str,
@@ -2120,9 +2129,7 @@ class ScrcpyControlSession:
     def start(self) -> None:
         self._validate_server()
         _run_adb(self._serial, "push", str(self._server_path), "/data/local/tmp/scrcpy-server.jar")
-        forwarded = _run_adb(
-            self._serial, "forward", "tcp:0", "localabstract:scrcpy", text=True
-        )
+        forwarded = _run_adb(self._serial, "forward", "tcp:0", "localabstract:scrcpy", text=True)
         match = re.search(r"([0-9]+)", cast(str, forwarded))
         if match is None:
             raise MobileTestbedError("ADB did not allocate a scrcpy tunnel")
@@ -2171,9 +2178,7 @@ class ScrcpyControlSession:
             self.close()
             raise MobileTestbedError("scrcpy server connection timed out")
         try:
-            self._control_socket = socket.create_connection(
-                ("127.0.0.1", self._port), timeout=2
-            )
+            self._control_socket = socket.create_connection(("127.0.0.1", self._port), timeout=2)
             metadata = _recv_exact(self._video_socket, 68)
         except (OSError, MobileTestbedError) as exc:
             self.close()
@@ -2360,8 +2365,15 @@ def _touch_factor_coverage(
         "aim": [item.aim for item in actions],
         "hold": [TOUCH_HOLD_BUCKETS[_hold_bucket(item.hold_ms)] for item in actions],
     }
-    required = {"movement": MOVEMENTS, "combat": ABILITIES, "aim": AIMS[1:], "hold": TOUCH_HOLD_BUCKETS[1:]}
-    missing = {name: [value for value in required[name] if value not in factors[name]] for name in required}
+    required = {
+        "movement": MOVEMENTS,
+        "combat": ABILITIES,
+        "aim": AIMS[1:],
+        "hold": TOUCH_HOLD_BUCKETS[1:],
+    }
+    missing = {
+        name: [value for value in required[name] if value not in factors[name]] for name in required
+    }
     core = {
         "wait": "wait" in factors["movement"],
         "movement": any(item != "wait" for item in factors["movement"]),
@@ -2373,7 +2385,10 @@ def _touch_factor_coverage(
         "conflict_free": conflict_samples == 0,
     }
     return {
-        "counts": {name: {value: values.count(value) for value in dict.fromkeys(values)} for name, values in factors.items()},
+        "counts": {
+            name: {value: values.count(value) for value in dict.fromkeys(values)}
+            for name, values in factors.items()
+        },
         "missing": missing,
         "complete": not any(missing.values()),
         "core": core,
@@ -2418,7 +2433,13 @@ def _live_factor_coverage(
 
 
 def _touch_semantic_state(action: FactorizedAction) -> dict[str, object]:
-    return dict(zip(("movement", "ability", "aim", "target", "hold_bucket"), _touch_semantic_key(action), strict=True))
+    return dict(
+        zip(
+            ("movement", "ability", "aim", "target", "hold_bucket"),
+            _touch_semantic_key(action),
+            strict=True,
+        )
+    )
 
 
 def _touch_semantic_key(action: FactorizedAction) -> tuple[str, str, str, str, int]:
@@ -2816,14 +2837,10 @@ def _rgb_teacher_contract(
     ).hexdigest()
 
 
-def _write_rgb_teacher_frame_shard(
-    path: Path, frames: list[tuple[int, np.ndarray]]
-) -> None:
+def _write_rgb_teacher_frame_shard(path: Path, frames: list[tuple[int, np.ndarray]]) -> None:
     np.savez_compressed(
         path,
-        frames=np.stack([frame for _timestamp, frame in frames]).astype(
-            np.uint8, copy=False
-        ),
+        frames=np.stack([frame for _timestamp, frame in frames]).astype(np.uint8, copy=False),
         timestamp_ns=np.asarray([timestamp for timestamp, _frame in frames], dtype=np.int64),
     )
 
@@ -2877,10 +2894,7 @@ def _publish_rgb_teacher_session(
                 samples[offset : offset + shard_size],
             )
         (staging / "events.jsonl").write_text(
-            "".join(
-                json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
-                for row in rows
-            ),
+            "".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows),
             encoding="utf-8",
         )
         (staging / "summary.json").write_text(
@@ -2891,12 +2905,8 @@ def _publish_rgb_teacher_session(
         )
         manifest: dict[str, object] = {
             "schema_version": RGB_TEACHER_SESSION_SCHEMA,
-            "summary_sha256": hashlib.sha256(
-                (staging / "summary.json").read_bytes()
-            ).hexdigest(),
-            "events_sha256": hashlib.sha256(
-                (staging / "events.jsonl").read_bytes()
-            ).hexdigest(),
+            "summary_sha256": hashlib.sha256((staging / "summary.json").read_bytes()).hexdigest(),
+            "events_sha256": hashlib.sha256((staging / "events.jsonl").read_bytes()).hexdigest(),
             "action_contract_file_sha256": hashlib.sha256(
                 (staging / "action-contract.json").read_bytes()
             ).hexdigest(),
@@ -2942,7 +2952,6 @@ def _write_keyboard_v21_shard(path: Path, samples: list[LiveSample]) -> None:
 
 
 class KeyboardV21Writer:
-
     def __init__(
         self,
         output: Path,
@@ -2952,9 +2961,7 @@ class KeyboardV21Writer:
         self._output = output
         self._contract = contract
         self._shard_size = shard_size
-        self._temporary = tempfile.TemporaryDirectory(
-            prefix=f".{output.name}-", dir=output.parent
-        )
+        self._temporary = tempfile.TemporaryDirectory(prefix=f".{output.name}-", dir=output.parent)
         self._staging = Path(self._temporary.name)
         self._events = (self._staging / "events.jsonl").open("w", encoding="utf-8")
         self._buffer: list[LiveSample] = []
@@ -2977,9 +2984,7 @@ class KeyboardV21Writer:
     def _flush(self) -> None:
         if not self._buffer:
             return
-        _write_keyboard_v21_shard(
-            self._staging / f"samples-{self._shards:05d}.npz", self._buffer
-        )
+        _write_keyboard_v21_shard(self._staging / f"samples-{self._shards:05d}.npz", self._buffer)
         self._buffer = []
         self._shards += 1
 
@@ -3128,9 +3133,7 @@ def run_mobile_demonstrate_rgb_teacher_v25(
             timestamp_ns, frame = stream.frame_with_timestamp()
             normalized = _model_frame(frame).astype(np.uint8, copy=False)
             frame_stream.append((timestamp_ns, normalized))
-            history.append(
-                (timestamp_ns, len(frame_stream) - 1, _rgb_teacher_views(normalized))
-            )
+            history.append((timestamp_ns, len(frame_stream) - 1, _rgb_teacher_views(normalized)))
             next_sample += 1.0 / RGB_TEACHER_SAMPLE_HZ
         if warmup_basic_attack:
             decision_timestamp_ns = time.monotonic_ns()
@@ -3171,20 +3174,19 @@ def run_mobile_demonstrate_rgb_teacher_v25(
                 time.sleep(min(next_decision - now, max(0.0, next_sample - now)))
                 continue
             values = list(history)
-            current_values = values[-RGB_TEACHER_WINDOW_FRAMES :]
+            current_values = values[-RGB_TEACHER_WINDOW_FRAMES:]
             shifted_values = values[
                 -RGB_TEACHER_WINDOW_FRAMES
                 - RGB_TEACHER_HISTORY_FRAMES : -RGB_TEACHER_HISTORY_FRAMES
             ]
-            if len(current_values) != RGB_TEACHER_WINDOW_FRAMES or len(
-                shifted_values
-            ) != RGB_TEACHER_WINDOW_FRAMES:
+            if (
+                len(current_values) != RGB_TEACHER_WINDOW_FRAMES
+                or len(shifted_values) != RGB_TEACHER_WINDOW_FRAMES
+            ):
                 raise MobileTestbedError("RGB teacher causal history is incomplete")
             current = np.stack([value[2] for value in current_values])
             shifted = np.stack([value[2] for value in shifted_values])
-            raw_decision = rgb_teacher_decision(
-                current[-1], shifted[-1], layout, calibration
-            )
+            raw_decision = rgb_teacher_decision(current[-1], shifted[-1], layout, calibration)
             decision_timestamp_ns = time.monotonic_ns()
             candidate_id = raw_decision.combat_id
             if raw_decision.enemy_cue:
@@ -3197,9 +3199,7 @@ def run_mobile_demonstrate_rgb_teacher_v25(
                 if balanced_actions and eligible:
                     least_executed = min(dispatch_counts.values())
                     eligible = [
-                        index
-                        for index in eligible
-                        if dispatch_counts[index] == least_executed
+                        index for index in eligible if dispatch_counts[index] == least_executed
                     ]
                 candidate_id = (
                     max(
@@ -3212,8 +3212,7 @@ def run_mobile_demonstrate_rgb_teacher_v25(
             combat_id = candidate_id
             minimum_interval_ns = 500_000_000 if combat_id == 1 else 1_000_000_000
             if combat_id and (
-                decision_timestamp_ns - last_dispatch.get(combat_id, 0)
-                < minimum_interval_ns
+                decision_timestamp_ns - last_dispatch.get(combat_id, 0) < minimum_interval_ns
             ):
                 combat_id = 0
             if combat_id and (
@@ -3233,9 +3232,7 @@ def run_mobile_demonstrate_rgb_teacher_v25(
                 if remaining > 0:
                     time.sleep(remaining)
                 assert guarded_send is not None
-                sent = _execute_action_v2(
-                    action, layout, guard.width, guard.height, guarded_send
-                )
+                sent = _execute_action_v2(action, layout, guard.width, guard.height, guarded_send)
                 execution_timestamp_ns = time.monotonic_ns()
                 if not sent or execution_timestamp_ns < deadline_ns:
                     raise MobileTestbedError("RGB teacher action was not causally dispatched")
@@ -3279,7 +3276,9 @@ def run_mobile_demonstrate_rgb_teacher_v25(
                     "candidate_combat": ABILITIES[candidate_id],
                     "combat": ABILITIES[combat_id],
                     "activity": round(raw_decision.activity, 8),
-                    "normalized_scores": [round(value, 8) for value in raw_decision.normalized_scores],
+                    "normalized_scores": [
+                        round(value, 8) for value in raw_decision.normalized_scores
+                    ],
                     "margin": round(raw_decision.margin, 8),
                     "confidence": round(confidence, 8),
                     "enemy_red_pixels": raw_decision.enemy_red_pixels,
@@ -3399,9 +3398,7 @@ def run_mobile_demonstrate_rgb_teacher_v25(
         "warmup_input_commands_sent": warmup_input_commands_sent,
         "warmup_execution_timestamp_ns": warmup_execution_timestamp_ns,
         "environment_driver": (
-            "guarded_rgb_minimap_navigation_v1_with_deterministic_fallback"
-            if patrol
-            else "none"
+            "guarded_rgb_minimap_navigation_v1_with_deterministic_fallback" if patrol else "none"
         ),
         "environment_actions": environment_actions,
         "environment_input_commands_sent": len(environment_actions),
@@ -3420,9 +3417,7 @@ def run_mobile_demonstrate_rgb_teacher_v25(
     published = (
         output_dir
         if status != "INCOMPLETE_FORMAL_ATTEMPT"
-        else output_dir.parent
-        / "diagnostics"
-        / f"{output_dir.name}-attempt-{time.monotonic_ns()}"
+        else output_dir.parent / "diagnostics" / f"{output_dir.name}-attempt-{time.monotonic_ns()}"
     )
     _publish_rgb_teacher_session(
         published, frame_stream, samples, rows, summary, contract, shard_size
@@ -3507,11 +3502,11 @@ def run_mobile_demonstrate_keyboard_v2(
                 break
             if action is None:
                 continue
-            sent = _execute_action_v2(
-                action, layout, guard.width, guard.height, guarded_send
-            )
+            sent = _execute_action_v2(action, layout, guard.width, guard.height, guarded_send)
             timestamp_ns = time.monotonic_ns()
-            causal = [frame for frame_time, frame in windows if frame_time <= timestamp_ns - 100_000_000]
+            causal = [
+                frame for frame_time, frame in windows if frame_time <= timestamp_ns - 100_000_000
+            ]
             if len(causal) < TOUCH_WINDOW_FRAMES:
                 continue
             window = np.stack(causal[-TOUCH_WINDOW_FRAMES:])
@@ -3567,10 +3562,23 @@ def run_mobile_demonstrate_keyboard_v2(
         "manual_annotation_required": False,
         "raw_video_or_device_paths_persisted": False,
     }
-    valid_dispatches = all(sent or (action.movement == "wait" and action.ability == "none") for _window, action, _timestamp, sent in samples)
-    if formal_session and (status != "COMPLETED" or duration < 300 or len(samples) < KEYBOARD_V2_MIN_FORMAL_SAMPLES or not coverage["complete"] or not valid_dispatches):
+    valid_dispatches = all(
+        sent or (action.movement == "wait" and action.ability == "none")
+        for _window, action, _timestamp, sent in samples
+    )
+    if formal_session and (
+        status != "COMPLETED"
+        or duration < 300
+        or len(samples) < KEYBOARD_V2_MIN_FORMAL_SAMPLES
+        or not coverage["complete"]
+        or not valid_dispatches
+    ):
         status = summary["status"] = "INCOMPLETE_FORMAL_ATTEMPT"
-    published = output_dir if status != "INCOMPLETE_FORMAL_ATTEMPT" else output_dir.parent / "diagnostics" / f"{output_dir.name}-attempt-{time.monotonic_ns()}"
+    published = (
+        output_dir
+        if status != "INCOMPLETE_FORMAL_ATTEMPT"
+        else output_dir.parent / "diagnostics" / f"{output_dir.name}-attempt-{time.monotonic_ns()}"
+    )
     summary["published_as_formal"] = formal_session and published == output_dir
     _publish_keyboard_v2(published, samples, rows, summary, contract, shard_size)
     return summary
@@ -3838,9 +3846,7 @@ def run_mobile_demonstrate_keyboard_v21(
     published = output_dir
     if summary["status"] == "INCOMPLETE_FORMAL_ATTEMPT":
         published = (
-            output_dir.parent
-            / "diagnostics"
-            / f"{output_dir.name}-attempt-{time.monotonic_ns()}"
+            output_dir.parent / "diagnostics" / f"{output_dir.name}-attempt-{time.monotonic_ns()}"
         )
     summary["published_as_formal"] = formal_session and published == output_dir
     writer.finalize(summary, published)
@@ -4064,10 +4070,26 @@ def run_mobile_touch_demonstrate(
                 next_sample += 1.0 / TOUCH_SAMPLE_HZ
                 continue
             semantic = _touch_semantic_key(action)
-            _, frame = next((frame_time, frame) for frame_time, frame in reversed(windows) if frame_time <= timestamp_ns - 100_000_000)
+            _, frame = next(
+                (frame_time, frame)
+                for frame_time, frame in reversed(windows)
+                if frame_time <= timestamp_ns - 100_000_000
+            )
             if semantic != last_semantic:
                 event_index += 1
-                rows.append({"schema_version": TOUCH_DEMONSTRATOR_SCHEMA, "sequence": len(rows), "timestamp_ns": timestamp_ns, "first_sample_index": len(samples), "frame_sha256": hashlib.sha256(frame.tobytes()).hexdigest(), "state": _touch_semantic_state(action), "source": OBSERVED_TOUCH_DEMONSTRATION_SOURCE, "evidence": "physical_touch_observed_not_app_acknowledged", "input_commands_sent": 0})
+                rows.append(
+                    {
+                        "schema_version": TOUCH_DEMONSTRATOR_SCHEMA,
+                        "sequence": len(rows),
+                        "timestamp_ns": timestamp_ns,
+                        "first_sample_index": len(samples),
+                        "frame_sha256": hashlib.sha256(frame.tobytes()).hexdigest(),
+                        "state": _touch_semantic_state(action),
+                        "source": OBSERVED_TOUCH_DEMONSTRATION_SOURCE,
+                        "evidence": "physical_touch_observed_not_app_acknowledged",
+                        "input_commands_sent": 0,
+                    }
+                )
                 last_semantic = semantic
             samples.append(_TouchSample(frame, action, timestamp_ns, event_index))
             if mapper.parallel:
@@ -4083,7 +4105,11 @@ def run_mobile_touch_demonstrate(
     if len(samples) >= max_samples and time.monotonic() - started < run_seconds:
         status = "SAMPLE_CAP_REACHED"
     calibration_sha256 = _touch_calibration_payload(calibration)["calibration_sha256"]
-    factor_coverage = _touch_factor_coverage([item.action for item in samples], parallel_samples=parallel_samples, conflict_samples=mapper.conflict_samples)
+    factor_coverage = _touch_factor_coverage(
+        [item.action for item in samples],
+        parallel_samples=parallel_samples,
+        conflict_samples=mapper.conflict_samples,
+    )
     duration = time.monotonic() - started
     if formal_session and (
         status != "COMPLETED"
@@ -4094,7 +4120,11 @@ def run_mobile_touch_demonstrate(
     ):
         status = "INCOMPLETE_FORMAL_ATTEMPT"
     if semantic_smoke:
-        status = "SMOKE_PASSED" if status == "COMPLETED" and factor_coverage["core_complete"] else "SMOKE_FAILED"
+        status = (
+            "SMOKE_PASSED"
+            if status == "COMPLETED" and factor_coverage["core_complete"]
+            else "SMOKE_FAILED"
+        )
     summary = {
         "schema_version": TOUCH_DEMONSTRATOR_SCHEMA,
         "dataset_schema_version": TOUCH_DEMONSTRATOR_DATA_SCHEMA,
@@ -4127,12 +4157,310 @@ def run_mobile_touch_demonstrate(
     published = output_dir
     if status == "INCOMPLETE_FORMAL_ATTEMPT":
         published = (
-            output_dir.parent
-            / "diagnostics"
-            / f"{output_dir.name}-attempt-{time.monotonic_ns()}"
+            output_dir.parent / "diagnostics" / f"{output_dir.name}-attempt-{time.monotonic_ns()}"
         )
     summary["published_as_formal"] = formal_session and published == output_dir
     _publish_touch_demonstration(published, samples, rows, summary, shard_size)
+    return summary
+
+
+def _basic_rule_contract(path: Path) -> tuple[dict[str, object], str]:
+    try:
+        data = path.read_bytes()
+        value = json.loads(data)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MobileTestbedError("basic rule engineering contract is unavailable") from exc
+    if not isinstance(value, dict):
+        raise MobileTestbedError("basic rule engineering contract is invalid")
+    supplied = value.get("contract_sha256")
+    unsigned = {key: item for key, item in value.items() if key != "contract_sha256"}
+    digest = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    schema = value.get("schema_version")
+    if schema not in {
+        BASIC_RULE_ENGINEERING_CONTRACT_SCHEMA,
+        BASIC_RULE_ENGINEERING_CONTRACT_V2_SCHEMA,
+    }:
+        raise MobileTestbedError("basic rule engineering contract schema differs")
+    expected: dict[str, object] = {
+        "schema_version": schema,
+        "action_vocabulary": ["wait", "basic_attack"],
+        "basic_rule_probability_threshold": (
+            0.75 if schema == BASIC_RULE_ENGINEERING_CONTRACT_V2_SCHEMA else 0.8
+        ),
+        "positive_confirmation_frames": 3,
+        "infer_hz": 5,
+        "stream_fps": 30,
+        "smoke_run_seconds": 20.0,
+        "minimum_smoke_ready_ratio": 0.5,
+        "minimum_period_coverage": 0.95,
+        "maximum_p95_decision_seconds": 0.15,
+        "probe_run_seconds": 45.0,
+        "probe_warmup_seconds": 3.0,
+        "minimum_action_interval_ms": 1500,
+        "maximum_actions": 20,
+        "movement_allowed": False,
+        "skills_allowed": False,
+        "target_selection_allowed": False,
+        "testbed_owner_authorized": True,
+    }
+    if schema == BASIC_RULE_ENGINEERING_CONTRACT_V2_SCHEMA:
+        expected["require_release_between_actions"] = True
+    if supplied != digest or any(value.get(key) != item for key, item in expected.items()):
+        raise MobileTestbedError("basic rule engineering contract differs")
+    return value, digest
+
+
+def _basic_rule_probability(
+    frame: np.ndarray, layout: Layout, calibration: RGBTeacherCalibration
+) -> float:
+    point = layout.basic_attack
+    hud = _rgb_teacher_views(frame)[2].astype(np.float32) / 255.0
+    center_x = round((point[0] - 0.52) / 0.48 * 127)
+    center_y = round((point[1] - 0.30) / 0.70 * 127)
+    x0, x1 = max(0, center_x - 6), min(128, center_x + 7)
+    y0, y1 = max(0, center_y - 5), min(128, center_y + 6)
+    if x0 >= x1 or y0 >= y1:
+        raise MobileTestbedError("basic rule ROI is invalid")
+    patch = hud[y0:y1, x0:x1]
+    maximum, minimum = patch.max(axis=2), patch.min(axis=2)
+    score = 0.55 * float(maximum.mean()) + 0.45 * float((maximum - minimum).mean())
+    normalized = (score - calibration.medians[0]) / calibration.scales[0]
+    return float(1.0 / (1.0 + math.exp(-4.0 * normalized)))
+
+
+def _summary_identity(summary: dict[str, object]) -> str:
+    unsigned = {key: item for key, item in summary.items() if key != "summary_sha256"}
+    return hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+
+
+def run_basic_rule_smoke(
+    *,
+    serial: str,
+    video_node: Path,
+    contract_path: Path,
+    teacher_report: Path,
+    layout_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract, contract_sha = _basic_rule_contract(contract_path)
+    output = _new_large_output(output_dir)
+    guard = _open_device_guard(serial)
+    layout, layout_sha = load_layout(layout_path)
+    if (guard.width, guard.height) != (layout.width, layout.height):
+        raise MobileTestbedError("basic rule smoke layout differs from display")
+    calibration = load_rgb_teacher_calibration(teacher_report, layout_sha)
+    stream = ScrcpyV4L2(guard.serial, video_node, cast(int, contract["stream_fps"]))
+    watchdog = GuardWatchdog(guard)
+    rows: list[dict[str, object]] = []
+    delays: list[float] = []
+    failure: str | None = None
+    run_seconds = cast(float, contract["smoke_run_seconds"])
+    infer_hz = cast(int, contract["infer_hz"])
+    expected = int(run_seconds * infer_hz)
+    started = next_due = 0.0
+    try:
+        stream.start()
+        watchdog.start()
+        started = next_due = time.monotonic()
+        while len(rows) < expected and time.monotonic() - started < run_seconds:
+            now = time.monotonic()
+            if now < next_due:
+                time.sleep(min(next_due - now, 0.01))
+                continue
+            scheduled = next_due
+            next_due += 1 / infer_hz
+            watchdog.ensure_fresh()
+            frame = stream.frame()
+            probability = _basic_rule_probability(frame, layout, calibration)
+            delays.append(time.monotonic() - scheduled)
+            rows.append(
+                {
+                    "schema_version": BASIC_RULE_SMOKE_SCHEMA,
+                    "sequence": len(rows),
+                    "frame_sha256": hashlib.sha256(_model_frame(frame).tobytes()).hexdigest(),
+                    "basic_rule_probability": round(probability, 8),
+                    "ready": probability
+                    >= cast(float, contract["basic_rule_probability_threshold"]),
+                    "input_sent": False,
+                }
+            )
+    except Exception as exc:
+        failure = str(exc)
+    finally:
+        watchdog.stop()
+        stream.close()
+    coverage = len(rows) / expected
+    ready_ratio = sum(cast(bool, row["ready"]) for row in rows) / max(len(rows), 1)
+    p95 = float(np.percentile(np.asarray(delays), 95)) if delays else None
+    strict = bool(
+        failure is None
+        and coverage >= cast(float, contract["minimum_period_coverage"])
+        and ready_ratio >= cast(float, contract["minimum_smoke_ready_ratio"])
+        and p95 is not None
+        and p95 <= cast(float, contract["maximum_p95_decision_seconds"])
+    )
+    summary: dict[str, object] = {
+        "schema_version": BASIC_RULE_SMOKE_SCHEMA,
+        "status": "PASSED" if strict else "FAILED",
+        "strict_passed": strict,
+        "contract_sha256": contract_sha,
+        "layout_sha256": layout_sha,
+        "teacher_report_sha256": calibration.report_sha256,
+        "scheduled_cycles": expected,
+        "completed_cycles": len(rows),
+        "period_coverage": round(coverage, 8),
+        "ready_ratio": round(ready_ratio, 8),
+        "p95_scheduled_to_decision_seconds": None if p95 is None else round(p95, 8),
+        "failure": failure,
+        "raw_frames_persisted": False,
+        "input_commands_sent": 0,
+        "control_output": False,
+        "probe_allowed": strict,
+    }
+    summary["summary_sha256"] = _summary_identity(summary)
+    _publish(output, rows, summary)
+    return summary
+
+
+def run_basic_rule_probe(
+    *,
+    serial: str,
+    video_node: Path,
+    contract_path: Path,
+    smoke_summary: Path,
+    teacher_report: Path,
+    layout_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract, contract_sha = _basic_rule_contract(contract_path)
+    try:
+        smoke_data = smoke_summary.read_bytes()
+        smoke = json.loads(smoke_data)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MobileTestbedError("basic rule smoke evidence is unavailable") from exc
+    if (
+        not isinstance(smoke, dict)
+        or smoke.get("schema_version") != BASIC_RULE_SMOKE_SCHEMA
+        or smoke.get("status") != "PASSED"
+        or smoke.get("strict_passed") is not True
+        or smoke.get("contract_sha256") != contract_sha
+        or smoke.get("summary_sha256") != _summary_identity(smoke)
+        or smoke.get("input_commands_sent") != 0
+        or smoke.get("control_output") is not False
+        or smoke.get("probe_allowed") is not True
+    ):
+        raise MobileTestbedError("basic rule smoke did not admit the probe")
+    _require_mobile_input_identity()
+    output = _new_large_output(output_dir)
+    guard = _open_device_guard(serial)
+    layout, layout_sha = load_layout(layout_path)
+    if (guard.width, guard.height) != (layout.width, layout.height) or smoke.get(
+        "layout_sha256"
+    ) != layout_sha:
+        raise MobileTestbedError("basic rule probe layout differs")
+    calibration = load_rgb_teacher_calibration(teacher_report, layout_sha)
+    if smoke.get("teacher_report_sha256") != calibration.report_sha256:
+        raise MobileTestbedError("basic rule probe teacher differs")
+    stream = ScrcpyV4L2(guard.serial, video_node, cast(int, contract["stream_fps"]))
+    pipe = AdbInputPipe(guard.serial)
+    watchdog = GuardWatchdog(guard)
+    rows: list[dict[str, object]] = []
+    failure: str | None = None
+    stable_count = 0
+    armed = True
+    executed = 0
+    last_sent = -(10**12)
+    run_seconds = cast(float, contract["probe_run_seconds"])
+    infer_hz = cast(int, contract["infer_hz"])
+    maximum_actions = cast(int, contract["maximum_actions"])
+    started = next_due = 0.0
+    try:
+        stream.start()
+        watchdog.start()
+        started = next_due = time.monotonic()
+        while time.monotonic() - started < run_seconds and executed < maximum_actions:
+            now = time.monotonic()
+            if now < next_due:
+                time.sleep(min(next_due - now, 0.01))
+                continue
+            next_due += 1 / infer_hz
+            watchdog.ensure_fresh()
+            frame = stream.frame()
+            probability = _basic_rule_probability(frame, layout, calibration)
+            ready = probability >= cast(float, contract["basic_rule_probability_threshold"])
+            stable_count = stable_count + 1 if ready else 0
+            if not ready:
+                armed = True
+            warmup = time.monotonic() - started >= cast(float, contract["probe_warmup_seconds"])
+            interval = time.monotonic_ns() // 1_000_000 - last_sent >= cast(
+                int, contract["minimum_action_interval_ms"]
+            )
+            accepted = bool(
+                warmup
+                and stable_count >= cast(int, contract["positive_confirmation_frames"])
+                and interval
+                and armed
+                and executed < maximum_actions
+            )
+            sent = False
+            if accepted:
+                sent = _execute_action(
+                    FactorizedAction(ability="basic_attack"),
+                    layout,
+                    guard.width,
+                    guard.height,
+                    _guarded_send(guard, pipe.send),
+                )
+            if sent:
+                executed += 1
+                last_sent = time.monotonic_ns() // 1_000_000
+                if contract.get("require_release_between_actions") is True:
+                    armed = False
+            rows.append(
+                {
+                    "schema_version": BASIC_RULE_PROBE_SCHEMA,
+                    "sequence": len(rows),
+                    "frame_sha256": hashlib.sha256(_model_frame(frame).tobytes()).hexdigest(),
+                    "basic_rule_probability": round(probability, 8),
+                    "ready": ready,
+                    "stable": stable_count >= cast(int, contract["positive_confirmation_frames"]),
+                    "warmup_complete": warmup,
+                    "armed": armed,
+                    "input_sent": sent,
+                }
+            )
+    except Exception as exc:
+        failure = str(exc)
+    finally:
+        watchdog.stop()
+        pipe.close()
+        stream.close()
+    strict = bool(failure is None and executed == maximum_actions)
+    summary: dict[str, object] = {
+        "schema_version": BASIC_RULE_PROBE_SCHEMA,
+        "status": "PASSED" if strict else "FAILED",
+        "strict_passed": strict,
+        "contract_sha256": contract_sha,
+        "smoke_summary_sha256": hashlib.sha256(smoke_data).hexdigest(),
+        "layout_sha256": layout_sha,
+        "teacher_report_sha256": calibration.report_sha256,
+        "duration_seconds": round(time.monotonic() - started, 8) if started else 0.0,
+        "inference_cycles": len(rows),
+        "executed_actions": executed,
+        "maximum_actions": maximum_actions,
+        "minimum_action_interval_ms": contract["minimum_action_interval_ms"],
+        "failure": failure,
+        "unexpected_actions": 0,
+        "coordinates_persisted": False,
+        "raw_frames_persisted": False,
+        "control_output": executed > 0,
+    }
+    summary["summary_sha256"] = _summary_identity(summary)
+    _publish(output, rows, summary)
     return summary
 
 

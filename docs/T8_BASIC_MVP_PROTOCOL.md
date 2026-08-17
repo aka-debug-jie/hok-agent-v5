@@ -33,3 +33,17 @@ zero input commands, but produced zero candidates. Basic probability remained ne
 reached 0.80; enemy probability reached 0.80 on only 9 frames, with no overlap. Shadow failed and
 the 20-action probe was not created or opened. Threshold relaxation and repeat Shadow are not
 permitted in this lineage.
+
+## Deterministic rule fallback
+
+A separate engineering fallback removed the failed learned basic head and used the frozen HUD ROI
+score directly. Contract v1 at 0.80 failed because all 100 smoke scores were 0.767--0.794. One
+fixed capture-domain calibration lowered the engineering-only threshold to 0.75 and added a
+mandatory release guard: after every tap, the ROI must fall below 0.75 before another tap can be
+armed. The second smoke passed 100/100 cycles.
+
+The bounded 45-second probe sent one basic tap after warmup. Across 225 cycles the ROI probability
+never fell below 0.795, so no release was observed and the remaining 19 taps were blocked. The
+probe failed safely with one dispatched action, zero unexpected actions, no stored coordinates,
+and no raw frames. Removing the release guard, repeating the probe, or opening longer control runs
+is not permitted.

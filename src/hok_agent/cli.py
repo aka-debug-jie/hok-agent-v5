@@ -627,6 +627,25 @@ def _parser() -> argparse.ArgumentParser:
     basic_mvp_shadow.add_argument("--output-dir", type=Path, required=True)
     basic_mvp_shadow.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     basic_mvp_shadow.add_argument("--batch-size", type=int, default=32)
+    basic_rule_smoke = commands.add_parser(
+        "basic-rule-smoke", help="run the fixed 20-second zero-input Basic ROI rule smoke"
+    )
+    basic_rule_smoke.add_argument("--serial", required=True)
+    basic_rule_smoke.add_argument("--video-node", type=Path, required=True)
+    basic_rule_smoke.add_argument("--contract", type=Path, required=True)
+    basic_rule_smoke.add_argument("--teacher-report", type=Path, required=True)
+    basic_rule_smoke.add_argument("--layout", type=Path, required=True)
+    basic_rule_smoke.add_argument("--output-dir", type=Path, required=True)
+    basic_rule_probe = commands.add_parser(
+        "basic-rule-probe", help="run the admitted bounded 20-tap Basic engineering probe"
+    )
+    basic_rule_probe.add_argument("--serial", required=True)
+    basic_rule_probe.add_argument("--video-node", type=Path, required=True)
+    basic_rule_probe.add_argument("--contract", type=Path, required=True)
+    basic_rule_probe.add_argument("--smoke-summary", type=Path, required=True)
+    basic_rule_probe.add_argument("--teacher-report", type=Path, required=True)
+    basic_rule_probe.add_argument("--layout", type=Path, required=True)
+    basic_rule_probe.add_argument("--output-dir", type=Path, required=True)
     t8_evaluate = commands.add_parser(
         "t8-evaluate-offline", help="run the sealed held-out evaluation for the selected T8 model"
     )
@@ -1585,6 +1604,29 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_dir=args.output_dir,
                 device=args.device,
                 batch_size=args.batch_size,
+            )
+        elif args.command == "basic-rule-smoke":
+            from hok_agent.mobile_testbed import run_basic_rule_smoke
+
+            result = run_basic_rule_smoke(
+                serial=args.serial,
+                video_node=args.video_node,
+                contract_path=args.contract,
+                teacher_report=args.teacher_report,
+                layout_path=args.layout,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "basic-rule-probe":
+            from hok_agent.mobile_testbed import run_basic_rule_probe
+
+            result = run_basic_rule_probe(
+                serial=args.serial,
+                video_node=args.video_node,
+                contract_path=args.contract,
+                smoke_summary=args.smoke_summary,
+                teacher_report=args.teacher_report,
+                layout_path=args.layout,
+                output_dir=args.output_dir,
             )
         elif args.command == "t8-evaluate-offline":
             from hok_agent.t8 import evaluate_t8_offline
