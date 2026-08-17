@@ -53,6 +53,8 @@ BASIC_RULE_ENGINEERING_CONTRACT_SCHEMA = "hok-agent-basic-rule-engineering-contr
 BASIC_RULE_ENGINEERING_CONTRACT_V2_SCHEMA = "hok-agent-basic-rule-engineering-contract-v2"
 BASIC_RULE_SMOKE_SCHEMA = "hok-agent-basic-rule-read-only-smoke-v1"
 BASIC_RULE_PROBE_SCHEMA = "hok-agent-basic-rule-bounded-probe-v1"
+SYNCHRONOUS_COMBAT_CONTRACT_SCHEMA = "hok-agent-synchronous-combat-probe-contract-v1"
+SYNCHRONOUS_COMBAT_PROBE_SCHEMA = "hok-agent-synchronous-combat-probe-v1"
 TOUCH_CALIBRATION_SCHEMA = "hok-agent-mobile-touch-calibration-v2"
 LAYOUT_SCHEMA = "hok-agent-mobile-layout-v3"
 MOBILE_BUILD_IDENTITY_SCHEMA = "hok-agent-mobile-build-identity-v1"
@@ -856,6 +858,33 @@ class AdbInputPipe:
         if self._process.poll() is None:
             self._process.terminate()
             self._process.wait(timeout=5)
+
+
+class SynchronousAdbInput:
+    """Acknowledged tap-only ADB input for bounded combat engineering probes."""
+
+    def __init__(self, guard: DeviceGuard) -> None:
+        self._guard = guard
+        self.sent = 0
+
+    def send(self, *arguments: str) -> None:
+        if (
+            len(arguments) != 3
+            or arguments[0] != "tap"
+            or not all(item.isdigit() for item in arguments[1:])
+        ):
+            raise MobileTestbedError("synchronous combat input accepts one numeric tap only")
+        _require_mobile_input_identity()
+        self._guard.check()
+        _run_adb(
+            self._guard.serial,
+            "shell",
+            "input",
+            "touchscreen",
+            *arguments,
+            text=True,
+        )
+        self.sent += 1
 
 
 DEFAULT_LAYOUT = Layout(
@@ -4212,22 +4241,33 @@ def _basic_rule_contract(path: Path) -> tuple[dict[str, object], str]:
     return value, digest
 
 
+def _combat_rule_probabilities(
+    frame: np.ndarray, layout: Layout, calibration: RGBTeacherCalibration
+) -> dict[str, float]:
+    hud = _rgb_teacher_views(frame)[2].astype(np.float32) / 255.0
+    result: dict[str, float] = {}
+    for index, ability in enumerate(ABILITIES[1:4]):
+        point = layout.buttons[ability]
+        if point is None:
+            raise MobileTestbedError(f"combat rule ROI {ability} is unavailable")
+        center_x = round((point[0] - 0.52) / 0.48 * 127)
+        center_y = round((point[1] - 0.30) / 0.70 * 127)
+        x0, x1 = max(0, center_x - 6), min(128, center_x + 7)
+        y0, y1 = max(0, center_y - 5), min(128, center_y + 6)
+        if x0 >= x1 or y0 >= y1:
+            raise MobileTestbedError(f"combat rule ROI {ability} is invalid")
+        patch = hud[y0:y1, x0:x1]
+        maximum, minimum = patch.max(axis=2), patch.min(axis=2)
+        score = 0.55 * float(maximum.mean()) + 0.45 * float((maximum - minimum).mean())
+        normalized = (score - calibration.medians[index]) / calibration.scales[index]
+        result[ability] = float(1.0 / (1.0 + math.exp(-4.0 * normalized)))
+    return result
+
+
 def _basic_rule_probability(
     frame: np.ndarray, layout: Layout, calibration: RGBTeacherCalibration
 ) -> float:
-    point = layout.basic_attack
-    hud = _rgb_teacher_views(frame)[2].astype(np.float32) / 255.0
-    center_x = round((point[0] - 0.52) / 0.48 * 127)
-    center_y = round((point[1] - 0.30) / 0.70 * 127)
-    x0, x1 = max(0, center_x - 6), min(128, center_x + 7)
-    y0, y1 = max(0, center_y - 5), min(128, center_y + 6)
-    if x0 >= x1 or y0 >= y1:
-        raise MobileTestbedError("basic rule ROI is invalid")
-    patch = hud[y0:y1, x0:x1]
-    maximum, minimum = patch.max(axis=2), patch.min(axis=2)
-    score = 0.55 * float(maximum.mean()) + 0.45 * float((maximum - minimum).mean())
-    normalized = (score - calibration.medians[0]) / calibration.scales[0]
-    return float(1.0 / (1.0 + math.exp(-4.0 * normalized)))
+    return _combat_rule_probabilities(frame, layout, calibration)["basic_attack"]
 
 
 def _summary_identity(summary: dict[str, object]) -> str:
@@ -4458,6 +4498,181 @@ def run_basic_rule_probe(
         "coordinates_persisted": False,
         "raw_frames_persisted": False,
         "control_output": executed > 0,
+    }
+    summary["summary_sha256"] = _summary_identity(summary)
+    _publish(output, rows, summary)
+    return summary
+
+
+def _synchronous_combat_contract(path: Path) -> tuple[dict[str, object], str]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MobileTestbedError("synchronous combat contract is unavailable") from exc
+    if not isinstance(value, dict):
+        raise MobileTestbedError("synchronous combat contract is invalid")
+    supplied = value.get("contract_sha256")
+    unsigned = {key: item for key, item in value.items() if key != "contract_sha256"}
+    digest = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    expected: dict[str, object] = {
+        "schema_version": SYNCHRONOUS_COMBAT_CONTRACT_SCHEMA,
+        "action_vocabulary": ["basic_attack", "skill1", "skill2", "skill3"],
+        "run_seconds": 60.0,
+        "infer_hz": 5,
+        "stream_fps": 30,
+        "warmup_seconds": 3.0,
+        "schedule_interval_ms": 2500,
+        "maximum_actions_per_button": 5,
+        "minimum_actions_per_button": 1,
+        "visual_probability_threshold": 0.75,
+        "positive_confirmation_frames": 3,
+        "minimum_screen_mean": 8.0,
+        "minimum_screen_standard_deviation": 5.0,
+        "skill3_gate": "screen_valid_only_owner_disabled_cooldown",
+        "synchronous_adb_required": True,
+        "movement_allowed": False,
+        "aim_allowed": False,
+        "target_selection_allowed": False,
+        "testbed_owner_authorized": True,
+    }
+    if supplied != digest or any(value.get(key) != item for key, item in expected.items()):
+        raise MobileTestbedError("synchronous combat contract differs")
+    return value, digest
+
+
+def run_synchronous_combat_probe(
+    *,
+    serial: str,
+    video_node: Path,
+    contract_path: Path,
+    teacher_report: Path,
+    visual_layout_path: Path,
+    execution_layout_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract, contract_sha = _synchronous_combat_contract(contract_path)
+    _require_mobile_input_identity()
+    output = _new_large_output(output_dir)
+    guard = _open_device_guard(serial)
+    visual_layout, visual_layout_sha = load_layout(visual_layout_path)
+    execution_layout, execution_layout_sha = load_layout(execution_layout_path)
+    if (
+        (guard.width, guard.height) != (visual_layout.width, visual_layout.height)
+        or (guard.width, guard.height) != (execution_layout.width, execution_layout.height)
+        or any(execution_layout.buttons[name] is None for name in ABILITIES[1:])
+    ):
+        raise MobileTestbedError("synchronous combat layouts differ from the active display")
+    calibration = load_rgb_teacher_calibration(teacher_report, visual_layout_sha)
+    stream = ScrcpyV4L2(guard.serial, video_node, cast(int, contract["stream_fps"]))
+    sender = SynchronousAdbInput(guard)
+    watchdog = GuardWatchdog(guard)
+    actions = cast(list[str], contract["action_vocabulary"])
+    counts = Counter({action: 0 for action in actions})
+    stable = Counter({action: 0 for action in actions})
+    rows: list[dict[str, object]] = []
+    failure: str | None = None
+    run_seconds = cast(float, contract["run_seconds"])
+    infer_hz = cast(int, contract["infer_hz"])
+    maximum = cast(int, contract["maximum_actions_per_button"])
+    started = next_due = next_schedule = 0.0
+    schedule_index = 0
+    try:
+        stream.start()
+        watchdog.start()
+        started = next_due = time.monotonic()
+        next_schedule = started + cast(float, contract["warmup_seconds"])
+        while time.monotonic() - started < run_seconds:
+            now = time.monotonic()
+            if now < next_due:
+                time.sleep(min(next_due - now, 0.01))
+                continue
+            next_due += 1 / infer_hz
+            watchdog.ensure_fresh()
+            frame = stream.frame()
+            model_frame = _model_frame(frame)
+            screen_valid = bool(
+                float(model_frame.mean()) >= cast(float, contract["minimum_screen_mean"])
+                and float(model_frame.std())
+                >= cast(float, contract["minimum_screen_standard_deviation"])
+            )
+            probabilities = _combat_rule_probabilities(frame, visual_layout, calibration)
+            for action in actions[:3]:
+                stable[action] = (
+                    stable[action] + 1
+                    if screen_valid
+                    and probabilities[action]
+                    >= cast(float, contract["visual_probability_threshold"])
+                    else 0
+                )
+            stable["skill3"] = stable["skill3"] + 1 if screen_valid else 0
+            scheduled_action: str | None = None
+            sent = False
+            if now >= next_schedule and schedule_index < len(actions) * maximum:
+                scheduled_action = actions[schedule_index % len(actions)]
+                schedule_index += 1
+                next_schedule += cast(int, contract["schedule_interval_ms"]) / 1000.0
+                admitted = bool(
+                    stable[scheduled_action] >= cast(int, contract["positive_confirmation_frames"])
+                    and counts[scheduled_action] < maximum
+                )
+                if admitted:
+                    sent = _execute_action(
+                        FactorizedAction(ability=scheduled_action),
+                        execution_layout,
+                        guard.width,
+                        guard.height,
+                        sender.send,
+                    )
+                if sent:
+                    counts[scheduled_action] += 1
+            rows.append(
+                {
+                    "schema_version": SYNCHRONOUS_COMBAT_PROBE_SCHEMA,
+                    "sequence": len(rows),
+                    "frame_sha256": hashlib.sha256(model_frame.tobytes()).hexdigest(),
+                    "screen_valid": screen_valid,
+                    "probabilities": {
+                        **{name: round(probabilities[name], 8) for name in actions[:3]},
+                        "skill3": None,
+                    },
+                    "scheduled_action": scheduled_action,
+                    "input_sent": sent,
+                    "synchronous_acknowledged": sent,
+                }
+            )
+    except Exception as exc:
+        failure = str(exc)
+    finally:
+        watchdog.stop()
+        stream.close()
+    minimum = cast(int, contract["minimum_actions_per_button"])
+    strict = bool(
+        failure is None
+        and len(rows) >= int(run_seconds * infer_hz * 0.95)
+        and sender.sent == sum(counts.values())
+        and all(minimum <= counts[action] <= maximum for action in actions)
+    )
+    summary: dict[str, object] = {
+        "schema_version": SYNCHRONOUS_COMBAT_PROBE_SCHEMA,
+        "status": "PASSED" if strict else "FAILED",
+        "strict_passed": strict,
+        "contract_sha256": contract_sha,
+        "visual_layout_sha256": visual_layout_sha,
+        "execution_layout_sha256": execution_layout_sha,
+        "teacher_report_sha256": calibration.report_sha256,
+        "duration_seconds": round(time.monotonic() - started, 8) if started else 0.0,
+        "inference_cycles": len(rows),
+        "executed_action_counts": dict(counts),
+        "total_executed_actions": sum(counts.values()),
+        "maximum_actions_per_button": maximum,
+        "synchronous_acknowledged_actions": sender.sent,
+        "unexpected_actions": 0,
+        "failure": failure,
+        "raw_frames_persisted": False,
+        "coordinates_persisted": False,
+        "control_output": sender.sent > 0,
     }
     summary["summary_sha256"] = _summary_identity(summary)
     _publish(output, rows, summary)

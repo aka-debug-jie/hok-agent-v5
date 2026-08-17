@@ -120,8 +120,12 @@
   Offline replay and read-only Shadow both retain `device_input_allowed=false`. Its frozen Shadow
   produced zero candidates, so repeat Shadow, threshold changes, probe, and control are closed.
 - The separate Basic rule engineering fallback used no learned head. Its one capture-domain
-  calibration required a visual release between taps. The probe dispatched one basic tap but saw
-  no release and failed. Repeating it, removing the release guard, or opening longer runs is closed.
+  calibration initially assumed a visual release between taps; owner observation established that
+  basic has no cooldown dimming. The corrected private execution point passed 20-action,
+  one-minute, and five-minute bounded runs while retaining the original visual ROI.
+- The synchronous combat probe is confined to acknowledged numeric taps for basic attack and the
+  three skills in the owner testbed. Two 60-second repeats passed with five actions per button.
+  It cannot send movement, swipe/aim, target selection, arbitrary shell input, or model decisions.
 - Never target an unapproved client or account; outside the single pinned T8-v2.1 demonstrator,
   never add scrcpy control, Accessibility, root,
   hooks, injection, memory/process inspection, protocol

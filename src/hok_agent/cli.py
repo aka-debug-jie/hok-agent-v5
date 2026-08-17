@@ -646,6 +646,17 @@ def _parser() -> argparse.ArgumentParser:
     basic_rule_probe.add_argument("--teacher-report", type=Path, required=True)
     basic_rule_probe.add_argument("--layout", type=Path, required=True)
     basic_rule_probe.add_argument("--output-dir", type=Path, required=True)
+    synchronous_combat = commands.add_parser(
+        "synchronous-combat-probe",
+        help="run the bounded acknowledged four-button combat probe",
+    )
+    synchronous_combat.add_argument("--serial", required=True)
+    synchronous_combat.add_argument("--video-node", type=Path, required=True)
+    synchronous_combat.add_argument("--contract", type=Path, required=True)
+    synchronous_combat.add_argument("--teacher-report", type=Path, required=True)
+    synchronous_combat.add_argument("--visual-layout", type=Path, required=True)
+    synchronous_combat.add_argument("--execution-layout", type=Path, required=True)
+    synchronous_combat.add_argument("--output-dir", type=Path, required=True)
     t8_evaluate = commands.add_parser(
         "t8-evaluate-offline", help="run the sealed held-out evaluation for the selected T8 model"
     )
@@ -1626,6 +1637,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 smoke_summary=args.smoke_summary,
                 teacher_report=args.teacher_report,
                 layout_path=args.layout,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "synchronous-combat-probe":
+            from hok_agent.mobile_testbed import run_synchronous_combat_probe
+
+            result = run_synchronous_combat_probe(
+                serial=args.serial,
+                video_node=args.video_node,
+                contract_path=args.contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
                 output_dir=args.output_dir,
             )
         elif args.command == "t8-evaluate-offline":

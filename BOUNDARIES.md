@@ -92,8 +92,13 @@ input admission.
   produced zero candidates and failed, so no repeat, threshold change, 20-action probe, one-minute
   run, or five-minute control contract is permitted.
 - The Basic rule engineering fallback is separately frozen. Its v2 probe required the basic ROI to
-  fall below threshold after every tap before rearming. One tap was dispatched, no release was
-  observed, and the probe failed. No repeat, release-guard removal, or longer control run is allowed.
+  fall below threshold after every tap before rearming. Owner observation established that basic
+  attack has no cooldown dimming, so a private execution point was separated from the visual ROI.
+  The bounded 20-action, one-minute, and five-minute basic runs passed without unexpected actions.
+- The synchronous combat probe accepts only acknowledged `input touchscreen tap` commands for the
+  four fixed combat buttons in the owner testbed. It uses a Git-ignored execution layout and may
+  not expose coordinates. Movement, swipe/aim, target selection, arbitrary commands, and model
+  decisions are forbidden. Two 60-second, five-per-button repeats are the frozen maximum evidence.
 - Offline synthetic training, unlabeled real-video representation learning, conservative
   pseudo-label research, one Mean Teacher round, and RGB-derived tracking/temporal diagnostics.
 - A future, separately authorized post-training phase may use owner gameplay-quality

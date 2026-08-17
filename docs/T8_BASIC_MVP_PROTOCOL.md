@@ -42,8 +42,16 @@ fixed capture-domain calibration lowered the engineering-only threshold to 0.75 
 mandatory release guard: after every tap, the ROI must fall below 0.75 before another tap can be
 armed. The second smoke passed 100/100 cycles.
 
-The bounded 45-second probe sent one basic tap after warmup. Across 225 cycles the ROI probability
-never fell below 0.795, so no release was observed and the remaining 19 taps were blocked. The
-probe failed safely with one dispatched action, zero unexpected actions, no stored coordinates,
-and no raw frames. Removing the release guard, repeating the probe, or opening longer control runs
-is not permitted.
+The initial bounded probe sent one basic tap after warmup. Across 225 cycles the ROI probability
+never fell below 0.795. Owner confirmation then established that basic attack has no cooldown
+dimming, so the release condition was invalid for that action rather than evidence of a failed
+tap. A private, Git-ignored touch sample corrected the execution point while the original icon
+center remained the visual ROI. The separated path passed 20 actions, one minute, and five minutes.
+
+The same visual/execution separation was applied to skills. Skill1 and skill2 touch points were
+confirmed, and skill1 demonstrated a visible cooldown cycle. Skill3 required synchronous ADB
+acknowledgement rather than the unacknowledged interactive pipe. A tap-only synchronous sender was
+then frozen for all four combat buttons. Two 60-second mixed probes each executed every button five
+times with 20/20 acknowledged commands, zero unexpected actions, no raw frames, and no persisted
+coordinates. Movement, aiming, target selection, and model-driven control remain outside this
+result.

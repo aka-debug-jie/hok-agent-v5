@@ -100,6 +100,31 @@ def test_basic_rule_engineering_contract_and_probability(tmp_path: Path) -> None
     assert calibrated["require_release_between_actions"] is True
 
 
+def test_synchronous_combat_sender_is_acknowledged_tap_only(monkeypatch) -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._synchronous_combat_contract(
+        root / "configs/synchronous_combat_probe_v1.json"
+    )
+    assert contract["maximum_actions_per_button"] == 5
+    assert len(digest) == 64
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(mobile_testbed, "_require_mobile_input_identity", lambda: None)
+    monkeypatch.setattr(mobile_testbed.DeviceGuard, "check", lambda _self: None)
+    monkeypatch.setattr(
+        mobile_testbed,
+        "_run_adb",
+        lambda _serial, *arguments, **_kwargs: calls.append(arguments) or "",
+    )
+    sender = mobile_testbed.SynchronousAdbInput(
+        mobile_testbed.DeviceGuard("test-1", TEST_PACKAGE, 1600, 720, 1)
+    )
+    sender.send("tap", "100", "200")
+    assert sender.sent == 1
+    assert calls == [("shell", "input", "touchscreen", "tap", "100", "200")]
+    with pytest.raises(mobile_testbed.MobileTestbedError, match="tap only"):
+        sender.send("swipe", "1", "2", "3", "4", "100")
+
+
 def test_mobile_input_fails_closed_without_frozen_build_identity(
     tmp_path: Path, monkeypatch
 ) -> None:

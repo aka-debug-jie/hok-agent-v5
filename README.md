@@ -189,9 +189,16 @@ never reached the frozen 0.80 threshold. The route is frozen without a probe or 
 
 A final deterministic rule fallback verified that the calibrated basic ROI appeared visually
 ready. The first 0.80 smoke failed on capture variation; one fixed 0.75 engineering calibration
-passed 100/100 cycles. Its bounded probe sent exactly one tap, then the mandatory visual-release
-guard blocked every later tap because the ROI never fell below 0.75. The fallback is frozen with no
-one-minute or five-minute control run.
+passed 100/100 cycles. Owner observation established that basic attack has no cooldown dimming, so
+visual and execution coordinates were separated instead of requiring a false release event. The
+corrected private touch point passed 20 actions, one minute, and five minutes without unexpected
+input.
+
+All four combat buttons were then moved to an acknowledged synchronous ADB tap sender. Two
+independent 60-second mixed probes each executed basic attack, skill1, skill2, and skill3 exactly
+five times, with 20/20 synchronous acknowledgements and zero unexpected actions per run. This is a
+deterministic owner-testbed result; it is not model-driven gameplay and does not include movement,
+aiming, or target selection.
 
 ## Project documents
 

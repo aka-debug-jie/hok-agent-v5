@@ -1,0 +1,22 @@
+{
+  "schema_version": "hok-agent-synchronous-combat-probe-contract-v1",
+  "action_vocabulary": ["basic_attack", "skill1", "skill2", "skill3"],
+  "run_seconds": 60.0,
+  "infer_hz": 5,
+  "stream_fps": 30,
+  "warmup_seconds": 3.0,
+  "schedule_interval_ms": 2500,
+  "maximum_actions_per_button": 5,
+  "minimum_actions_per_button": 1,
+  "visual_probability_threshold": 0.75,
+  "positive_confirmation_frames": 3,
+  "minimum_screen_mean": 8.0,
+  "minimum_screen_standard_deviation": 5.0,
+  "skill3_gate": "screen_valid_only_owner_disabled_cooldown",
+  "synchronous_adb_required": true,
+  "movement_allowed": false,
+  "aim_allowed": false,
+  "target_selection_allowed": false,
+  "testbed_owner_authorized": true,
+  "contract_sha256": "fa94b39ec96ef59f6bcceb41772d9ecb50c655271eff9415240b460f8c803d3a"
+}
