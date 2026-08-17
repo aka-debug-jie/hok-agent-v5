@@ -80,6 +80,11 @@ input admission.
   sessions. Accepted labels enter only the masked T8-v4 diagnostic loss; no human labels,
   annotation UI, or video-test access are allowed. Derived candidate actions are offline logs with
   `control_output=false`; replay, Shadow, and device input remain closed.
+- T8-v5 is an offline ROI-isolation lineage governed by `docs/T8_V5_ROI_PROTOCOL.md`. It may reuse
+  only the frozen T8-v4 repair-1 weak targets and frozen adapter. Its first gate uses single-frame
+  correct-ROI, wrong-ROI, time-only, prior, and shuffle controls. Skill2 is diagnostic-only. It
+  stores derived ROI features only and cannot open TCN, replay, Shadow, capture, or input unless a
+  later contract is explicitly admitted after all three formal ROI heads pass.
 - Offline synthetic training, unlabeled real-video representation learning, conservative
   pseudo-label research, one Mean Teacher round, and RGB-derived tracking/temporal diagnostics.
 - A future, separately authorized post-training phase may use owner gameplay-quality

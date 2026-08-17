@@ -27,6 +27,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 | T8-v2.7 | `FROZEN_FAILED` | No recollection, threshold changes, or four-class retraining |
 | T8-v3 | Video-state seed-0 pilot failed admission | No replay, Shadow, or device input |
 | T8-v4 | `FROZEN_FAILED`: weak targets learnable, spatial-selectivity gate failed | No more repair, training, replay, Shadow, or input |
+| T8-v5 | `FROZEN_FAILED`: only basic passed the per-head ROI gate | No TCN, replay, Shadow, capture, or input |
 
 ## T8-v2.7 freeze
 
@@ -99,6 +100,20 @@ was below zero and the maximum irrelevant-region drop was 0.6550. The final deci
 T8-v4 remains `control_output=false`. Offline replay, Shadow, and device input are blocked until
 their earlier gates pass under separately frozen evidence.
 
+## T8-v5 ROI-isolation closure
+
+T8-v5 reused the frozen T8-v4 repair-1 weak targets and produced separate correct-ROI and
+wrong-ROI ResNet-18 features without storing RGB. The single seed-0 comparison used class prior,
+time-only, correct-ROI linear, wrong-ROI linear, and label-shuffle baselines. Skill2 was
+diagnostic-only because the frozen dev split contains four accepted negative examples.
+
+Basic attack passed all three formal margins: correct-ROI macro-F1 was 0.9554 and its gains over
+time-only, wrong ROI, and shuffle were 0.5040, 0.1531, and 0.6618. Enemy cue reached 0.7384
+correct-ROI macro-F1 but its wrong-ROI margin was only 0.1022. Skill1 reached 0.8224 but its
+wrong-ROI margin was only 0.1213. Both are below the frozen 0.15 requirement, so the combined gate
+failed. T8-v5 is frozen without a TCN value test, semantic-accuracy claim, replay, Shadow, capture,
+or device input.
+
 ## Verification baseline
 
 The release gate is:
@@ -127,5 +142,8 @@ T8-v4 supplies the diagnostic protocol, offline implementation, preserved initia
 coordinate repair, repaired audit, and seed-0 decision. The permitted repair has been consumed and
 the spatial-selectivity gate failed, so the lineage is frozen as insufficient weak-supervision
 evidence. No larger model, additional training, replay, Shadow, or device input is allowed.
+T8-v5 demonstrates strong partial ROI signal, especially for basic attack, but does not separate
+enemy and skill1 evidence sufficiently from correlated wrong regions. Its per-head gate failed,
+so this lineage is also frozen rather than expanded into a temporal model.
 It is a separate lineage and must not be presented as a continuation of the failed v2.7 or v3
 pilots by threshold relaxation.

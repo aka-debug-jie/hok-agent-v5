@@ -168,12 +168,17 @@ positive recall was `0.314075`, normal-minus-shuffled margin was `0.023275`, and
 coverage was `0.039481`. Offline replay rejected the model; video-test, live Shadow, and all T8-v3
 device stages remained unopened. These results are failure evidence, not a released policy.
 
-T8-v4 is the planned read-only diagnostic successor. It narrows the task to four local visual
-cues under one fixed layout and action schema, uses a zero-human dual-teacher weak-supervision
-route, and compares class/time priors, static features, pooled temporal features, and the existing
-causal TCN under spatial and temporal shortcut interventions. Labels never enter training.
-Candidate actions remain offline logs with `control_output=false`. See
+T8-v4 narrowed the task to four local visual cues and used conservative dual-teacher weak targets.
+Its RGB and temporal controls passed, but the selected model failed the frozen spatial-selectivity
+gate. T8-v4 is therefore frozen failed with no replay, Shadow, or input permission. See
 [docs/T8_V4_PROTOCOL.md](docs/T8_V4_PROTOCOL.md).
+
+T8-v5 is a smaller offline successor that asks only whether each fixed correct ROI predicts the
+frozen weak target better than time, a wrong ROI, and shuffled labels. Enemy, basic attack, and
+skill1 are formal heads; skill2 is diagnostic-only because its frozen dev negative support is too
+small. Basic attack passed, but enemy and skill1 failed the frozen wrong-ROI margin, so T8-v5 is
+frozen without a TCN stage and remains non-promoting. See
+[docs/T8_V5_ROI_PROTOCOL.md](docs/T8_V5_ROI_PROTOCOL.md).
 
 ## Project documents
 
@@ -181,6 +186,7 @@ Candidate actions remain offline logs with `control_output=false`. See
 - [BOUNDARIES.md](BOUNDARIES.md): permitted and forbidden execution surfaces.
 - [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md): concise current-state ledger.
 - [docs/T8_V4_PROTOCOL.md](docs/T8_V4_PROTOCOL.md): frozen T8-v4 diagnostic and promotion protocol.
+- [docs/T8_V5_ROI_PROTOCOL.md](docs/T8_V5_ROI_PROTOCOL.md): T8-v5 isolated-ROI evidence gate.
 - [docs/DELIVERY_HISTORY.md](docs/DELIVERY_HISTORY.md): sanitized historical ledger.
 
 ## License

@@ -554,6 +554,41 @@ def _parser() -> argparse.ArgumentParser:
             type=Path,
             default=Path("configs/t8_v4_experiment_plan_v1.json"),
         )
+    v5_roi_contract = commands.add_parser(
+        "t8-v5-roi-contract-check", help="verify the frozen T8-v5 ROI-isolation contract"
+    )
+    v5_roi_contract.add_argument(
+        "--experiment-contract",
+        type=Path,
+        default=Path("configs/t8_v5_roi_experiment_v1.json"),
+    )
+    v5_roi_materialize = commands.add_parser(
+        "t8-v5-roi-materialize", help="materialize correct-ROI and wrong-ROI frozen features"
+    )
+    v5_roi_materialize.add_argument("--pseudolabel-root", type=Path, required=True)
+    v5_roi_materialize.add_argument("--target-root", type=Path, required=True)
+    v5_roi_materialize.add_argument("--adapter-checkpoint", type=Path, required=True)
+    v5_roi_materialize.add_argument("--layout", type=Path, required=True)
+    v5_roi_materialize.add_argument("--output-dir", type=Path, required=True)
+    v5_roi_materialize.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    v5_roi_materialize.add_argument("--batch-size", type=int, default=256)
+    v5_roi_materialize.add_argument(
+        "--experiment-contract",
+        type=Path,
+        default=Path("configs/t8_v5_roi_experiment_v1.json"),
+    )
+    v5_roi_diagnose = commands.add_parser(
+        "t8-v5-roi-seed0-diagnose", help="run the single-frame T8-v5 ROI evidence ladder"
+    )
+    v5_roi_diagnose.add_argument("--dataset-root", type=Path, required=True)
+    v5_roi_diagnose.add_argument("--output-dir", type=Path, required=True)
+    v5_roi_diagnose.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    v5_roi_diagnose.add_argument("--batch-size", type=int, default=256)
+    v5_roi_diagnose.add_argument(
+        "--experiment-contract",
+        type=Path,
+        default=Path("configs/t8_v5_roi_experiment_v1.json"),
+    )
     t8_evaluate = commands.add_parser(
         "t8-evaluate-offline", help="run the sealed held-out evaluation for the selected T8 model"
     )
@@ -1442,6 +1477,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                 observation_contract=args.observation_contract,
                 candidate_contract=args.candidate_contract,
                 weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-v5-roi-contract-check":
+            from hok_agent.t8_v5 import verify_t8_v5_contract
+
+            result = verify_t8_v5_contract(args.experiment_contract)
+        elif args.command == "t8-v5-roi-materialize":
+            from hok_agent.t8_v5 import materialize_t8_v5_roi_features
+
+            result = materialize_t8_v5_roi_features(
+                pseudolabel_root=args.pseudolabel_root,
+                target_root=args.target_root,
+                adapter_checkpoint=args.adapter_checkpoint,
+                layout_path=args.layout,
+                experiment_contract=args.experiment_contract,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-v5-roi-seed0-diagnose":
+            from hok_agent.t8_v5 import diagnose_t8_v5_roi_seed0
+
+            result = diagnose_t8_v5_roi_seed0(
+                dataset_root=args.dataset_root,
                 experiment_contract=args.experiment_contract,
                 output_dir=args.output_dir,
                 device=args.device,
