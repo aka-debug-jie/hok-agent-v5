@@ -610,6 +610,39 @@ def _source_view_probabilities(
     ).astype(np.float32)
 
 
+def _normalize_teacher_frame(
+    frame: np.ndarray, content_box: tuple[int, int, int, int]
+) -> np.ndarray:
+    if frame.shape != (128, 128, 3) or frame.dtype != np.uint8:
+        raise T8V4Error("T8-v4 teacher frame is invalid")
+    x0, y0, x1, y1 = content_box
+    if not (0 <= x0 < x1 <= 128 and 0 <= y0 < y1 <= 128):
+        raise T8V4Error("T8-v4 teacher content box is invalid")
+    rows = np.linspace(y0, y1 - 1, 128).astype(np.int64)
+    columns = np.linspace(x0, x1 - 1, 128).astype(np.int64)
+    return frame[rows[:, None], columns[None, :], :]
+
+
+def _restore_teacher_frame(
+    normalized: np.ndarray,
+    canonical: np.ndarray,
+    content_box: tuple[int, int, int, int],
+    orientation: str,
+) -> np.ndarray:
+    if normalized.shape != (128, 128, 3) or canonical.shape != normalized.shape:
+        raise T8V4Error("T8-v4 restored teacher frame is invalid")
+    x0, y0, x1, y1 = content_box
+    rows = np.linspace(0, 127, y1 - y0).astype(np.int64)
+    columns = np.linspace(0, 127, x1 - x0).astype(np.int64)
+    restored = canonical.copy()
+    restored[y0:y1, x0:x1] = normalized[rows[:, None], columns[None, :], :]
+    if orientation == "counter_clockwise_90":
+        return np.rot90(restored, -1).copy()
+    if orientation != "stored":
+        raise T8V4Error("T8-v4 restored teacher orientation is invalid")
+    return restored
+
+
 def _balanced_training_mask(
     labels: np.ndarray, accepted: np.ndarray, timestamps: np.ndarray, session_hash: str
 ) -> np.ndarray:
@@ -754,13 +787,13 @@ def materialize_t8_v4_pseudolabels(
                 )
                 current_frames = np.stack(
                     [
-                        _causal_pixel_views(canonical[int(index)], content_box)[0]
+                        _normalize_teacher_frame(canonical[int(index)], content_box)
                         for index in indices
                     ]
                 )
                 history_frames = np.stack(
                     [
-                        _causal_pixel_views(canonical[int(index)], content_box)[0]
+                        _normalize_teacher_frame(canonical[int(index)], content_box)
                         for index in history_indices
                     ]
                 )
@@ -841,6 +874,8 @@ def materialize_t8_v4_pseudolabels(
             "feature_shape": [WINDOW_FRAMES, FEATURE_SIZE],
             "views": list(VIEW_NAMES),
             "teacher_confidence_threshold": 0.8,
+            "teacher_input_normalization": "detected_content_box_to_128_nearest_v1",
+            "rule_repairs_used": 1,
             "splits": split_qc,
             "shards": manifest_rows,
             "human_labels_used": False,
@@ -913,6 +948,11 @@ def audit_t8_v4_weak_supervision(
     )
     root = _large_existing(dataset_root)
     manifest = _verified_pseudolabel_manifest(root)
+    if (
+        manifest.get("rule_repairs_used") != 1
+        or manifest.get("teacher_input_normalization") != "detected_content_box_to_128_nearest_v1"
+    ):
+        raise T8V4Error("T8-v4 audit requires the single frozen coordinate repair")
     if manifest.get("contract_set_sha256") != contracts.contract_set_sha256:
         raise T8V4Error("T8-v4 pseudolabel contract binding differs")
     rows = manifest.get("shards")
@@ -1319,7 +1359,10 @@ def _student_spatial_audit(
     rows = dataset_manifest.get("shards")
     if not isinstance(rows, list):
         raise T8V4Error("T8-v4 spatial shard index is invalid")
-    frames_by_session: list[np.ndarray] = []
+    normalized_by_session: list[np.ndarray] = []
+    canonical_by_session: list[np.ndarray] = []
+    orientations: list[str] = []
+    content_boxes: list[tuple[int, int, int, int]] = []
     for row in rows:
         if not isinstance(row, dict) or row.get("split") != "dev":
             continue
@@ -1332,24 +1375,35 @@ def _student_spatial_audit(
         source_frames, timestamps, _hashes = _retrospective_load_session(
             target_base, "dev", identity, indexed[identity]
         )
-        canonical, _orientation, content_box = _retrospective_content_box(source_frames)
+        canonical, orientation, content_box = _retrospective_content_box(source_frames)
         indices = np.searchsorted(timestamps, observation_end)
         if np.any(indices >= len(timestamps)) or not np.array_equal(
             timestamps[indices], observation_end
         ):
             raise T8V4Error("T8-v4 spatial timestamps do not bind RGB")
-        frames_by_session.append(
-            np.stack(
-                [_causal_pixel_views(canonical[int(index)], content_box)[0] for index in indices]
-            )
+        selected_canonical = canonical[indices]
+        canonical_by_session.append(selected_canonical)
+        normalized_by_session.append(
+            np.stack([_normalize_teacher_frame(frame, content_box) for frame in selected_canonical])
         )
-    current_frames = np.concatenate(frames_by_session)
+        orientations.extend([orientation] * len(indices))
+        content_boxes.extend([content_box] * len(indices))
+    current_frames = np.concatenate(normalized_by_session)
+    canonical_frames = np.concatenate(canonical_by_session)
     if len(current_frames) != len(dev_x):
         raise T8V4Error("T8-v4 spatial RGB rows differ from feature rows")
 
     def predict_changed(frames: np.ndarray) -> np.ndarray:
+        stored = np.stack(
+            [
+                _restore_teacher_frame(
+                    frame, canonical_frames[index], content_boxes[index], orientations[index]
+                )
+                for index, frame in enumerate(frames)
+            ]
+        )
         changed = dev_x.copy()
-        changed[:, -1] = _encode_v4_frames(encoder, frames, device, batch_size)
+        changed[:, -1] = _encode_v4_frames(encoder, stored, device, batch_size)
         return _predict_v4(selected_model, changed, device, batch_size)
 
     gameplay_probability = predict_changed(spatial_mask(current_frames, "gameplay"))
@@ -1433,6 +1487,11 @@ def diagnose_t8_v4_seed0(
         raise T8V4Error("T8-v4 diagnostic batch size is invalid")
     root = _large_existing(dataset_root)
     manifest = _verified_pseudolabel_manifest(root)
+    if (
+        manifest.get("rule_repairs_used") != 1
+        or manifest.get("teacher_input_normalization") != "detected_content_box_to_128_nearest_v1"
+    ):
+        raise T8V4Error("T8-v4 diagnostic requires the single frozen coordinate repair")
     audit_path = _large_existing(weak_audit_report)
     audit = _read_object(audit_path, "T8-v4 weak audit is unreadable")
     if (
@@ -1448,6 +1507,7 @@ def diagnose_t8_v4_seed0(
     target = torch.device(device)
     prior_probability = _prior_probabilities(train_y, train_mask, len(dev_y))
     prior_metrics = _masked_metrics(prior_probability, dev_y, dev_mask)
+    torch.manual_seed(0)
     time_metrics, _time_state, time_probability = _fit_v4_model(
         _V4LastLinear(),
         _time_only_features(train_sessions),
@@ -1459,16 +1519,20 @@ def diagnose_t8_v4_seed0(
         target,
         batch_size,
     )
+    torch.manual_seed(0)
     last_metrics, last_state, last_probability = _fit_v4_model(
         _V4LastLinear(), train_x, train_y, train_mask, dev_x, dev_y, dev_mask, target, batch_size
     )
+    torch.manual_seed(0)
     pool_metrics, pool_state, pool_probability = _fit_v4_model(
         _V4PoolMLP(), train_x, train_y, train_mask, dev_x, dev_y, dev_mask, target, batch_size
     )
+    torch.manual_seed(0)
     tcn_model = _V4CausalTCN()
     tcn_metrics, tcn_state, tcn_probability = _fit_v4_model(
         tcn_model, train_x, train_y, train_mask, dev_x, dev_y, dev_mask, target, batch_size
     )
+    torch.manual_seed(0)
     shuffle_metrics, _shuffle_state, _shuffle_probability = _fit_v4_model(
         _V4CausalTCN(),
         train_x,
@@ -1551,12 +1615,11 @@ def diagnose_t8_v4_seed0(
         "control_output": False,
         "next_required_action": (
             "record_weak_supervision_evidence_insufficient"
-            if not rgb_signal
-            else "run_student_spatial_interventions"
-            if not spatial_passed
+            if not rgb_signal or not spatial_passed
             else "freeze_t8_v4_gate"
         ),
     }
+    decision["decision_sha256"] = hashlib.sha256(_canonical(decision)).hexdigest()
     report: dict[str, object] = {
         "schema_version": DIAGNOSIS_SCHEMA,
         "status": "COMPLETED",
@@ -1599,7 +1662,6 @@ def diagnose_t8_v4_seed0(
         (staging / "report.json").write_text(
             json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8"
         )
-        decision["decision_sha256"] = hashlib.sha256(_canonical(decision)).hexdigest()
         (staging / "decision.json").write_text(
             json.dumps(decision, sort_keys=True, indent=2) + "\n", encoding="utf-8"
         )

@@ -10,6 +10,8 @@ import pytest
 from hok_agent.t8_v4 import (
     STATE_NAMES,
     T8V4Error,
+    _normalize_teacher_frame,
+    _restore_teacher_frame,
     consensus_labels,
     deterministic_photometric_views,
     spatial_mask,
@@ -84,6 +86,16 @@ def test_t8_v4_photometric_views_are_deterministic() -> None:
     assert first.shape == (2, 5, 8, 8, 3)
     assert np.array_equal(first, second)
     assert np.array_equal(first[:, 0], frames)
+
+
+def test_t8_v4_teacher_frame_removes_letterbox_without_future_data() -> None:
+    frame = np.zeros((128, 128, 3), dtype=np.uint8)
+    frame[34:93] = 73
+    normalized = _normalize_teacher_frame(frame, (0, 34, 128, 93))
+    assert normalized.shape == frame.shape
+    assert np.all(normalized == 73)
+    restored = _restore_teacher_frame(normalized, frame, (0, 34, 128, 93), "stored")
+    assert np.array_equal(restored, frame)
 
 
 def test_t8_v4_spatial_interventions_touch_only_requested_regions() -> None:

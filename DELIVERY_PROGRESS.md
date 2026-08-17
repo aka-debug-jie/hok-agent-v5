@@ -26,7 +26,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 | T8-v1–v2.6 | Historical demonstration, causal-policy, Shadow, and bounded-probe evidence | Local evidence only |
 | T8-v2.7 | `FROZEN_FAILED` | No recollection, threshold changes, or four-class retraining |
 | T8-v3 | Video-state seed-0 pilot failed admission | No replay, Shadow, or device input |
-| T8-v4 | Source teacher passed; first weak audit stopped on incomplete accepted classes | One rule repair allowed; seed-0 blocked |
+| T8-v4 | `FROZEN_FAILED`: weak targets learnable, spatial-selectivity gate failed | No more repair, training, replay, Shadow, or input |
 
 ## T8-v2.7 freeze
 
@@ -66,7 +66,7 @@ replay correctly rejected the model and created no output. Five-minute read-only
 20-action probe, one-minute run, and five-minute run were not started. T8-v3 device input remains
 zero.
 
-## T8-v4 planned diagnostic lineage
+## T8-v4 zero-label diagnostic closure
 
 The optimized T8-v4 protocol is frozen in
 [`docs/T8_V4_PROTOCOL.md`](docs/T8_V4_PROTOCOL.md). It learns only
@@ -83,10 +83,18 @@ used. Seed 0 compares class prior, time-only,
 last-frame linear, pooled MLP, and the existing causal TCN, then applies gameplay/HUD masks and
 swaps plus temporal controls. Machine contracts and command implementations exist locally. The
 PixelArena source teacher passed its frozen synthetic-dev gate on all four heads. The first 103/23
-real-video consensus pass completed with per-head accepted coverage above 0.15 and accepted
-perturbation stability 1.0, but accepted labels did not contain both classes for every head in both
-splits. The weak audit is therefore `COVERAGE_FAILED`, `teacher_consensus_usable=false`, and seed-0
-training was not started. This is weak-supervision evidence, not real-video semantic accuracy.
+real-video consensus pass found an incorrect full-frame coordinate transform and failed accepted
+class coverage. The one allowed repair normalized the detected content box without changing the
+0.80 confidence threshold, model, split, or label rule. The repaired audit passed: every train/dev
+head had both accepted classes, minimum accepted coverage was 0.2098, and accepted perturbation
+stability was 1.0.
+
+The single seed-0 diagnostic then found weak-target RGB and temporal signal. Causal-TCN mean dev
+macro-F1 was 0.6442 versus 0.4440 for time-only and 0.4708 for label shuffle; it exceeded Pool-MLP
+by 0.0569. Spatial selectivity nevertheless failed: the minimum relevant-region confidence drop
+was below zero and the maximum irrelevant-region drop was 0.6550. The final decision is therefore
+`spatial_selectivity_demonstrated=false`, `semantic_accuracy_verified=false`, and
+`promotion_allowed=false`. This is weak-supervision evidence, not real-video semantic accuracy.
 
 T8-v4 remains `control_output=false`. Offline replay, Shadow, and device input are blocked until
 their earlier gates pass under separately frozen evidence.
@@ -115,8 +123,9 @@ boundary findings, and no checked-in large-data or mobile-private artifacts.
 The project demonstrates reproducible RGB policy research in project-owned PixelArena and
 read-only/strictly bounded mobile-testbed infrastructure. It does not establish commercial-game
 skill, tactical optimality, general transfer, or authorization to control any third-party client.
-T8-v4 supplies the diagnostic protocol, offline implementation, and a preserved failed first weak
-audit. Its one permitted next action is a rule-teacher repair without lowering the 0.80 threshold;
-if class coverage still fails, the lineage closes as insufficient weak-supervision evidence.
+T8-v4 supplies the diagnostic protocol, offline implementation, preserved initial failure, single
+coordinate repair, repaired audit, and seed-0 decision. The permitted repair has been consumed and
+the spatial-selectivity gate failed, so the lineage is frozen as insufficient weak-supervision
+evidence. No larger model, additional training, replay, Shadow, or device input is allowed.
 It is a separate lineage and must not be presented as a continuation of the failed v2.7 or v3
 pilots by threshold relaxation.
