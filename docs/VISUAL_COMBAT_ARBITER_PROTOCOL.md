@@ -28,3 +28,11 @@ cooldown state, synchronous execution state, and rejection reason without storin
 source paths, or coordinates. These events may be used later as automatic `executed_action`
 supervision only under a separately frozen dataset contract. They do not establish tactical skill
 or semantic enemy understanding.
+
+The first formal event collection contains one 60-second and one five-minute session: 1,770 event
+rows, 78 synchronously bound actions, and 1,692 wait rows. Every executed row has a selected action,
+synchronous acknowledgement, and `synchronous_executed_action` source; cooldown-unarmed and wait
+states are both covered. These two diagnostic sessions have only derived fixed-rate timestamps and
+no RGB/features, so training is explicitly blocked. The frozen dataset contract requires twelve
+new sessions with actual elapsed timestamps and 16-frame derived RGB or frozen-encoder features,
+then an 8/2/2 session split.

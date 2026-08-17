@@ -130,6 +130,9 @@
   only the four fixed combat taps by cooldown-aware round-robin and must synchronously acknowledge
   every send. Its 60-second and five-minute gates passed. It cannot add movement, aim, target
   selection, enemy semantics, arbitrary commands, or model decisions without a new contract.
+- Visual combat event data requires actual elapsed timestamps, 16-frame derived RGB or frozen
+  encoder features, anonymous sessions, synchronous action binding, and at least twelve sessions
+  before an 8/2/2 split. The two initial event-only diagnostic sessions cannot train a model.
 - Never target an unapproved client or account; outside the single pinned T8-v2.1 demonstrator,
   never add scrcpy control, Accessibility, root,
   hooks, injection, memory/process inspection, protocol

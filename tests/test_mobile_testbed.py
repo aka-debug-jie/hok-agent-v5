@@ -139,6 +139,12 @@ def test_visual_combat_arbiter_contracts_freeze_staged_caps() -> None:
     assert long["run_seconds"] == 300.0
     assert long["maximum_total_actions"] == 60
     assert long_maximum == {"basic_attack": 30, "skill1": 10, "skill2": 10, "skill3": 10}
+    dataset = mobile_testbed.verify_visual_combat_event_dataset_contract(
+        root / "configs/visual_combat_event_dataset_v1.json"
+    )
+    assert dataset["status"] == "PASSED"
+    assert dataset["minimum_training_sessions"] == 12
+    assert dataset["training_allowed"] is False
 
 
 def test_mobile_input_fails_closed_without_frozen_build_identity(

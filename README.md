@@ -206,6 +206,11 @@ every command was synchronously acknowledged and owner-observed as normal. Skill
 enter cooldown and recover before rearming. See
 [docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md](docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md).
 
+Its first formal event package has two diagnostic sessions and 78 synchronously bound actions.
+Training remains blocked: the initial events have no RGB/features and only fixed-rate derived
+timestamps. The next dataset gate requires twelve new timestamped feature sessions frozen as
+8 train, 2 dev, and 2 test.
+
 ## Project documents
 
 - [AGENTS.md](AGENTS.md): implementation authority and module constraints.

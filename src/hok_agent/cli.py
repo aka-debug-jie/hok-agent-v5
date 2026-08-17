@@ -668,6 +668,15 @@ def _parser() -> argparse.ArgumentParser:
     visual_arbiter.add_argument("--visual-layout", type=Path, required=True)
     visual_arbiter.add_argument("--execution-layout", type=Path, required=True)
     visual_arbiter.add_argument("--output-dir", type=Path, required=True)
+    visual_event_contract = commands.add_parser(
+        "visual-combat-dataset-contract-check",
+        help="verify the timestamped executed-action dataset contract",
+    )
+    visual_event_contract.add_argument(
+        "--contract",
+        type=Path,
+        default=Path("configs/visual_combat_event_dataset_v1.json"),
+    )
     t8_evaluate = commands.add_parser(
         "t8-evaluate-offline", help="run the sealed held-out evaluation for the selected T8 model"
     )
@@ -1674,6 +1683,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 execution_layout_path=args.execution_layout,
                 output_dir=args.output_dir,
             )
+        elif args.command == "visual-combat-dataset-contract-check":
+            from hok_agent.mobile_testbed import verify_visual_combat_event_dataset_contract
+
+            result = verify_visual_combat_event_dataset_contract(args.contract)
         elif args.command == "t8-evaluate-offline":
             from hok_agent.t8 import evaluate_t8_offline
 

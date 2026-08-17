@@ -1,0 +1,31 @@
+{
+  "schema_version": "hok-agent-visual-combat-event-dataset-contract-v1",
+  "source_event_schema": "hok-agent-visual-combat-arbiter-v1",
+  "action_vocabulary": ["wait", "basic_attack", "skill1", "skill2", "skill3"],
+  "label_source": "synchronous_executed_action",
+  "sample_hz": 5,
+  "required_timestamp_fields": [
+    "scheduled_elapsed_ms",
+    "decision_elapsed_ms",
+    "executed_elapsed_ms"
+  ],
+  "required_state_fields": [
+    "probabilities",
+    "cooldown_state",
+    "selected_action",
+    "input_sent",
+    "synchronous_acknowledged",
+    "rejection_reason"
+  ],
+  "minimum_training_sessions": 12,
+  "formal_split": {"train": 8, "dev": 2, "test": 2},
+  "window_frames": 16,
+  "raw_rgb_allowed": false,
+  "derived_rgb_or_features_required": true,
+  "source_paths_allowed": false,
+  "coordinates_allowed": false,
+  "serial_allowed": false,
+  "video_test_access_allowed": false,
+  "training_allowed_before_minimum_sessions": false,
+  "contract_sha256": "baab45536a2c98f2471d606cc5170d19928ce5d48230ad1ac309a77cbe80f433"
+}

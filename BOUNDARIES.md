@@ -104,6 +104,9 @@ input admission.
   only the global interval. Its frozen evidence is one 60-second and one five-minute run. Movement,
   aim/swipe, target selection, enemy interpretation, arbitrary commands, and model control remain
   forbidden.
+- Arbiter event logs alone are not a training dataset. Training requires twelve separately frozen
+  anonymous sessions with actual elapsed timestamps and derived RGB or frozen-encoder features;
+  raw video, source paths, serials, coordinates, and pre-threshold training remain forbidden.
 - Offline synthetic training, unlabeled real-video representation learning, conservative
   pseudo-label research, one Mean Teacher round, and RGB-derived tracking/temporal diagnostics.
 - A future, separately authorized post-training phase may use owner gameplay-quality

@@ -4758,6 +4758,60 @@ def _visual_combat_arbiter_contract(
     return value, digest, maximum
 
 
+def verify_visual_combat_event_dataset_contract(path: Path) -> dict[str, object]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MobileTestbedError("visual combat event dataset contract is unavailable") from exc
+    if not isinstance(value, dict):
+        raise MobileTestbedError("visual combat event dataset contract is invalid")
+    supplied = value.get("contract_sha256")
+    unsigned = {key: item for key, item in value.items() if key != "contract_sha256"}
+    digest = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    expected: dict[str, object] = {
+        "schema_version": "hok-agent-visual-combat-event-dataset-contract-v1",
+        "source_event_schema": VISUAL_COMBAT_ARBITER_SCHEMA,
+        "action_vocabulary": ["wait", "basic_attack", "skill1", "skill2", "skill3"],
+        "label_source": "synchronous_executed_action",
+        "sample_hz": 5,
+        "required_timestamp_fields": [
+            "scheduled_elapsed_ms",
+            "decision_elapsed_ms",
+            "executed_elapsed_ms",
+        ],
+        "required_state_fields": [
+            "probabilities",
+            "cooldown_state",
+            "selected_action",
+            "input_sent",
+            "synchronous_acknowledged",
+            "rejection_reason",
+        ],
+        "minimum_training_sessions": 12,
+        "formal_split": {"train": 8, "dev": 2, "test": 2},
+        "window_frames": 16,
+        "raw_rgb_allowed": False,
+        "derived_rgb_or_features_required": True,
+        "source_paths_allowed": False,
+        "coordinates_allowed": False,
+        "serial_allowed": False,
+        "video_test_access_allowed": False,
+        "training_allowed_before_minimum_sessions": False,
+    }
+    if supplied != digest or any(value.get(key) != item for key, item in expected.items()):
+        raise MobileTestbedError("visual combat event dataset contract differs")
+    return {
+        "schema_version": "hok-agent-visual-combat-event-dataset-contract-check-v1",
+        "status": "PASSED",
+        "contract_sha256": digest,
+        "minimum_training_sessions": 12,
+        "training_allowed": False,
+        "video_test_accessed": False,
+    }
+
+
 def run_visual_combat_arbiter(
     *,
     serial: str,
@@ -4822,6 +4876,7 @@ def run_visual_combat_arbiter(
             if now < next_due:
                 time.sleep(min(next_due - now, 0.01))
                 continue
+            scheduled = next_due
             next_due += 1 / infer_hz
             watchdog.ensure_fresh()
             frame = stream.frame()
@@ -4905,6 +4960,11 @@ def run_visual_combat_arbiter(
                 {
                     "schema_version": VISUAL_COMBAT_ARBITER_SCHEMA,
                     "sequence": len(rows),
+                    "scheduled_elapsed_ms": round((scheduled - started) * 1000),
+                    "decision_elapsed_ms": round((time.monotonic() - started) * 1000),
+                    "executed_elapsed_ms": (
+                        round((time.monotonic() - started) * 1000) if sent else None
+                    ),
                     "frame_sha256": hashlib.sha256(model_frame.tobytes()).hexdigest(),
                     "screen_valid": screen_valid,
                     "probabilities": {
