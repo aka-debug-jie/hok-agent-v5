@@ -31,6 +31,11 @@
   reuses only T8-v4 repair-1 weak labels and the frozen adapter. Enemy, basic attack, and skill1
   must each beat time-only, wrong-ROI, and shuffle controls; skill2 is diagnostic-only. T8-v5 may
   store derived ROI features but no RGB, video, source path, human label, or device data.
+- Basic-only MVP is an independent deterministic delivery route governed by
+  `docs/T8_BASIC_MVP_PROTOCOL.md`. It may extract only the independently passed T8-v5 basic ROI
+  component, but T8-v5's failed combined decision cannot authorize input. A passing all-dev
+  offline replay may admit one five-minute zero-control Shadow. No probe contract exists before
+  that Shadow passes.
 - A future, separately authorized post-training phase may use only owner gameplay-quality
   preferences over completed PixelArena games. It is not part of V5/V6 base training.
 - Preserve V1/V2/V3 and the offline V4 route as frozen regressions. Never overwrite their
@@ -110,6 +115,10 @@
 - T8-v5 does not reopen T8-v4. Its first gate is single-frame ROI evidence only and excludes TCN,
   replay, Shadow, mobile capture, and input. A TCN value test is permitted only after all three
   formal ROI heads pass. The authority is `docs/T8_V5_ROI_PROTOCOL.md`.
+- Basic-only MVP permits only `wait` and an offline/read-only `candidate_basic_attack`. It uses the
+  frozen enemy rule plus the passed basic ROI component with fixed persistence and rate limits.
+  Offline replay and read-only Shadow both retain `device_input_allowed=false`. Its frozen Shadow
+  produced zero candidates, so repeat Shadow, threshold changes, probe, and control are closed.
 - Never target an unapproved client or account; outside the single pinned T8-v2.1 demonstrator,
   never add scrcpy control, Accessibility, root,
   hooks, injection, memory/process inspection, protocol
@@ -138,7 +147,7 @@
   Tk, and device APIs; CLI imports optional stages lazily.
 - Torch/torchvision/safetensors are allowed only in `bc.py`, `pixel.py`, `alignment.py`,
   `temporal.py`, `v6_zero.py`, `rich_pixel.py`, `t8.py`, `t8_v3.py`, `t8_v4.py`, `t8_v5.py`,
-  `t8_shadow.py`, and their
+  `t8_basic_mvp.py`, `t8_shadow.py`, and their
   focused tests.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,
   `v5_data.py`, `mobile_testbed.py`, and focused tests.

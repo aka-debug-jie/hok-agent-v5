@@ -589,6 +589,44 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("configs/t8_v5_roi_experiment_v1.json"),
     )
+    basic_mvp_contract = commands.add_parser(
+        "t8-basic-mvp-contract-check", help="verify the frozen Basic-only MVP contract"
+    )
+    basic_mvp_contract.add_argument(
+        "--contract", type=Path, default=Path("configs/t8_basic_mvp_v1.json")
+    )
+    basic_mvp_replay = commands.add_parser(
+        "t8-basic-mvp-offline-replay",
+        help="run deterministic Basic-only candidates on frozen video-dev",
+    )
+    basic_mvp_replay.add_argument("--contract", type=Path, required=True)
+    basic_mvp_replay.add_argument("--v5-contract", type=Path, required=True)
+    basic_mvp_replay.add_argument("--feature-root", type=Path, required=True)
+    basic_mvp_replay.add_argument("--target-root", type=Path, required=True)
+    basic_mvp_replay.add_argument("--training-report", type=Path, required=True)
+    basic_mvp_replay.add_argument("--model", type=Path, required=True)
+    basic_mvp_replay.add_argument("--adapter-checkpoint", type=Path, required=True)
+    basic_mvp_replay.add_argument("--layout", type=Path, required=True)
+    basic_mvp_replay.add_argument("--output-dir", type=Path, required=True)
+    basic_mvp_replay.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    basic_mvp_replay.add_argument("--batch-size", type=int, default=256)
+    basic_mvp_shadow = commands.add_parser(
+        "t8-basic-mvp-shadow", help="run the admitted five-minute zero-control Basic Shadow"
+    )
+    basic_mvp_shadow.add_argument("--serial", required=True)
+    basic_mvp_shadow.add_argument("--video-node", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--base-contract", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--shadow-contract", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--offline-summary", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--v5-contract", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--feature-root", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--training-report", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--model", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--adapter-checkpoint", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--layout", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--output-dir", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    basic_mvp_shadow.add_argument("--batch-size", type=int, default=32)
     t8_evaluate = commands.add_parser(
         "t8-evaluate-offline", help="run the sealed held-out evaluation for the selected T8 model"
     )
@@ -1505,6 +1543,45 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = diagnose_t8_v5_roi_seed0(
                 dataset_root=args.dataset_root,
                 experiment_contract=args.experiment_contract,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-basic-mvp-contract-check":
+            from hok_agent.t8_basic_mvp import verify_t8_basic_mvp_contract
+
+            result = verify_t8_basic_mvp_contract(args.contract)
+        elif args.command == "t8-basic-mvp-offline-replay":
+            from hok_agent.t8_basic_mvp import run_t8_basic_mvp_offline_replay
+
+            result = run_t8_basic_mvp_offline_replay(
+                contract_path=args.contract,
+                v5_contract=args.v5_contract,
+                feature_root=args.feature_root,
+                target_root=args.target_root,
+                training_report=args.training_report,
+                model_path=args.model,
+                adapter_checkpoint=args.adapter_checkpoint,
+                layout_path=args.layout,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-basic-mvp-shadow":
+            from hok_agent.t8_basic_mvp import run_t8_basic_mvp_shadow
+
+            result = run_t8_basic_mvp_shadow(
+                serial=args.serial,
+                video_node=args.video_node,
+                base_contract_path=args.base_contract,
+                shadow_contract_path=args.shadow_contract,
+                offline_summary=args.offline_summary,
+                v5_contract=args.v5_contract,
+                feature_root=args.feature_root,
+                training_report=args.training_report,
+                model_path=args.model,
+                adapter_checkpoint=args.adapter_checkpoint,
+                layout_path=args.layout,
                 output_dir=args.output_dir,
                 device=args.device,
                 batch_size=args.batch_size,

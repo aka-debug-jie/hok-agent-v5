@@ -85,6 +85,12 @@ input admission.
   correct-ROI, wrong-ROI, time-only, prior, and shuffle controls. Skill2 is diagnostic-only. It
   stores derived ROI features only and cannot open TCN, replay, Shadow, capture, or input unless a
   later contract is explicitly admitted after all three formal ROI heads pass.
+- Basic-only MVP is a separate deterministic component route governed by
+  `docs/T8_BASIC_MVP_PROTOCOL.md`. It may extract the passed basic ROI head without promoting the
+  failed T8-v5 model. A hash-bound passing offline replay may admit one five-minute read-only
+  Shadow through explicit serial and V4L2 capture. Both stages send zero input. The frozen Shadow
+  produced zero candidates and failed, so no repeat, threshold change, 20-action probe, one-minute
+  run, or five-minute control contract is permitted.
 - Offline synthetic training, unlabeled real-video representation learning, conservative
   pseudo-label research, one Mean Teacher round, and RGB-derived tracking/temporal diagnostics.
 - A future, separately authorized post-training phase may use owner gameplay-quality

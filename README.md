@@ -180,6 +180,13 @@ small. Basic attack passed, but enemy and skill1 failed the frozen wrong-ROI mar
 frozen without a TCN stage and remains non-promoting. See
 [docs/T8_V5_ROI_PROTOCOL.md](docs/T8_V5_ROI_PROTOCOL.md).
 
+The independent Basic-only MVP extracts only the passed basic ROI component and combines it with
+the frozen enemy visual rule. Its complete video-dev replay produced six conservative candidates
+with no invalid-screen or rate-limit violations. The admitted five-minute zero-control Shadow
+completed all 1,500 cycles with low latency but produced zero candidates: the live basic score
+never reached the frozen 0.80 threshold. The route is frozen without a probe or device input. See
+[docs/T8_BASIC_MVP_PROTOCOL.md](docs/T8_BASIC_MVP_PROTOCOL.md).
+
 ## Project documents
 
 - [AGENTS.md](AGENTS.md): implementation authority and module constraints.
@@ -187,6 +194,7 @@ frozen without a TCN stage and remains non-promoting. See
 - [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md): concise current-state ledger.
 - [docs/T8_V4_PROTOCOL.md](docs/T8_V4_PROTOCOL.md): frozen T8-v4 diagnostic and promotion protocol.
 - [docs/T8_V5_ROI_PROTOCOL.md](docs/T8_V5_ROI_PROTOCOL.md): T8-v5 isolated-ROI evidence gate.
+- [docs/T8_BASIC_MVP_PROTOCOL.md](docs/T8_BASIC_MVP_PROTOCOL.md): deterministic basic-only gates.
 - [docs/DELIVERY_HISTORY.md](docs/DELIVERY_HISTORY.md): sanitized historical ledger.
 
 ## License
