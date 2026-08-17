@@ -147,6 +147,147 @@ def test_visual_combat_arbiter_contracts_freeze_staged_caps() -> None:
     assert dataset["training_allowed"] is False
 
 
+def test_visual_combat_dataset_stores_one_frame_and_actual_elapsed_times(tmp_path: Path) -> None:
+    output = tmp_path / "session"
+    row: dict[str, object] = {
+        "scheduled_elapsed_ms": 3200,
+        "decision_elapsed_ms": 3210,
+        "executed_elapsed_ms": 3212,
+        "selected_action": "skill1",
+        "input_sent": True,
+    }
+    summary: dict[str, object] = {
+        "schema_version": mobile_testbed.VISUAL_COMBAT_ARBITER_SCHEMA,
+        "raw_frames_persisted": False,
+    }
+    mobile_testbed._publish_visual_combat_dataset(
+        output,
+        [row],
+        [np.zeros((128, 128, 3), dtype=np.uint8)],
+        summary,
+        256,
+    )
+    written = json.loads((output / "summary.json").read_text(encoding="utf-8"))
+    assert written["derived_rgb_persisted"] is True
+    assert written["storage_frames_per_sample"] == 1
+    assert written["window_frames"] == 16
+    with np.load(output / "shards" / "frames-0000.npz", allow_pickle=False) as values:
+        assert values["rgb"].shape == (1, 128, 128, 3)
+        assert values["scheduled_elapsed_ms"].tolist() == [3200]
+        assert values["executed_elapsed_ms"].tolist() == [3212]
+        assert values["action_id"].tolist() == [2]
+
+
+def test_operation_base_roi_loader_and_persistent_joystick(tmp_path: Path) -> None:
+    roi_path = tmp_path / "rois.local.json"
+    roi_path.write_text(
+        json.dumps(
+            {
+                "schema_version": mobile_testbed.OBSERVATION_ROI_SCHEMA,
+                "screen": {"width": 1600, "height": 720, "rotation": 1},
+                "main_view": {"pixel_box_xyxy": [312, 60, 1280, 650]},
+                "minimap": {"pixel_box_xyxy": [80, 0, 312, 232]},
+                "hud": {"pixel_box_xyxy": [832, 216, 1600, 720]},
+                "recommended_equipment": {"pixel_box_xyxy": [160, 240, 260, 345]},
+                "death_replay_banner": {
+                    "pixel_box_xyxy": [720, 0, 880, 22],
+                    "minimum_red_pixels": 1000,
+                    "minimum_white_text_pixels": 40,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    rois, digest = mobile_testbed.load_observation_rois(roi_path)
+    assert rois.minimap == (80, 0, 312, 232)
+    assert rois.recommended_center == (210, 292)
+    assert len(digest) == 64
+    layout, _layout_sha = mobile_testbed.load_layout(_write_layout(tmp_path))
+    joystick = mobile_testbed.PersistentJoystick(layout, 1600, 720)
+    north = joystick.set_direction("north")
+    assert [operation.action for operation in north] == [
+        mobile_testbed.ANDROID_ACTION_DOWN,
+        mobile_testbed.ANDROID_ACTION_MOVE,
+    ]
+    east = joystick.set_direction("east")
+    assert [operation.action for operation in east] == [mobile_testbed.ANDROID_ACTION_MOVE]
+    stopped = joystick.release()
+    assert [operation.action for operation in stopped] == [mobile_testbed.ANDROID_ACTION_UP]
+    assert all(
+        operation.pointer_id == mobile_testbed.JOYSTICK_POINTER_ID
+        for operation in north + east + stopped
+    )
+    alive = np.zeros((720, 1600, 3), dtype=np.uint8)
+    death = alive.copy()
+    death[0:22, 720:880] = (120, 30, 20)
+    death[0:10, 720:760] = (220, 220, 220)
+    assert not mobile_testbed._death_replay_visible(alive, rois)
+    assert mobile_testbed._death_replay_visible(death, rois)
+
+
+def test_operation_base_contracts_freeze_movement_and_purchase_caps() -> None:
+    root = Path(__file__).resolve().parents[1]
+    short, _short_hash = mobile_testbed._mobile_operation_base_contract(
+        root / "configs/mobile_operation_base_60s_v1.json"
+    )
+    long, _long_hash = mobile_testbed._mobile_operation_base_contract(
+        root / "configs/mobile_operation_base_5m_v1.json"
+    )
+    assert short["run_seconds"] == 60.0
+    assert short["maximum_combat_actions"] == 20
+    assert short["maximum_purchases_per_minute"] == 5
+    assert long["run_seconds"] == 300.0
+    assert long["maximum_combat_actions"] == 60
+    assert short["movement_directions"] == list(mobile_testbed.MOVEMENTS[1:])
+    data_contract = json.loads(
+        (root / "configs/mobile_operation_base_data_v1.json").read_text(encoding="utf-8")
+    )
+    claimed = data_contract.pop("contract_sha256")
+    actual = mobile_testbed.hashlib.sha256(
+        json.dumps(data_contract, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    assert claimed == actual
+    assert data_contract["death_and_unknown_force_wait"] is True
+    assert data_contract["derived_roi_names"] == [
+        "main_view",
+        "minimap",
+        "hud",
+        "recommended_equipment",
+    ]
+
+
+def test_operation_base_dataset_binds_four_rois_and_factorized_actions(tmp_path: Path) -> None:
+    output = tmp_path / "operation-session"
+    row: dict[str, object] = {
+        "scheduled_elapsed_ms": 1000,
+        "frame_elapsed_ms": 1005,
+        "movement": "north",
+        "combat_event": "skill2",
+        "purchase_event": "buy_recommended",
+        "hard_stop_latched": False,
+    }
+    frame = np.zeros((128, 128, 3), dtype=np.uint8)
+    summary: dict[str, object] = {"status": "PASSED", "raw_frames_persisted": False}
+    mobile_testbed._publish_operation_base_dataset(
+        output,
+        [row],
+        [frame],
+        [frame],
+        [frame],
+        [frame],
+        summary,
+    )
+    written = json.loads((output / "summary.json").read_text(encoding="utf-8"))
+    assert written["roi_names"] == ["main_view", "minimap", "hud", "recommended_equipment"]
+    assert written["continuous_movement_state_persisted"] is True
+    with np.load(output / "shards" / "observations-0000.npz", allow_pickle=False) as values:
+        assert values["main_rgb"].shape == (1, 128, 128, 3)
+        assert values["minimap_rgb"].shape == (1, 128, 128, 3)
+        assert values["movement_id"].tolist() == [1]
+        assert values["combat_id"].tolist() == [3]
+        assert values["purchase_id"].tolist() == [1]
+
+
 def test_mobile_input_fails_closed_without_frozen_build_identity(
     tmp_path: Path, monkeypatch
 ) -> None:

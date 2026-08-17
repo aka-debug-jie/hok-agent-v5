@@ -107,6 +107,13 @@ input admission.
 - Arbiter event logs alone are not a training dataset. Training requires twelve separately frozen
   anonymous sessions with actual elapsed timestamps and derived RGB or frozen-encoder features;
   raw video, source paths, serials, coordinates, and pre-threshold training remain forbidden.
+- Mobile Operation Base v1 is a separately authorized exception to the older scrcpy-control
+  restriction, confined to the `mobile-operation-base` command, exact self-built App identity,
+  pinned scrcpy 1.25 server, private observation/execution layouts, and one finite session. Pointer
+  0 owns only persistent joystick movement; pointer 1 owns only the four combat taps or the single
+  recommended-purchase tap. Death/respawn/ended or unknown screens force both actions to stop.
+  Enemy semantics, target selection, aiming, arbitrary coordinates/commands, other packages, and
+  online model control remain forbidden.
 - Offline synthetic training, unlabeled real-video representation learning, conservative
   pseudo-label research, one Mean Teacher round, and RGB-derived tracking/temporal diagnostics.
 - A future, separately authorized post-training phase may use owner gameplay-quality
@@ -119,7 +126,8 @@ input admission.
 - Treating package name, USB serial, foreground state, or display geometry as proof that an app is
   the project-owned self-built test app. Those checks remain necessary but are not sufficient.
 - Any input to an unapproved client or account; scrcpy control outside the pinned T8-v2.1
-  demonstrator, Accessibility, macros, mechanical input, or account automation.
+  demonstrator and Mobile Operation Base v1, Accessibility, macros, mechanical input, or account
+  automation.
 - The ADB touchscreen input chain is confined to the owner-authorized self-built test app declared
   by the local private identity file, through `mobile_testbed.py`. The configured-package gate
   admits no bypass: no condition, override, fallback, or step that routes the chain to any other

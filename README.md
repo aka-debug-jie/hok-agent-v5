@@ -211,6 +211,12 @@ Training remains blocked: the initial events have no RGB/features and only fixed
 timestamps. The next dataset gate requires twelve new timestamped feature sessions frozen as
 8 train, 2 dev, and 2 test.
 
+Mobile Operation Base v1 closes the first engineering part with one guarded two-pointer scrcpy
+session. It continuously moves through eight directions while concurrently executing combat and
+the single recommended-equipment purchase, observes the minimap, and stores four derived ROI
+views. The five-minute gate and a live death/respawn hard-stop test passed. See
+[docs/MOBILE_OPERATION_BASE_PROTOCOL.md](docs/MOBILE_OPERATION_BASE_PROTOCOL.md).
+
 ## Project documents
 
 - [AGENTS.md](AGENTS.md): implementation authority and module constraints.
@@ -220,6 +226,7 @@ timestamps. The next dataset gate requires twelve new timestamped feature sessio
 - [docs/T8_V5_ROI_PROTOCOL.md](docs/T8_V5_ROI_PROTOCOL.md): T8-v5 isolated-ROI evidence gate.
 - [docs/T8_BASIC_MVP_PROTOCOL.md](docs/T8_BASIC_MVP_PROTOCOL.md): deterministic basic-only gates.
 - [docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md](docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md): cooldown-aware four-button arbiter.
+- [docs/MOBILE_OPERATION_BASE_PROTOCOL.md](docs/MOBILE_OPERATION_BASE_PROTOCOL.md): frozen movement, combat, purchase, minimap, and hard-stop base.
 - [docs/DELIVERY_HISTORY.md](docs/DELIVERY_HISTORY.md): sanitized historical ledger.
 
 ## License

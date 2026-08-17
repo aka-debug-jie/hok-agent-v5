@@ -133,7 +133,14 @@
 - Visual combat event data requires actual elapsed timestamps, 16-frame derived RGB or frozen
   encoder features, anonymous sessions, synchronous action binding, and at least twelve sessions
   before an 8/2/2 split. The two initial event-only diagnostic sessions cannot train a model.
-- Never target an unapproved client or account; outside the single pinned T8-v2.1 demonstrator,
+- Mobile Operation Base v1 is governed by `docs/MOBILE_OPERATION_BASE_PROTOCOL.md`. It is a new,
+  explicitly authorized owner-testbed route through `mobile-operation-base`, using the pinned
+  scrcpy 1.25 server, pointer 0 for persistent joystick movement, and pointer 1 for combat or the
+  single recommended purchase. Its 60-second, five-minute, and live death-stop gates passed. It
+  cannot add enemy semantics, target selection, aiming, tactics, another package, or another input
+  transport without a new contract.
+- Never target an unapproved client or account; outside the pinned T8-v2.1 demonstrator and
+  Mobile Operation Base v1,
   never add scrcpy control, Accessibility, root,
   hooks, injection, memory/process inspection, protocol
   interception, evasion, a generic shell runner, or network capture input. The input-control

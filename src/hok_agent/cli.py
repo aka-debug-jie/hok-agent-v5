@@ -668,6 +668,18 @@ def _parser() -> argparse.ArgumentParser:
     visual_arbiter.add_argument("--visual-layout", type=Path, required=True)
     visual_arbiter.add_argument("--execution-layout", type=Path, required=True)
     visual_arbiter.add_argument("--output-dir", type=Path, required=True)
+    visual_collect = commands.add_parser(
+        "visual-combat-collect",
+        help="collect timestamped single-frame RGB and synchronous combat labels",
+    )
+    visual_collect.add_argument("--serial", required=True)
+    visual_collect.add_argument("--video-node", type=Path, required=True)
+    visual_collect.add_argument("--contract", type=Path, required=True)
+    visual_collect.add_argument("--teacher-report", type=Path, required=True)
+    visual_collect.add_argument("--visual-layout", type=Path, required=True)
+    visual_collect.add_argument("--execution-layout", type=Path, required=True)
+    visual_collect.add_argument("--output-dir", type=Path, required=True)
+    visual_collect.add_argument("--shard-size", type=int, default=256)
     visual_event_contract = commands.add_parser(
         "visual-combat-dataset-contract-check",
         help="verify the timestamped executed-action dataset contract",
@@ -677,6 +689,17 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("configs/visual_combat_event_dataset_v1.json"),
     )
+    operation_base = commands.add_parser(
+        "mobile-operation-base",
+        help="run persistent movement with concurrent combat, minimap, and purchase",
+    )
+    operation_base.add_argument("--serial", required=True)
+    operation_base.add_argument("--contract", type=Path, required=True)
+    operation_base.add_argument("--teacher-report", type=Path, required=True)
+    operation_base.add_argument("--visual-layout", type=Path, required=True)
+    operation_base.add_argument("--execution-layout", type=Path, required=True)
+    operation_base.add_argument("--observation-rois", type=Path, required=True)
+    operation_base.add_argument("--output-dir", type=Path, required=True)
     t8_evaluate = commands.add_parser(
         "t8-evaluate-offline", help="run the sealed held-out evaluation for the selected T8 model"
     )
@@ -1683,10 +1706,36 @@ def main(argv: Sequence[str] | None = None) -> int:
                 execution_layout_path=args.execution_layout,
                 output_dir=args.output_dir,
             )
+        elif args.command == "visual-combat-collect":
+            from hok_agent.mobile_testbed import run_visual_combat_arbiter
+
+            result = run_visual_combat_arbiter(
+                serial=args.serial,
+                video_node=args.video_node,
+                contract_path=args.contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                output_dir=args.output_dir,
+                persist_derived_rgb=True,
+                shard_size=args.shard_size,
+            )
         elif args.command == "visual-combat-dataset-contract-check":
             from hok_agent.mobile_testbed import verify_visual_combat_event_dataset_contract
 
             result = verify_visual_combat_event_dataset_contract(args.contract)
+        elif args.command == "mobile-operation-base":
+            from hok_agent.mobile_testbed import run_mobile_operation_base
+
+            result = run_mobile_operation_base(
+                serial=args.serial,
+                contract_path=args.contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+            )
         elif args.command == "t8-evaluate-offline":
             from hok_agent.t8 import evaluate_t8_offline
 
