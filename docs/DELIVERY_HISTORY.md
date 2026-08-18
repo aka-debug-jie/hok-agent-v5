@@ -187,7 +187,7 @@ fresh-process exact replay/tamper rejection, and RTX 4090 forward p95 at most 10
   audit/staging directories and a fail-closed read-write mount preflight. A later host-namespace
   check corrected the initial sandbox-only observation: `/dev/sda2` is mounted `fuseblk rw` on
   the host, `/etc/fstab` already binds UUID `<redacted-storage-uuid>` to `<local-data-volume>`, and the
-  generated `media-hgdl1012-E.mount` is active under `local-fs.target`. The sandbox exposes the
+  generated local large-data mount is active under `local-fs.target`. The sandbox exposes the
   mount read-only, so its failed write probe and `storage-preflight` result are not host-state
   evidence. No directory was created and no frozen run was moved. Before starting heavy writes,
   review the repeated host `ntfs-3g` `Failed to read index block: Input/output error` events
