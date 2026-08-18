@@ -1,0 +1,36 @@
+{
+  "schema_version": "hok-agent-hero-ability-profile-v1",
+  "profile_status": "TEMPLATE_NOT_CONFIGURED",
+  "hero_id": "",
+  "abilities": {
+    "basic_attack": {
+      "mode": "tap",
+      "aim_radius": null,
+      "hold_ms": null,
+      "minimum_interval_ms": 500,
+      "cooldown_observation_required": false
+    },
+    "skill1": {
+      "mode": "disabled",
+      "aim_radius": null,
+      "hold_ms": null,
+      "minimum_interval_ms": 0,
+      "cooldown_observation_required": false
+    },
+    "skill2": {
+      "mode": "disabled",
+      "aim_radius": null,
+      "hold_ms": null,
+      "minimum_interval_ms": 0,
+      "cooldown_observation_required": false
+    },
+    "skill3": {
+      "mode": "disabled",
+      "aim_radius": null,
+      "hold_ms": null,
+      "minimum_interval_ms": 0,
+      "cooldown_observation_required": false
+    }
+  },
+  "profile_sha256": ""
+}

@@ -61,6 +61,9 @@ VISUAL_COMBAT_ARBITER_SCHEMA = "hok-agent-visual-combat-arbiter-v1"
 OBSERVATION_ROI_SCHEMA = "hok-agent-mobile-observation-rois-v1"
 MOBILE_OPERATION_BASE_CONTRACT_SCHEMA = "hok-agent-mobile-operation-base-contract-v1"
 MOBILE_OPERATION_BASE_SCHEMA = "hok-agent-mobile-operation-base-v1"
+MOVEMENT_TEACHER_CONTRACT_SCHEMA = "hok-agent-operation-movement-teacher-contract-v1"
+MOVEMENT_TEACHER_AUDIT_SCHEMA = "hok-agent-operation-movement-teacher-audit-v1"
+MOBILE_OPERATION_TEACHER_SCHEMA = "hok-agent-mobile-operation-teacher-v1"
 TOUCH_CALIBRATION_SCHEMA = "hok-agent-mobile-touch-calibration-v2"
 LAYOUT_SCHEMA = "hok-agent-mobile-layout-v3"
 MOBILE_BUILD_IDENTITY_SCHEMA = "hok-agent-mobile-build-identity-v1"
@@ -390,6 +393,56 @@ class MinimapNavigation:
     movement: str
     player_yx: tuple[float, float]
     target_yx: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class MinimapTeacherDecision:
+    movement: str
+    player_yx: tuple[float, float]
+    target_yx: tuple[float, float]
+    confidence: float
+
+
+class MinimapDirectionFilter:
+    def __init__(
+        self, confirmation_frames: int, minimum_hold_ms: int, missing_hold_ms: int
+    ) -> None:
+        self.confirmation_frames = confirmation_frames
+        self.minimum_hold_ms = minimum_hold_ms
+        self.missing_hold_ms = missing_hold_ms
+        self.direction = "wait"
+        self.pending = "wait"
+        self.pending_count = 0
+        self.last_change_ms = -(10**12)
+        self.last_seen_ms = -(10**12)
+
+    def update(self, candidate: str | None, timestamp_ms: int) -> tuple[str, bool]:
+        previous = self.direction
+        if candidate is None:
+            self.pending = "wait"
+            self.pending_count = 0
+            if timestamp_ms - self.last_seen_ms > self.missing_hold_ms:
+                self.direction = "wait"
+            return self.direction, self.direction != previous
+        if candidate not in MOVEMENTS[1:]:
+            raise MobileTestbedError("minimap teacher candidate is invalid")
+        self.last_seen_ms = timestamp_ms
+        if candidate == self.direction:
+            self.pending = candidate
+            self.pending_count = 0
+            return self.direction, False
+        if timestamp_ms - self.last_change_ms < self.minimum_hold_ms:
+            return self.direction, False
+        if candidate != self.pending:
+            self.pending = candidate
+            self.pending_count = 1
+        else:
+            self.pending_count += 1
+        if self.pending_count >= self.confirmation_frames:
+            self.direction = candidate
+            self.pending_count = 0
+            self.last_change_ms = timestamp_ms
+        return self.direction, self.direction != previous
 
 
 @dataclass(frozen=True)
@@ -1372,6 +1425,20 @@ def _new_large_output(path: Path) -> Path:
     return _new_output(path)
 
 
+def _existing_large_path(path: Path) -> Path:
+    root_text = os.environ.get("HOK_LARGE_ROOT")
+    if not root_text:
+        raise MobileTestbedError("HOK_LARGE_ROOT is required for T8 data")
+    try:
+        root = Path(root_text).resolve(strict=True)
+        target = path.resolve(strict=True)
+    except OSError as exc:
+        raise MobileTestbedError("T8 input path is unavailable") from exc
+    if root.is_symlink() or not target.is_dir() or target == root or root not in target.parents:
+        raise MobileTestbedError("T8 input must be a directory below HOK_LARGE_ROOT")
+    return target
+
+
 def _guarded_send(guard: DeviceGuard, send: Callable[..., None]) -> Callable[..., None]:
     def guarded(*arguments: str) -> None:
         _require_mobile_input_identity()
@@ -1966,6 +2033,263 @@ def rgb_teacher_minimap_navigation(frame: np.ndarray) -> MinimapNavigation | Non
         (round(float(player[0]), 4), round(float(player[1]), 4)),
         (int(selected[0]), int(selected[1])),
     )
+
+
+def _movement_teacher_contract(path: Path) -> tuple[dict[str, object], str]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MobileTestbedError("movement teacher contract is unavailable") from exc
+    if not isinstance(value, dict):
+        raise MobileTestbedError("movement teacher contract is invalid")
+    supplied = value.get("contract_sha256")
+    unsigned = {key: item for key, item in value.items() if key != "contract_sha256"}
+    digest = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    expected: dict[str, object] = {
+        "schema_version": MOVEMENT_TEACHER_CONTRACT_SCHEMA,
+        "green_minimum": 85,
+        "green_red_margin": 18,
+        "green_blue_margin": 10,
+        "red_minimum": 105,
+        "red_green_margin": 28,
+        "red_blue_margin": 18,
+        "green_component_size": [20, 140],
+        "green_component_extent": [7, 24],
+        "red_component_size": [20, 240],
+        "red_component_extent": [5, 24],
+        "paired_component_l1_distance": 7.0,
+        "target_exclusion_distance": 15.0,
+        "direction_confirmation_frames": 3,
+        "minimum_direction_hold_ms": 1000,
+        "missing_detection_hold_ms": 1000,
+        "minimum_offline_coverage": 0.7,
+        "required_direction_count": 8,
+        "maximum_player_jump_p95": 5.0,
+        "fixed_patrol_fallback_allowed": False,
+        "random_fallback_allowed": False,
+        "manual_annotation_required": False,
+        "control_output": False,
+        "device_input_allowed": False,
+    }
+    if unsigned != expected or supplied != digest:
+        raise MobileTestbedError("movement teacher contract differs")
+    return value, digest
+
+
+def _mask_components(mask: np.ndarray) -> list[tuple[int, float, float, int, int]]:
+    if mask.shape != (128, 128) or mask.dtype != np.bool_:
+        raise MobileTestbedError("movement teacher color mask is invalid")
+    seen = np.zeros(mask.shape, dtype=bool)
+    components: list[tuple[int, float, float, int, int]] = []
+    for raw_y, raw_x in zip(*np.where(mask), strict=True):
+        y, x = int(raw_y), int(raw_x)
+        if seen[y, x]:
+            continue
+        stack = [(y, x)]
+        seen[y, x] = True
+        points: list[tuple[int, int]] = []
+        while stack:
+            current_y, current_x = stack.pop()
+            points.append((current_y, current_x))
+            for delta_y, delta_x in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                next_y, next_x = current_y + delta_y, current_x + delta_x
+                if (
+                    0 <= next_y < 128
+                    and 0 <= next_x < 128
+                    and mask[next_y, next_x]
+                    and not seen[next_y, next_x]
+                ):
+                    seen[next_y, next_x] = True
+                    stack.append((next_y, next_x))
+        if len(points) < 3:
+            continue
+        values = np.asarray(points, dtype=np.int16)
+        components.append(
+            (
+                len(points),
+                float(values[:, 0].mean()),
+                float(values[:, 1].mean()),
+                int(np.ptp(values[:, 0]) + 1),
+                int(np.ptp(values[:, 1]) + 1),
+            )
+        )
+    return components
+
+
+def movement_teacher_decision(
+    frame: np.ndarray,
+    contract: dict[str, object],
+    previous_player: tuple[float, float] | None = None,
+) -> MinimapTeacherDecision | None:
+    if frame.shape != (128, 128, 3) or frame.dtype != np.uint8:
+        raise MobileTestbedError("movement teacher requires 128x128 uint8 minimap RGB")
+    rgb = frame.astype(np.int16)
+    red, green, blue = (rgb[..., index] for index in range(3))
+    green_mask = (
+        (green > cast(int, contract["green_minimum"]))
+        & (green - red > cast(int, contract["green_red_margin"]))
+        & (green - blue > cast(int, contract["green_blue_margin"]))
+    )
+    red_mask = (
+        (red > cast(int, contract["red_minimum"]))
+        & (red - green > cast(int, contract["red_green_margin"]))
+        & (red - blue > cast(int, contract["red_blue_margin"]))
+    )
+    green_size = cast(list[int], contract["green_component_size"])
+    green_extent = cast(list[int], contract["green_component_extent"])
+    red_size = cast(list[int], contract["red_component_size"])
+    red_extent = cast(list[int], contract["red_component_extent"])
+    green_components = [
+        item
+        for item in _mask_components(green_mask)
+        if green_size[0] <= item[0] <= green_size[1]
+        and green_extent[0] <= item[3] <= green_extent[1]
+        and green_extent[0] <= item[4] <= green_extent[1]
+        and 5 < item[1] < 123
+        and 5 < item[2] < 123
+    ]
+    red_components = [
+        item
+        for item in _mask_components(red_mask)
+        if red_size[0] <= item[0] <= red_size[1]
+        and red_extent[0] <= item[3] <= red_extent[1]
+        and red_extent[0] <= item[4] <= red_extent[1]
+        and 4 < item[1] < 124
+        and 4 < item[2] < 124
+    ]
+    maximum_pair_distance = cast(float, contract["paired_component_l1_distance"])
+    pairs = [
+        (abs(green_item[1] - red_item[1]) + abs(green_item[2] - red_item[2]), green_item)
+        for green_item in green_components
+        for red_item in red_components
+        if abs(green_item[1] - red_item[1]) + abs(green_item[2] - red_item[2])
+        <= maximum_pair_distance
+    ]
+    if not pairs:
+        return None
+    if previous_player is not None:
+        nearby = [
+            item
+            for item in pairs
+            if math.dist((item[1][1], item[1][2]), previous_player) <= 10.0
+        ]
+    else:
+        nearby = []
+    pair_distance, player_component = min(
+        nearby or pairs,
+        key=lambda item: (
+            math.dist((item[1][1], item[1][2]), previous_player)
+            if previous_player is not None and nearby
+            else item[0],
+            item[0],
+        ),
+    )
+    player = np.asarray((player_component[1], player_component[2]))
+    exclusion = cast(float, contract["target_exclusion_distance"])
+    targets = [
+        item
+        for item in red_components
+        if float(np.linalg.norm(np.asarray((item[1], item[2])) - player)) >= exclusion
+    ]
+    if not targets:
+        return None
+    target_component = min(
+        targets,
+        key=lambda item: float(np.linalg.norm(np.asarray((item[1], item[2])) - player)),
+    )
+    target = np.asarray((target_component[1], target_component[2]))
+    delta_y, delta_x = target - player
+    sector = round(math.atan2(float(delta_x), float(-delta_y)) / (math.pi / 4)) % 8
+    target_distance = float(np.linalg.norm(target - player))
+    confidence = max(0.0, 1.0 - pair_distance / max(maximum_pair_distance, 1.0))
+    confidence *= min(1.0, target_distance / max(exclusion * 2, 1.0))
+    return MinimapTeacherDecision(
+        MOVEMENTS[1:][sector],
+        (round(float(player[0]), 4), round(float(player[1]), 4)),
+        (round(float(target[0]), 4), round(float(target[1]), 4)),
+        round(confidence, 8),
+    )
+
+
+def audit_operation_movement_teacher(
+    *, session_dir: Path, contract_path: Path, output_dir: Path
+) -> dict[str, object]:
+    contract, contract_sha = _movement_teacher_contract(contract_path)
+    root = _existing_large_path(session_dir)
+    try:
+        summary = json.loads((root / "summary.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MobileTestbedError("operation base summary is unavailable") from exc
+    if (
+        not isinstance(summary, dict)
+        or summary.get("schema_version") != MOBILE_OPERATION_BASE_SCHEMA
+        or summary.get("status") != "PASSED"
+        or summary.get("summary_sha256") != _summary_identity(
+            {key: item for key, item in summary.items() if key != "summary_sha256"}
+        )
+    ):
+        raise MobileTestbedError("operation base summary is invalid")
+    shard_rows = summary.get("observation_shards")
+    if not isinstance(shard_rows, list) or not shard_rows:
+        raise MobileTestbedError("operation base observation shards are unavailable")
+    frames: list[np.ndarray] = []
+    for raw in shard_rows:
+        row = cast(dict[str, object], raw)
+        name = row.get("path")
+        if not isinstance(name, str) or Path(name).name != name:
+            raise MobileTestbedError("operation base observation shard name is invalid")
+        path = root / "shards" / name
+        if row.get("sha256") != hashlib.sha256(path.read_bytes()).hexdigest():
+            raise MobileTestbedError("operation base observation shard hash differs")
+        with np.load(path, allow_pickle=False) as shard:
+            frames.extend(shard["minimap_rgb"])
+    directions = Counter({name: 0 for name in MOVEMENTS[1:]})
+    previous: tuple[float, float] | None = None
+    jumps: list[float] = []
+    valid = 0
+    for frame in frames:
+        decision = movement_teacher_decision(frame, contract, previous)
+        if decision is None:
+            continue
+        valid += 1
+        directions[decision.movement] += 1
+        if previous is not None:
+            jumps.append(math.dist(previous, decision.player_yx))
+        previous = decision.player_yx
+    coverage = valid / len(frames)
+    jump_p95 = float(np.percentile(jumps, 95)) if jumps else math.inf
+    strict = bool(
+        coverage >= cast(float, contract["minimum_offline_coverage"])
+        and sum(count > 0 for count in directions.values())
+        == cast(int, contract["required_direction_count"])
+        and jump_p95 <= cast(float, contract["maximum_player_jump_p95"])
+    )
+    report: dict[str, object] = {
+        "schema_version": MOVEMENT_TEACHER_AUDIT_SCHEMA,
+        "status": "PASSED" if strict else "FAILED",
+        "strict_passed": strict,
+        "contract_sha256": contract_sha,
+        "source_summary_sha256": summary["summary_sha256"],
+        "frames": len(frames),
+        "valid_detections": valid,
+        "coverage": round(coverage, 8),
+        "direction_counts": dict(directions),
+        "player_jump_p95": round(jump_p95, 8),
+        "fixed_patrol_fallback_used": False,
+        "random_fallback_used": False,
+        "manual_annotation_required": False,
+        "control_output": False,
+        "device_input_allowed": False,
+    }
+    report["report_sha256"] = _summary_identity(report)
+    output = _new_large_output(output_dir)
+    output.mkdir()
+    (output / "report.json").write_text(
+        json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    return report
 
 
 def pick_layout_points(
@@ -2579,6 +2903,24 @@ def _publish_operation_base_dataset(
                 movement_id=np.asarray(
                     [MOVEMENTS.index(cast(str, row["movement"])) for row in rows[start:stop]],
                     dtype=np.int8,
+                ),
+                movement_confidence=np.asarray(
+                    [
+                        cast(float, row.get("movement_confidence", 0.0))
+                        for row in rows[start:stop]
+                    ],
+                    dtype=np.float32,
+                ),
+                movement_label_source=np.asarray(
+                    [
+                        int(row.get("movement_label_source") == "rgb_minimap_teacher_v1")
+                        for row in rows[start:stop]
+                    ],
+                    dtype=np.uint8,
+                ),
+                movement_input_sent=np.asarray(
+                    [bool(row.get("movement_input_sent", False)) for row in rows[start:stop]],
+                    dtype=np.uint8,
                 ),
                 combat_id=np.asarray(
                     [combat_ids[cast(str, row["combat_event"])] for row in rows[start:stop]],
@@ -5424,9 +5766,16 @@ def run_mobile_operation_base(
     execution_layout_path: Path,
     observation_rois_path: Path,
     output_dir: Path,
+    movement_teacher_contract_path: Path | None = None,
+    enable_input: bool = True,
 ) -> dict[str, object]:
     contract, contract_sha = _mobile_operation_base_contract(contract_path)
     _require_mobile_input_identity()
+    movement_teacher, movement_teacher_sha = (
+        _movement_teacher_contract(movement_teacher_contract_path)
+        if movement_teacher_contract_path is not None
+        else (None, None)
+    )
     output = _new_large_output(output_dir)
     guard = _open_device_guard(serial)
     visual_layout, visual_layout_sha = load_layout(visual_layout_path)
@@ -5462,8 +5811,20 @@ def run_mobile_operation_base(
     hud_frames: list[np.ndarray] = []
     recommended_frames: list[np.ndarray] = []
     directions = cast(list[str], contract["movement_directions"])
+    direction_filter = (
+        MinimapDirectionFilter(
+            cast(int, movement_teacher["direction_confirmation_frames"]),
+            cast(int, movement_teacher["minimum_direction_hold_ms"]),
+            cast(int, movement_teacher["missing_detection_hold_ms"]),
+        )
+        if movement_teacher is not None
+        else None
+    )
     directions_seen: set[str] = set()
     movement_transitions = 0
+    movement_teacher_detections = 0
+    movement_teacher_confidence_sum = 0.0
+    previous_teacher_player: tuple[float, float] | None = None
     pointer0_up_before_end = False
     hard_stop_latched = False
     hard_stop_recovery_frames = 0
@@ -5485,6 +5846,8 @@ def run_mobile_operation_base(
 
     def dispatch(operations: list[TouchOperation], *, expected_up: bool = False) -> None:
         nonlocal pointer_messages, pointer0_up_before_end
+        if not enable_input:
+            return
         for operation in operations:
             watchdog.ensure_fresh()
             session.touch(operation, guard.width, guard.height)
@@ -5498,6 +5861,8 @@ def run_mobile_operation_base(
 
     def transient_tap(point: tuple[int, int]) -> None:
         nonlocal pointer_messages, combat_pointer_active
+        if not enable_input:
+            return
         if combat_pointer_active:
             raise MobileTestbedError("transient action pointer conflict")
         combat_pointer_active = True
@@ -5564,13 +5929,30 @@ def run_mobile_operation_base(
                 if not screen_valid
                 else None
             )
+            minimap_frame = _observation_roi_frame(frame, rois.minimap)
+            movement_decision = (
+                movement_teacher_decision(
+                    minimap_frame,
+                    movement_teacher,
+                    previous_teacher_player,
+                )
+                if movement_teacher is not None and hard_stop_reason is None
+                else None
+            )
+            movement_candidate = movement_decision.movement if movement_decision else None
+            movement_confidence = movement_decision.confidence if movement_decision else 0.0
+            if movement_decision is not None:
+                movement_teacher_detections += 1
+                movement_teacher_confidence_sum += movement_decision.confidence
+                previous_teacher_player = movement_decision.player_yx
+            movement_sent = False
             if hard_stop_reason is not None:
                 hard_stop_recovery_frames = 0
                 if not hard_stop_latched:
                     release_ops = joystick.release()
                     if release_ops:
                         dispatch(release_ops, expected_up=True)
-                        hard_stop_releases += 1
+                        hard_stop_releases += int(enable_input)
                 hard_stop_latched = True
             elif hard_stop_latched:
                 hard_stop_recovery_frames += 1
@@ -5580,9 +5962,26 @@ def run_mobile_operation_base(
                     next_direction = now
             if hard_stop_latched:
                 hard_stop_cycles += 1
+            elif movement_teacher is not None:
+                assert direction_filter is not None
+                filtered_direction, changed = direction_filter.update(
+                    movement_candidate,
+                    round((scheduled - started) * 1000),
+                )
+                movement_operations = joystick.set_direction(filtered_direction)
+                movement_sent = bool(movement_operations and enable_input)
+                dispatch(
+                    movement_operations,
+                    expected_up=filtered_direction == "wait",
+                )
+                if filtered_direction != "wait":
+                    directions_seen.add(filtered_direction)
+                movement_transitions += int(changed)
             elif now >= next_direction:
                 direction = directions[movement_transitions % len(directions)]
-                dispatch(joystick.set_direction(direction))
+                movement_operations = joystick.set_direction(direction)
+                movement_sent = bool(movement_operations and enable_input)
+                dispatch(movement_operations)
                 directions_seen.add(direction)
                 movement_transitions += 1
                 next_direction = now + cast(float, contract["movement_direction_interval_seconds"])
@@ -5599,7 +5998,7 @@ def run_mobile_operation_base(
             previous_minimap = minimap.copy()
             minimap_observations += 1
             main_view_frames.append(_observation_roi_frame(frame, rois.main_view))
-            minimap_frames.append(_observation_roi_frame(frame, rois.minimap))
+            minimap_frames.append(minimap_frame)
             hud_frames.append(_observation_roi_frame(frame, rois.hud))
             recommended_frames.append(_observation_roi_frame(frame, rois.recommended_equipment))
             probabilities = _combat_rule_probabilities(frame, visual_layout, calibration)
@@ -5665,15 +6064,16 @@ def run_mobile_operation_base(
                     button = execution_layout.buttons[selected_combat]
                     if button is None:
                         raise MobileTestbedError("operation base combat coordinate is unavailable")
-                    transient_tap(_point(guard.width, guard.height, *button))
-                    combat_sent = True
-                    combat_counts[selected_combat] += 1
-                    combat_total += 1
-                    last_combat = now
-                    if selected_combat != "basic_attack":
-                        armed[selected_combat] = False
-                        release_seen[selected_combat] = False
-                        low[selected_combat] = high[selected_combat] = 0
+                    if enable_input:
+                        transient_tap(_point(guard.width, guard.height, *button))
+                        combat_sent = True
+                        combat_counts[selected_combat] += 1
+                        combat_total += 1
+                        last_combat = now
+                        if selected_combat != "basic_attack":
+                            armed[selected_combat] = False
+                            release_seen[selected_combat] = False
+                            low[selected_combat] = high[selected_combat] = 0
             purchase_box = rois.recommended_equipment
             purchase_crop = frame[
                 purchase_box[1] : purchase_box[3], purchase_box[0] : purchase_box[2]
@@ -5706,6 +6106,7 @@ def run_mobile_operation_base(
                 and purchase_visible
                 and now_ms - last_purchase_ms >= cast(int, contract["purchase_refractory_ms"])
                 and len(purchase_times) < cast(int, contract["maximum_purchases_per_minute"])
+                and enable_input
             ):
                 purchase_reference = purchase_crop.copy()
                 transient_tap(rois.recommended_center)
@@ -5720,7 +6121,11 @@ def run_mobile_operation_base(
                 parallel_action_cycles += 1
             rows.append(
                 {
-                    "schema_version": MOBILE_OPERATION_BASE_SCHEMA,
+                    "schema_version": (
+                        MOBILE_OPERATION_TEACHER_SCHEMA
+                        if movement_teacher is not None
+                        else MOBILE_OPERATION_BASE_SCHEMA
+                    ),
                     "sequence": len(rows),
                     "scheduled_elapsed_ms": round((scheduled - started) * 1000),
                     "frame_elapsed_ms": round(frame_timestamp_ns / 1_000_000 - started * 1000),
@@ -5737,7 +6142,22 @@ def run_mobile_operation_base(
                     ),
                     "operation_allowed": not hard_stop_latched,
                     "movement": joystick.direction,
+                    "movement_candidate": movement_candidate,
+                    "movement_confidence": round(movement_confidence, 8),
+                    "movement_label_source": (
+                        "rgb_minimap_teacher_v1"
+                        if movement_teacher is not None
+                        else "fixed_operation_schedule_v1"
+                    ),
+                    "movement_input_sent": movement_sent,
+                    "movement_player_yx": (
+                        list(movement_decision.player_yx) if movement_decision else None
+                    ),
+                    "movement_target_yx": (
+                        list(movement_decision.target_yx) if movement_decision else None
+                    ),
                     "joystick_active": joystick.direction != "wait",
+                    "combat_candidate": selected_combat,
                     "combat_event": selected_combat if combat_sent else "none",
                     "purchase_event": "buy_recommended" if purchase_sent else "none",
                     "purchase_visible": purchase_visible,
@@ -5749,7 +6169,7 @@ def run_mobile_operation_base(
                     "recommended_equipment_sha256": hashlib.sha256(
                         recommended_frames[-1].tobytes()
                     ).hexdigest(),
-                    "input_sent": combat_sent or purchase_sent,
+                    "input_sent": movement_sent or combat_sent or purchase_sent,
                 }
             )
     except Exception as exc:
@@ -5757,25 +6177,18 @@ def run_mobile_operation_base(
     finally:
         try:
             release_ops = joystick.release()
-            for operation in release_ops:
-                session.touch(operation, guard.width, guard.height)
-                pointer_messages += 1
+            if enable_input:
+                for operation in release_ops:
+                    session.touch(operation, guard.width, guard.height)
+                    pointer_messages += 1
         except Exception as exc:
             if failure is None:
                 failure = str(exc)
         watchdog.stop()
         session.close()
     minimum_combat = cast(int, contract["minimum_actions_per_button"])
-    strict = bool(
-        failure is None
-        and len(rows) >= int(run_seconds * infer_hz * 0.95)
-        and directions_seen == set(directions)
-        and not pointer0_up_before_end
-        and actions_during_hard_stop == 0
-        and parallel_action_cycles > 0
-        and all(combat_counts[action] >= minimum_combat for action in actions)
-        and purchase_count >= cast(int, contract["minimum_purchases"])
-        and minimap_observations == len(rows)
+    frame_integrity = bool(
+        minimap_observations == len(rows)
         and all(
             len(values) == len(rows)
             for values in (
@@ -5786,8 +6199,52 @@ def run_mobile_operation_base(
             )
         )
     )
+    teacher_coverage = movement_teacher_detections / max(len(rows), 1)
+    if movement_teacher is None:
+        strict = bool(
+            failure is None
+            and len(rows) >= int(run_seconds * infer_hz * 0.95)
+            and directions_seen == set(directions)
+            and not pointer0_up_before_end
+            and actions_during_hard_stop == 0
+            and parallel_action_cycles > 0
+            and all(combat_counts[action] >= minimum_combat for action in actions)
+            and purchase_count >= cast(int, contract["minimum_purchases"])
+            and frame_integrity
+        )
+    else:
+        required_directions = 1
+        strict = bool(
+            failure is None
+            and len(rows) >= int(run_seconds * infer_hz * 0.95)
+            and teacher_coverage
+            >= cast(float, movement_teacher["minimum_offline_coverage"])
+            and len(directions_seen) >= required_directions
+            and actions_during_hard_stop == 0
+            and frame_integrity
+            and (
+                pointer_messages == 0
+                if not enable_input
+                else (
+                    not pointer0_up_before_end
+                    and parallel_action_cycles > 0
+                    and combat_total > 0
+                    and purchase_count >= cast(int, contract["minimum_purchases"])
+                )
+            )
+        )
+    training_eligible = bool(
+        movement_teacher is not None
+        and enable_input
+        and run_seconds == 300.0
+        and strict
+    )
     summary: dict[str, object] = {
-        "schema_version": MOBILE_OPERATION_BASE_SCHEMA,
+        "schema_version": (
+            MOBILE_OPERATION_TEACHER_SCHEMA
+            if movement_teacher is not None
+            else MOBILE_OPERATION_BASE_SCHEMA
+        ),
         "status": "PASSED" if strict else "FAILED",
         "strict_passed": strict,
         "contract_sha256": contract_sha,
@@ -5798,6 +6255,17 @@ def run_mobile_operation_base(
         "inference_cycles": len(rows),
         "directions_seen": sorted(directions_seen),
         "movement_transitions": movement_transitions,
+        "movement_label_source": (
+            "rgb_minimap_teacher_v1"
+            if movement_teacher is not None
+            else "fixed_operation_schedule_v1"
+        ),
+        "movement_teacher_contract_sha256": movement_teacher_sha,
+        "movement_teacher_detections": movement_teacher_detections,
+        "movement_teacher_coverage": round(teacher_coverage, 8),
+        "movement_teacher_mean_confidence": round(
+            movement_teacher_confidence_sum / max(movement_teacher_detections, 1), 8
+        ),
         "combat_action_counts": dict(combat_counts),
         "combat_actions": combat_total,
         "recommended_purchases": purchase_count,
@@ -5813,7 +6281,10 @@ def run_mobile_operation_base(
         "raw_frames_persisted": False,
         "derived_roi_rgb_persisted": True,
         "coordinates_persisted": False,
-        "control_output": combat_total + purchase_count > 0,
+        "input_enabled": enable_input,
+        "training_eligible": training_eligible,
+        "manual_annotation_required": False,
+        "control_output": pointer_messages > 0,
     }
     _publish_operation_base_dataset(
         output,

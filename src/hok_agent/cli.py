@@ -700,6 +700,117 @@ def _parser() -> argparse.ArgumentParser:
     operation_base.add_argument("--execution-layout", type=Path, required=True)
     operation_base.add_argument("--observation-rois", type=Path, required=True)
     operation_base.add_argument("--output-dir", type=Path, required=True)
+    operation_teacher = commands.add_parser(
+        "mobile-operation-teacher",
+        help="run state-conditioned minimap movement through the operation base",
+    )
+    operation_teacher.add_argument("--serial", required=True)
+    operation_teacher.add_argument("--base-contract", type=Path, required=True)
+    operation_teacher.add_argument("--movement-contract", type=Path, required=True)
+    operation_teacher.add_argument("--teacher-report", type=Path, required=True)
+    operation_teacher.add_argument("--visual-layout", type=Path, required=True)
+    operation_teacher.add_argument("--execution-layout", type=Path, required=True)
+    operation_teacher.add_argument("--observation-rois", type=Path, required=True)
+    operation_teacher.add_argument("--output-dir", type=Path, required=True)
+    operation_teacher.add_argument("--enable-input", action="store_true")
+    movement_teacher_audit = commands.add_parser(
+        "operation-minimap-teacher-audit",
+        help="audit the state-conditioned minimap movement teacher offline",
+    )
+    movement_teacher_audit.add_argument("--session-dir", type=Path, required=True)
+    movement_teacher_audit.add_argument(
+        "--contract",
+        type=Path,
+        default=Path("configs/operation_movement_teacher_v1.json"),
+    )
+    movement_teacher_audit.add_argument("--output-dir", type=Path, required=True)
+    operation_contract = commands.add_parser(
+        "operation-policy-contract-check",
+        help="verify the offline Operation Policy v1 contract",
+    )
+    operation_contract.add_argument(
+        "--contract", type=Path, default=Path("configs/operation_policy_v1.json")
+    )
+    operation_idm = commands.add_parser(
+        "operation-idm-pilot",
+        help="train the seed-0 movement and combat inverse-dynamics pilot",
+    )
+    operation_idm.add_argument("--contract", type=Path, required=True)
+    operation_idm.add_argument("--adapter-checkpoint", type=Path, required=True)
+    operation_idm.add_argument("--observation-rois", type=Path, required=True)
+    operation_idm.add_argument("--operation-train", type=Path, required=True)
+    operation_idm.add_argument("--operation-dev", type=Path, required=True)
+    operation_idm.add_argument("--combat-root", type=Path, required=True)
+    operation_idm.add_argument("--output-dir", type=Path, required=True)
+    operation_idm.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    operation_idm.add_argument("--batch-size", type=int, default=256)
+    operation_pseudo = commands.add_parser(
+        "operation-video-pseudolabel",
+        help="apply admitted inverse dynamics to video-train and video-dev",
+    )
+    operation_pseudo.add_argument("--contract", type=Path, required=True)
+    operation_pseudo.add_argument("--idm-dir", type=Path, required=True)
+    operation_pseudo.add_argument("--target-dir", type=Path, required=True)
+    operation_pseudo.add_argument("--adapter-checkpoint", type=Path, required=True)
+    operation_pseudo.add_argument("--observation-rois", type=Path, required=True)
+    operation_pseudo.add_argument("--output-dir", type=Path, required=True)
+    operation_pseudo.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    operation_pseudo.add_argument("--batch-size", type=int, default=512)
+    operation_policy = commands.add_parser(
+        "operation-policy-pilot",
+        help="train the seed-0 causal movement and combat policy pilot",
+    )
+    operation_policy.add_argument("--contract", type=Path, required=True)
+    operation_policy.add_argument("--dataset-root", type=Path, required=True)
+    operation_policy.add_argument("--output-dir", type=Path, required=True)
+    operation_policy.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    operation_policy.add_argument("--batch-size", type=int, default=128)
+    direct_contract = commands.add_parser(
+        "operation-direct-policy-contract-check",
+        help="verify the executed-action direct-policy contract",
+    )
+    direct_contract.add_argument(
+        "--contract", type=Path, default=Path("configs/operation_direct_policy_v1.json")
+    )
+    direct_policy = commands.add_parser(
+        "operation-direct-policy-pilot",
+        help="train one offline causal policy from frozen executed-action sessions",
+    )
+    direct_policy.add_argument("--contract", type=Path, required=True)
+    direct_policy.add_argument("--adapter-checkpoint", type=Path, required=True)
+    direct_policy.add_argument("--observation-rois", type=Path, required=True)
+    direct_policy.add_argument("--operation-train", type=Path, required=True)
+    direct_policy.add_argument("--operation-dev", type=Path, required=True)
+    direct_policy.add_argument("--combat-root", type=Path, required=True)
+    direct_policy.add_argument("--output-dir", type=Path, required=True)
+    direct_policy.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    direct_policy.add_argument("--batch-size", type=int, default=128)
+    movement_policy_contract = commands.add_parser(
+        "operation-movement-policy-contract-check",
+        help="verify the state-conditioned movement policy contract",
+    )
+    movement_policy_contract.add_argument(
+        "--contract", type=Path, default=Path("configs/operation_movement_policy_v1.json")
+    )
+    movement_split = commands.add_parser(
+        "operation-movement-freeze-split",
+        help="freeze four-session pilot or twelve-session formal movement split",
+    )
+    movement_split.add_argument("--dataset-root", type=Path, required=True)
+    movement_split.add_argument("--contract", type=Path, required=True)
+    movement_split.add_argument("--output", type=Path, required=True)
+    movement_split.add_argument("--pilot", action="store_true")
+    movement_pilot = commands.add_parser(
+        "operation-movement-pilot",
+        help="train the seed-0 state-conditioned movement learnability pilot",
+    )
+    movement_pilot.add_argument("--dataset-root", type=Path, required=True)
+    movement_pilot.add_argument("--split", type=Path, required=True)
+    movement_pilot.add_argument("--contract", type=Path, required=True)
+    movement_pilot.add_argument("--adapter-checkpoint", type=Path, required=True)
+    movement_pilot.add_argument("--output-dir", type=Path, required=True)
+    movement_pilot.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    movement_pilot.add_argument("--batch-size", type=int, default=128)
     t8_evaluate = commands.add_parser(
         "t8-evaluate-offline", help="run the sealed held-out evaluation for the selected T8 model"
     )
@@ -892,6 +1003,33 @@ def _parser() -> argparse.ArgumentParser:
     rich.add_argument("--output-dir", type=Path)
     rich.add_argument("--smoke", action="store_true")
     commands.add_parser("check", help="run size and static safety gates")
+    adaptive_check = commands.add_parser(
+        "adaptive-layout-check",
+        help="verify one local adaptive device layout without opening a device",
+    )
+    adaptive_check.add_argument("--layout", type=Path, required=True)
+    hero_check = commands.add_parser(
+        "hero-profile-check",
+        help="verify one explicit local hero ability behavior profile",
+    )
+    hero_check.add_argument("--profile", type=Path, required=True)
+    combat_cache = commands.add_parser(
+        "global-combat-feature-cache",
+        help="materialize frozen 32-frame combat features once for fast offline training",
+    )
+    combat_cache.add_argument("--dataset-root", type=Path, required=True)
+    combat_cache.add_argument("--split", type=Path, required=True)
+    combat_cache.add_argument("--adapter-checkpoint", type=Path, required=True)
+    combat_cache.add_argument("--output-dir", type=Path, required=True)
+    combat_cache.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    combat_cache.add_argument("--batch-size", type=int, default=128)
+    combat_cached_train = commands.add_parser(
+        "global-combat-feature-train", help="train a causal combat head from cached features"
+    )
+    combat_cached_train.add_argument("--feature-root", type=Path, required=True)
+    combat_cached_train.add_argument("--output-dir", type=Path, required=True)
+    combat_cached_train.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    combat_cached_train.add_argument("--batch-size", type=int, default=128)
     return parser
 
 
@@ -1736,6 +1874,112 @@ def main(argv: Sequence[str] | None = None) -> int:
                 observation_rois_path=args.observation_rois,
                 output_dir=args.output_dir,
             )
+        elif args.command == "mobile-operation-teacher":
+            from hok_agent.mobile_testbed import run_mobile_operation_base
+
+            result = run_mobile_operation_base(
+                serial=args.serial,
+                contract_path=args.base_contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                movement_teacher_contract_path=args.movement_contract,
+                enable_input=args.enable_input,
+            )
+        elif args.command == "operation-minimap-teacher-audit":
+            from hok_agent.mobile_testbed import audit_operation_movement_teacher
+
+            result = audit_operation_movement_teacher(
+                session_dir=args.session_dir,
+                contract_path=args.contract,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "operation-policy-contract-check":
+            from hok_agent.operation_policy import verify_operation_policy_contract
+
+            result = verify_operation_policy_contract(args.contract)
+        elif args.command == "operation-idm-pilot":
+            from hok_agent.operation_policy import run_operation_idm_pilot
+
+            result = run_operation_idm_pilot(
+                contract_path=args.contract,
+                adapter_checkpoint=args.adapter_checkpoint,
+                observation_rois_path=args.observation_rois,
+                operation_train=args.operation_train,
+                operation_dev=args.operation_dev,
+                combat_root=args.combat_root,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "operation-video-pseudolabel":
+            from hok_agent.operation_policy import materialize_operation_video_pseudolabels
+
+            result = materialize_operation_video_pseudolabels(
+                contract_path=args.contract,
+                idm_dir=args.idm_dir,
+                target_dir=args.target_dir,
+                adapter_checkpoint=args.adapter_checkpoint,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "operation-policy-pilot":
+            from hok_agent.operation_policy import train_operation_policy_pilot
+
+            result = train_operation_policy_pilot(
+                contract_path=args.contract,
+                dataset_root=args.dataset_root,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "operation-direct-policy-contract-check":
+            from hok_agent.operation_policy import verify_operation_direct_policy_contract
+
+            result = verify_operation_direct_policy_contract(args.contract)
+        elif args.command == "operation-direct-policy-pilot":
+            from hok_agent.operation_policy import run_operation_direct_policy_pilot
+
+            result = run_operation_direct_policy_pilot(
+                contract_path=args.contract,
+                adapter_checkpoint=args.adapter_checkpoint,
+                observation_rois_path=args.observation_rois,
+                operation_train=args.operation_train,
+                operation_dev=args.operation_dev,
+                combat_root=args.combat_root,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "operation-movement-policy-contract-check":
+            from hok_agent.operation_policy import verify_operation_movement_policy_contract
+
+            result = verify_operation_movement_policy_contract(args.contract)
+        elif args.command == "operation-movement-freeze-split":
+            from hok_agent.operation_policy import freeze_operation_movement_split
+
+            result = freeze_operation_movement_split(
+                dataset_root=args.dataset_root,
+                contract_path=args.contract,
+                output_path=args.output,
+                pilot=args.pilot,
+            )
+        elif args.command == "operation-movement-pilot":
+            from hok_agent.operation_policy import run_operation_movement_pilot
+
+            result = run_operation_movement_pilot(
+                dataset_root=args.dataset_root,
+                split_path=args.split,
+                contract_path=args.contract,
+                adapter_checkpoint=args.adapter_checkpoint,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
         elif args.command == "t8-evaluate-offline":
             from hok_agent.t8 import evaluate_t8_offline
 
@@ -2027,6 +2271,61 @@ def main(argv: Sequence[str] | None = None) -> int:
             from hok_agent.rich_pixel import accept_rich_pixel
 
             result = accept_rich_pixel(args.output_dir, args.device, args.smoke)
+        elif args.command == "adaptive-layout-check":
+            from hok_agent.adaptive_layout import load_adaptive_layout
+
+            adaptive = load_adaptive_layout(args.layout)
+            result = {
+                "status": "PASSED",
+                "schema_version": "hok-agent-adaptive-layout-check-v1",
+                "layout_sha256": adaptive.layout_sha256,
+                "reference_layout_sha256": adaptive.reference_layout_sha256,
+                "build_identity_sha256": adaptive.build_identity_sha256,
+                "content_box_xyxy": [
+                    adaptive.content_box.x0,
+                    adaptive.content_box.y0,
+                    adaptive.content_box.x1,
+                    adaptive.content_box.y1,
+                ],
+                "control_output": False,
+                "device_input_allowed": False,
+            }
+        elif args.command == "hero-profile-check":
+            from hok_agent.adaptive_layout import load_hero_profile
+            from hok_agent.mobile_testbed import ABILITIES
+
+            profile = load_hero_profile(args.profile)
+            result = {
+                "status": "PASSED",
+                "schema_version": "hok-agent-hero-profile-check-v1",
+                "hero_id": profile.hero_id,
+                "profile_sha256": profile.profile_sha256,
+                "ability_modes": {
+                    ability: profile.behavior(ability).mode for ability in ABILITIES[1:]
+                },
+                "control_output": False,
+                "device_input_allowed": False,
+            }
+        elif args.command == "global-combat-feature-cache":
+            from hok_agent.combat_feature_cache import materialize_global_combat_features
+
+            result = materialize_global_combat_features(
+                dataset_root=args.dataset_root,
+                split_path=args.split,
+                adapter_checkpoint=args.adapter_checkpoint,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "global-combat-feature-train":
+            from hok_agent.combat_feature_cache import train_global_combat_feature_head
+
+            result = train_global_combat_feature_head(
+                feature_root=args.feature_root,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
         else:
             result = check_project()
             if not result["passed"]:

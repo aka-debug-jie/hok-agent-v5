@@ -114,6 +114,26 @@ input admission.
   recommended-purchase tap. Death/respawn/ended or unknown screens force both actions to stop.
   Enemy semantics, target selection, aiming, arbitrary coordinates/commands, other packages, and
   online model control remain forbidden.
+- Operation Policy v1 is offline-only and governed by
+  `docs/OPERATION_POLICY_V1_PROTOCOL.md`. It may train inverse-dynamics movement/combat heads from
+  the frozen Operation Base and visual-combat evidence, apply admitted heads to the 103/23
+  video-train/dev splits, and train one seed-0 causal policy against accepted automatic targets.
+  It may not open video-test or connect to capture/device input. Purchase and hard-stop remain in
+  the deterministic Mobile Operation Base rather than learned outputs.
+  Its repaired spatial IDM failed the frozen movement/combat gates, so pseudolabel, policy,
+  Shadow, capture, and input stages remain closed.
+- Operation Direct Policy v1 may consume only the already frozen executed-action sessions for one
+  offline seed-0 learnability check. Its transition and combat gates failed, so it is frozen and
+  cannot open Shadow, capture, or device input.
+- Operation Movement Teacher v1 may use the Mobile Operation Base two-pointer transport only in
+  the owner-attested self-built App. Its minimap decision has no fixed/random fallback; missing
+  evidence becomes a bounded hold then `wait`. Zero-input smoke precedes input smoke, and input
+  smoke precedes four automatic five-minute pilot sessions. The route cannot load a movement model
+  or open fusion Shadow before the frozen pilot gate passes.
+- Adaptive device layouts and hero profiles are local, Git-ignored control prerequisites. Layout
+  calibration may run read-only; skill execution requires a configured hero profile, stable
+  content box, per-group confidence, and identity-bound hash. Unknown heroes, unknown skill modes,
+  icon-only hero inference, and layout drift must disable skills rather than guess coordinates.
 - Offline synthetic training, unlabeled real-video representation learning, conservative
   pseudo-label research, one Mean Teacher round, and RGB-derived tracking/temporal diagnostics.
 - A future, separately authorized post-training phase may use owner gameplay-quality

@@ -34,6 +34,11 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 | Visual combat arbiter | 60-second and five-minute cooldown-aware gates passed | Deterministic four-button loop; no model/movement/aim/target |
 | Visual combat event data | 2 diagnostic sessions, 1,770 rows, 78 synchronized actions | Training blocked until 12 timestamped feature sessions |
 | Mobile Operation Base | `PASSED`: 5-minute movement+combat+purchase+minimap and live death stop | First part frozen; no enemy/target/aim/tactics yet |
+| Operation Policy v1 | `FROZEN_FAILED`: source-clock/spatial IDM still failed movement and combat gates | No pseudolabel, policy, test, Shadow, capture, or input |
+| Operation Direct Policy v1 | `FROZEN_FAILED`: executed schedules failed transition and combat gates | No Shadow, capture, or input |
+| Operation Movement Teacher v1 | Offline audit, zero-input and input smoke passed; two 5-minute sessions eligible | Collection paused for direction-diversity review before split freezing |
+| Adaptive Layout / Hero Profiles v1 | Geometry and behavior contracts implemented with synthetic tests | Read-only per-device calibration required before integration |
+| Global combat feature cache v1 | 32x1024 float16 cache completed; frozen-feature TCN head failed dev evidence | Preserve cache; do not promote the new head |
 
 ## T8-v2.7 freeze
 
@@ -119,6 +124,30 @@ correct-ROI macro-F1 but its wrong-ROI margin was only 0.1022. Skill1 reached 0.
 wrong-ROI margin was only 0.1213. Both are below the frozen 0.15 requirement, so the combined gate
 failed. T8-v5 is frozen without a TCN value test, semantic-accuracy claim, replay, Shadow, capture,
 or device input.
+
+## Operation Policy v1 closure
+
+Operation Policy v1 implemented the offline contract, inverse-dynamics, consensus-video, and
+16-frame causal-policy command surfaces in
+[`docs/OPERATION_POLICY_V1_PROTOCOL.md`](docs/OPERATION_POLICY_V1_PROTOCOL.md). The first pooled
+512-feature IDM run failed. One implementation repair preserved that report, changed source pairs
+from delayed capture time to the frozen 5 Hz scheduled clock, and exposed the same frozen
+ResNet-18 encoder's 4x4 spatial map without lowering any admission threshold.
+
+The repaired seed-0 run still failed. Movement dev macro-F1 was `0.2472` at 200 ms and `0.2059` at
+500 ms versus the required `0.70`; several direction recalls remained zero. Normal-minus-shuffle
+movement macro-F1 was `0.1731` and `0.1318`, so the 500 ms control also missed the required `0.15`.
+Combat macro-F1 was `0.1714` and `0.2124` versus the required `0.55`, with skill recall near zero.
+
+The gate stopped before video pseudolabel materialization. No video-test shard, policy training,
+Shadow, capture, or device input was opened. Both reports remain under
+`HOK_LARGE_ROOT/runs/operation-policy-v1/`; frozen T8 evidence was not changed.
+
+Operation Direct Policy v1 then used the existing execution events directly, without video action
+inference or a phone connection. Pool-MLP was selected over the causal TCN. Dev movement macro-F1
+was `0.1618`, combat macro-F1 was `0.1913`, and only one of eleven movement transitions was
+correct. These schedules verify the actuator but were not chosen from gameplay state, so they do
+not supervise tactical action selection. This route is frozen before Shadow or input.
 
 ## Verification baseline
 

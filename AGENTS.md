@@ -36,6 +36,28 @@
   component, but T8-v5's failed combined decision cannot authorize input. A passing all-dev
   offline replay may admit one five-minute zero-control Shadow. No probe contract exists before
   that Shadow passes.
+- Operation Policy v1 is the separate offline second-part route governed by
+  `docs/OPERATION_POLICY_V1_PROTOCOL.md`. It uses the frozen Mobile Operation Base and visual-combat
+  evidence to train seed-0 inverse dynamics, then may label only video-train/video-dev and fit one
+  16-frame causal movement/combat policy. Purchase and hard-stop remain deterministic. It cannot
+  open video-test, Shadow, capture, or device input in its first contract.
+  Its pooled and one allowed source-clock/spatial IDM runs failed; the lineage is frozen before
+  pseudolabel and policy stages and may not be reopened by threshold reduction or model growth.
+- Operation Direct Policy v1 is the separate executed-action check governed by
+  `docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md`. Its seed-0 movement-transition and combat gates
+  failed. Automated actuator schedules must not be described as gameplay-state demonstrations;
+  this route is frozen without Shadow or input.
+- Operation Movement Teacher v1 is the active modular route governed by
+  `docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md`. It replaces fixed patrol with the frozen
+  high-resolution minimap detector, uses the existing persistent joystick executor, and trains
+  only a movement head. The selected T8-v2.6 seed-1 combat model is immutable and bound by hash.
+  A zero-input smoke, bounded input smoke, four-session pilot, and movement gate are mandatory
+  before more collection, fusion Shadow, or model input.
+- Adaptive Layout and Hero Profiles v1 is governed by
+  `docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md`. Device geometry is icon-independent and local;
+  hero profiles define only fixed-slot behavior. Until a local profile and adaptive-layout hash
+  pass read-only calibration, skills are disabled and no execution route may infer a hero from a
+  variable skill icon.
 - A future, separately authorized post-training phase may use only owner gameplay-quality
   preferences over completed PixelArena games. It is not part of V5/V6 base training.
 - Preserve V1/V2/V3 and the offline V4 route as frozen regressions. Never overwrite their
@@ -139,6 +161,11 @@
   single recommended purchase. Its 60-second, five-minute, and live death-stop gates passed. It
   cannot add enemy semantics, target selection, aiming, tactics, another package, or another input
   transport without a new contract.
+- Operation Policy v1 does not modify any frozen T8 lineage. Its only learned outputs are
+  nine-class movement and five-class combat against automatic inverse-dynamics targets. Every
+  first-contract artifact keeps `semantic_accuracy_verified=false`, `promotion_allowed=false`,
+  `control_output=false`, and `device_input_allowed=false`; a pass can request only a separately
+  reviewed read-only Shadow contract.
 - Never target an unapproved client or account; outside the pinned T8-v2.1 demonstrator and
   Mobile Operation Base v1,
   never add scrcpy control, Accessibility, root,
@@ -168,7 +195,7 @@
   Tk, and device APIs; CLI imports optional stages lazily.
 - Torch/torchvision/safetensors are allowed only in `bc.py`, `pixel.py`, `alignment.py`,
   `temporal.py`, `v6_zero.py`, `rich_pixel.py`, `t8.py`, `t8_v3.py`, `t8_v4.py`, `t8_v5.py`,
-  `t8_basic_mvp.py`, `t8_shadow.py`, and their
+  `t8_basic_mvp.py`, `t8_shadow.py`, `operation_policy.py`, and their
   focused tests.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,
   `v5_data.py`, `mobile_testbed.py`, and focused tests.

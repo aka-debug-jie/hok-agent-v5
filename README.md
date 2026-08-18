@@ -217,6 +217,33 @@ the single recommended-equipment purchase, observes the minimap, and stores four
 views. The five-minute gate and a live death/respawn hard-stop test passed. See
 [docs/MOBILE_OPERATION_BASE_PROTOCOL.md](docs/MOBILE_OPERATION_BASE_PROTOCOL.md).
 
+Operation Policy v1 starts the offline second part without reopening the failed T8 lineages. It
+uses the frozen operation/combat evidence to train 200/500 ms inverse-dynamics heads, admits only
+their high-confidence agreement on video-train/video-dev, and compares simple 16-frame movement
+and combat policies. Purchase and hard-stop remain deterministic; the entire first contract is
+zero-control and cannot connect to the phone. See
+[docs/OPERATION_POLICY_V1_PROTOCOL.md](docs/OPERATION_POLICY_V1_PROTOCOL.md).
+Its seed-0 inverse-dynamics gate is now frozen failed: spatial encoder features improved the
+negative-control margin but did not recover reliable movement directions or combat classes. The
+run stopped before video pseudolabels, policy fitting, Shadow, or phone input.
+
+The separate Operation Direct Policy check used existing executed actions without connecting the
+phone. It also failed: direction changes and combat classes were not predictable from automatic
+round-robin schedules. Operation Base therefore closes the actuator and data-binding layer, not
+tactical policy supervision. See
+[docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md](docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md).
+
+The active engineering route is now Operation Movement Teacher v1. It keeps the existing selected
+combat model and learns only movement from a state-conditioned high-resolution minimap teacher.
+Its offline 1,485-frame audit passed with 0.7838 coverage, all eight directions, and 3.59-pixel
+player-jump P95. Live collection remains staged and fail-closed. See
+[docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md](docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md).
+
+Adaptive Layout and Hero Profiles v1 separates device geometry from hero skill behavior. Button
+groups are located by structure rather than skill-icon appearance; local hero profiles define how
+the three fixed skill slots execute. Unknown heroes remain skill-disabled. See
+[docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md](docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md).
+
 ## Project documents
 
 - [AGENTS.md](AGENTS.md): implementation authority and module constraints.
@@ -227,6 +254,10 @@ views. The five-minute gate and a live death/respawn hard-stop test passed. See
 - [docs/T8_BASIC_MVP_PROTOCOL.md](docs/T8_BASIC_MVP_PROTOCOL.md): deterministic basic-only gates.
 - [docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md](docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md): cooldown-aware four-button arbiter.
 - [docs/MOBILE_OPERATION_BASE_PROTOCOL.md](docs/MOBILE_OPERATION_BASE_PROTOCOL.md): frozen movement, combat, purchase, minimap, and hard-stop base.
+- [docs/OPERATION_POLICY_V1_PROTOCOL.md](docs/OPERATION_POLICY_V1_PROTOCOL.md): offline inverse-dynamics and causal movement/combat route.
+- [docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md](docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md): frozen executed-action learnability check.
+- [docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md](docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md): active state-conditioned movement route.
+- [docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md](docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md): device geometry and skill-behavior contracts.
 - [docs/DELIVERY_HISTORY.md](docs/DELIVERY_HISTORY.md): sanitized historical ledger.
 
 ## License

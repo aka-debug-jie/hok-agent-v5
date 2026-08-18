@@ -225,6 +225,38 @@ def test_operation_base_roi_loader_and_persistent_joystick(tmp_path: Path) -> No
     assert mobile_testbed._death_replay_visible(death, rois)
 
 
+def test_operation_movement_teacher_contract_and_state_filter() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._movement_teacher_contract(
+        root / "configs/operation_movement_teacher_v1.json"
+    )
+    assert len(digest) == 64
+    assert contract["fixed_patrol_fallback_allowed"] is False
+    movement_filter = mobile_testbed.MinimapDirectionFilter(3, 1000, 1000)
+    assert movement_filter.update("north", 0) == ("wait", False)
+    assert movement_filter.update("north", 200) == ("wait", False)
+    assert movement_filter.update("north", 400) == ("north", True)
+    assert movement_filter.update("east", 800) == ("north", False)
+    assert movement_filter.update(None, 1200) == ("north", False)
+    assert movement_filter.update(None, 1901) == ("wait", True)
+
+
+def test_operation_movement_teacher_uses_player_and_separate_target() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, _digest = mobile_testbed._movement_teacher_contract(
+        root / "configs/operation_movement_teacher_v1.json"
+    )
+    frame = np.zeros((128, 128, 3), dtype=np.uint8)
+    frame[43:57, 43:57, 0] = 220
+    frame[45:55, 45:55] = np.asarray([20, 180, 20], dtype=np.uint8)
+    frame[80:90, 50:60, 0] = 220
+    decision = mobile_testbed.movement_teacher_decision(frame, contract)
+    assert decision is not None
+    assert decision.movement == "south"
+    assert decision.player_yx == (49.5, 49.5)
+    assert decision.target_yx == (84.5, 54.5)
+
+
 def test_operation_base_contracts_freeze_movement_and_purchase_caps() -> None:
     root = Path(__file__).resolve().parents[1]
     short, _short_hash = mobile_testbed._mobile_operation_base_contract(
@@ -262,6 +294,9 @@ def test_operation_base_dataset_binds_four_rois_and_factorized_actions(tmp_path:
         "scheduled_elapsed_ms": 1000,
         "frame_elapsed_ms": 1005,
         "movement": "north",
+        "movement_confidence": 0.75,
+        "movement_label_source": "rgb_minimap_teacher_v1",
+        "movement_input_sent": True,
         "combat_event": "skill2",
         "purchase_event": "buy_recommended",
         "hard_stop_latched": False,
@@ -284,6 +319,9 @@ def test_operation_base_dataset_binds_four_rois_and_factorized_actions(tmp_path:
         assert values["main_rgb"].shape == (1, 128, 128, 3)
         assert values["minimap_rgb"].shape == (1, 128, 128, 3)
         assert values["movement_id"].tolist() == [1]
+        assert values["movement_confidence"].tolist() == [0.75]
+        assert values["movement_label_source"].tolist() == [1]
+        assert values["movement_input_sent"].tolist() == [1]
         assert values["combat_id"].tolist() == [3]
         assert values["purchase_id"].tolist() == [1]
 
