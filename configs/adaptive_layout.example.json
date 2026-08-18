@@ -1,0 +1,16 @@
+{
+  "schema_version": "hok-agent-adaptive-layout-v1",
+  "calibration_status": "TEMPLATE_NOT_CALIBRATED",
+  "width": 0,
+  "height": 0,
+  "content_box_xyxy": null,
+  "reference_layout_sha256": "",
+  "build_identity_sha256": "",
+  "groups": {
+    "joystick": null,
+    "combat": null,
+    "minimap": null,
+    "purchase": null
+  },
+  "layout_sha256": ""
+}

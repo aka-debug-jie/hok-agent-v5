@@ -292,9 +292,7 @@ def _parser() -> argparse.ArgumentParser:
     video_three_class_pilot.add_argument("--dataset-root", type=Path, required=True)
     video_three_class_pilot.add_argument("--adapter-checkpoint", type=Path, required=True)
     video_three_class_pilot.add_argument("--output-dir", type=Path, required=True)
-    video_three_class_pilot.add_argument(
-        "--device", choices=("cpu", "cuda"), default="cuda"
-    )
+    video_three_class_pilot.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     video_three_class_pilot.add_argument("--batch-size", type=int, default=64)
     video_three_class_pilot.add_argument("--retrospective", action="store_true")
     retrospective_roi = commands.add_parser(
@@ -496,6 +494,323 @@ def _parser() -> argparse.ArgumentParser:
     v3_replay.add_argument("--output-dir", type=Path, required=True)
     v3_replay.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     v3_replay.add_argument("--batch-size", type=int, default=256)
+    v4_contract = commands.add_parser(
+        "t8-v4-contract-check", help="verify the frozen zero-label T8-v4 contracts"
+    )
+    v4_source = commands.add_parser(
+        "t8-v4-source-teacher-train", help="train the independent PixelArena source teacher"
+    )
+    v4_source.add_argument("--adapter-checkpoint", type=Path, required=True)
+    v4_source.add_argument("--layout", type=Path, required=True)
+    v4_source.add_argument("--output-dir", type=Path, required=True)
+    v4_source.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    v4_source.add_argument("--batch-size", type=int, default=64)
+    v4_source.add_argument("--epochs", type=int, choices=(8,), default=8)
+    v4_materialize = commands.add_parser(
+        "t8-v4-pseudolabel-materialize", help="materialize dual-teacher consensus targets"
+    )
+    v4_materialize.add_argument("--feature-root", type=Path, required=True)
+    v4_materialize.add_argument("--target-root", type=Path, required=True)
+    v4_materialize.add_argument("--rule-teacher-report", type=Path, required=True)
+    v4_materialize.add_argument("--source-teacher-model", type=Path, required=True)
+    v4_materialize.add_argument("--source-teacher-report", type=Path, required=True)
+    v4_materialize.add_argument("--layout", type=Path, required=True)
+    v4_materialize.add_argument("--output-dir", type=Path, required=True)
+    v4_materialize.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    v4_materialize.add_argument("--batch-size", type=int, default=256)
+    v4_audit = commands.add_parser(
+        "t8-v4-weak-audit", help="audit anonymous T8-v4 consensus shards and coverage"
+    )
+    v4_audit.add_argument("--dataset-root", type=Path, required=True)
+    v4_audit.add_argument("--output", type=Path, required=True)
+    v4_diagnose = commands.add_parser(
+        "t8-v4-seed0-diagnose", help="run the frozen zero-label model ladder and controls"
+    )
+    v4_diagnose.add_argument("--dataset-root", type=Path, required=True)
+    v4_diagnose.add_argument("--target-root", type=Path, required=True)
+    v4_diagnose.add_argument("--adapter-checkpoint", type=Path, required=True)
+    v4_diagnose.add_argument("--weak-audit-report", type=Path, required=True)
+    v4_diagnose.add_argument("--output-dir", type=Path, required=True)
+    v4_diagnose.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    v4_diagnose.add_argument("--batch-size", type=int, default=256)
+    for command in (v4_contract, v4_source, v4_materialize, v4_audit, v4_diagnose):
+        command.add_argument(
+            "--observation-contract",
+            type=Path,
+            default=Path("game_rules/observation_contract_v2.json"),
+        )
+        command.add_argument(
+            "--candidate-contract",
+            type=Path,
+            default=Path("game_rules/candidate_action_contract_v1.json"),
+        )
+        command.add_argument(
+            "--weak-supervision-contract",
+            type=Path,
+            default=Path("configs/t8_v4_weak_supervision_v1.json"),
+        )
+        command.add_argument(
+            "--experiment-contract",
+            type=Path,
+            default=Path("configs/t8_v4_experiment_plan_v1.json"),
+        )
+    v5_roi_contract = commands.add_parser(
+        "t8-v5-roi-contract-check", help="verify the frozen T8-v5 ROI-isolation contract"
+    )
+    v5_roi_contract.add_argument(
+        "--experiment-contract",
+        type=Path,
+        default=Path("configs/t8_v5_roi_experiment_v1.json"),
+    )
+    v5_roi_materialize = commands.add_parser(
+        "t8-v5-roi-materialize", help="materialize correct-ROI and wrong-ROI frozen features"
+    )
+    v5_roi_materialize.add_argument("--pseudolabel-root", type=Path, required=True)
+    v5_roi_materialize.add_argument("--target-root", type=Path, required=True)
+    v5_roi_materialize.add_argument("--adapter-checkpoint", type=Path, required=True)
+    v5_roi_materialize.add_argument("--layout", type=Path, required=True)
+    v5_roi_materialize.add_argument("--output-dir", type=Path, required=True)
+    v5_roi_materialize.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    v5_roi_materialize.add_argument("--batch-size", type=int, default=256)
+    v5_roi_materialize.add_argument(
+        "--experiment-contract",
+        type=Path,
+        default=Path("configs/t8_v5_roi_experiment_v1.json"),
+    )
+    v5_roi_diagnose = commands.add_parser(
+        "t8-v5-roi-seed0-diagnose", help="run the single-frame T8-v5 ROI evidence ladder"
+    )
+    v5_roi_diagnose.add_argument("--dataset-root", type=Path, required=True)
+    v5_roi_diagnose.add_argument("--output-dir", type=Path, required=True)
+    v5_roi_diagnose.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    v5_roi_diagnose.add_argument("--batch-size", type=int, default=256)
+    v5_roi_diagnose.add_argument(
+        "--experiment-contract",
+        type=Path,
+        default=Path("configs/t8_v5_roi_experiment_v1.json"),
+    )
+    basic_mvp_contract = commands.add_parser(
+        "t8-basic-mvp-contract-check", help="verify the frozen Basic-only MVP contract"
+    )
+    basic_mvp_contract.add_argument(
+        "--contract", type=Path, default=Path("configs/t8_basic_mvp_v1.json")
+    )
+    basic_mvp_replay = commands.add_parser(
+        "t8-basic-mvp-offline-replay",
+        help="run deterministic Basic-only candidates on frozen video-dev",
+    )
+    basic_mvp_replay.add_argument("--contract", type=Path, required=True)
+    basic_mvp_replay.add_argument("--v5-contract", type=Path, required=True)
+    basic_mvp_replay.add_argument("--feature-root", type=Path, required=True)
+    basic_mvp_replay.add_argument("--target-root", type=Path, required=True)
+    basic_mvp_replay.add_argument("--training-report", type=Path, required=True)
+    basic_mvp_replay.add_argument("--model", type=Path, required=True)
+    basic_mvp_replay.add_argument("--adapter-checkpoint", type=Path, required=True)
+    basic_mvp_replay.add_argument("--layout", type=Path, required=True)
+    basic_mvp_replay.add_argument("--output-dir", type=Path, required=True)
+    basic_mvp_replay.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    basic_mvp_replay.add_argument("--batch-size", type=int, default=256)
+    basic_mvp_shadow = commands.add_parser(
+        "t8-basic-mvp-shadow", help="run the admitted five-minute zero-control Basic Shadow"
+    )
+    basic_mvp_shadow.add_argument("--serial", required=True)
+    basic_mvp_shadow.add_argument("--video-node", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--base-contract", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--shadow-contract", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--offline-summary", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--v5-contract", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--feature-root", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--training-report", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--model", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--adapter-checkpoint", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--layout", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--output-dir", type=Path, required=True)
+    basic_mvp_shadow.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    basic_mvp_shadow.add_argument("--batch-size", type=int, default=32)
+    basic_rule_smoke = commands.add_parser(
+        "basic-rule-smoke", help="run the fixed 20-second zero-input Basic ROI rule smoke"
+    )
+    basic_rule_smoke.add_argument("--serial", required=True)
+    basic_rule_smoke.add_argument("--video-node", type=Path, required=True)
+    basic_rule_smoke.add_argument("--contract", type=Path, required=True)
+    basic_rule_smoke.add_argument("--teacher-report", type=Path, required=True)
+    basic_rule_smoke.add_argument("--layout", type=Path, required=True)
+    basic_rule_smoke.add_argument("--output-dir", type=Path, required=True)
+    basic_rule_probe = commands.add_parser(
+        "basic-rule-probe", help="run the admitted bounded 20-tap Basic engineering probe"
+    )
+    basic_rule_probe.add_argument("--serial", required=True)
+    basic_rule_probe.add_argument("--video-node", type=Path, required=True)
+    basic_rule_probe.add_argument("--contract", type=Path, required=True)
+    basic_rule_probe.add_argument("--smoke-summary", type=Path, required=True)
+    basic_rule_probe.add_argument("--teacher-report", type=Path, required=True)
+    basic_rule_probe.add_argument("--layout", type=Path, required=True)
+    basic_rule_probe.add_argument("--output-dir", type=Path, required=True)
+    synchronous_combat = commands.add_parser(
+        "synchronous-combat-probe",
+        help="run the bounded acknowledged four-button combat probe",
+    )
+    synchronous_combat.add_argument("--serial", required=True)
+    synchronous_combat.add_argument("--video-node", type=Path, required=True)
+    synchronous_combat.add_argument("--contract", type=Path, required=True)
+    synchronous_combat.add_argument("--teacher-report", type=Path, required=True)
+    synchronous_combat.add_argument("--visual-layout", type=Path, required=True)
+    synchronous_combat.add_argument("--execution-layout", type=Path, required=True)
+    synchronous_combat.add_argument("--output-dir", type=Path, required=True)
+    visual_arbiter = commands.add_parser(
+        "visual-combat-arbiter",
+        help="run the bounded visual cooldown-aware combat arbiter",
+    )
+    visual_arbiter.add_argument("--serial", required=True)
+    visual_arbiter.add_argument("--video-node", type=Path, required=True)
+    visual_arbiter.add_argument("--contract", type=Path, required=True)
+    visual_arbiter.add_argument("--teacher-report", type=Path, required=True)
+    visual_arbiter.add_argument("--visual-layout", type=Path, required=True)
+    visual_arbiter.add_argument("--execution-layout", type=Path, required=True)
+    visual_arbiter.add_argument("--output-dir", type=Path, required=True)
+    visual_collect = commands.add_parser(
+        "visual-combat-collect",
+        help="collect timestamped single-frame RGB and synchronous combat labels",
+    )
+    visual_collect.add_argument("--serial", required=True)
+    visual_collect.add_argument("--video-node", type=Path, required=True)
+    visual_collect.add_argument("--contract", type=Path, required=True)
+    visual_collect.add_argument("--teacher-report", type=Path, required=True)
+    visual_collect.add_argument("--visual-layout", type=Path, required=True)
+    visual_collect.add_argument("--execution-layout", type=Path, required=True)
+    visual_collect.add_argument("--output-dir", type=Path, required=True)
+    visual_collect.add_argument("--shard-size", type=int, default=256)
+    visual_event_contract = commands.add_parser(
+        "visual-combat-dataset-contract-check",
+        help="verify the timestamped executed-action dataset contract",
+    )
+    visual_event_contract.add_argument(
+        "--contract",
+        type=Path,
+        default=Path("configs/visual_combat_event_dataset_v1.json"),
+    )
+    operation_base = commands.add_parser(
+        "mobile-operation-base",
+        help="run persistent movement with concurrent combat, minimap, and purchase",
+    )
+    operation_base.add_argument("--serial", required=True)
+    operation_base.add_argument("--contract", type=Path, required=True)
+    operation_base.add_argument("--teacher-report", type=Path, required=True)
+    operation_base.add_argument("--visual-layout", type=Path, required=True)
+    operation_base.add_argument("--execution-layout", type=Path, required=True)
+    operation_base.add_argument("--observation-rois", type=Path, required=True)
+    operation_base.add_argument("--output-dir", type=Path, required=True)
+    operation_teacher = commands.add_parser(
+        "mobile-operation-teacher",
+        help="run state-conditioned minimap movement through the operation base",
+    )
+    operation_teacher.add_argument("--serial", required=True)
+    operation_teacher.add_argument("--base-contract", type=Path, required=True)
+    operation_teacher.add_argument("--movement-contract", type=Path, required=True)
+    operation_teacher.add_argument("--teacher-report", type=Path, required=True)
+    operation_teacher.add_argument("--visual-layout", type=Path, required=True)
+    operation_teacher.add_argument("--execution-layout", type=Path, required=True)
+    operation_teacher.add_argument("--observation-rois", type=Path, required=True)
+    operation_teacher.add_argument("--output-dir", type=Path, required=True)
+    operation_teacher.add_argument("--enable-input", action="store_true")
+    movement_teacher_audit = commands.add_parser(
+        "operation-minimap-teacher-audit",
+        help="audit the state-conditioned minimap movement teacher offline",
+    )
+    movement_teacher_audit.add_argument("--session-dir", type=Path, required=True)
+    movement_teacher_audit.add_argument(
+        "--contract",
+        type=Path,
+        default=Path("configs/operation_movement_teacher_v1.json"),
+    )
+    movement_teacher_audit.add_argument("--output-dir", type=Path, required=True)
+    operation_contract = commands.add_parser(
+        "operation-policy-contract-check",
+        help="verify the offline Operation Policy v1 contract",
+    )
+    operation_contract.add_argument(
+        "--contract", type=Path, default=Path("configs/operation_policy_v1.json")
+    )
+    operation_idm = commands.add_parser(
+        "operation-idm-pilot",
+        help="train the seed-0 movement and combat inverse-dynamics pilot",
+    )
+    operation_idm.add_argument("--contract", type=Path, required=True)
+    operation_idm.add_argument("--adapter-checkpoint", type=Path, required=True)
+    operation_idm.add_argument("--observation-rois", type=Path, required=True)
+    operation_idm.add_argument("--operation-train", type=Path, required=True)
+    operation_idm.add_argument("--operation-dev", type=Path, required=True)
+    operation_idm.add_argument("--combat-root", type=Path, required=True)
+    operation_idm.add_argument("--output-dir", type=Path, required=True)
+    operation_idm.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    operation_idm.add_argument("--batch-size", type=int, default=256)
+    operation_pseudo = commands.add_parser(
+        "operation-video-pseudolabel",
+        help="apply admitted inverse dynamics to video-train and video-dev",
+    )
+    operation_pseudo.add_argument("--contract", type=Path, required=True)
+    operation_pseudo.add_argument("--idm-dir", type=Path, required=True)
+    operation_pseudo.add_argument("--target-dir", type=Path, required=True)
+    operation_pseudo.add_argument("--adapter-checkpoint", type=Path, required=True)
+    operation_pseudo.add_argument("--observation-rois", type=Path, required=True)
+    operation_pseudo.add_argument("--output-dir", type=Path, required=True)
+    operation_pseudo.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    operation_pseudo.add_argument("--batch-size", type=int, default=512)
+    operation_policy = commands.add_parser(
+        "operation-policy-pilot",
+        help="train the seed-0 causal movement and combat policy pilot",
+    )
+    operation_policy.add_argument("--contract", type=Path, required=True)
+    operation_policy.add_argument("--dataset-root", type=Path, required=True)
+    operation_policy.add_argument("--output-dir", type=Path, required=True)
+    operation_policy.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    operation_policy.add_argument("--batch-size", type=int, default=128)
+    direct_contract = commands.add_parser(
+        "operation-direct-policy-contract-check",
+        help="verify the executed-action direct-policy contract",
+    )
+    direct_contract.add_argument(
+        "--contract", type=Path, default=Path("configs/operation_direct_policy_v1.json")
+    )
+    direct_policy = commands.add_parser(
+        "operation-direct-policy-pilot",
+        help="train one offline causal policy from frozen executed-action sessions",
+    )
+    direct_policy.add_argument("--contract", type=Path, required=True)
+    direct_policy.add_argument("--adapter-checkpoint", type=Path, required=True)
+    direct_policy.add_argument("--observation-rois", type=Path, required=True)
+    direct_policy.add_argument("--operation-train", type=Path, required=True)
+    direct_policy.add_argument("--operation-dev", type=Path, required=True)
+    direct_policy.add_argument("--combat-root", type=Path, required=True)
+    direct_policy.add_argument("--output-dir", type=Path, required=True)
+    direct_policy.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    direct_policy.add_argument("--batch-size", type=int, default=128)
+    movement_policy_contract = commands.add_parser(
+        "operation-movement-policy-contract-check",
+        help="verify the state-conditioned movement policy contract",
+    )
+    movement_policy_contract.add_argument(
+        "--contract", type=Path, default=Path("configs/operation_movement_policy_v1.json")
+    )
+    movement_split = commands.add_parser(
+        "operation-movement-freeze-split",
+        help="freeze four-session pilot or twelve-session formal movement split",
+    )
+    movement_split.add_argument("--dataset-root", type=Path, required=True)
+    movement_split.add_argument("--contract", type=Path, required=True)
+    movement_split.add_argument("--output", type=Path, required=True)
+    movement_split.add_argument("--pilot", action="store_true")
+    movement_pilot = commands.add_parser(
+        "operation-movement-pilot",
+        help="train the seed-0 state-conditioned movement learnability pilot",
+    )
+    movement_pilot.add_argument("--dataset-root", type=Path, required=True)
+    movement_pilot.add_argument("--split", type=Path, required=True)
+    movement_pilot.add_argument("--contract", type=Path, required=True)
+    movement_pilot.add_argument("--adapter-checkpoint", type=Path, required=True)
+    movement_pilot.add_argument("--output-dir", type=Path, required=True)
+    movement_pilot.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    movement_pilot.add_argument("--batch-size", type=int, default=128)
     t8_evaluate = commands.add_parser(
         "t8-evaluate-offline", help="run the sealed held-out evaluation for the selected T8 model"
     )
@@ -688,6 +1003,33 @@ def _parser() -> argparse.ArgumentParser:
     rich.add_argument("--output-dir", type=Path)
     rich.add_argument("--smoke", action="store_true")
     commands.add_parser("check", help="run size and static safety gates")
+    adaptive_check = commands.add_parser(
+        "adaptive-layout-check",
+        help="verify one local adaptive device layout without opening a device",
+    )
+    adaptive_check.add_argument("--layout", type=Path, required=True)
+    hero_check = commands.add_parser(
+        "hero-profile-check",
+        help="verify one explicit local hero ability behavior profile",
+    )
+    hero_check.add_argument("--profile", type=Path, required=True)
+    combat_cache = commands.add_parser(
+        "global-combat-feature-cache",
+        help="materialize frozen 32-frame combat features once for fast offline training",
+    )
+    combat_cache.add_argument("--dataset-root", type=Path, required=True)
+    combat_cache.add_argument("--split", type=Path, required=True)
+    combat_cache.add_argument("--adapter-checkpoint", type=Path, required=True)
+    combat_cache.add_argument("--output-dir", type=Path, required=True)
+    combat_cache.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    combat_cache.add_argument("--batch-size", type=int, default=128)
+    combat_cached_train = commands.add_parser(
+        "global-combat-feature-train", help="train a causal combat head from cached features"
+    )
+    combat_cached_train.add_argument("--feature-root", type=Path, required=True)
+    combat_cached_train.add_argument("--output-dir", type=Path, required=True)
+    combat_cached_train.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    combat_cached_train.add_argument("--batch-size", type=int, default=128)
     return parser
 
 
@@ -1036,9 +1378,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "t8-v2-live-freeze-split":
             from hok_agent.t8 import freeze_t8_v21_split
 
-            result = freeze_t8_v21_split(
-                dataset_root=args.dataset_root, output_path=args.output
-            )
+            result = freeze_t8_v21_split(dataset_root=args.dataset_root, output_path=args.output)
         elif args.command == "t8-v2-live-pilot-freeze":
             from hok_agent.t8 import freeze_t8_v21_pilot_split
 
@@ -1318,6 +1658,324 @@ def main(argv: Sequence[str] | None = None) -> int:
                 dataset_root=args.dataset_root,
                 model_path=args.model,
                 training_report=args.training_report,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-v4-contract-check":
+            from hok_agent.t8_v4 import verify_t8_v4_contracts
+
+            result = verify_t8_v4_contracts(
+                observation_contract=args.observation_contract,
+                candidate_contract=args.candidate_contract,
+                weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
+            )
+        elif args.command == "t8-v4-source-teacher-train":
+            from hok_agent.t8_v4 import train_t8_v4_source_teacher
+
+            result = train_t8_v4_source_teacher(
+                adapter_checkpoint=args.adapter_checkpoint,
+                layout_path=args.layout,
+                observation_contract=args.observation_contract,
+                candidate_contract=args.candidate_contract,
+                weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+                epochs=args.epochs,
+            )
+        elif args.command == "t8-v4-pseudolabel-materialize":
+            from hok_agent.t8_v4 import materialize_t8_v4_pseudolabels
+
+            result = materialize_t8_v4_pseudolabels(
+                feature_root=args.feature_root,
+                target_root=args.target_root,
+                rule_teacher_report=args.rule_teacher_report,
+                source_teacher_model=args.source_teacher_model,
+                source_teacher_report=args.source_teacher_report,
+                layout_path=args.layout,
+                observation_contract=args.observation_contract,
+                candidate_contract=args.candidate_contract,
+                weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-v4-weak-audit":
+            from hok_agent.t8_v4 import audit_t8_v4_weak_supervision
+
+            result = audit_t8_v4_weak_supervision(
+                dataset_root=args.dataset_root,
+                observation_contract=args.observation_contract,
+                candidate_contract=args.candidate_contract,
+                weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
+                output_path=args.output,
+            )
+        elif args.command == "t8-v4-seed0-diagnose":
+            from hok_agent.t8_v4 import diagnose_t8_v4_seed0
+
+            result = diagnose_t8_v4_seed0(
+                dataset_root=args.dataset_root,
+                target_root=args.target_root,
+                adapter_checkpoint=args.adapter_checkpoint,
+                weak_audit_report=args.weak_audit_report,
+                observation_contract=args.observation_contract,
+                candidate_contract=args.candidate_contract,
+                weak_supervision_contract=args.weak_supervision_contract,
+                experiment_contract=args.experiment_contract,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-v5-roi-contract-check":
+            from hok_agent.t8_v5 import verify_t8_v5_contract
+
+            result = verify_t8_v5_contract(args.experiment_contract)
+        elif args.command == "t8-v5-roi-materialize":
+            from hok_agent.t8_v5 import materialize_t8_v5_roi_features
+
+            result = materialize_t8_v5_roi_features(
+                pseudolabel_root=args.pseudolabel_root,
+                target_root=args.target_root,
+                adapter_checkpoint=args.adapter_checkpoint,
+                layout_path=args.layout,
+                experiment_contract=args.experiment_contract,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-v5-roi-seed0-diagnose":
+            from hok_agent.t8_v5 import diagnose_t8_v5_roi_seed0
+
+            result = diagnose_t8_v5_roi_seed0(
+                dataset_root=args.dataset_root,
+                experiment_contract=args.experiment_contract,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-basic-mvp-contract-check":
+            from hok_agent.t8_basic_mvp import verify_t8_basic_mvp_contract
+
+            result = verify_t8_basic_mvp_contract(args.contract)
+        elif args.command == "t8-basic-mvp-offline-replay":
+            from hok_agent.t8_basic_mvp import run_t8_basic_mvp_offline_replay
+
+            result = run_t8_basic_mvp_offline_replay(
+                contract_path=args.contract,
+                v5_contract=args.v5_contract,
+                feature_root=args.feature_root,
+                target_root=args.target_root,
+                training_report=args.training_report,
+                model_path=args.model,
+                adapter_checkpoint=args.adapter_checkpoint,
+                layout_path=args.layout,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "t8-basic-mvp-shadow":
+            from hok_agent.t8_basic_mvp import run_t8_basic_mvp_shadow
+
+            result = run_t8_basic_mvp_shadow(
+                serial=args.serial,
+                video_node=args.video_node,
+                base_contract_path=args.base_contract,
+                shadow_contract_path=args.shadow_contract,
+                offline_summary=args.offline_summary,
+                v5_contract=args.v5_contract,
+                feature_root=args.feature_root,
+                training_report=args.training_report,
+                model_path=args.model,
+                adapter_checkpoint=args.adapter_checkpoint,
+                layout_path=args.layout,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "basic-rule-smoke":
+            from hok_agent.mobile_testbed import run_basic_rule_smoke
+
+            result = run_basic_rule_smoke(
+                serial=args.serial,
+                video_node=args.video_node,
+                contract_path=args.contract,
+                teacher_report=args.teacher_report,
+                layout_path=args.layout,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "basic-rule-probe":
+            from hok_agent.mobile_testbed import run_basic_rule_probe
+
+            result = run_basic_rule_probe(
+                serial=args.serial,
+                video_node=args.video_node,
+                contract_path=args.contract,
+                smoke_summary=args.smoke_summary,
+                teacher_report=args.teacher_report,
+                layout_path=args.layout,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "synchronous-combat-probe":
+            from hok_agent.mobile_testbed import run_synchronous_combat_probe
+
+            result = run_synchronous_combat_probe(
+                serial=args.serial,
+                video_node=args.video_node,
+                contract_path=args.contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "visual-combat-arbiter":
+            from hok_agent.mobile_testbed import run_visual_combat_arbiter
+
+            result = run_visual_combat_arbiter(
+                serial=args.serial,
+                video_node=args.video_node,
+                contract_path=args.contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "visual-combat-collect":
+            from hok_agent.mobile_testbed import run_visual_combat_arbiter
+
+            result = run_visual_combat_arbiter(
+                serial=args.serial,
+                video_node=args.video_node,
+                contract_path=args.contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                output_dir=args.output_dir,
+                persist_derived_rgb=True,
+                shard_size=args.shard_size,
+            )
+        elif args.command == "visual-combat-dataset-contract-check":
+            from hok_agent.mobile_testbed import verify_visual_combat_event_dataset_contract
+
+            result = verify_visual_combat_event_dataset_contract(args.contract)
+        elif args.command == "mobile-operation-base":
+            from hok_agent.mobile_testbed import run_mobile_operation_base
+
+            result = run_mobile_operation_base(
+                serial=args.serial,
+                contract_path=args.contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "mobile-operation-teacher":
+            from hok_agent.mobile_testbed import run_mobile_operation_base
+
+            result = run_mobile_operation_base(
+                serial=args.serial,
+                contract_path=args.base_contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                movement_teacher_contract_path=args.movement_contract,
+                enable_input=args.enable_input,
+            )
+        elif args.command == "operation-minimap-teacher-audit":
+            from hok_agent.mobile_testbed import audit_operation_movement_teacher
+
+            result = audit_operation_movement_teacher(
+                session_dir=args.session_dir,
+                contract_path=args.contract,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "operation-policy-contract-check":
+            from hok_agent.operation_policy import verify_operation_policy_contract
+
+            result = verify_operation_policy_contract(args.contract)
+        elif args.command == "operation-idm-pilot":
+            from hok_agent.operation_policy import run_operation_idm_pilot
+
+            result = run_operation_idm_pilot(
+                contract_path=args.contract,
+                adapter_checkpoint=args.adapter_checkpoint,
+                observation_rois_path=args.observation_rois,
+                operation_train=args.operation_train,
+                operation_dev=args.operation_dev,
+                combat_root=args.combat_root,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "operation-video-pseudolabel":
+            from hok_agent.operation_policy import materialize_operation_video_pseudolabels
+
+            result = materialize_operation_video_pseudolabels(
+                contract_path=args.contract,
+                idm_dir=args.idm_dir,
+                target_dir=args.target_dir,
+                adapter_checkpoint=args.adapter_checkpoint,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "operation-policy-pilot":
+            from hok_agent.operation_policy import train_operation_policy_pilot
+
+            result = train_operation_policy_pilot(
+                contract_path=args.contract,
+                dataset_root=args.dataset_root,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "operation-direct-policy-contract-check":
+            from hok_agent.operation_policy import verify_operation_direct_policy_contract
+
+            result = verify_operation_direct_policy_contract(args.contract)
+        elif args.command == "operation-direct-policy-pilot":
+            from hok_agent.operation_policy import run_operation_direct_policy_pilot
+
+            result = run_operation_direct_policy_pilot(
+                contract_path=args.contract,
+                adapter_checkpoint=args.adapter_checkpoint,
+                observation_rois_path=args.observation_rois,
+                operation_train=args.operation_train,
+                operation_dev=args.operation_dev,
+                combat_root=args.combat_root,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "operation-movement-policy-contract-check":
+            from hok_agent.operation_policy import verify_operation_movement_policy_contract
+
+            result = verify_operation_movement_policy_contract(args.contract)
+        elif args.command == "operation-movement-freeze-split":
+            from hok_agent.operation_policy import freeze_operation_movement_split
+
+            result = freeze_operation_movement_split(
+                dataset_root=args.dataset_root,
+                contract_path=args.contract,
+                output_path=args.output,
+                pilot=args.pilot,
+            )
+        elif args.command == "operation-movement-pilot":
+            from hok_agent.operation_policy import run_operation_movement_pilot
+
+            result = run_operation_movement_pilot(
+                dataset_root=args.dataset_root,
+                split_path=args.split,
+                contract_path=args.contract,
+                adapter_checkpoint=args.adapter_checkpoint,
                 output_dir=args.output_dir,
                 device=args.device,
                 batch_size=args.batch_size,
@@ -1613,6 +2271,61 @@ def main(argv: Sequence[str] | None = None) -> int:
             from hok_agent.rich_pixel import accept_rich_pixel
 
             result = accept_rich_pixel(args.output_dir, args.device, args.smoke)
+        elif args.command == "adaptive-layout-check":
+            from hok_agent.adaptive_layout import load_adaptive_layout
+
+            adaptive = load_adaptive_layout(args.layout)
+            result = {
+                "status": "PASSED",
+                "schema_version": "hok-agent-adaptive-layout-check-v1",
+                "layout_sha256": adaptive.layout_sha256,
+                "reference_layout_sha256": adaptive.reference_layout_sha256,
+                "build_identity_sha256": adaptive.build_identity_sha256,
+                "content_box_xyxy": [
+                    adaptive.content_box.x0,
+                    adaptive.content_box.y0,
+                    adaptive.content_box.x1,
+                    adaptive.content_box.y1,
+                ],
+                "control_output": False,
+                "device_input_allowed": False,
+            }
+        elif args.command == "hero-profile-check":
+            from hok_agent.adaptive_layout import load_hero_profile
+            from hok_agent.mobile_testbed import ABILITIES
+
+            profile = load_hero_profile(args.profile)
+            result = {
+                "status": "PASSED",
+                "schema_version": "hok-agent-hero-profile-check-v1",
+                "hero_id": profile.hero_id,
+                "profile_sha256": profile.profile_sha256,
+                "ability_modes": {
+                    ability: profile.behavior(ability).mode for ability in ABILITIES[1:]
+                },
+                "control_output": False,
+                "device_input_allowed": False,
+            }
+        elif args.command == "global-combat-feature-cache":
+            from hok_agent.combat_feature_cache import materialize_global_combat_features
+
+            result = materialize_global_combat_features(
+                dataset_root=args.dataset_root,
+                split_path=args.split,
+                adapter_checkpoint=args.adapter_checkpoint,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "global-combat-feature-train":
+            from hok_agent.combat_feature_cache import train_global_combat_feature_head
+
+            result = train_global_combat_feature_head(
+                feature_root=args.feature_root,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
+            )
         else:
             result = check_project()
             if not result["passed"]:

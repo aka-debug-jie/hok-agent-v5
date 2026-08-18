@@ -74,6 +74,66 @@ input admission.
   report is required before offline replay; a passing replay is required before five-minute
   zero-control Shadow; that Shadow is required before the 20-action, one-minute, and five-minute
   input stages. Failure at any gate prohibits all later stages and sends no fallback action.
+- T8-v4 is a new read-only lineage governed by `docs/T8_V4_PROTOCOL.md`. It learns four local
+  visual-cue heads under one fixed layout and action schema. Two independent automatic teachers
+  may produce confidence- and perturbation-gated pseudolabels from the frozen 103/23 train/dev
+  sessions. Accepted labels enter only the masked T8-v4 diagnostic loss; no human labels,
+  annotation UI, or video-test access are allowed. Derived candidate actions are offline logs with
+  `control_output=false`; replay, Shadow, and device input remain closed.
+- T8-v5 is an offline ROI-isolation lineage governed by `docs/T8_V5_ROI_PROTOCOL.md`. It may reuse
+  only the frozen T8-v4 repair-1 weak targets and frozen adapter. Its first gate uses single-frame
+  correct-ROI, wrong-ROI, time-only, prior, and shuffle controls. Skill2 is diagnostic-only. It
+  stores derived ROI features only and cannot open TCN, replay, Shadow, capture, or input unless a
+  later contract is explicitly admitted after all three formal ROI heads pass.
+- Basic-only MVP is a separate deterministic component route governed by
+  `docs/T8_BASIC_MVP_PROTOCOL.md`. It may extract the passed basic ROI head without promoting the
+  failed T8-v5 model. A hash-bound passing offline replay may admit one five-minute read-only
+  Shadow through explicit serial and V4L2 capture. Both stages send zero input. The frozen Shadow
+  produced zero candidates and failed, so no repeat, threshold change, 20-action probe, one-minute
+  run, or five-minute control contract is permitted.
+- The Basic rule engineering fallback is separately frozen. Its v2 probe required the basic ROI to
+  fall below threshold after every tap before rearming. Owner observation established that basic
+  attack has no cooldown dimming, so a private execution point was separated from the visual ROI.
+  The bounded 20-action, one-minute, and five-minute basic runs passed without unexpected actions.
+- The synchronous combat probe accepts only acknowledged `input touchscreen tap` commands for the
+  four fixed combat buttons in the owner testbed. It uses a Git-ignored execution layout and may
+  not expose coordinates. Movement, swipe/aim, target selection, arbitrary commands, and model
+  decisions are forbidden. Two 60-second, five-per-button repeats are the frozen maximum evidence.
+- The visual combat arbiter may use only cooldown-aware round-robin selection among the same four
+  fixed taps. Skills require a confirmed cooldown and recovery before rearming; basic attack uses
+  only the global interval. Its frozen evidence is one 60-second and one five-minute run. Movement,
+  aim/swipe, target selection, enemy interpretation, arbitrary commands, and model control remain
+  forbidden.
+- Arbiter event logs alone are not a training dataset. Training requires twelve separately frozen
+  anonymous sessions with actual elapsed timestamps and derived RGB or frozen-encoder features;
+  raw video, source paths, serials, coordinates, and pre-threshold training remain forbidden.
+- Mobile Operation Base v1 is a separately authorized exception to the older scrcpy-control
+  restriction, confined to the `mobile-operation-base` command, exact self-built App identity,
+  pinned scrcpy 1.25 server, private observation/execution layouts, and one finite session. Pointer
+  0 owns only persistent joystick movement; pointer 1 owns only the four combat taps or the single
+  recommended-purchase tap. Death/respawn/ended or unknown screens force both actions to stop.
+  Enemy semantics, target selection, aiming, arbitrary coordinates/commands, other packages, and
+  online model control remain forbidden.
+- Operation Policy v1 is offline-only and governed by
+  `docs/OPERATION_POLICY_V1_PROTOCOL.md`. It may train inverse-dynamics movement/combat heads from
+  the frozen Operation Base and visual-combat evidence, apply admitted heads to the 103/23
+  video-train/dev splits, and train one seed-0 causal policy against accepted automatic targets.
+  It may not open video-test or connect to capture/device input. Purchase and hard-stop remain in
+  the deterministic Mobile Operation Base rather than learned outputs.
+  Its repaired spatial IDM failed the frozen movement/combat gates, so pseudolabel, policy,
+  Shadow, capture, and input stages remain closed.
+- Operation Direct Policy v1 may consume only the already frozen executed-action sessions for one
+  offline seed-0 learnability check. Its transition and combat gates failed, so it is frozen and
+  cannot open Shadow, capture, or device input.
+- Operation Movement Teacher v1 may use the Mobile Operation Base two-pointer transport only in
+  the owner-attested self-built App. Its minimap decision has no fixed/random fallback; missing
+  evidence becomes a bounded hold then `wait`. Zero-input smoke precedes input smoke, and input
+  smoke precedes four automatic five-minute pilot sessions. The route cannot load a movement model
+  or open fusion Shadow before the frozen pilot gate passes.
+- Adaptive device layouts and hero profiles are local, Git-ignored control prerequisites. Layout
+  calibration may run read-only; skill execution requires a configured hero profile, stable
+  content box, per-group confidence, and identity-bound hash. Unknown heroes, unknown skill modes,
+  icon-only hero inference, and layout drift must disable skills rather than guess coordinates.
 - Offline synthetic training, unlabeled real-video representation learning, conservative
   pseudo-label research, one Mean Teacher round, and RGB-derived tracking/temporal diagnostics.
 - A future, separately authorized post-training phase may use owner gameplay-quality
@@ -86,7 +146,8 @@ input admission.
 - Treating package name, USB serial, foreground state, or display geometry as proof that an app is
   the project-owned self-built test app. Those checks remain necessary but are not sufficient.
 - Any input to an unapproved client or account; scrcpy control outside the pinned T8-v2.1
-  demonstrator, Accessibility, macros, mechanical input, or account automation.
+  demonstrator and Mobile Operation Base v1, Accessibility, macros, mechanical input, or account
+  automation.
 - The ADB touchscreen input chain is confined to the owner-authorized self-built test app declared
   by the local private identity file, through `mobile_testbed.py`. The configured-package gate
   admits no bypass: no condition, override, fallback, or step that routes the chain to any other
@@ -151,10 +212,13 @@ V5/V6 base data, training, validation, model selection, and diagnostics contain 
 provided action, frame, HUD, tracking, or temporal labels. T8 may consume its own automatically
 recorded self-built-test-app dispatched actions or standardized observed touches as
 behavior-cloning targets, but it remains a
-separate dataset, model lineage, evaluation suite, and action boundary. The sole future human annotation is
-an owner judgment of which complete PixelArena game is better (or `TIE`/`UNJUDGEABLE`); it
-must be stored as a separate, versioned post-training preference artifact and is never an
-action target.
+  separate dataset, model lineage, evaluation suite, and action boundary. T8-v4 may additionally
+hold a separately versioned, path-free dual-teacher weak route producing three-value visual-cue
+outputs and frame-interpretability diagnostics. It is evaluation-only: it cannot train or tune a
+model, seed pseudo-labels, supervise an action, or release control. The other permitted human
+annotation is an owner judgment of which complete PixelArena game is better (or `TIE`/`UNJUDGEABLE`);
+it must be stored as a separate, versioned post-training preference artifact and is never an action
+target.
 It may train only a separately versioned offline descendant for PixelArena quality or read-only
 advice calibration.
 

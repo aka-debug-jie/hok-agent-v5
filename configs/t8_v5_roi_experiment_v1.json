@@ -1,0 +1,36 @@
+{
+  "schema_version": "hok-agent-t8-v5-roi-experiment-contract-v1",
+  "source_lineage": "hok-agent-t8-v4-consensus-pseudolabel-dataset-v1",
+  "required_rule_repairs_used": 1,
+  "train_sessions": 103,
+  "dev_sessions": 23,
+  "state_names": [
+    "main_view_enemy_cue_visible",
+    "basic_attack_button_visual_enabled",
+    "skill1_button_visual_ready",
+    "skill2_button_visual_ready"
+  ],
+  "formal_gate_heads": [
+    "main_view_enemy_cue_visible",
+    "basic_attack_button_visual_enabled",
+    "skill1_button_visual_ready"
+  ],
+  "diagnostic_only_heads": ["skill2_button_visual_ready"],
+  "feature_size": 512,
+  "seed": 0,
+  "epochs": 8,
+  "models": ["class_prior", "time_only", "correct_roi_linear", "wrong_roi_linear", "label_shuffle"],
+  "enemy_correct_roi": [0.0, 0.0, 0.71875, 1.0],
+  "enemy_wrong_roi": [0.5234375, 0.296875, 1.0, 1.0],
+  "button_roi_half_size_fraction": 0.08,
+  "minimum_gain_over_time_only": 0.1,
+  "minimum_gain_over_wrong_roi": 0.15,
+  "minimum_gain_over_shuffle": 0.15,
+  "video_test_access_allowed": false,
+  "human_labels_used": false,
+  "semantic_accuracy_verified": false,
+  "promotion_allowed": false,
+  "control_output": false,
+  "device_input_allowed": false,
+  "experiment_sha256": "bfc0768375c949410d8a4b3c11516e84a3df85f0498c8fe1dab6c458ac04f450"
+}

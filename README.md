@@ -168,11 +168,96 @@ positive recall was `0.314075`, normal-minus-shuffled margin was `0.023275`, and
 coverage was `0.039481`. Offline replay rejected the model; video-test, live Shadow, and all T8-v3
 device stages remained unopened. These results are failure evidence, not a released policy.
 
+T8-v4 narrowed the task to four local visual cues and used conservative dual-teacher weak targets.
+Its RGB and temporal controls passed, but the selected model failed the frozen spatial-selectivity
+gate. T8-v4 is therefore frozen failed with no replay, Shadow, or input permission. See
+[docs/T8_V4_PROTOCOL.md](docs/T8_V4_PROTOCOL.md).
+
+T8-v5 is a smaller offline successor that asks only whether each fixed correct ROI predicts the
+frozen weak target better than time, a wrong ROI, and shuffled labels. Enemy, basic attack, and
+skill1 are formal heads; skill2 is diagnostic-only because its frozen dev negative support is too
+small. Basic attack passed, but enemy and skill1 failed the frozen wrong-ROI margin, so T8-v5 is
+frozen without a TCN stage and remains non-promoting. See
+[docs/T8_V5_ROI_PROTOCOL.md](docs/T8_V5_ROI_PROTOCOL.md).
+
+The independent Basic-only MVP extracts only the passed basic ROI component and combines it with
+the frozen enemy visual rule. Its complete video-dev replay produced six conservative candidates
+with no invalid-screen or rate-limit violations. The admitted five-minute zero-control Shadow
+completed all 1,500 cycles with low latency but produced zero candidates: the live basic score
+never reached the frozen 0.80 threshold. The route is frozen without a probe or device input. See
+[docs/T8_BASIC_MVP_PROTOCOL.md](docs/T8_BASIC_MVP_PROTOCOL.md).
+
+A final deterministic rule fallback verified that the calibrated basic ROI appeared visually
+ready. The first 0.80 smoke failed on capture variation; one fixed 0.75 engineering calibration
+passed 100/100 cycles. Owner observation established that basic attack has no cooldown dimming, so
+visual and execution coordinates were separated instead of requiring a false release event. The
+corrected private touch point passed 20 actions, one minute, and five minutes without unexpected
+input.
+
+All four combat buttons were then moved to an acknowledged synchronous ADB tap sender. Two
+independent 60-second mixed probes each executed basic attack, skill1, skill2, and skill3 exactly
+five times, with 20/20 synchronous acknowledgements and zero unexpected actions per run. This is a
+deterministic owner-testbed result; it is not model-driven gameplay and does not include movement,
+aiming, or target selection.
+
+The subsequent visual combat arbiter replaced the fixed button schedule with cooldown-aware
+round-robin selection. Its 60-second gate executed 20 actions and its five-minute gate executed 58;
+every command was synchronously acknowledged and owner-observed as normal. Skills must visibly
+enter cooldown and recover before rearming. See
+[docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md](docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md).
+
+Its first formal event package has two diagnostic sessions and 78 synchronously bound actions.
+Training remains blocked: the initial events have no RGB/features and only fixed-rate derived
+timestamps. The next dataset gate requires twelve new timestamped feature sessions frozen as
+8 train, 2 dev, and 2 test.
+
+Mobile Operation Base v1 closes the first engineering part with one guarded two-pointer scrcpy
+session. It continuously moves through eight directions while concurrently executing combat and
+the single recommended-equipment purchase, observes the minimap, and stores four derived ROI
+views. The five-minute gate and a live death/respawn hard-stop test passed. See
+[docs/MOBILE_OPERATION_BASE_PROTOCOL.md](docs/MOBILE_OPERATION_BASE_PROTOCOL.md).
+
+Operation Policy v1 starts the offline second part without reopening the failed T8 lineages. It
+uses the frozen operation/combat evidence to train 200/500 ms inverse-dynamics heads, admits only
+their high-confidence agreement on video-train/video-dev, and compares simple 16-frame movement
+and combat policies. Purchase and hard-stop remain deterministic; the entire first contract is
+zero-control and cannot connect to the phone. See
+[docs/OPERATION_POLICY_V1_PROTOCOL.md](docs/OPERATION_POLICY_V1_PROTOCOL.md).
+Its seed-0 inverse-dynamics gate is now frozen failed: spatial encoder features improved the
+negative-control margin but did not recover reliable movement directions or combat classes. The
+run stopped before video pseudolabels, policy fitting, Shadow, or phone input.
+
+The separate Operation Direct Policy check used existing executed actions without connecting the
+phone. It also failed: direction changes and combat classes were not predictable from automatic
+round-robin schedules. Operation Base therefore closes the actuator and data-binding layer, not
+tactical policy supervision. See
+[docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md](docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md).
+
+The active engineering route is now Operation Movement Teacher v1. It keeps the existing selected
+combat model and learns only movement from a state-conditioned high-resolution minimap teacher.
+Its offline 1,485-frame audit passed with 0.7838 coverage, all eight directions, and 3.59-pixel
+player-jump P95. Live collection remains staged and fail-closed. See
+[docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md](docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md).
+
+Adaptive Layout and Hero Profiles v1 separates device geometry from hero skill behavior. Button
+groups are located by structure rather than skill-icon appearance; local hero profiles define how
+the three fixed skill slots execute. Unknown heroes remain skill-disabled. See
+[docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md](docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md).
+
 ## Project documents
 
 - [AGENTS.md](AGENTS.md): implementation authority and module constraints.
 - [BOUNDARIES.md](BOUNDARIES.md): permitted and forbidden execution surfaces.
 - [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md): concise current-state ledger.
+- [docs/T8_V4_PROTOCOL.md](docs/T8_V4_PROTOCOL.md): frozen T8-v4 diagnostic and promotion protocol.
+- [docs/T8_V5_ROI_PROTOCOL.md](docs/T8_V5_ROI_PROTOCOL.md): T8-v5 isolated-ROI evidence gate.
+- [docs/T8_BASIC_MVP_PROTOCOL.md](docs/T8_BASIC_MVP_PROTOCOL.md): deterministic basic-only gates.
+- [docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md](docs/VISUAL_COMBAT_ARBITER_PROTOCOL.md): cooldown-aware four-button arbiter.
+- [docs/MOBILE_OPERATION_BASE_PROTOCOL.md](docs/MOBILE_OPERATION_BASE_PROTOCOL.md): frozen movement, combat, purchase, minimap, and hard-stop base.
+- [docs/OPERATION_POLICY_V1_PROTOCOL.md](docs/OPERATION_POLICY_V1_PROTOCOL.md): offline inverse-dynamics and causal movement/combat route.
+- [docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md](docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md): frozen executed-action learnability check.
+- [docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md](docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md): active state-conditioned movement route.
+- [docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md](docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md): device geometry and skill-behavior contracts.
 - [docs/DELIVERY_HISTORY.md](docs/DELIVERY_HISTORY.md): sanitized historical ledger.
 
 ## License

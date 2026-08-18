@@ -1,0 +1,15 @@
+{
+  "schema_version": "hok-agent-t8-basic-mvp-shadow-contract-v1",
+  "base_contract_sha256": "86ee5ca4653a1fa890dc26da50236b4078ebcba34bd630a9991a98c690a6fb51",
+  "run_seconds": 300.0,
+  "infer_hz": 5,
+  "stream_fps": 30,
+  "minimum_period_coverage": 0.95,
+  "maximum_p95_decision_seconds": 0.15,
+  "minimum_candidates": 1,
+  "maximum_candidates_per_minute": 10,
+  "input_commands_sent": 0,
+  "control_output": false,
+  "device_input_allowed": false,
+  "contract_sha256": "c856591396ffbbbe41d665ff30e141a1dbf32f3ce3ae002ab1247d83a716563b"
+}

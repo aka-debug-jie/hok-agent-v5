@@ -73,6 +73,259 @@ def _guard(monkeypatch) -> None:
     monkeypatch.setattr(mobile_testbed, "_require_mobile_input_identity", lambda: None)
 
 
+def test_basic_rule_engineering_contract_and_probability(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._basic_rule_contract(
+        root / "configs/basic_rule_engineering_v1.json"
+    )
+    assert contract["maximum_actions"] == 20
+    assert contract["probe_run_seconds"] == 45.0
+    assert len(digest) == 64
+    layout, _layout_sha = mobile_testbed.load_layout(_write_layout(tmp_path))
+    calibration = mobile_testbed.RGBTeacherCalibration(
+        "a" * 64,
+        "b" * 64,
+        0.1,
+        (0.3, 0.3, 0.3),
+        (0.1, 0.1, 0.1),
+    )
+    dark = np.zeros((128, 128, 3), dtype=np.uint8)
+    bright = np.full((128, 128, 3), 255, dtype=np.uint8)
+    assert mobile_testbed._basic_rule_probability(dark, layout, calibration) < 0.2
+    assert mobile_testbed._basic_rule_probability(bright, layout, calibration) > 0.8
+    calibrated, _digest = mobile_testbed._basic_rule_contract(
+        root / "configs/basic_rule_engineering_v2.json"
+    )
+    assert calibrated["basic_rule_probability_threshold"] == 0.75
+    assert calibrated["require_release_between_actions"] is True
+
+
+def test_synchronous_combat_sender_is_acknowledged_tap_only(monkeypatch) -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._synchronous_combat_contract(
+        root / "configs/synchronous_combat_probe_v1.json"
+    )
+    assert contract["maximum_actions_per_button"] == 5
+    assert len(digest) == 64
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(mobile_testbed, "_require_mobile_input_identity", lambda: None)
+    monkeypatch.setattr(mobile_testbed.DeviceGuard, "check", lambda _self: None)
+    monkeypatch.setattr(
+        mobile_testbed,
+        "_run_adb",
+        lambda _serial, *arguments, **_kwargs: calls.append(arguments) or "",
+    )
+    sender = mobile_testbed.SynchronousAdbInput(
+        mobile_testbed.DeviceGuard("test-1", TEST_PACKAGE, 1600, 720, 1)
+    )
+    sender.send("tap", "100", "200")
+    assert sender.sent == 1
+    assert calls == [("shell", "input", "touchscreen", "tap", "100", "200")]
+    with pytest.raises(mobile_testbed.MobileTestbedError, match="tap only"):
+        sender.send("swipe", "1", "2", "3", "4", "100")
+
+
+def test_visual_combat_arbiter_contracts_freeze_staged_caps() -> None:
+    root = Path(__file__).resolve().parents[1]
+    short, _short_hash, short_maximum = mobile_testbed._visual_combat_arbiter_contract(
+        root / "configs/visual_combat_arbiter_v1.json"
+    )
+    long, _long_hash, long_maximum = mobile_testbed._visual_combat_arbiter_contract(
+        root / "configs/visual_combat_arbiter_5m_v1.json"
+    )
+    assert short["run_seconds"] == 60.0
+    assert short["maximum_total_actions"] == 20
+    assert short_maximum == {name: 10 for name in ("skill1", "skill2", "skill3", "basic_attack")}
+    assert long["run_seconds"] == 300.0
+    assert long["maximum_total_actions"] == 60
+    assert long_maximum == {"basic_attack": 30, "skill1": 10, "skill2": 10, "skill3": 10}
+    dataset = mobile_testbed.verify_visual_combat_event_dataset_contract(
+        root / "configs/visual_combat_event_dataset_v1.json"
+    )
+    assert dataset["status"] == "PASSED"
+    assert dataset["minimum_training_sessions"] == 12
+    assert dataset["training_allowed"] is False
+
+
+def test_visual_combat_dataset_stores_one_frame_and_actual_elapsed_times(tmp_path: Path) -> None:
+    output = tmp_path / "session"
+    row: dict[str, object] = {
+        "scheduled_elapsed_ms": 3200,
+        "decision_elapsed_ms": 3210,
+        "executed_elapsed_ms": 3212,
+        "selected_action": "skill1",
+        "input_sent": True,
+    }
+    summary: dict[str, object] = {
+        "schema_version": mobile_testbed.VISUAL_COMBAT_ARBITER_SCHEMA,
+        "raw_frames_persisted": False,
+    }
+    mobile_testbed._publish_visual_combat_dataset(
+        output,
+        [row],
+        [np.zeros((128, 128, 3), dtype=np.uint8)],
+        summary,
+        256,
+    )
+    written = json.loads((output / "summary.json").read_text(encoding="utf-8"))
+    assert written["derived_rgb_persisted"] is True
+    assert written["storage_frames_per_sample"] == 1
+    assert written["window_frames"] == 16
+    with np.load(output / "shards" / "frames-0000.npz", allow_pickle=False) as values:
+        assert values["rgb"].shape == (1, 128, 128, 3)
+        assert values["scheduled_elapsed_ms"].tolist() == [3200]
+        assert values["executed_elapsed_ms"].tolist() == [3212]
+        assert values["action_id"].tolist() == [2]
+
+
+def test_operation_base_roi_loader_and_persistent_joystick(tmp_path: Path) -> None:
+    roi_path = tmp_path / "rois.local.json"
+    roi_path.write_text(
+        json.dumps(
+            {
+                "schema_version": mobile_testbed.OBSERVATION_ROI_SCHEMA,
+                "screen": {"width": 1600, "height": 720, "rotation": 1},
+                "main_view": {"pixel_box_xyxy": [312, 60, 1280, 650]},
+                "minimap": {"pixel_box_xyxy": [80, 0, 312, 232]},
+                "hud": {"pixel_box_xyxy": [832, 216, 1600, 720]},
+                "recommended_equipment": {"pixel_box_xyxy": [160, 240, 260, 345]},
+                "death_replay_banner": {
+                    "pixel_box_xyxy": [720, 0, 880, 22],
+                    "minimum_red_pixels": 1000,
+                    "minimum_white_text_pixels": 40,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    rois, digest = mobile_testbed.load_observation_rois(roi_path)
+    assert rois.minimap == (80, 0, 312, 232)
+    assert rois.recommended_center == (210, 292)
+    assert len(digest) == 64
+    layout, _layout_sha = mobile_testbed.load_layout(_write_layout(tmp_path))
+    joystick = mobile_testbed.PersistentJoystick(layout, 1600, 720)
+    north = joystick.set_direction("north")
+    assert [operation.action for operation in north] == [
+        mobile_testbed.ANDROID_ACTION_DOWN,
+        mobile_testbed.ANDROID_ACTION_MOVE,
+    ]
+    east = joystick.set_direction("east")
+    assert [operation.action for operation in east] == [mobile_testbed.ANDROID_ACTION_MOVE]
+    stopped = joystick.release()
+    assert [operation.action for operation in stopped] == [mobile_testbed.ANDROID_ACTION_UP]
+    assert all(
+        operation.pointer_id == mobile_testbed.JOYSTICK_POINTER_ID
+        for operation in north + east + stopped
+    )
+    alive = np.zeros((720, 1600, 3), dtype=np.uint8)
+    death = alive.copy()
+    death[0:22, 720:880] = (120, 30, 20)
+    death[0:10, 720:760] = (220, 220, 220)
+    assert not mobile_testbed._death_replay_visible(alive, rois)
+    assert mobile_testbed._death_replay_visible(death, rois)
+
+
+def test_operation_movement_teacher_contract_and_state_filter() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._movement_teacher_contract(
+        root / "configs/operation_movement_teacher_v1.json"
+    )
+    assert len(digest) == 64
+    assert contract["fixed_patrol_fallback_allowed"] is False
+    movement_filter = mobile_testbed.MinimapDirectionFilter(3, 1000, 1000)
+    assert movement_filter.update("north", 0) == ("wait", False)
+    assert movement_filter.update("north", 200) == ("wait", False)
+    assert movement_filter.update("north", 400) == ("north", True)
+    assert movement_filter.update("east", 800) == ("north", False)
+    assert movement_filter.update(None, 1200) == ("north", False)
+    assert movement_filter.update(None, 1901) == ("wait", True)
+
+
+def test_operation_movement_teacher_uses_player_and_separate_target() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, _digest = mobile_testbed._movement_teacher_contract(
+        root / "configs/operation_movement_teacher_v1.json"
+    )
+    frame = np.zeros((128, 128, 3), dtype=np.uint8)
+    frame[43:57, 43:57, 0] = 220
+    frame[45:55, 45:55] = np.asarray([20, 180, 20], dtype=np.uint8)
+    frame[80:90, 50:60, 0] = 220
+    decision = mobile_testbed.movement_teacher_decision(frame, contract)
+    assert decision is not None
+    assert decision.movement == "south"
+    assert decision.player_yx == (49.5, 49.5)
+    assert decision.target_yx == (84.5, 54.5)
+
+
+def test_operation_base_contracts_freeze_movement_and_purchase_caps() -> None:
+    root = Path(__file__).resolve().parents[1]
+    short, _short_hash = mobile_testbed._mobile_operation_base_contract(
+        root / "configs/mobile_operation_base_60s_v1.json"
+    )
+    long, _long_hash = mobile_testbed._mobile_operation_base_contract(
+        root / "configs/mobile_operation_base_5m_v1.json"
+    )
+    assert short["run_seconds"] == 60.0
+    assert short["maximum_combat_actions"] == 20
+    assert short["maximum_purchases_per_minute"] == 5
+    assert long["run_seconds"] == 300.0
+    assert long["maximum_combat_actions"] == 60
+    assert short["movement_directions"] == list(mobile_testbed.MOVEMENTS[1:])
+    data_contract = json.loads(
+        (root / "configs/mobile_operation_base_data_v1.json").read_text(encoding="utf-8")
+    )
+    claimed = data_contract.pop("contract_sha256")
+    actual = mobile_testbed.hashlib.sha256(
+        json.dumps(data_contract, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    assert claimed == actual
+    assert data_contract["death_and_unknown_force_wait"] is True
+    assert data_contract["derived_roi_names"] == [
+        "main_view",
+        "minimap",
+        "hud",
+        "recommended_equipment",
+    ]
+
+
+def test_operation_base_dataset_binds_four_rois_and_factorized_actions(tmp_path: Path) -> None:
+    output = tmp_path / "operation-session"
+    row: dict[str, object] = {
+        "scheduled_elapsed_ms": 1000,
+        "frame_elapsed_ms": 1005,
+        "movement": "north",
+        "movement_confidence": 0.75,
+        "movement_label_source": "rgb_minimap_teacher_v1",
+        "movement_input_sent": True,
+        "combat_event": "skill2",
+        "purchase_event": "buy_recommended",
+        "hard_stop_latched": False,
+    }
+    frame = np.zeros((128, 128, 3), dtype=np.uint8)
+    summary: dict[str, object] = {"status": "PASSED", "raw_frames_persisted": False}
+    mobile_testbed._publish_operation_base_dataset(
+        output,
+        [row],
+        [frame],
+        [frame],
+        [frame],
+        [frame],
+        summary,
+    )
+    written = json.loads((output / "summary.json").read_text(encoding="utf-8"))
+    assert written["roi_names"] == ["main_view", "minimap", "hud", "recommended_equipment"]
+    assert written["continuous_movement_state_persisted"] is True
+    with np.load(output / "shards" / "observations-0000.npz", allow_pickle=False) as values:
+        assert values["main_rgb"].shape == (1, 128, 128, 3)
+        assert values["minimap_rgb"].shape == (1, 128, 128, 3)
+        assert values["movement_id"].tolist() == [1]
+        assert values["movement_confidence"].tolist() == [0.75]
+        assert values["movement_label_source"].tolist() == [1]
+        assert values["movement_input_sent"].tolist() == [1]
+        assert values["combat_id"].tolist() == [3]
+        assert values["purchase_id"].tolist() == [1]
+
+
 def test_mobile_input_fails_closed_without_frozen_build_identity(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -372,10 +625,16 @@ def test_type_a_decoder_assigns_stable_logical_slots(monkeypatch) -> None:
     )
     observer = mobile_testbed.TouchObserver("test-1", descriptor)
     observer._decode(
-        StringIO("[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 00000090\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004ff\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_SYN SYN_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 00000230\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004ff\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 0000012c\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004b0\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_SYN SYN_REPORT 00000000\n")
+        StringIO(
+            "[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 00000090\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004ff\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_SYN SYN_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 00000230\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004ff\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_TRACKING_ID 00000000\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_X 0000012c\n[ 1.0] /dev/input/event7: EV_ABS ABS_MT_POSITION_Y 000004b0\n[ 1.0] /dev/input/event7: EV_SYN SYN_MT_REPORT 00000000\n[ 1.0] /dev/input/event7: EV_SYN SYN_REPORT 00000000\n"
+        )
     )
     packets = [item for item in iter(lambda: observer.read(0.0), None)]
-    assert [(item.slot, item.tracking_id, item.x, item.y) for item in packets] == [(0, 0, 144, 1279), (0, 0, 300, 1200), (1, 0, 560, 1279)]
+    assert [(item.slot, item.tracking_id, item.x, item.y) for item in packets] == [
+        (0, 0, 144, 1279),
+        (0, 0, 300, 1200),
+        (1, 0, 560, 1279),
+    ]
 
 
 def test_touch_action_mapper_derives_parallel_move_and_skill() -> None:
@@ -838,9 +1097,11 @@ def test_inverse_probe_schedule_is_combat_only_balanced_and_bounded() -> None:
     releases = [key for _offset, key, pressed in events if not pressed]
     assert presses == releases
     assert set(presses) == {"f", "1", "2", "3"}
-    assert max(presses.count(key) for key in set(presses)) - min(
-        presses.count(key) for key in set(presses)
-    ) <= 1
+    assert (
+        max(presses.count(key) for key in set(presses))
+        - min(presses.count(key) for key in set(presses))
+        <= 1
+    )
     assert all(0 < offset < 60 for offset, _key, _pressed in events)
 
 
@@ -913,25 +1174,19 @@ def test_rgb_teacher_uses_activity_button_margin_and_abstains(tmp_path: Path) ->
     center_x = round((point[0] - 0.52) / 0.48 * 127)
     center_y = round((point[1] - 0.30) / 0.70 * 127)
     current[2, center_y - 3 : center_y + 4, center_x - 3 : center_x + 4, 0] = 255
-    decision = mobile_testbed.rgb_teacher_decision(
-        current, history, layout, calibration
-    )
+    decision = mobile_testbed.rgb_teacher_decision(current, history, layout, calibration)
     assert decision.combat_id == mobile_testbed.ABILITIES.index("skill1")
     assert decision.activity >= calibration.activity_threshold
     assert decision.margin >= mobile_testbed.RGB_TEACHER_MARGIN
     low_activity = current.copy()
     low_activity[1] = 8
-    live_decision = mobile_testbed.rgb_teacher_decision(
-        low_activity, history, layout, calibration
-    )
+    live_decision = mobile_testbed.rgb_teacher_decision(low_activity, history, layout, calibration)
     assert mobile_testbed.RGB_TEACHER_LIVE_ACTIVITY_THRESHOLD <= live_decision.activity < 0.10
     assert live_decision.combat_id == mobile_testbed.ABILITIES.index("skill1")
     enemy = current.copy()
     enemy[1] = 0
     enemy[0, 50, 30:55, 0] = 255
-    enemy_decision = mobile_testbed.rgb_teacher_decision(
-        enemy, history, layout, calibration
-    )
+    enemy_decision = mobile_testbed.rgb_teacher_decision(enemy, history, layout, calibration)
     assert enemy_decision.enemy_cue is True
     assert enemy_decision.enemy_red_row_max >= mobile_testbed.RGB_TEACHER_ENEMY_RED_ROW_MAX
     assert enemy_decision.combat_id == mobile_testbed.ABILITIES.index("skill1")
@@ -939,15 +1194,10 @@ def test_rgb_teacher_uses_activity_button_margin_and_abstains(tmp_path: Path) ->
     near_enemy[1] = 0
     near_enemy[0, 50, 30:40, 0] = 255
     assert (
-        mobile_testbed.rgb_teacher_decision(
-            near_enemy, history, layout, calibration
-        ).enemy_cue
+        mobile_testbed.rgb_teacher_decision(near_enemy, history, layout, calibration).enemy_cue
         is False
     )
-    assert (
-        mobile_testbed.rgb_teacher_decision(current, current, layout, calibration).combat_id
-        == 0
-    )
+    assert mobile_testbed.rgb_teacher_decision(current, current, layout, calibration).combat_id == 0
 
 
 def test_rgb_teacher_minimap_navigation_tracks_nearest_red_target() -> None:
@@ -966,8 +1216,7 @@ def test_rgb_teacher_writer_stores_one_frame_stream_not_repeated_windows(
 ) -> None:
     output = tmp_path / "session"
     frames = [
-        (index * 100_000_000, np.full((128, 128, 3), index, dtype=np.uint8))
-        for index in range(52)
+        (index * 100_000_000, np.full((128, 128, 3), index, dtype=np.uint8)) for index in range(52)
     ]
     samples = [
         mobile_testbed.RGBTeacherSample(51, 31, 0, 5_100_000_000, 5_200_000_000, -1, 0.0, False),

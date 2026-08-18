@@ -1,0 +1,14 @@
+{
+  "schema_version": "hok-agent-t8-v4-weak-supervision-contract-v1",
+  "teachers": ["frozen_rule_teacher_v1", "pixelarena_transfer_teacher_v1"],
+  "fusion_rule": "intersection_only",
+  "teacher_confidence_threshold": 0.8,
+  "minimum_head_coverage": 0.15,
+  "minimum_accepted_stability": 0.9,
+  "maximum_negative_to_positive_ratio": 3,
+  "maximum_rule_repairs": 1,
+  "views": ["original", "brightness_plus_8pct", "brightness_minus_8pct", "contrast_0_9", "contrast_1_1"],
+  "human_labels_used": false,
+  "semantic_accuracy_verified": false,
+  "weak_supervision_sha256": "c344d77b05414bf408cb7492cec555fc08dbf7c9c919fa2d7ec7ce0a61a47f56"
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": "hok-agent-t8-v4-observation-contract-v2",
+  "state_names": [
+    "main_view_enemy_cue_visible",
+    "basic_attack_button_visual_enabled",
+    "skill1_button_visual_ready",
+    "skill2_button_visual_ready"
+  ],
+  "state_scope": "fixed_layout_fixed_action_schema_visual_cues_only",
+  "negative_enemy_semantics": "no_qualifying_cue_in_current_main_view",
+  "final_frame_labels_window_frames": 16,
+  "human_labels_used": false,
+  "uncertain_enters_loss": false,
+  "excluded_states": ["attack_opportunity", "target_attackable", "safe_to_attack", "skill3"],
+  "observation_sha256": "92a0b90f11f8565bb797920d4ecc77b742342a953173950bff688a1bb9a29bc7"
+}

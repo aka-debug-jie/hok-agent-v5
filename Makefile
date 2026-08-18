@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check storage-show storage-preflight storage-init accept accept-v2 pixel-smoke accept-v3 shadow-live-smoke mobile-testbed-smoke t8-smoke t8-data-smoke t8-shadow-smoke t8-contract-smoke t8-v2-contract-smoke t8-v2-keyboard-smoke t8-v2-live-smoke t8-v2-live-inverse-probe t8-v2-live-collect t8-v2-live-pilot-freeze t8-v2-live-freeze t8-v2-live-pilot t8-video-three-class-pilot t8-video-retrospective-materialize t8-video-retrospective-pilot t8-video-retrospective-roi-evaluate t8-retrospective-v1-verify t8-retrospective-v1-batch t8-retrospective-v2-calibrate t8-causal-video-materialize t8-causal-video-pilot t8-causal-video-diagnose t8-causal-pixel-materialize t8-causal-pixel-probe t8-visual-teacher-replay t8-visible-onset-audit t8-combat-causal-materialize t8-combat-causal-pilot t8-combat-causal-diagnostic-materialize t8-combat-causal-diagnostic-pilot t8-v25-dry-run t8-v25-probe-20 t8-v25-smoke-60 t8-v25-collect t8-v25-pilot-freeze t8-v25-freeze t8-v25-pilot t8-v26-train-seed t8-v26-select t8-v26-evaluate-offline t8-v26-shadow t8-v26-shadow-replay t8-v26-execute-probe t8-v27-calibration-pilot t8-v27-freeze t8-v3-state-materialize t8-v3-state-train t8-v3-hybrid-replay t8-v2-touch-smoke t8-v2-collect t8-v2-freeze t8-v2-adapt t8-v2-pilot alignment-smoke temporal-smoke rich-smoke accept-v7 v5-source-produce v5-build-cohort v5-ingest-zero-label v5-validate-zero-target v5-freeze-training-config v5-train-simsiam-adapted v5-model-predict v5-materialize-pseudo v5-run-mean-teacher-round v6-zero-smoke
+.PHONY: install lint typecheck test check storage-show storage-preflight storage-init accept accept-v2 pixel-smoke accept-v3 shadow-live-smoke mobile-testbed-smoke t8-smoke t8-data-smoke t8-shadow-smoke t8-contract-smoke t8-v2-contract-smoke t8-v4-contract-smoke t8-v5-roi-contract-smoke t8-basic-mvp-contract-smoke t8-v2-keyboard-smoke t8-v2-live-smoke t8-v2-live-inverse-probe t8-v2-live-collect t8-v2-live-pilot-freeze t8-v2-live-freeze t8-v2-live-pilot t8-video-three-class-pilot t8-video-retrospective-materialize t8-video-retrospective-pilot t8-video-retrospective-roi-evaluate t8-retrospective-v1-verify t8-retrospective-v1-batch t8-retrospective-v2-calibrate t8-causal-video-materialize t8-causal-video-pilot t8-causal-video-diagnose t8-causal-pixel-materialize t8-causal-pixel-probe t8-visual-teacher-replay t8-visible-onset-audit t8-combat-causal-materialize t8-combat-causal-pilot t8-combat-causal-diagnostic-materialize t8-combat-causal-diagnostic-pilot t8-v25-dry-run t8-v25-probe-20 t8-v25-smoke-60 t8-v25-collect t8-v25-pilot-freeze t8-v25-freeze t8-v25-pilot t8-v26-train-seed t8-v26-select t8-v26-evaluate-offline t8-v26-shadow t8-v26-shadow-replay t8-v26-execute-probe t8-v27-calibration-pilot t8-v27-freeze t8-v3-state-materialize t8-v3-state-train t8-v3-hybrid-replay t8-v2-touch-smoke t8-v2-collect t8-v2-freeze t8-v2-adapt t8-v2-pilot alignment-smoke temporal-smoke rich-smoke accept-v7 v5-source-produce v5-build-cohort v5-ingest-zero-label v5-validate-zero-target v5-freeze-training-config v5-train-simsiam-adapted v5-model-predict v5-materialize-pseudo v5-run-mean-teacher-round v6-zero-smoke operation-policy-contract-smoke operation-idm-pilot operation-video-pseudolabel operation-policy-pilot operation-direct-policy-contract-smoke operation-direct-policy-pilot operation-minimap-teacher-audit operation-teacher-readonly-smoke operation-teacher-input-smoke operation-teacher-collect operation-movement-contract-smoke operation-movement-pilot-freeze operation-movement-pilot
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
 WZRY_DATA_ROOT ?= $(CURDIR)/.local-data
@@ -61,6 +61,29 @@ T8_V3_DATASET ?=$(HOK_DATASETS_ROOT)/t8-video-state-v3
 T8_V3_RUN ?=$(HOK_RUNS_ROOT)/t8-policy-v3/state-seed0-v1
 T8_V3_REPLAY ?=$(T8_V3_RUN)/hybrid-replay-v1
 T8_SEED ?=
+OPERATION_POLICY_CONTRACT ?=configs/operation_policy_v1.json
+OPERATION_POLICY_ADAPTER ?=$(HOK_CHECKPOINTS_ROOT)/t8-policy-v2/video-adapter-v1/adapter-epoch-3.safetensors
+OPERATION_POLICY_ROIS ?=configs/mobile_observation_rois.local.json
+OPERATION_POLICY_TRAIN ?=$(HOK_RUNS_ROOT)/mobile-operation-base/5m-v1
+OPERATION_POLICY_DEV ?=$(HOK_RUNS_ROOT)/mobile-operation-base/60s-v2
+OPERATION_POLICY_COMBAT ?=$(HOK_DATASETS_ROOT)/visual-combat-rgb
+OPERATION_IDM_RUN ?=$(HOK_RUNS_ROOT)/operation-policy-v1/idm-seed0-spatial-v1
+OPERATION_PSEUDO_DATASET ?=$(HOK_DATASETS_ROOT)/operation-policy-v1/video-pseudolabel-v1
+OPERATION_POLICY_RUN ?=$(HOK_RUNS_ROOT)/operation-policy-v1/policy-seed0-v1
+OPERATION_DIRECT_CONTRACT ?=configs/operation_direct_policy_v1.json
+OPERATION_DIRECT_RUN ?=$(HOK_RUNS_ROOT)/operation-direct-policy-v1/seed0-v1
+OPERATION_MOVEMENT_TEACHER_CONTRACT ?=configs/operation_movement_teacher_v1.json
+OPERATION_MOVEMENT_TEACHER_AUDIT ?=$(HOK_AUDIT_ROOT)/operation-movement-teacher-v1
+OPERATION_VISUAL_LAYOUT ?=configs/mobile_testbed_layout_calibrated_v3.json
+OPERATION_EXECUTION_LAYOUT ?=configs/mobile_testbed_layout_all_actions_corrected.local.json
+OPERATION_OBSERVATION_ROIS ?=configs/mobile_observation_rois.local.json
+OPERATION_TEACHER_REPORT ?=$(HOK_RUNS_ROOT)/t8-policy-v2.3/visual-teacher-replay-v1/report.json
+OPERATION_TEACHER_DATASET ?=$(HOK_DATASETS_ROOT)/operation-movement-teacher-v1
+OPERATION_TEACHER_SESSION ?=
+OPERATION_MOBILE_IDENTITY ?=configs/mobile_testbed_identity.local.json
+OPERATION_MOVEMENT_POLICY_CONTRACT ?=configs/operation_movement_policy_v1.json
+OPERATION_MOVEMENT_PILOT_SPLIT ?=$(OPERATION_TEACHER_DATASET)/movement-pilot-split.json
+OPERATION_MOVEMENT_PILOT_RUN ?=$(HOK_RUNS_ROOT)/operation-movement-policy-v1/pilot-seed0-v1
 
 install:
 	$(PYTHON) -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
@@ -118,6 +141,61 @@ mobile-testbed-smoke:
 
 t8-smoke:
 	$(RUN_PYTHON) -m hok_agent t8-smoke
+
+t8-v4-contract-smoke:
+	$(RUN_PYTHON) -m hok_agent t8-v4-contract-check
+	$(RUN_PYTHON) -m pytest -q tests/test_t8_v4.py
+
+t8-v5-roi-contract-smoke:
+	$(RUN_PYTHON) -m hok_agent t8-v5-roi-contract-check
+	$(RUN_PYTHON) -m pytest -q tests/test_t8_v5.py
+
+t8-basic-mvp-contract-smoke:
+	$(RUN_PYTHON) -m hok_agent t8-basic-mvp-contract-check
+	$(RUN_PYTHON) -m pytest -q tests/test_t8_basic_mvp.py
+
+operation-policy-contract-smoke:
+	$(RUN_PYTHON) -m hok_agent operation-policy-contract-check --contract "$(OPERATION_POLICY_CONTRACT)"
+
+operation-idm-pilot: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-idm-pilot --contract "$(OPERATION_POLICY_CONTRACT)" --adapter-checkpoint "$(OPERATION_POLICY_ADAPTER)" --observation-rois "$(OPERATION_POLICY_ROIS)" --operation-train "$(OPERATION_POLICY_TRAIN)" --operation-dev "$(OPERATION_POLICY_DEV)" --combat-root "$(OPERATION_POLICY_COMBAT)" --output-dir "$(OPERATION_IDM_RUN)" --device cuda --batch-size 256
+
+operation-video-pseudolabel: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-video-pseudolabel --contract "$(OPERATION_POLICY_CONTRACT)" --idm-dir "$(OPERATION_IDM_RUN)" --target-dir "$(HOK_DATASETS_ROOT)/v5-target-file-atomic-v2" --adapter-checkpoint "$(OPERATION_POLICY_ADAPTER)" --observation-rois "$(OPERATION_POLICY_ROIS)" --output-dir "$(OPERATION_PSEUDO_DATASET)" --device cuda --batch-size 512
+
+operation-policy-pilot: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-policy-pilot --contract "$(OPERATION_POLICY_CONTRACT)" --dataset-root "$(OPERATION_PSEUDO_DATASET)" --output-dir "$(OPERATION_POLICY_RUN)" --device cuda --batch-size 128
+
+operation-direct-policy-contract-smoke:
+	$(RUN_PYTHON) -m hok_agent operation-direct-policy-contract-check --contract "$(OPERATION_DIRECT_CONTRACT)"
+
+operation-direct-policy-pilot: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-direct-policy-pilot --contract "$(OPERATION_DIRECT_CONTRACT)" --adapter-checkpoint "$(OPERATION_POLICY_ADAPTER)" --observation-rois "$(OPERATION_POLICY_ROIS)" --operation-train "$(OPERATION_POLICY_TRAIN)" --operation-dev "$(OPERATION_POLICY_DEV)" --combat-root "$(OPERATION_POLICY_COMBAT)" --output-dir "$(OPERATION_DIRECT_RUN)" --device cuda --batch-size 128
+
+operation-minimap-teacher-audit: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent operation-minimap-teacher-audit --session-dir "$(OPERATION_POLICY_TRAIN)" --contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --output-dir "$(OPERATION_MOVEMENT_TEACHER_AUDIT)"
+
+operation-teacher-readonly-smoke: storage-preflight
+	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-operation-teacher --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_60s_v1.json --movement-contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --output-dir "$(HOK_RUNS_ROOT)/operation-movement-teacher-v1/read-only-$$(date +%s)"
+
+operation-teacher-input-smoke: storage-preflight
+	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-operation-teacher --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_60s_v1.json --movement-contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --enable-input --output-dir "$(HOK_RUNS_ROOT)/operation-movement-teacher-v1/input-$$(date +%s)"
+
+operation-teacher-collect: storage-preflight
+	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
+	@test -n "$(OPERATION_TEACHER_SESSION)" || { echo "OPERATION_TEACHER_SESSION is required" >&2; exit 2; }
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-operation-teacher --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_5m_v1.json --movement-contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --enable-input --output-dir "$(OPERATION_TEACHER_DATASET)/$(OPERATION_TEACHER_SESSION)"
+
+operation-movement-contract-smoke:
+	$(RUN_PYTHON) -m hok_agent operation-movement-policy-contract-check --contract "$(OPERATION_MOVEMENT_POLICY_CONTRACT)"
+
+operation-movement-pilot-freeze: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent operation-movement-freeze-split --dataset-root "$(OPERATION_TEACHER_DATASET)" --contract "$(OPERATION_MOVEMENT_POLICY_CONTRACT)" --output "$(OPERATION_MOVEMENT_PILOT_SPLIT)" --pilot
+
+operation-movement-pilot: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-movement-pilot --dataset-root "$(OPERATION_TEACHER_DATASET)" --split "$(OPERATION_MOVEMENT_PILOT_SPLIT)" --contract "$(OPERATION_MOVEMENT_POLICY_CONTRACT)" --adapter-checkpoint "$(OPERATION_POLICY_ADAPTER)" --output-dir "$(OPERATION_MOVEMENT_PILOT_RUN)" --device cuda --batch-size 128
 
 t8-data-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_mobile_testbed.py tests/test_t8.py

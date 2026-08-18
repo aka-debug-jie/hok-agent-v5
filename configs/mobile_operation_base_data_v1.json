@@ -1,0 +1,23 @@
+{
+  "schema_version": "hok-agent-mobile-operation-base-data-contract-v1",
+  "source_schema": "hok-agent-mobile-operation-base-v1",
+  "sample_hz": 5,
+  "derived_roi_names": ["main_view", "minimap", "hud", "recommended_equipment"],
+  "derived_roi_shape": [128, 128, 3],
+  "movement_vocabulary": ["wait", "north", "north_east", "east", "south_east", "south", "south_west", "west", "north_west"],
+  "combat_vocabulary": ["none", "basic_attack", "skill1", "skill2", "skill3"],
+  "purchase_vocabulary": ["none", "buy_recommended"],
+  "hard_stop_vocabulary": ["none", "death_respawn_or_ended", "unknown_screen", "recovery_confirmation"],
+  "required_timestamp_fields": ["scheduled_elapsed_ms", "frame_elapsed_ms"],
+  "continuous_movement_state_required": true,
+  "sparse_combat_event_required": true,
+  "sparse_purchase_event_required": true,
+  "minimap_observation_required": true,
+  "death_and_unknown_force_wait": true,
+  "single_scrcpy_two_pointer_source_required": true,
+  "raw_full_frame_allowed": false,
+  "source_paths_allowed": false,
+  "coordinates_allowed": false,
+  "serial_allowed": false,
+  "contract_sha256": "19bbf99794bac1f376da31b438b00929a4fe3c79c22f1adfa8c25709366383f6"
+}

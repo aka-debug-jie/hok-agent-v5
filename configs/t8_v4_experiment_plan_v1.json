@@ -1,0 +1,23 @@
+{
+  "schema_version": "hok-agent-t8-v4-experiment-contract-v1",
+  "train_sessions": 103,
+  "dev_sessions": 23,
+  "window_frames": 16,
+  "feature_shape": [16, 512],
+  "seed": 0,
+  "epochs": 8,
+  "model_ladder": ["class_prior", "time_only", "last_frame_linear", "pool_mlp", "causal_tcn", "label_shuffle"],
+  "interventions": ["gameplay_mask", "hud_mask", "gameplay_swap", "hud_swap", "sham_swap", "static", "reverse", "time_shift_2000ms"],
+  "minimum_source_head_macro_f1": 0.9,
+  "minimum_rgb_gain_over_time_only": 0.1,
+  "minimum_normal_gain_over_shuffle": 0.15,
+  "minimum_relevant_mask_confidence_drop": 0.15,
+  "maximum_irrelevant_mask_confidence_drop": 0.05,
+  "minimum_tcn_gain": 0.05,
+  "video_test_access_allowed": false,
+  "human_labels_used": false,
+  "promotion_allowed": false,
+  "control_output": false,
+  "device_input_allowed": false,
+  "experiment_sha256": "5ac89ad30134b67fdb6b8d593e9c5d6f31e5ee89a3ccd27d6e2c0b66c204268f"
+}
