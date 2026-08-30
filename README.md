@@ -236,8 +236,16 @@ tactical policy supervision. See
 The active route is Global Agent v1: a structured simulator rule teacher completes full games and
 labels macro intent plus semantic target zone; an RGB student learns those high-level decisions,
 while the existing deterministic navigation, combat, purchase, layout, hero-profile, and safety
-modules execute them. Behavior cloning precedes simulator DAgger, and mobile validation is last.
+modules execute them. Its five offline stages are now complete: the rule teacher passed 20/20,
+seed-0 BC reached 7/10 pure-student simulator terminals, the only DAgger round reached 9/10, and
+the dev-selected real-video adapter plus 23-session zero-control replay passed. No phone was opened
+by these stages; mobile validation remains a separate future review.
 See [docs/GLOBAL_AGENT_V1_PROTOCOL.md](docs/GLOBAL_AGENT_V1_PROTOCOL.md).
+
+The reproducible entrypoints are `global-agent-evaluate`, `global-agent-materialize`,
+`global-agent-train`, `global-agent-dagger`, `global-agent-domain-adapt`, and
+`global-agent-replay`. Their Make targets use `HOK_LARGE_ROOT`; dataset, checkpoint, video, and
+report artifacts are never committed.
 
 Adaptive Layout and Hero Profiles v1 separates device geometry from hero skill behavior. Button
 groups are located by structure rather than skill-icon appearance; local hero profiles define how

@@ -1030,6 +1030,49 @@ def _parser() -> argparse.ArgumentParser:
     combat_cached_train.add_argument("--output-dir", type=Path, required=True)
     combat_cached_train.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     combat_cached_train.add_argument("--batch-size", type=int, default=128)
+    global_evaluate = commands.add_parser(
+        "global-agent-evaluate", help="evaluate the deterministic Global Agent rule teacher"
+    )
+    global_evaluate.add_argument("--episodes", type=int, required=True)
+    global_evaluate.add_argument("--seed", type=int, required=True)
+    global_materialize = commands.add_parser(
+        "global-agent-materialize", help="materialize the frozen 40/10 Global Agent pilot"
+    )
+    global_materialize.add_argument("--output-dir", type=Path, required=True)
+    global_train = commands.add_parser(
+        "global-agent-train", help="train seed-0 Global Agent behavior-cloning controls"
+    )
+    global_train.add_argument("--dataset-root", type=Path, required=True)
+    global_train.add_argument("--output-dir", type=Path, required=True)
+    global_train.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    global_train.add_argument("--epochs", type=int, default=4)
+    global_train.add_argument("--batch-size", type=int, default=32)
+    global_dagger = commands.add_parser(
+        "global-agent-dagger", help="run the single admitted Global Agent DAgger round"
+    )
+    global_dagger.add_argument("--dataset-root", type=Path, required=True)
+    global_dagger.add_argument("--checkpoint", type=Path, required=True)
+    global_dagger.add_argument("--output-dir", type=Path, required=True)
+    global_dagger.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    global_dagger.add_argument("--epochs", type=int, default=4)
+    global_dagger.add_argument("--batch-size", type=int, default=32)
+    global_adapt = commands.add_parser(
+        "global-agent-domain-adapt",
+        help="adapt the Global Agent encoder on unlabeled video-train only",
+    )
+    global_adapt.add_argument("--dataset-root", type=Path, required=True)
+    global_adapt.add_argument("--checkpoint", type=Path, required=True)
+    global_adapt.add_argument("--video-cohort", type=Path, required=True)
+    global_adapt.add_argument("--output-dir", type=Path, required=True)
+    global_adapt.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    global_adapt.add_argument("--epochs", type=int, default=2)
+    global_replay = commands.add_parser(
+        "global-agent-replay", help="run zero-control Global Agent video-dev replay"
+    )
+    global_replay.add_argument("--checkpoint", type=Path, required=True)
+    global_replay.add_argument("--video-cohort", type=Path, required=True)
+    global_replay.add_argument("--output-dir", type=Path, required=True)
+    global_replay.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     return parser
 
 
@@ -2325,6 +2368,61 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_dir=args.output_dir,
                 device=args.device,
                 batch_size=args.batch_size,
+            )
+        elif args.command == "global-agent-evaluate":
+            from hok_agent.global_agent import evaluate_teacher
+
+            result = evaluate_teacher(args.episodes, args.seed)
+        elif args.command == "global-agent-materialize":
+            from hok_agent.global_policy import materialize_global_dataset
+
+            result = materialize_global_dataset(args.output_dir)
+        elif args.command == "global-agent-train":
+            if args.device == "cuda":
+                os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            from hok_agent.global_policy import train_global_bc
+
+            result = train_global_bc(
+                args.dataset_root,
+                args.output_dir,
+                device_name=args.device,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "global-agent-dagger":
+            if args.device == "cuda":
+                os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            from hok_agent.global_policy import run_global_dagger
+
+            result = run_global_dagger(
+                args.dataset_root,
+                args.checkpoint,
+                args.output_dir,
+                device_name=args.device,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+            )
+        elif args.command == "global-agent-domain-adapt":
+            if args.device == "cuda":
+                os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            from hok_agent.global_policy import domain_adapt_global
+
+            result = domain_adapt_global(
+                args.dataset_root,
+                args.checkpoint,
+                args.video_cohort,
+                args.output_dir,
+                device_name=args.device,
+                epochs=args.epochs,
+            )
+        elif args.command == "global-agent-replay":
+            from hok_agent.global_policy import replay_global_video
+
+            result = replay_global_video(
+                args.checkpoint,
+                args.video_cohort,
+                args.output_dir,
+                device_name=args.device,
             )
         else:
             result = check_project()
