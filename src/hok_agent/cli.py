@@ -1048,6 +1048,167 @@ def _parser() -> argparse.ArgumentParser:
     global_scenario_contract.add_argument(
         "--contract", type=Path, default=Path("configs/global_agent_scenario_cards_v1.json")
     )
+    human_ifo_template = commands.add_parser(
+        "human-ifo-cohort-template", help="write the ignored local Human IfO cohort template"
+    )
+    human_ifo_template.add_argument(
+        "--output", type=Path, default=Path("configs/human_ifo_cohort.local.json")
+    )
+    human_ifo_propose = commands.add_parser(
+        "human-ifo-cohort-propose",
+        help="write a non-promoting unlabeled Human IfO cohort proposal",
+    )
+    human_ifo_propose.add_argument("--video-cohort", type=Path, required=True)
+    human_ifo_propose.add_argument("--output-dir", type=Path, required=True)
+    human_ifo_precheck = commands.add_parser(
+        "human-ifo-unsupervised-precheck",
+        help="evaluate an unlabeled Human IfO proposal without training or promotion",
+    )
+    human_ifo_precheck.add_argument("--dataset-root", type=Path, required=True)
+    human_ifo_precheck.add_argument("--checkpoint", type=Path, required=True)
+    human_ifo_precheck.add_argument("--video-cohort", type=Path, required=True)
+    human_ifo_precheck.add_argument("--proposal", type=Path, required=True)
+    human_ifo_precheck.add_argument("--output-dir", type=Path, required=True)
+    human_ifo_precheck.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    human_ifo_repair = commands.add_parser(
+        "human-ifo-unsupervised-repair",
+        help="run the single non-promoting Human/Sim representation repair",
+    )
+    for argument in ("dataset-root", "checkpoint", "video-cohort", "proposal", "output-dir"):
+        human_ifo_repair.add_argument(f"--{argument}", type=Path, required=True)
+    human_ifo_repair.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    human_ifo_broad = commands.add_parser(
+        "human-ifo-broad-representation",
+        help="train one non-promoting shared representation on all video train/dev sessions",
+    )
+    for argument in ("dataset-root", "checkpoint", "video-cohort", "output-dir"):
+        human_ifo_broad.add_argument(f"--{argument}", type=Path, required=True)
+    human_ifo_broad.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    human_inverse = commands.add_parser(
+        "human-ifo-gate-b", help="train simulator-only inverse macro dynamics"
+    )
+    for argument in ("dataset-root", "shared-checkpoint", "acceptance", "output-dir"):
+        human_inverse.add_argument(f"--{argument}", type=Path, required=True)
+    human_inverse.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    human_pseudolabel = commands.add_parser(
+        "human-ifo-gate-c", help="materialize automatic human-train macro pseudolabel features"
+    )
+    for argument in (
+        "video-cohort",
+        "shared-checkpoint",
+        "broad-acceptance",
+        "inverse-checkpoint",
+        "gate-b-acceptance",
+        "output-dir",
+    ):
+        human_pseudolabel.add_argument(f"--{argument}", type=Path, required=True)
+    human_pseudolabel.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    human_pseudolabel.add_argument("--temperature", type=Path)
+    human_calibrate = commands.add_parser(
+        "human-ifo-gate-c-calibrate",
+        help="run the single simulator-dev inverse temperature calibration",
+    )
+    for argument in (
+        "dataset-root",
+        "shared-checkpoint",
+        "broad-acceptance",
+        "inverse-checkpoint",
+        "gate-b-acceptance",
+        "output-dir",
+    ):
+        human_calibrate.add_argument(f"--{argument}", type=Path, required=True)
+    human_calibrate.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    human_style = commands.add_parser(
+        "human-ifo-transition-style",
+        help="train the simulator-only latent transition style constraint",
+    )
+    for argument in (
+        "dataset-root",
+        "video-cohort",
+        "shared-checkpoint",
+        "broad-acceptance",
+        "output-dir",
+    ):
+        human_style.add_argument(f"--{argument}", type=Path, required=True)
+    human_style.add_argument(
+        "--contract",
+        type=Path,
+        default=Path("configs/human_ifo_transition_style_v1.json"),
+    )
+    human_style.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    human_rebind = commands.add_parser(
+        "human-ifo-encoder-rebind",
+        help="rebind the Human-adapted encoder using simulator strategy truth only",
+    )
+    for argument in (
+        "dataset-root",
+        "shared-checkpoint",
+        "broad-acceptance",
+        "dagger-checkpoint",
+        "output-dir",
+    ):
+        human_rebind.add_argument(f"--{argument}", type=Path, required=True)
+    human_rebind.add_argument(
+        "--contract",
+        type=Path,
+        default=Path("configs/human_ifo_encoder_rebind_v1.json"),
+    )
+    human_rebind.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    challenge_curriculum = commands.add_parser(
+        "global-challenge-curriculum",
+        help="train one simulator-only parameterized challenge curriculum",
+    )
+    challenge_curriculum.add_argument("--dataset-root", type=Path, required=True)
+    challenge_curriculum.add_argument("--dagger-checkpoint", type=Path, required=True)
+    challenge_curriculum.add_argument("--output-dir", type=Path, required=True)
+    challenge_curriculum.add_argument(
+        "--contract",
+        type=Path,
+        default=Path("configs/global_challenge_curriculum_v1.json"),
+    )
+    challenge_curriculum.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    observable_probe = commands.add_parser(
+        "global-observable-factor-probe",
+        help="probe frozen Dagger latent factors using simulator truth only",
+    )
+    observable_probe.add_argument("--dagger-checkpoint", type=Path, required=True)
+    observable_probe.add_argument("--output-dir", type=Path, required=True)
+    observable_probe.add_argument(
+        "--contract",
+        type=Path,
+        default=Path("configs/global_observable_factor_probe_v1.json"),
+    )
+    observable_probe.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    observable_aux = commands.add_parser(
+        "global-observable-aux-train",
+        help="run the single simulator-only observable auxiliary representation update",
+    )
+    observable_aux.add_argument("--dataset-root", type=Path, required=True)
+    observable_aux.add_argument("--dagger-checkpoint", type=Path, required=True)
+    observable_aux.add_argument("--probe-report", type=Path, required=True)
+    observable_aux.add_argument("--output-dir", type=Path, required=True)
+    observable_aux.add_argument(
+        "--contract",
+        type=Path,
+        default=Path("configs/global_observable_aux_training_v1.json"),
+    )
+    observable_aux.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    human_ifo_check = commands.add_parser(
+        "human-ifo-contract-check", help="validate the Human IfO Gate A cohort and lineage"
+    )
+    human_ifo_gate = commands.add_parser(
+        "human-ifo-gate-a", help="train the offline Human/Sim shared temporal representation"
+    )
+    for command in (human_ifo_check, human_ifo_gate):
+        command.add_argument("--dataset-root", type=Path, required=True)
+        command.add_argument("--checkpoint", type=Path, required=True)
+        command.add_argument("--video-cohort", type=Path, required=True)
+        command.add_argument(
+            "--cohort", type=Path, default=Path("configs/human_ifo_cohort.local.json")
+        )
+        command.add_argument("--contract", type=Path, default=Path("configs/human_ifo_v1.json"))
+    human_ifo_gate.add_argument("--output-dir", type=Path, required=True)
+    human_ifo_gate.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     global_materialize = commands.add_parser(
         "global-agent-materialize", help="materialize the frozen 40/10 Global Agent pilot"
     )
@@ -2430,6 +2591,171 @@ def main(argv: Sequence[str] | None = None) -> int:
             from hok_agent.global_scenario_cards import verify_scenario_card_contract
 
             result = verify_scenario_card_contract(args.contract)
+        elif args.command == "human-ifo-cohort-template":
+            from hok_agent.human_ifo import write_cohort_template
+
+            result = write_cohort_template(args.output)
+        elif args.command == "human-ifo-cohort-propose":
+            from hok_agent.human_ifo import propose_unsupervised_cohort
+
+            result = propose_unsupervised_cohort(args.video_cohort, args.output_dir)
+        elif args.command == "human-ifo-unsupervised-precheck":
+            from hok_agent.human_ifo import run_unsupervised_precheck
+
+            result = run_unsupervised_precheck(
+                args.dataset_root,
+                args.checkpoint,
+                args.video_cohort,
+                args.proposal,
+                args.output_dir,
+                device_name=args.device,
+            )
+        elif args.command == "human-ifo-unsupervised-repair":
+            if args.device == "cuda":
+                os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            from hok_agent.human_ifo import run_unsupervised_repair
+
+            result = run_unsupervised_repair(
+                args.dataset_root,
+                args.checkpoint,
+                args.video_cohort,
+                args.proposal,
+                args.output_dir,
+                device_name=args.device,
+            )
+        elif args.command == "human-ifo-broad-representation":
+            if args.device == "cuda":
+                os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            from hok_agent.human_ifo import run_broad_unlabeled_representation
+
+            result = run_broad_unlabeled_representation(
+                args.dataset_root,
+                args.checkpoint,
+                args.video_cohort,
+                args.output_dir,
+                device_name=args.device,
+            )
+        elif args.command == "human-ifo-gate-b":
+            if args.device == "cuda":
+                os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            from hok_agent.human_inverse import train_inverse_macro
+
+            result = train_inverse_macro(
+                args.dataset_root,
+                args.shared_checkpoint,
+                args.acceptance,
+                args.output_dir,
+                device_name=args.device,
+            )
+        elif args.command == "human-ifo-gate-c":
+            from hok_agent.human_inverse import materialize_human_pseudolabels
+
+            result = materialize_human_pseudolabels(
+                args.video_cohort,
+                args.shared_checkpoint,
+                args.broad_acceptance,
+                args.inverse_checkpoint,
+                args.gate_b_acceptance,
+                args.output_dir,
+                device_name=args.device,
+                temperature_path=args.temperature,
+            )
+        elif args.command == "human-ifo-gate-c-calibrate":
+            from hok_agent.human_inverse import calibrate_inverse_temperature
+
+            result = calibrate_inverse_temperature(
+                args.dataset_root,
+                args.shared_checkpoint,
+                args.broad_acceptance,
+                args.inverse_checkpoint,
+                args.gate_b_acceptance,
+                args.output_dir,
+                device_name=args.device,
+            )
+        elif args.command == "human-ifo-transition-style":
+            from hok_agent.human_inverse import train_transition_style_discriminator
+
+            result = train_transition_style_discriminator(
+                args.dataset_root,
+                args.video_cohort,
+                args.shared_checkpoint,
+                args.broad_acceptance,
+                args.output_dir,
+                device_name=args.device,
+                contract_path=args.contract,
+            )
+        elif args.command == "human-ifo-encoder-rebind":
+            if args.device == "cuda":
+                os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            from hok_agent.human_ifo import rebind_human_encoder_to_simulator_policy
+
+            result = rebind_human_encoder_to_simulator_policy(
+                args.dataset_root,
+                args.shared_checkpoint,
+                args.broad_acceptance,
+                args.dagger_checkpoint,
+                args.output_dir,
+                device_name=args.device,
+                contract_path=args.contract,
+            )
+        elif args.command == "global-challenge-curriculum":
+            if args.device == "cuda":
+                os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            from hok_agent.human_ifo import train_parameterized_challenge_curriculum
+
+            result = train_parameterized_challenge_curriculum(
+                args.dataset_root,
+                args.dagger_checkpoint,
+                args.output_dir,
+                device_name=args.device,
+                contract_path=args.contract,
+            )
+        elif args.command == "global-observable-factor-probe":
+            from hok_agent.human_ifo import run_observable_factor_probe
+
+            result = run_observable_factor_probe(
+                args.dagger_checkpoint,
+                args.output_dir,
+                device_name=args.device,
+                contract_path=args.contract,
+            )
+        elif args.command == "global-observable-aux-train":
+            if args.device == "cuda":
+                os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            from hok_agent.human_ifo import train_observable_auxiliary_representation
+
+            result = train_observable_auxiliary_representation(
+                args.dataset_root,
+                args.dagger_checkpoint,
+                args.probe_report,
+                args.output_dir,
+                device_name=args.device,
+                contract_path=args.contract,
+            )
+        elif args.command == "human-ifo-contract-check":
+            from hok_agent.human_ifo import gate_a_contract_check
+
+            result = gate_a_contract_check(
+                args.dataset_root,
+                args.checkpoint,
+                args.video_cohort,
+                args.cohort,
+                contract_path=args.contract,
+            )
+        elif args.command == "human-ifo-gate-a":
+            if args.device == "cuda":
+                os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+            from hok_agent.human_ifo import run_gate_a
+
+            result = run_gate_a(
+                args.dataset_root,
+                args.checkpoint,
+                args.video_cohort,
+                args.cohort,
+                args.output_dir,
+                device_name=args.device,
+                contract_path=args.contract,
+            )
         elif args.command == "global-agent-train":
             if args.device == "cuda":
                 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")

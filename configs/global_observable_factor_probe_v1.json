@@ -1,0 +1,12 @@
+{
+  "schema_version": "hok-agent-global-observable-factor-probe-v1",
+  "seed": 0,
+  "epochs": 30,
+  "batch_size": 64,
+  "learning_rate": 0.01,
+  "minimum_macro_f1": 0.85,
+  "minimum_shuffle_margin": 0.2,
+  "minimum_passing_factors": 4,
+  "device_input_allowed": false,
+  "contract_sha256": "429be45698c7df73f8ca1430b7d87625dd884a30188c410e9566cd2eb3e6026a"
+}

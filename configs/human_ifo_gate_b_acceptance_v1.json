@@ -1,0 +1,14 @@
+{
+  "schema_version": "hok-agent-human-ifo-gate-b-acceptance-v1",
+  "source_report_sha256": "02a1337713169ceca7d9b9c40fbb17bb4260d3b3dd2c9b5fe659bc8253ade4d4",
+  "inverse_checkpoint_sha256": "723793c1c988f054ef164e20a02e158140a0c59e393e8e61131a6b7d83338a8c",
+  "selected_horizon": "delta_0_8s",
+  "original_transition_gain_threshold": 0.05,
+  "engineering_transition_gain_threshold": 0.02,
+  "observed_transition_gain": 0.02820345833968485,
+  "observed_shuffle_margin": 0.7044905006397366,
+  "gate_c_pseudolabel_audit_allowed": true,
+  "human_bc_allowed": false,
+  "device_input_allowed": false,
+  "contract_sha256": "ccd34aaa5c46bd60bc2495dc7ceb89262674c0033962c5a9fb106f3d81c9a9cd"
+}

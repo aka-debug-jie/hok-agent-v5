@@ -1,0 +1,18 @@
+{
+  "schema_version": "hok-agent-global-observable-aux-training-v1",
+  "seed": 0,
+  "epochs": 4,
+  "batch_size": 32,
+  "learning_rate": 0.0001,
+  "auxiliary_loss_weight": 0.5,
+  "scene_loss_weight": 0.25,
+  "dagger_distillation_weight": 1.0,
+  "minimum_canonical_challenge_passes": 4,
+  "minimum_parameterized_holdout_passes": 15,
+  "minimum_non_timeout_terminals": 18,
+  "minimum_tower_progress_episodes": 20,
+  "maximum_stuck_time_ratio": 0.0498728721574974,
+  "minimum_mean_tower_damage": 12.0,
+  "device_input_allowed": false,
+  "contract_sha256": "703b89d8efa2880e70ef827d920b6eb9364bc3ac2f0f873fe5d4daea57ca002d"
+}

@@ -96,6 +96,25 @@ GLOBAL_SHADOW_SERIAL ?=
 GLOBAL_SHADOW_VIDEO_NODE ?=
 GLOBAL_SHADOW_CHECKPOINT ?=$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors
 GLOBAL_SHADOW_ROIS ?=configs/mobile_observation_rois.local.json
+HUMAN_IFO_COHORT ?=configs/human_ifo_cohort.local.json
+HUMAN_IFO_CONTRACT ?=configs/human_ifo_v1.json
+HUMAN_IFO_RUN ?=$(HOK_RUNS_ROOT)/human-ifo-v1/gate-a-v1
+HUMAN_IFO_PROPOSAL ?=$(HOK_AUDIT_ROOT)/human-ifo-v1/unsupervised-cohort-v1
+HUMAN_IFO_PRECHECK ?=$(HOK_AUDIT_ROOT)/human-ifo-v1/unsupervised-precheck-v1
+HUMAN_IFO_REPAIR ?=$(HOK_RUNS_ROOT)/human-ifo-v1/unsupervised-repair-v1
+HUMAN_IFO_BROAD ?=$(HOK_RUNS_ROOT)/human-ifo-v1/broad-representation-v1
+HUMAN_IFO_ACCEPTANCE ?=configs/human_ifo_broad_acceptance_v1.json
+HUMAN_IFO_GATE_B ?=$(HOK_RUNS_ROOT)/human-ifo-v1/gate-b-v1
+HUMAN_IFO_GATE_B_ACCEPTANCE ?=configs/human_ifo_gate_b_acceptance_v1.json
+HUMAN_IFO_GATE_C ?=$(HOK_DATASETS_ROOT)/human-ifo-v1/gate-c-v1
+HUMAN_IFO_GATE_C_CALIBRATION ?=$(HOK_RUNS_ROOT)/human-ifo-v1/gate-c-calibration-v1
+HUMAN_IFO_STYLE ?=$(HOK_RUNS_ROOT)/human-ifo-v1/transition-style-v1
+HUMAN_IFO_STYLE_CONTRACT ?=configs/human_ifo_transition_style_v2.json
+HUMAN_IFO_REBIND ?=$(HOK_RUNS_ROOT)/human-ifo-v1/encoder-rebind-v1
+GLOBAL_CHALLENGE_CURRICULUM ?=$(HOK_RUNS_ROOT)/global-agent-v1/challenge-curriculum-v1
+GLOBAL_CHALLENGE_CURRICULUM_CONTRACT ?=configs/global_challenge_curriculum_v2.json
+GLOBAL_OBSERVABLE_PROBE ?=$(HOK_RUNS_ROOT)/global-agent-v1/observable-factor-probe-v1
+GLOBAL_OBSERVABLE_AUX ?=$(HOK_RUNS_ROOT)/global-agent-v1/observable-aux-v1
 
 install:
 	$(PYTHON) -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
@@ -135,6 +154,52 @@ storage-init:
 
 global-agent-stage-1a:
 	$(RUN_PYTHON) -m hok_agent global-agent-evaluate --episodes 1 --seed 17
+
+.PHONY: human-ifo-cohort-template human-ifo-cohort-propose human-ifo-unsupervised-precheck human-ifo-unsupervised-repair human-ifo-broad-representation human-ifo-gate-b human-ifo-gate-c-calibrate human-ifo-gate-c human-ifo-transition-style human-ifo-encoder-rebind global-challenge-curriculum global-observable-factor-probe global-observable-aux-train human-ifo-contract-check human-ifo-gate-a
+human-ifo-cohort-template:
+	$(RUN_PYTHON) -m hok_agent human-ifo-cohort-template --output "$(HUMAN_IFO_COHORT)"
+
+human-ifo-cohort-propose: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-cohort-propose --video-cohort "$(GLOBAL_AGENT_VIDEO_COHORT)" --output-dir "$(HUMAN_IFO_PROPOSAL)"
+
+human-ifo-unsupervised-precheck: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-unsupervised-precheck --dataset-root "$(GLOBAL_AGENT_DATASET)" --checkpoint "$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors" --video-cohort "$(GLOBAL_AGENT_VIDEO_COHORT)" --proposal "$(HUMAN_IFO_PROPOSAL)/proposal.json" --output-dir "$(HUMAN_IFO_PRECHECK)" --device cuda
+
+human-ifo-unsupervised-repair: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-unsupervised-repair --dataset-root "$(GLOBAL_AGENT_DATASET)" --checkpoint "$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors" --video-cohort "$(GLOBAL_AGENT_VIDEO_COHORT)" --proposal "$(HUMAN_IFO_PROPOSAL)/proposal.json" --output-dir "$(HUMAN_IFO_REPAIR)" --device cuda
+
+human-ifo-broad-representation: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-broad-representation --dataset-root "$(GLOBAL_AGENT_DATASET)" --checkpoint "$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors" --video-cohort "$(GLOBAL_AGENT_VIDEO_COHORT)" --output-dir "$(HUMAN_IFO_BROAD)" --device cuda
+
+human-ifo-gate-b: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-gate-b --dataset-root "$(GLOBAL_AGENT_DATASET)" --shared-checkpoint "$(HUMAN_IFO_BROAD)/shared.safetensors" --acceptance "$(HUMAN_IFO_ACCEPTANCE)" --output-dir "$(HUMAN_IFO_GATE_B)" --device cuda
+
+human-ifo-gate-c: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-gate-c --video-cohort "$(GLOBAL_AGENT_VIDEO_COHORT)" --shared-checkpoint "$(HUMAN_IFO_BROAD)/shared.safetensors" --broad-acceptance "$(HUMAN_IFO_ACCEPTANCE)" --inverse-checkpoint "$(HUMAN_IFO_GATE_B)/inverse.safetensors" --gate-b-acceptance "$(HUMAN_IFO_GATE_B_ACCEPTANCE)" --output-dir "$(HUMAN_IFO_GATE_C)" --device cuda
+
+human-ifo-gate-c-calibrate: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-gate-c-calibrate --dataset-root "$(GLOBAL_AGENT_DATASET)" --shared-checkpoint "$(HUMAN_IFO_BROAD)/shared.safetensors" --broad-acceptance "$(HUMAN_IFO_ACCEPTANCE)" --inverse-checkpoint "$(HUMAN_IFO_GATE_B)/inverse.safetensors" --gate-b-acceptance "$(HUMAN_IFO_GATE_B_ACCEPTANCE)" --output-dir "$(HUMAN_IFO_GATE_C_CALIBRATION)" --device cuda
+
+human-ifo-transition-style: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-transition-style --dataset-root "$(GLOBAL_AGENT_DATASET)" --video-cohort "$(GLOBAL_AGENT_VIDEO_COHORT)" --shared-checkpoint "$(HUMAN_IFO_BROAD)/shared.safetensors" --broad-acceptance "$(HUMAN_IFO_ACCEPTANCE)" --contract "$(HUMAN_IFO_STYLE_CONTRACT)" --output-dir "$(HUMAN_IFO_STYLE)" --device cuda
+
+human-ifo-encoder-rebind: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-encoder-rebind --dataset-root "$(GLOBAL_AGENT_DATASET)" --shared-checkpoint "$(HUMAN_IFO_BROAD)/shared.safetensors" --broad-acceptance "$(HUMAN_IFO_ACCEPTANCE)" --dagger-checkpoint "$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors" --output-dir "$(HUMAN_IFO_REBIND)" --device cuda
+
+global-challenge-curriculum: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent global-challenge-curriculum --dataset-root "$(GLOBAL_AGENT_DATASET)" --dagger-checkpoint "$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors" --contract "$(GLOBAL_CHALLENGE_CURRICULUM_CONTRACT)" --output-dir "$(GLOBAL_CHALLENGE_CURRICULUM)" --device cuda
+
+global-observable-factor-probe: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent global-observable-factor-probe --dagger-checkpoint "$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors" --output-dir "$(GLOBAL_OBSERVABLE_PROBE)" --device cuda
+
+global-observable-aux-train: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent global-observable-aux-train --dataset-root "$(GLOBAL_AGENT_DATASET)" --dagger-checkpoint "$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors" --probe-report "$(GLOBAL_OBSERVABLE_PROBE)/report.json" --output-dir "$(GLOBAL_OBSERVABLE_AUX)" --device cuda
+
+human-ifo-contract-check: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-contract-check --dataset-root "$(GLOBAL_AGENT_DATASET)" --checkpoint "$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors" --video-cohort "$(GLOBAL_AGENT_VIDEO_COHORT)" --cohort "$(HUMAN_IFO_COHORT)" --contract "$(HUMAN_IFO_CONTRACT)"
+
+human-ifo-gate-a: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent human-ifo-gate-a --dataset-root "$(GLOBAL_AGENT_DATASET)" --checkpoint "$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors" --video-cohort "$(GLOBAL_AGENT_VIDEO_COHORT)" --cohort "$(HUMAN_IFO_COHORT)" --contract "$(HUMAN_IFO_CONTRACT)" --output-dir "$(HUMAN_IFO_RUN)" --device cuda
 
 global-agent-stage-1b:
 	$(RUN_PYTHON) -m hok_agent global-agent-evaluate --episodes 20 --seed 17

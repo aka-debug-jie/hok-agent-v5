@@ -1,0 +1,18 @@
+{
+  "schema_version": "hok-agent-global-challenge-curriculum-v1",
+  "seed": 0,
+  "train_variants_per_family": 8,
+  "holdout_variants_per_family": 4,
+  "curriculum_repeat": 4,
+  "epochs": 3,
+  "batch_size": 32,
+  "learning_rate": 0.0005,
+  "scene_loss_weight": 0.25,
+  "dagger_distillation_weight": 1.0,
+  "minimum_canonical_challenge_passes": 4,
+  "minimum_parameterized_holdout_fraction": 0.6,
+  "maximum_stuck_regression": 0.0,
+  "human_video_used": false,
+  "device_input_allowed": false,
+  "contract_sha256": "709c6fc259a26babe2adde88dd59558bc7ab02f73781614b497e915fadbe9059"
+}

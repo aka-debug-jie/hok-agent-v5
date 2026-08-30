@@ -17,11 +17,23 @@
   inverse macro dynamics only from GlobalArena truth, pseudolabel only video-train/video-dev, and
   fit one seed-0 Human-BC model with frozen-Dagger distillation. It is the only active learning
   repair; scenario cards are diagnostic-only.
-  H0-H4 cannot capture from or send input to a phone; H5 is optional and simulator-only.
+  Gate A-D cannot capture from or send input to a phone. Human-dev is diagnostics-only and must be
+  mechanically excluded from Human-BC; H5 is not planned and remains simulator-only.
+  Gate A reads exactly one Git-ignored local cohort manifest that binds 20 train and 5 dev anonymous
+  session hashes to one declared hero, role, and mode; missing, mixed, or unqualified rows stop
+  before any selected training frame is opened.
 - Global Agent work has a hard WIP limit: one global feature task plus one highest-frequency
   blocking failure. Every active experiment must name the targeted lexicographic episode metric:
   safety, non-timeout terminal, tower progress, stuck time, fallback rate, or win rate. Local F1
   alone is diagnostic and never opens a new route.
+- The parameterized challenge curriculum is frozen after two bounded simulator-only candidates.
+  One improved canonical cards while regressing complete episodes; the conservative repair removed
+  the card gain and still failed disjoint parameter holdout. Do not retune curriculum weights or
+  train on the fixed six cards; the original Dagger checkpoint remains selected.
+- The observable-factor probe and its single authorized auxiliary representation update are frozen.
+  The probe exposed missing health/base/distance factors; layer4/project fine-tuning then regressed
+  full episodes to 12/20 and did not improve challenge coverage. Do not add another auxiliary run,
+  unfreeze more layers, or tune factor weights. The original Dagger checkpoint is permanent for v1.
 - Stage 6A is an explicitly authorized, zero-control Global Agent Shadow surface governed by
   `docs/GLOBAL_AGENT_V1_SHADOW_PROTOCOL.md`. It may bind the promoted DAgger model to an attested
   foreground self-built App and explicit V4L2 RGB node, but may only write candidate logs with
