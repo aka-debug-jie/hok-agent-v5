@@ -34,6 +34,47 @@ def _write_identity(tmp_path: Path, monkeypatch) -> str:
     return digest
 
 
+def test_initialize_mobile_build_identity_reads_only_current_foreground(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "mobile_testbed_identity.local.json"
+    calls: list[tuple[str, ...]] = []
+
+    def adb(serial: str, *arguments: str, text: bool = False) -> str | bytes:
+        del serial
+        calls.append(arguments)
+        values: dict[tuple[str, ...], str] = {
+            ("get-state",): "device\n",
+            ("shell", "dumpsys", "window", "displays"): (
+                "mCurrentFocus=Window{a org.example.owner.testbed/.MainActivity}\n"
+            ),
+            ("shell", "dumpsys", "package", TEST_PACKAGE): (
+                "versionCode=7\nversionName=0.7.0\nsignatures:[deadbeef]\n"
+            ),
+            ("shell", "pm", "path", TEST_PACKAGE): "package:/data/app/pkg/base.apk\n",
+            ("shell", "sha256sum", "/data/app/pkg/base.apk"): "a" * 64 + "  base.apk\n",
+        }
+        return values[arguments] if text else values[arguments].encode()
+
+    monkeypatch.setattr(mobile_testbed, "MOBILE_BUILD_IDENTITY_DEFAULT_PATH", output)
+    monkeypatch.setattr(mobile_testbed, "_run_adb", adb)
+    result = mobile_testbed.initialize_mobile_build_identity(
+        "ABC123", owner_attested_self_built=True
+    )
+    assert result["status"] == "PASSED"
+    assert result["input_commands_sent"] == 0
+    assert output.stat().st_mode & 0o777 == 0o600
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["package"] == TEST_PACKAGE
+    assert payload["owner_attested_self_built"] is True
+    assert all("input" not in call for call in calls)
+
+
+def test_initialize_mobile_build_identity_requires_owner_attestation() -> None:
+    with pytest.raises(mobile_testbed.MobileTestbedError, match="owner attestation"):
+        mobile_testbed.initialize_mobile_build_identity("ABC123", owner_attested_self_built=False)
+
+
 def _write_layout(tmp_path: Path, *, complete: bool = True) -> Path:
     path = tmp_path / ("layout.json" if complete else "partial-layout.json")
     path.write_text(

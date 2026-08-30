@@ -1,0 +1,21 @@
+{
+  "cards": [
+    {"card_id": "farm_lane", "intent": "FARM_LANE", "minimum_stable_seconds": 8, "target_zone": "MID_LANE"},
+    {"card_id": "push_structure", "intent": "PUSH_STRUCTURE", "minimum_stable_seconds": 8, "target_zone": "ENEMY_BASE"},
+    {"card_id": "engage", "intent": "ENGAGE", "minimum_stable_seconds": 8, "target_zone": "HOLD_CURRENT_ZONE"},
+    {"card_id": "disengage", "intent": "DISENGAGE", "minimum_stable_seconds": 8, "target_zone": "OWN_BASE"},
+    {"card_id": "recall", "intent": "RECALL", "minimum_stable_seconds": 8, "target_zone": "OWN_BASE"}
+  ],
+  "contract_sha256": "b049858561fd0a340123e0ad9907702fa3945c2ac2daa3020cbcb0e22a4eccab",
+  "dev_episodes_per_card": 4,
+  "device_input_allowed": false,
+  "episodes_per_card": 20,
+  "human_frame_labels_used": false,
+  "raw_video_persisted": false,
+  "runtime_app_state_input": false,
+  "sample_hz": 5,
+  "schema_version": "hok-agent-global-scenario-cards-v1",
+  "source_paths_persisted": false,
+  "train_episodes_per_card": 16,
+  "window_frames": 16
+}

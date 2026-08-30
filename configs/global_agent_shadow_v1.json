@@ -1,0 +1,17 @@
+{
+  "schema_version": "hok-agent-global-shadow-config-v1",
+  "sample_hz": 5,
+  "decision_hz": 2,
+  "window_frames": 16,
+  "minimum_confidence": 0.55,
+  "minimum_command_hold_ms": 1500,
+  "maximum_frame_age_ms": 500,
+  "smoke_seconds": 60,
+  "formal_seconds": 600,
+  "minimum_cycle_coverage": 0.95,
+  "maximum_p95_end_to_end_ms": 500,
+  "read_only_shadow_allowed": true,
+  "control_output": false,
+  "device_input_allowed": false,
+  "online_learning_allowed": false
+}

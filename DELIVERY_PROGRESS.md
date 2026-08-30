@@ -18,7 +18,8 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Global Agent v1 | `HOLDOUT_PASSED_CHALLENGE_BLOCKED`: rule 19/20, BC 7/10, DAgger 9/10, fresh holdout 18/20 | Student challenge pack 2/6 blocks Shadow and mobile input |
+| Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
+| Human IfO Bridge v1 | `PROTOCOL_READY`: Human-video temporal imitation replaces scenario-card training as the active repair | H0-H4 are offline-only; H5 is optional; phone input remains closed |
 | V1/V2/V3 | Frozen regression baselines | No schema or identity changes |
 | V4 | Offline video and explicit V4L2 read-only inference | No control output |
 | V5 | Zero-label real-video adaptation pipeline implemented | Non-promoting without frozen local evidence |
@@ -171,18 +172,18 @@ boundary findings, and no checked-in large-data or mobile-private artifacts.
 
 ## Current limitation
 
-The active objective is now Global Agent v1: one fixed hero, complete simulator episodes,
-structured rule-teacher labels, RGB macro intent/zone imitation, simulator DAgger, and only then
-mobile Shadow. Earlier T8 and operation-policy results remain evidence and reusable execution
-components, not the active learning roadmap.
+The active objective is Human IfO Bridge v1: learn a shared temporal representation from human and
+simulator videos, train inverse macro dynamics from GlobalArena truth, pseudolabel human transitions,
+and fit Human-BC while retaining the frozen DAgger complete-episode behavior. Earlier Global Agent,
+T8, and operation-policy results remain evidence and reusable components, not parallel routes.
 
 ## Global Agent execution state
 
 ```text
-CURRENT GOAL: Preserve the failed six-state student challenge evidence
-BLOCKING FAILURE: Selected RGB student passes only 2/6 challenge states
-NEXT ACCEPTANCE COMMAND: global-agent-challenge --checkpoint <promoted-dagger> ...
-DO NOT WORK ON: second DAgger, PPO, jungle, objectives, multi-agent, phone Shadow or input
+CURRENT GOAL: Implement Human IfO Bridge v1 H0-H1
+BLOCKING FAILURE: Human-video macro output collapses without action observations
+NEXT ACCEPTANCE COMMAND: Human/Sim shared-representation contract check
+DO NOT WORK ON: scenario-card training, second DAgger, early PPO, 10m Shadow or phone input
 ```
 
 The episode score remains lexicographic: safety violations, non-timeout terminal, tower progress,
@@ -193,8 +194,29 @@ raised mean tower damage from `11.1` to `12.0`, and reduced fallback from `0.082
 The video adapter improved unlabeled video-dev consistency from `0.01581` to `0.00780`, but reduced
 simulator terminals `9/10→8/10`; strict promotion rejects it and keeps DAgger. Fresh holdout seeds
 selected DAgger (`18/20`) over adapted (`17/20`). Its six-state student challenge passes only 2/6,
-so Shadow remains closed. The failed adapter candidates, challenge reports, and the DAgger report
-missing tower-damage comparison remain preserved evidence.
+so input remains closed. The separately authorized 60-second zero-control Shadow completed 114/114
+cycles at p95 end-to-end latency 37.2 ms, with zero hard stops and zero input, but ran on a paused
+screen and emitted only `DISENGAGE/OWN_BASE`; it validates transport stability only and is
+semantically unevaluable. The failed adapter
+candidates, challenge reports, and the DAgger report missing tower-damage comparison remain
+preserved evidence.
+
+The following active-scene diagnostic completed 114/114 cycles at p95 end-to-end latency 33.1 ms,
+with zero hard stops and zero input. Its 114 frame hashes were all distinct, proving a visually
+dynamic source, but all candidates still remained `DISENGAGE/OWN_BASE`. It therefore passes runtime
+safety only; candidate diversity was not demonstrated. The report does not claim a verified
+real-video semantic error, and it does not admit threshold changes, retraining, a 10-minute Shadow,
+or input.
+
+The single permitted geometry repair cropped the locally configured main view, minimap, and HUD
+before model resizing. It again completed 114/114 zero-input cycles at p95 32.9 ms and again emitted
+only `DISENGAGE/OWN_BASE`. This excludes the previous whole-screen resize path as a sufficient
+explanation and closes further preprocessing variants in this lineage.
+
+The frozen training labels are not retreat-dominated, while both video-dev replay and mobile Shadow
+are. The remaining blocker is cross-domain imitation from action-free human observations, not
+device transport, layout geometry, or a retriable threshold. Human IfO Bridge v1 replaces the
+scenario-card training proposal; its first four stages remain offline and cannot open device input.
 
 The project demonstrates reproducible RGB policy research in project-owned PixelArena and
 read-only/strictly bounded mobile-testbed infrastructure. It does not establish commercial-game
