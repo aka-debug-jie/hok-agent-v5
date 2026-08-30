@@ -5,17 +5,27 @@
 
 ## Active route
 
-- Global Agent v1 is the only active learning route and is governed by
+- Global Agent v1 is the frozen simulator foundation and is governed by
   `docs/GLOBAL_AGENT_V1_PROTOCOL.md`. A structured simulator rule teacher must first complete full
   games and label only `intent_id`, `target_zone_id`, and an auxiliary `scene_id`. The RGB student
   receives main/minimap/HUD sequences only. Target-zone navigation, combat modes, purchase, hero
   profiles, layout adaptation, and safety remain deterministic execution modules. Behavior
   cloning precedes simulator DAgger; PPO and mobile control remain blocked by complete-episode
   gates.
+- Human IfO Bridge v1 is the active successor repair governed by
+  `docs/HUMAN_IFO_V1_PROTOCOL.md`. It may learn a shared Human/Sim temporal representation, train
+  inverse macro dynamics only from GlobalArena truth, pseudolabel only video-train/video-dev, and
+  fit one seed-0 Human-BC model with frozen-Dagger distillation. It is the only active learning
+  repair; scenario cards are diagnostic-only.
+  H0-H4 cannot capture from or send input to a phone; H5 is optional and simulator-only.
 - Global Agent work has a hard WIP limit: one global feature task plus one highest-frequency
   blocking failure. Every active experiment must name the targeted lexicographic episode metric:
   safety, non-timeout terminal, tower progress, stuck time, fallback rate, or win rate. Local F1
   alone is diagnostic and never opens a new route.
+- Stage 6A is an explicitly authorized, zero-control Global Agent Shadow surface governed by
+  `docs/GLOBAL_AGENT_V1_SHADOW_PROTOCOL.md`. It may bind the promoted DAgger model to an attested
+  foreground self-built App and explicit V4L2 RGB node, but may only write candidate logs with
+  `input_commands_sent=0`. Challenge-pack failure continues to block every input stage.
 
 - V4: read a privacy-reviewed local recording or an explicitly selected Linux V4L2 UVC
   capture node and emit host-side JSON/terminal hypotheses. The separately bounded
@@ -208,8 +218,11 @@
 - Torch/torchvision/safetensors are allowed only in `bc.py`, `pixel.py`, `alignment.py`,
   `temporal.py`, `v6_zero.py`, `rich_pixel.py`, `t8.py`, `t8_v3.py`, `t8_v4.py`, `t8_v5.py`,
   `t8_basic_mvp.py`, `t8_shadow.py`, `operation_policy.py`, and their
-  focused tests, plus `global_policy.py` and `test_global_agent.py` for the offline Global Agent
-  BC, single DAgger round, video adaptation, and zero-control replay.
+  focused tests, plus `global_policy.py`, `human_ifo.py`, `human_inverse.py`, and their focused tests
+  for offline Global Agent BC, Human IfO, inverse macro dynamics, single DAgger round, video
+  adaptation, and zero-control replay.
+  `global_shadow.py` and `test_global_shadow.py` may use the same frozen Global Agent model only for
+  authorized zero-control Shadow; they may never add an input sender.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,
   `v5_data.py`, `mobile_testbed.py`, and focused tests.
 - No annotation UI is an active V5/V6 surface. The T8 calibration picker may use Tk only to pick

@@ -49,6 +49,7 @@ ALLOWED_TORCH_PATHS = {
     Path("src/hok_agent/combat_feature_cache.py"),
     Path("src/hok_agent/operation_policy.py"),
     Path("src/hok_agent/global_policy.py"),
+    Path("src/hok_agent/global_shadow.py"),
     Path("tests/test_bc.py"),
     Path("tests/test_pixel.py"),
     Path("tests/test_alignment.py"),
@@ -62,6 +63,7 @@ ALLOWED_TORCH_PATHS = {
     Path("tests/test_t8_basic_mvp.py"),
     Path("tests/test_operation_policy.py"),
     Path("tests/test_global_agent.py"),
+    Path("tests/test_global_shadow.py"),
 }
 ALLOWED_VISION_PATHS = {
     Path("src/hok_agent/pixel.py"),
@@ -78,6 +80,7 @@ ALLOWED_VISION_PATHS = {
     Path("src/hok_agent/combat_feature_cache.py"),
     Path("src/hok_agent/operation_policy.py"),
     Path("src/hok_agent/global_policy.py"),
+    Path("src/hok_agent/global_shadow.py"),
     Path("tests/test_pixel.py"),
     Path("tests/test_alignment.py"),
     Path("tests/test_temporal.py"),
@@ -90,6 +93,7 @@ ALLOWED_VISION_PATHS = {
     Path("tests/test_t8_basic_mvp.py"),
     Path("tests/test_operation_policy.py"),
     Path("tests/test_global_agent.py"),
+    Path("tests/test_global_shadow.py"),
 }
 ALLOWED_VIDEO_PATHS = {
     Path("src/hok_agent/shadow.py"),
@@ -98,10 +102,12 @@ ALLOWED_VIDEO_PATHS = {
     Path("src/hok_agent/pre_ingest.py"),
     Path("src/hok_agent/v5_data.py"),
     Path("src/hok_agent/mobile_testbed.py"),
+    Path("src/hok_agent/global_shadow.py"),
     Path("tests/test_shadow.py"),
     Path("tests/test_capture.py"),
     Path("tests/test_alignment.py"),
     Path("tests/test_mobile_testbed.py"),
+    Path("tests/test_global_shadow.py"),
 }
 ALLOWED_ANNOTATION_PATHS = {
     Path("src/hok_agent/alignment.py"),

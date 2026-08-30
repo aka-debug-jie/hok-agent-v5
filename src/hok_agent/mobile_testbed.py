@@ -24,6 +24,7 @@ from collections import Counter, deque
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, replace
+from datetime import date
 from pathlib import Path
 from queue import Empty, Queue
 from typing import Any, BinaryIO, TextIO, cast
@@ -1099,6 +1100,76 @@ def _mobile_build_identity() -> dict[str, object]:
     ):
         raise MobileTestbedError("frozen mobile build identity is invalid")
     return payload
+
+
+def _foreground_package(serial: str) -> str:
+    output = _run_adb(serial, "shell", "dumpsys", "window", "displays", text=True)
+    if not isinstance(output, str):
+        raise MobileTestbedError("test device foreground package is unavailable")
+    focus = re.search(r"mCurrentFocus=Window\{[^}]*\s([A-Za-z0-9._]+)/[^}]+\}", output)
+    if focus is None or not ANDROID_PACKAGE_RE.fullmatch(focus.group(1)):
+        raise MobileTestbedError("test device foreground package is unavailable")
+    return focus.group(1)
+
+
+def initialize_mobile_build_identity(
+    serial: str, *, owner_attested_self_built: bool, output_path: Path | None = None
+) -> dict[str, object]:
+    """Create the one local, Git-ignored identity record from the current authorized foreground App."""
+    if not owner_attested_self_built:
+        raise MobileTestbedError("owner attestation is required to initialize a mobile identity")
+    active_serial = _validate_serial(serial)
+    package = _foreground_package(active_serial)
+    package_dump = _run_adb(active_serial, "shell", "dumpsys", "package", package, text=True)
+    if not isinstance(package_dump, str):
+        raise MobileTestbedError("installed mobile build identity is unavailable")
+    version_code = re.search(r"\bversionCode=(\d+)\b", package_dump)
+    version_name = re.search(r"\bversionName=([^\s]+)", package_dump)
+    signatures = re.search(r"signatures:\[([^\]]+)\]", package_dump)
+    if version_code is None or version_name is None or signatures is None:
+        raise MobileTestbedError("installed mobile build identity is incomplete")
+    signature_ids = sorted(item.strip().lower() for item in signatures.group(1).split(","))
+    if not signature_ids or not all(re.fullmatch(r"[0-9a-f]+", item) for item in signature_ids):
+        raise MobileTestbedError("installed mobile signature identity is invalid")
+    apk_paths = _run_adb(active_serial, "shell", "pm", "path", package, text=True)
+    if not isinstance(apk_paths, str):
+        raise MobileTestbedError("installed base APK path is unavailable")
+    candidates = [line.removeprefix("package:") for line in apk_paths.splitlines()]
+    base_apk = next((path for path in candidates if path.endswith("/base.apk")), None)
+    if base_apk is None:
+        raise MobileTestbedError("installed base APK path is unavailable")
+    apk_digest = _run_adb(active_serial, "shell", "sha256sum", base_apk, text=True)
+    match = re.match(r"\s*([0-9a-f]{64})\s+", apk_digest) if isinstance(apk_digest, str) else None
+    if match is None:
+        raise MobileTestbedError("installed base APK hash is unavailable")
+    record: dict[str, object] = {
+        "schema_version": MOBILE_BUILD_IDENTITY_SCHEMA,
+        "package": package,
+        "version_code": int(version_code.group(1)),
+        "version_name": version_name.group(1),
+        "signature_ids": signature_ids,
+        "base_apk_sha256": match.group(1),
+        "owner_attested_self_built": True,
+        "attested_date": date.today().isoformat(),
+    }
+    record["identity_sha256"] = hashlib.sha256(
+        json.dumps(record, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    output = MOBILE_BUILD_IDENTITY_DEFAULT_PATH if output_path is None else output_path
+    if output != MOBILE_BUILD_IDENTITY_DEFAULT_PATH or output.exists() or output.is_symlink():
+        raise MobileTestbedError("mobile build identity output is unavailable")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
+    output.chmod(0o600)
+    return {
+        "status": "PASSED",
+        "schema_version": "hok-agent-mobile-build-identity-init-v1",
+        "identity_sha256": record["identity_sha256"],
+        "owner_attested_self_built": True,
+        "input_commands_sent": 0,
+        "device_input_allowed": False,
+    }
 
 
 def _verify_mobile_build_identity(serial: str, identity: dict[str, object] | None = None) -> str:

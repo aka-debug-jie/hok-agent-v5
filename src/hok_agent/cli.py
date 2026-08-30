@@ -94,6 +94,12 @@ def _parser() -> argparse.ArgumentParser:
     mobile.add_argument("--stream-fps", type=int, default=30)
     mobile.add_argument("--enable-input", action="store_true")
     mobile.add_argument("--max-actions", type=int, default=0)
+    mobile_identity = commands.add_parser(
+        "mobile-init-build-identity",
+        help="create local identity from the current self-built foreground App",
+    )
+    mobile_identity.add_argument("--serial", required=True)
+    mobile_identity.add_argument("--owner-attested-self-built", action="store_true")
     demonstrate = commands.add_parser(
         "mobile-demonstrate",
         help="record keyboard-issued factorized actions for the owner-authorized test app",
@@ -1035,6 +1041,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     global_evaluate.add_argument("--episodes", type=int, required=True)
     global_evaluate.add_argument("--seed", type=int, required=True)
+    global_scenario_contract = commands.add_parser(
+        "global-agent-scenario-contract-check",
+        help="verify the zero-manual-label Global Agent scenario-card contract",
+    )
+    global_scenario_contract.add_argument(
+        "--contract", type=Path, default=Path("configs/global_agent_scenario_cards_v1.json")
+    )
     global_materialize = commands.add_parser(
         "global-agent-materialize", help="materialize the frozen 40/10 Global Agent pilot"
     )
@@ -1092,6 +1105,16 @@ def _parser() -> argparse.ArgumentParser:
     global_challenge.add_argument("--checkpoint", type=Path, required=True)
     global_challenge.add_argument("--output-dir", type=Path, required=True)
     global_challenge.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    global_shadow = commands.add_parser(
+        "global-agent-shadow", help="run one zero-control Global Agent V4L2 Shadow session"
+    )
+    global_shadow.add_argument("--serial", required=True)
+    global_shadow.add_argument("--video-node", type=Path, required=True)
+    global_shadow.add_argument("--checkpoint", type=Path, required=True)
+    global_shadow.add_argument("--output-dir", type=Path, required=True)
+    global_shadow.add_argument("--run-seconds", type=int, choices=(60, 600), required=True)
+    global_shadow.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    global_shadow.add_argument("--observation-rois", type=Path)
     return parser
 
 
@@ -1170,6 +1193,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 capture_mode=args.capture_mode,
                 video_node=args.video_node,
                 stream_fps=args.stream_fps,
+            )
+        elif args.command == "mobile-init-build-identity":
+            from hok_agent.mobile_testbed import initialize_mobile_build_identity
+
+            result = initialize_mobile_build_identity(
+                args.serial,
+                owner_attested_self_built=args.owner_attested_self_built,
             )
         elif args.command == "mobile-demonstrate":
             from hok_agent.mobile_testbed import (
@@ -2396,6 +2426,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             from hok_agent.global_policy import materialize_global_dataset
 
             result = materialize_global_dataset(args.output_dir)
+        elif args.command == "global-agent-scenario-contract-check":
+            from hok_agent.global_scenario_cards import verify_scenario_card_contract
+
+            result = verify_scenario_card_contract(args.contract)
         elif args.command == "global-agent-train":
             if args.device == "cuda":
                 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -2463,6 +2497,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.checkpoint,
                 args.output_dir,
                 device_name=args.device,
+            )
+        elif args.command == "global-agent-shadow":
+            from hok_agent.global_shadow import run_global_shadow
+
+            result = run_global_shadow(
+                serial=args.serial,
+                video_node=args.video_node,
+                checkpoint=args.checkpoint,
+                output_dir=args.output_dir,
+                run_seconds=args.run_seconds,
+                device_name=args.device,
+                observation_rois=args.observation_rois,
             )
         else:
             result = check_project()

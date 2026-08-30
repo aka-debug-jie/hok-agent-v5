@@ -1,0 +1,11 @@
+{
+  "schema_version": "hok-agent-global-shadow-authorization-v1",
+  "offline_evidence_commit": "d4715aedbb3146e7ee017a1916f0cc641bc4fa2c",
+  "offline_evidence_sha256": "9ec2d580a83d49161bd2491ff9522c1a43a087a140adedf94322a845a5c00e0e",
+  "checkpoint_sha256": "c033264f83d1c667c4dff5f93dec02183535386cfcde1a527a60303647a3e39e",
+  "challenge_pack_disposition": "diagnostic_only_not_shadow_blocking",
+  "read_only_shadow_allowed": true,
+  "control_output": false,
+  "device_input_allowed": false,
+  "online_learning_allowed": false
+}

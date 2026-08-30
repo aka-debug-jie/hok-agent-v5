@@ -8,7 +8,9 @@
 → 完整episode数据与宏观标签
 → RGB高层意图模仿学习
 → 一轮仿真内DAgger修正
-→ RGB域适配与预处理一致性
+→ Human IfO共享时序表征
+→ 仿真逆宏观动力学与人类视频伪标签
+→ Human-BC
 → 移动端只读Shadow
 → 受限单英雄完整对局
 ```
@@ -43,8 +45,11 @@ DO NOT WORK ON:
 | 4 | 唯一一轮DAgger | `PASSED`：765边界样本，9/10终局，平均塔伤提升，安全违规0 | 禁止第二轮 |
 | 5 | 103/23真实视频适配与离线回放 | `PASSED`：适配非退化，391行回放，输入0 | 等待独立Shadow审查 |
 | 5.5 | Fresh 20-seed holdout 与模型选择 | `PASSED`：Dagger 18/20，adapted 17/20；选择Dagger | 已冻结，禁止重训 |
-| 5.6 | 最小challenge pack | `FAILED`：学生仅通过2/6固定语义状态 | 阻止Shadow；不调阈值或重训 |
-| 6（未开放） | 移动端Shadow与受限完整对局 | 仅在challenge修复后再审查 | 当前禁止 |
+| 5.6 | 最小challenge pack | `FAILED`：学生仅通过2/6固定语义状态 | 阻止所有输入；不调阈值或重训 |
+| 6A（诊断） | 移动端只读Shadow | v1 与本地ROI v1.1均`RUNTIME_PASSED`；候选多样性未证明 | 10分钟与输入关闭 |
+| 6B（未开放） | 受限单英雄完整对局 | 必须另行修复challenge并审查 | 当前禁止 |
+| H0–H4（新主线） | Human IfO表征、逆动力学、伪标签与Human-BC | 逐级通过`docs/HUMAN_IFO_V1_PROTOCOL.md`门槛 | H4前不接手机 |
+| H5（可选） | latent transition imitation | 仅H4通过且仍需策略提升时启动 | 不作为主线阻塞项 |
 
 ## 固定模型边界
 
@@ -106,17 +111,22 @@ DAgger只收集学生低置信、与教师分歧、卡住和恢复状态，不�
 - 不再新增敌人可见、按钮就绪、目标可攻击等局部研究lineage。
 - 不训练直接点击坐标、瞄准坐标、目标单位或完整连招。
 - 不把现有手机动作日志直接用于离线强化学习。
-- 当前路线不运行PPO。
+- Human-BC通过前不运行PPO；H5仅为可跳过的仿真内提升。
 - 不在仿真完成前让移动端模型输出控制动作。
 - 不在单英雄闭环前做多英雄或五智能体协作。
 
 ## 当前状态
 
 ```text
-CURRENT GOAL: freeze five-stage Global Agent v1 evidence
-BLOCKING FAILURE: selected RGB student passes only 2/6 challenge states
-NEXT ACCEPTANCE COMMAND: global-agent-challenge --checkpoint <promoted-dagger> ...
-DO NOT WORK ON: second DAgger, PPO, jungle, objectives, multi-agent, phone Shadow or input
+CURRENT GOAL: implement Human IfO Bridge v1 H0-H1
+BLOCKING FAILURE: real-video macro outputs collapse despite dynamic RGB and ROI repair
+NEXT ACCEPTANCE COMMAND: Human/Sim shared-representation contract check
+DO NOT WORK ON: scenario-card training, preprocessing variants, second DAgger, early PPO, 10m Shadow or phone input
 ```
 
-下一阶段不是Shadow：必须先以独立合同解决challenge语义泛化失败。本文件没有开放手机输入。
+独立授权的活跃场景只读Shadow已验证传输与运行时安全，但未证明候选多样性。它没有开放
+手机输入。任何受限完整对局仍必须先以独立合同解决challenge语义泛化失败。
+
+当前修复主线是Human IfO Bridge v1：人类视频教行为分布，GlobalArena教状态转移对应的
+宏观动作，冻结DAgger保护完整终局能力。场景卡片仅保留为备用诊断。权威协议见
+`docs/HUMAN_IFO_V1_PROTOCOL.md`。

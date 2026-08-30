@@ -240,9 +240,16 @@ modules execute them. Its five offline stages are complete: the frozen GlobalAre
 is 19/20 (with 20/20 tower progress), seed-0 BC reached 7/10 pure-student simulator terminals, the
 only DAgger round reached 9/10, and the fresh 20-seed holdout selected DAgger at 18/20. The adapter
 improved video consistency but reduced simulator terminals, so it is not promoted. The selected
-student then passed only 2/6 fixed challenge states; mobile Shadow remains closed. No phone was
-opened by these stages.
+student then passed only 2/6 fixed challenge states. Two separately authorized zero-control mobile
+diagnostics passed runtime safety but produced constant `DISENGAGE/OWN_BASE`; the 10-minute Shadow
+and every input stage remain closed.
 See [docs/GLOBAL_AGENT_V1_PROTOCOL.md](docs/GLOBAL_AGENT_V1_PROTOCOL.md).
+
+The active repair is Human IfO Bridge v1. It uses complete human-match videos as observation-only
+behavior demonstrations, learns Human/Sim temporal representations, trains inverse macro dynamics
+from GlobalArena truth, and then fits Human-BC with frozen-Dagger distillation. Scenario cards are
+diagnostic-only; direct pixel-similarity reward and early reinforcement learning are not admitted.
+See [docs/HUMAN_IFO_V1_PROTOCOL.md](docs/HUMAN_IFO_V1_PROTOCOL.md).
 
 The reproducible entrypoints are `global-agent-evaluate`, `global-agent-materialize`,
 `global-agent-train`, `global-agent-dagger`, `global-agent-domain-adapt`, and
