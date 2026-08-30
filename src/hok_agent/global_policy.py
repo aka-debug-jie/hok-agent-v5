@@ -38,6 +38,7 @@ SAMPLE_HZ: Final = 5
 TRAIN_SEEDS: Final = tuple(range(1000, 1040))
 DEV_SEEDS: Final = tuple(range(2000, 2010))
 DAGGER_SEEDS: Final = tuple(range(3000, 3040))
+HOLDOUT_SEEDS: Final = tuple(range(4000, 4020))
 INTENT_INDEX = {value: index for index, value in enumerate(ENABLED_INTENTS)}
 ZONE_INDEX = {value: index for index, value in enumerate(ENABLED_ZONES)}
 SCENES: Final = (
@@ -944,6 +945,205 @@ def audit_existing_dagger(
     return acceptance
 
 
+def audit_adapter_promotion(
+    baseline_checkpoint: Path, adapter_dir: Path
+) -> dict[str, object]:
+    """Apply terminal-preserving promotion to an existing adapter report without retraining."""
+    root = _under_large_root(adapter_dir, output=False)
+    report_path = root / "report.json"
+    report = cast(dict[str, object], json.loads(report_path.read_text(encoding="utf-8")))
+    output = root / "promotion.json"
+    if output.exists():
+        raise GlobalPolicyError("adapter promotion audit already exists")
+    before = cast(dict[str, object], report.get("before_simulator"))
+    after = cast(dict[str, object], report.get("after_simulator"))
+    before_terminal = cast(int, before.get("non_timeout_terminals"))
+    after_terminal = cast(int, after.get("non_timeout_terminals"))
+    baseline_sha256 = _sha(baseline_checkpoint.read_bytes())
+    adapter_sha256 = _sha((root / "adapted.safetensors").read_bytes())
+    promotion_allowed = _adapter_promotion_allowed(before_terminal, after_terminal)
+    payload: dict[str, object] = {
+        "schema_version": "hok-agent-global-adapter-promotion-v1",
+        "status": "PASSED" if promotion_allowed else "REJECTED",
+        "rule": "simulator_terminal_must_equal_or_exceed_baseline",
+        "adapter_report_sha256": report.get("report_sha256"),
+        "baseline_checkpoint_sha256": baseline_sha256,
+        "adapter_checkpoint_sha256": adapter_sha256,
+        "baseline_terminals": before_terminal,
+        "adapter_terminals": after_terminal,
+        "promoted_checkpoint_sha256": baseline_sha256 if not promotion_allowed else adapter_sha256,
+        "promotion_allowed": promotion_allowed,
+        "device_input_allowed": False,
+    }
+    payload["audit_sha256"] = _sha(_canonical(payload).encode())
+    _write_json(output, payload)
+    return payload
+
+
+def _adapter_promotion_allowed(baseline_terminals: int, adapter_terminals: int) -> bool:
+    return adapter_terminals >= baseline_terminals
+
+
+def _holdout_eligible(summary: dict[str, object]) -> bool:
+    return (
+        cast(int, summary["non_timeout_terminals"]) >= 14
+        and cast(int, summary["tower_progress_episodes"]) >= 14
+        and cast(float, summary["mean_stuck_time_ratio"]) < 0.10
+        and cast(int, summary["safety_violations"]) == 0
+        and cast(int, summary["invalid_actions"]) == 0
+    )
+
+
+def _holdout_order(name: str, summary: dict[str, object]) -> tuple[object, ...]:
+    return (
+        -cast(int, summary["safety_violations"]),
+        cast(int, summary["non_timeout_terminals"]),
+        cast(int, summary["tower_progress_episodes"]),
+        -cast(float, summary["mean_stuck_time_ratio"]),
+        -cast(float, summary["mean_fallback_rate"]),
+        name,
+    )
+
+
+def evaluate_global_holdout(
+    dagger_checkpoint: Path,
+    adapted_checkpoint: Path,
+    output_dir: Path,
+    *,
+    device_name: str,
+) -> dict[str, object]:
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise GlobalPolicyError("CUDA requested but unavailable")
+    _config, config_sha256 = load_global_config()
+    output = _under_large_root(output_dir, output=True)
+    models = {
+        "dagger": load_global_model(dagger_checkpoint, device),
+        "adapted": load_global_model(adapted_checkpoint, device),
+    }
+    metadata = {name: item[1] for name, item in models.items()}
+    if metadata["dagger"]["manifest_sha256"] != metadata["adapted"]["manifest_sha256"]:
+        raise GlobalPolicyError("holdout checkpoints have incompatible dataset lineage")
+    candidates: dict[str, dict[str, object]] = {}
+    for name, (model, _meta) in models.items():
+        summary = _rollout_summary(
+            [
+                _student_rollout(model, seed, device, authority_fraction=1.0, collect=False)[0]
+                for seed in HOLDOUT_SEEDS
+            ]
+        )
+        candidates[name] = {
+            "checkpoint_sha256": _sha(
+                (dagger_checkpoint if name == "dagger" else adapted_checkpoint).read_bytes()
+            ),
+            "summary": summary,
+            "eligible": _holdout_eligible(summary),
+        }
+    eligible = [
+        (name, cast(dict[str, object], value["summary"]))
+        for name, value in candidates.items()
+        if value["eligible"] is True
+    ]
+    selected = max(eligible, key=lambda item: _holdout_order(*item))[0] if eligible else None
+    payload: dict[str, object] = {
+        "schema_version": "hok-agent-global-holdout-v1",
+        "status": "PASSED" if selected is not None else "FAILED",
+        "config_sha256": config_sha256,
+        "seeds": list(HOLDOUT_SEEDS),
+        "candidates": candidates,
+        "selected_model": selected,
+        "promotion_allowed": selected is not None,
+        "device_input_allowed": False,
+    }
+    payload["report_sha256"] = _sha(_canonical(payload).encode())
+    output.mkdir(parents=True)
+    _write_json(output / "report.json", payload)
+    return payload
+
+
+def _challenge_arena(name: str) -> tuple[GlobalArena, MacroIntent, TargetZone]:
+    arena = GlobalArena()
+    arena.reset(0)
+    if name == "low_health_far_from_base":
+        arena.state.blue.x, arena.state.blue.y, arena.state.blue.health = 8, 3, 2
+        return arena, MacroIntent.DISENGAGE, TargetZone.OWN_BASE
+    if name == "low_health_at_base":
+        arena.state.blue.health = 2
+        return arena, MacroIntent.RECALL, TargetZone.OWN_BASE
+    if name == "wave_in_tower_range":
+        arena.state.blue.x, arena.state.blue.y = 12, 3
+        arena.state.red.x, arena.state.red.y = 8, 3
+        return arena, MacroIntent.PUSH_STRUCTURE, TargetZone.ENEMY_BASE
+    if name == "enemy_hero_contact":
+        arena.state.blue.x, arena.state.blue.y = 7, 3
+        arena.state.red.x, arena.state.red.y = 8, 3
+        return arena, MacroIntent.ENGAGE, TargetZone.HOLD_CURRENT_ZONE
+    if name == "ordinary_lane_advance":
+        arena.state.blue.x, arena.state.blue.y = 2, 3
+        arena.state.red.x, arena.state.red.y = 12, 3
+        arena.state.blue.cooldowns["skill2"] = 1
+        arena.state.blue.cooldowns["skill3"] = 1
+        return arena, MacroIntent.FARM_LANE, TargetZone.MID_LANE
+    if name == "tower_destroyed_crystal_range":
+        arena.state.blue.x, arena.state.blue.y = 13, 3
+        arena.state.red.x, arena.state.red.y = 9, 3
+        arena.state.red_tower_health = 0
+        return arena, MacroIntent.PUSH_STRUCTURE, TargetZone.ENEMY_BASE
+    raise GlobalPolicyError(f"unknown challenge scenario: {name}")
+
+
+def run_global_challenges(
+    checkpoint_path: Path, output_dir: Path, *, device_name: str
+) -> dict[str, object]:
+    device = torch.device(device_name)
+    model, _metadata = load_global_model(checkpoint_path, device)
+    config, config_sha256 = load_global_config()
+    scenarios = cast(list[str], config["challenge_scenarios"])
+    output = _under_large_root(output_dir, output=True)
+    teacher = GlobalRuleTeacher()
+    rows: list[dict[str, object]] = []
+    for index, name in enumerate(scenarios):
+        arena, expected_intent, expected_zone = _challenge_arena(name)
+        observation = arena.observe("blue")
+        decision = teacher.decide("blue", arena.legal_actions("blue"), observation)
+        frame = render_views(observation, 70_000 + index)
+        frames: deque[tuple[np.ndarray, ...]] = deque([frame] * WINDOW_FRAMES, maxlen=WINDOW_FRAMES)
+        student = _predict_command(model, frames, device)
+        expected = (expected_intent.value, expected_zone.value)
+        rows.append(
+            {
+                "scenario": name,
+                "expected_intent": expected[0],
+                "expected_target_zone": expected[1],
+                "teacher_intent": decision.command.intent.value,
+                "teacher_target_zone": decision.command.target_zone.value,
+                "student_intent": student.intent.value,
+                "student_target_zone": student.target_zone.value,
+                "student_confidence": student.confidence,
+                "teacher_passed": (
+                    decision.command.intent.value,
+                    decision.command.target_zone.value,
+                )
+                == expected,
+                "student_passed": (student.intent.value, student.target_zone.value) == expected,
+            }
+        )
+    payload: dict[str, object] = {
+        "schema_version": "hok-agent-global-challenge-v1",
+        "status": "PASSED" if all(bool(row["student_passed"]) for row in rows) else "FAILED",
+        "config_sha256": config_sha256,
+        "checkpoint_sha256": _sha(checkpoint_path.read_bytes()),
+        "teacher_passed": all(bool(row["teacher_passed"]) for row in rows),
+        "student_passed": all(bool(row["student_passed"]) for row in rows),
+        "scenarios": rows,
+        "device_input_allowed": False,
+    }
+    payload["report_sha256"] = _sha(_canonical(payload).encode())
+    output.mkdir(parents=True)
+    _write_json(output / "report.json", payload)
+    return payload
+
+
 def _video_manifest(root: Path) -> tuple[dict[str, object], str]:
     resolved = _under_large_root(root, output=False)
     raw = cast(
@@ -1102,9 +1302,9 @@ def domain_adapt_global(
                 for seed in DEV_SEEDS
             ]
         )
-        non_regression = (
-            cast(int, rollout["non_timeout_terminals"])
-            >= cast(int, before_rollout["non_timeout_terminals"]) - 1
+        non_regression = _adapter_promotion_allowed(
+            cast(int, before_rollout["non_timeout_terminals"]),
+            cast(int, rollout["non_timeout_terminals"]),
         )
         candidates.append(
             {

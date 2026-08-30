@@ -1073,6 +1073,25 @@ def _parser() -> argparse.ArgumentParser:
     global_replay.add_argument("--video-cohort", type=Path, required=True)
     global_replay.add_argument("--output-dir", type=Path, required=True)
     global_replay.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    global_adapter_audit = commands.add_parser(
+        "global-agent-adapter-audit",
+        help="apply strict simulator-terminal promotion to an existing adapter report",
+    )
+    global_adapter_audit.add_argument("--baseline-checkpoint", type=Path, required=True)
+    global_adapter_audit.add_argument("--adapter-dir", type=Path, required=True)
+    global_holdout = commands.add_parser(
+        "global-agent-holdout", help="run the frozen 20-seed post-selection simulator holdout"
+    )
+    global_holdout.add_argument("--dagger-checkpoint", type=Path, required=True)
+    global_holdout.add_argument("--adapted-checkpoint", type=Path, required=True)
+    global_holdout.add_argument("--output-dir", type=Path, required=True)
+    global_holdout.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    global_challenge = commands.add_parser(
+        "global-agent-challenge", help="run fixed-state Global Agent strategy regressions"
+    )
+    global_challenge.add_argument("--checkpoint", type=Path, required=True)
+    global_challenge.add_argument("--output-dir", type=Path, required=True)
+    global_challenge.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     return parser
 
 
@@ -2421,6 +2440,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = replay_global_video(
                 args.checkpoint,
                 args.video_cohort,
+                args.output_dir,
+                device_name=args.device,
+            )
+        elif args.command == "global-agent-adapter-audit":
+            from hok_agent.global_policy import audit_adapter_promotion
+
+            result = audit_adapter_promotion(args.baseline_checkpoint, args.adapter_dir)
+        elif args.command == "global-agent-holdout":
+            from hok_agent.global_policy import evaluate_global_holdout
+
+            result = evaluate_global_holdout(
+                args.dagger_checkpoint,
+                args.adapted_checkpoint,
+                args.output_dir,
+                device_name=args.device,
+            )
+        elif args.command == "global-agent-challenge":
+            from hok_agent.global_policy import run_global_challenges
+
+            result = run_global_challenges(
+                args.checkpoint,
                 args.output_dir,
                 device_name=args.device,
             )

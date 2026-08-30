@@ -89,6 +89,9 @@ def load_global_config(path: Path = GLOBAL_CONFIG_PATH) -> tuple[dict[str, objec
         or raw.get("enabled_intents") != [value.value for value in ENABLED_INTENTS]
         or raw.get("enabled_target_zones") != [value.value for value in ENABLED_ZONES]
         or raw.get("middle_waypoints") != list(MID_WAYPOINTS)
+        or raw.get("holdout_seeds") != [4000, 4019]
+        or raw.get("adapter_terminal_promotion_rule")
+        != "must_equal_or_exceed_baseline"
         or raw.get("video_test_allowed") is not False
         or raw.get("mobile_capture_allowed") is not False
         or raw.get("device_input_allowed") is not False

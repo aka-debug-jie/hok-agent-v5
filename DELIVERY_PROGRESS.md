@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Global Agent v1 | `OFFLINE_GATES_PASSED`: rule 20/20, BC 7/10, DAgger 9/10, domain adapter and replay passed | Mobile remains closed pending a separate read-only Shadow review |
+| Global Agent v1 | `HOLDOUT_PASSED_CHALLENGE_BLOCKED`: rule 19/20, BC 7/10, DAgger 9/10, fresh holdout 18/20 | Student challenge pack 2/6 blocks Shadow and mobile input |
 | V1/V2/V3 | Frozen regression baselines | No schema or identity changes |
 | V4 | Offline video and explicit V4L2 read-only inference | No control output |
 | V5 | Zero-label real-video adaptation pipeline implemented | Non-promoting without frozen local evidence |
@@ -179,21 +179,22 @@ components, not the active learning roadmap.
 ## Global Agent execution state
 
 ```text
-CURRENT GOAL: Freeze the completed five-stage Global Agent v1 offline evidence
-BLOCKING FAILURE: None inside the five offline stages
-NEXT ACCEPTANCE COMMAND: make check
-DO NOT WORK ON: second DAgger, PPO, jungle, objectives, multi-agent, phone input
+CURRENT GOAL: Preserve the failed six-state student challenge evidence
+BLOCKING FAILURE: Selected RGB student passes only 2/6 challenge states
+NEXT ACCEPTANCE COMMAND: global-agent-challenge --checkpoint <promoted-dagger> ...
+DO NOT WORK ON: second DAgger, PPO, jungle, objectives, multi-agent, phone Shadow or input
 ```
 
 The episode score remains lexicographic: safety violations, non-timeout terminal, tower progress,
-stuck time, teacher fallback, win rate, then local metrics. Stage 1A passed; Stage 1B reached 20/20
-normal crystal terminals. The 40/10 dataset contains 3,276 rows. Seed-0 TCN achieved intent/zone
+stuck time, teacher fallback, win rate, then local metrics. Stage 1A passed; Stage 1B reached 19/20
+normal crystal terminals and 20/20 tower-progress episodes. The 40/10 dataset contains 3,276 rows. Seed-0 TCN achieved intent/zone
 macro-F1 `0.8465/0.7257` and 7/10 pure-student terminals. The only DAgger round reached 9/10,
 raised mean tower damage from `11.1` to `12.0`, and reduced fallback from `0.0828` to `0.0525`.
-The dev-selected video adapter preserved 8/10 simulator terminals and improved unlabeled video-dev
-consistency from `0.01581` to `0.00780`. Its 23-session offline replay produced 391 rows, zero
-constraint violations, 100% static-negative abstention, and zero device input. The earlier failed
-adapter candidate and the DAgger report missing tower-damage comparison remain preserved evidence.
+The video adapter improved unlabeled video-dev consistency from `0.01581` to `0.00780`, but reduced
+simulator terminals `9/10→8/10`; strict promotion rejects it and keeps DAgger. Fresh holdout seeds
+selected DAgger (`18/20`) over adapted (`17/20`). Its six-state student challenge passes only 2/6,
+so Shadow remains closed. The failed adapter candidates, challenge reports, and the DAgger report
+missing tower-damage comparison remain preserved evidence.
 
 The project demonstrates reproducible RGB policy research in project-owned PixelArena and
 read-only/strictly bounded mobile-testbed infrastructure. It does not establish commercial-game
