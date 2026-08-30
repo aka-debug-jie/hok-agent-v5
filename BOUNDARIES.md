@@ -130,6 +130,12 @@ input admission.
   evidence becomes a bounded hold then `wait`. Zero-input smoke precedes input smoke, and input
   smoke precedes four automatic five-minute pilot sessions. The route cannot load a movement model
   or open fusion Shadow before the frozen pilot gate passes.
+- Global Agent v1 may train only inside project-owned GlobalArena/Rich PixelArena until its
+  complete-episode behavior-cloning and DAgger gates pass. The structured teacher may generate
+  labels but never enter the RGB student input. Its learned outputs are limited to macro intent
+  and semantic target zone; exact movement, skills, purchase, layout, and safety remain
+  deterministic. PPO, mobile model input, multi-agent control, and commercial-client execution are
+  not admitted by the first contract.
 - Adaptive device layouts and hero profiles are local, Git-ignored control prerequisites. Layout
   calibration may run read-only; skill execution requires a configured hero profile, stable
   content box, per-group confidence, and identity-bound hash. Unknown heroes, unknown skill modes,
