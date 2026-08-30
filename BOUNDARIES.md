@@ -138,9 +138,11 @@ input admission.
   not admitted by the first contract.
 - Human IfO Bridge v1 may read only the frozen video-train/video-dev human episodes and
   GlobalArena-generated transitions. Human videos provide observations, never ground-truth actions;
-  inverse macro labels come only from simulator truth. H0-H4 are offline-only, video-test is
-  fail-closed, and the optional H5 transition-imitation stage runs only in GlobalArena. No Human IfO
-  stage authorizes mobile input.
+  its Git-ignored local cohort manifest may contain anonymous session hashes and eligibility metadata
+  only. `video-test`, mobile capture, Shadow, and every device-input surface remain closed in Gate A.
+  Inverse macro labels come only from simulator truth. Gate A-D are offline-only, human-dev is
+  diagnostics-only, video-test is fail-closed, and the not-planned H5 transition-imitation stage can
+  run only in GlobalArena after Gate D. No Human IfO stage authorizes mobile input.
 - Stage 6A may run a separately authorized, explicit-serial, V4L2-only Global Agent Shadow after
   its local build identity, foreground, display, promoted checkpoint, and public authorization hash
   all pass. It may emit macro candidate modes only; ADB input, scrcpy control, touch operations,

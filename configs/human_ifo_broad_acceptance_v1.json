@@ -1,0 +1,16 @@
+{
+  "schema_version": "hok-agent-human-ifo-broad-acceptance-v1",
+  "source_report_sha256": "20202d54868dd8f0e1cbb5a1b176e9868b599e31961e21ee8d2877cfcd960c49",
+  "shared_checkpoint_sha256": "a40d7fe1d83dbeef25ef94bdac6af5fc136148b3c05595edf04d59720759491d",
+  "original_human_auc_threshold": 0.7,
+  "engineering_human_auc_threshold": 0.68,
+  "observed_human_auc": 0.6814744801512287,
+  "observed_simulator_auc": 0.7847265625,
+  "maximum_nearest_scene_fraction": 0.6674757281553398,
+  "maximum_simulator_macro_f1_degradation": 0.0009776009443039912,
+  "semantic_identity_verified": false,
+  "gate_b_simulator_only_allowed": true,
+  "gate_c_allowed": false,
+  "device_input_allowed": false,
+  "contract_sha256": "462fd625df4ac29697c65077de830008f2f1034fe0aa0eb6410acd9163fa2e16"
+}

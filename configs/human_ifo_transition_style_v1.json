@@ -1,0 +1,17 @@
+{
+  "schema_version": "hok-agent-human-ifo-transition-style-v1",
+  "seed": 0,
+  "epochs": 10,
+  "batch_size": 256,
+  "learning_rate": 0.001,
+  "minimum_dev_auc": 0.55,
+  "maximum_dev_auc": 0.9,
+  "minimum_order_margin": 0.02,
+  "human_transition_reward_weight": 1.0,
+  "terminal_reward_weight": 0.5,
+  "structure_reward_weight": 0.2,
+  "stuck_penalty_weight": 0.2,
+  "dagger_distillation_weight": 0.5,
+  "mobile_input_allowed": false,
+  "contract_sha256": "7a4e7661009d27a7c91874a9b8ad81cd0d5ddf433bef7dcd43700f9d3f1144e5"
+}

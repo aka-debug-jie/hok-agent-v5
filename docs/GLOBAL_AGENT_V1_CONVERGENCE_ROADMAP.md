@@ -48,8 +48,11 @@ DO NOT WORK ON:
 | 5.6 | 最小challenge pack | `FAILED`：学生仅通过2/6固定语义状态 | 阻止所有输入；不调阈值或重训 |
 | 6A（诊断） | 移动端只读Shadow | v1 与本地ROI v1.1均`RUNTIME_PASSED`；候选多样性未证明 | 10分钟与输入关闭 |
 | 6B（未开放） | 受限单英雄完整对局 | 必须另行修复challenge并审查 | 当前禁止 |
-| H0–H4（新主线） | Human IfO表征、逆动力学、伪标签与Human-BC | 逐级通过`docs/HUMAN_IFO_V1_PROTOCOL.md`门槛 | H4前不接手机 |
-| H5（可选） | latent transition imitation | 仅H4通过且仍需策略提升时启动 | 不作为主线阻塞项 |
+| Gate A | 窄Human cohort与跨域共享表征 | 时序可学且Human→Sim邻域不坍缩 | 只允许一次表征修复 |
+| Gate B | 多horizon逆宏观动力学 | 真实transition gain；current-only不得胜出 | 否则停止IfO |
+| Gate C | 伪标签坍缩门 | 覆盖、类别、持续时间通过；dev不可训练 | 仅一次Sim calibration |
+| Gate D | Human-BC与只读验证 | Sim保持、challenge、真实候选多样性通过 | 60秒后才审查10分钟Shadow |
+| H5（非计划） | latent transition imitation | 仅Gate D通过仍有明确行为缺口 | 不作为主线阻塞项 |
 
 ## 固定模型边界
 
@@ -118,9 +121,9 @@ DAgger只收集学生低置信、与教师分歧、卡住和恢复状态，不�
 ## 当前状态
 
 ```text
-CURRENT GOAL: implement Human IfO Bridge v1 H0-H1
-BLOCKING FAILURE: real-video macro outputs collapse despite dynamic RGB and ROI repair
-NEXT ACCEPTANCE COMMAND: Human/Sim shared-representation contract check
+CURRENT GOAL: freeze Global Agent v1 model evidence
+BLOCKING FAILURE: key observable factors are weak, while the only authorized encoder update regresses full episodes to 12/20
+NEXT ACCEPTANCE COMMAND: none; frozen Dagger is the permanent Global Agent v1 policy
 DO NOT WORK ON: scenario-card training, preprocessing variants, second DAgger, early PPO, 10m Shadow or phone input
 ```
 

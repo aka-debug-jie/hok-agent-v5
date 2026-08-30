@@ -19,7 +19,9 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 | Route | Current result | Promotion boundary |
 |---|---|---|
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
-| Human IfO Bridge v1 | `PROTOCOL_READY`: Human-video temporal imitation replaces scenario-card training as the active repair | H0-H4 are offline-only; H5 is optional; phone input remains closed |
+| Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
+| Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
+| Human IfO Bridge v1 | `ENCODER_REBIND_NON_PROMOTED`: Human-adapted frozen encoder plus GlobalArena-only supervision matched Dagger at 18/20 terminals and 20/20 tower progress, but challenge stayed 2/6 and stuck rose 4.99%→5.69% | Candidate rejected; Human video is visual-adaptation evidence only, frozen Dagger remains selected, no Shadow or input |
 | V1/V2/V3 | Frozen regression baselines | No schema or identity changes |
 | V4 | Offline video and explicit V4L2 read-only inference | No control output |
 | V5 | Zero-label real-video adaptation pipeline implemented | Non-promoting without frozen local evidence |
@@ -180,9 +182,9 @@ T8, and operation-policy results remain evidence and reusable components, not pa
 ## Global Agent execution state
 
 ```text
-CURRENT GOAL: Implement Human IfO Bridge v1 H0-H1
-BLOCKING FAILURE: Human-video macro output collapses without action observations
-NEXT ACCEPTANCE COMMAND: Human/Sim shared-representation contract check
+CURRENT GOAL: Freeze Global Agent v1 model evidence
+BLOCKING FAILURE: observable health/distance factors are weak, but the only auxiliary encoder update destroys complete-episode performance
+NEXT ACCEPTANCE COMMAND: none; frozen Dagger is the permanent Global Agent v1 policy
 DO NOT WORK ON: scenario-card training, second DAgger, early PPO, 10m Shadow or phone input
 ```
 
@@ -216,7 +218,7 @@ explanation and closes further preprocessing variants in this lineage.
 The frozen training labels are not retreat-dominated, while both video-dev replay and mobile Shadow
 are. The remaining blocker is cross-domain imitation from action-free human observations, not
 device transport, layout geometry, or a retriable threshold. Human IfO Bridge v1 replaces the
-scenario-card training proposal; its first four stages remain offline and cannot open device input.
+scenario-card training proposal; Gate A-D remain offline and cannot open device input.
 
 The project demonstrates reproducible RGB policy research in project-owned PixelArena and
 read-only/strictly bounded mobile-testbed infrastructure. It does not establish commercial-game

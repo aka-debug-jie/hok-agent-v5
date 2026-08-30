@@ -1,0 +1,14 @@
+{
+  "schema_version": "hok-agent-human-ifo-encoder-rebind-v1",
+  "seed": 0,
+  "epochs": 4,
+  "batch_size": 32,
+  "learning_rate": 0.001,
+  "scene_loss_weight": 0.25,
+  "dagger_distillation_weight": 0.5,
+  "minimum_challenge_passes": 4,
+  "maximum_stuck_regression": 0.01,
+  "human_labels_allowed": false,
+  "device_input_allowed": false,
+  "contract_sha256": "244a28bdd0dede115e99460d4e00f23790e6e0e76f7eb29eb74e2581b3fb378b"
+}

@@ -50,6 +50,8 @@ ALLOWED_TORCH_PATHS = {
     Path("src/hok_agent/operation_policy.py"),
     Path("src/hok_agent/global_policy.py"),
     Path("src/hok_agent/global_shadow.py"),
+    Path("src/hok_agent/human_ifo.py"),
+    Path("src/hok_agent/human_inverse.py"),
     Path("tests/test_bc.py"),
     Path("tests/test_pixel.py"),
     Path("tests/test_alignment.py"),
@@ -64,6 +66,8 @@ ALLOWED_TORCH_PATHS = {
     Path("tests/test_operation_policy.py"),
     Path("tests/test_global_agent.py"),
     Path("tests/test_global_shadow.py"),
+    Path("tests/test_human_ifo.py"),
+    Path("tests/test_human_inverse.py"),
 }
 ALLOWED_VISION_PATHS = {
     Path("src/hok_agent/pixel.py"),
@@ -81,6 +85,8 @@ ALLOWED_VISION_PATHS = {
     Path("src/hok_agent/operation_policy.py"),
     Path("src/hok_agent/global_policy.py"),
     Path("src/hok_agent/global_shadow.py"),
+    Path("src/hok_agent/human_ifo.py"),
+    Path("src/hok_agent/human_inverse.py"),
     Path("tests/test_pixel.py"),
     Path("tests/test_alignment.py"),
     Path("tests/test_temporal.py"),
@@ -94,6 +100,8 @@ ALLOWED_VISION_PATHS = {
     Path("tests/test_operation_policy.py"),
     Path("tests/test_global_agent.py"),
     Path("tests/test_global_shadow.py"),
+    Path("tests/test_human_ifo.py"),
+    Path("tests/test_human_inverse.py"),
 }
 ALLOWED_VIDEO_PATHS = {
     Path("src/hok_agent/shadow.py"),

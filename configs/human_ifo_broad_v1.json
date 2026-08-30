@@ -1,0 +1,23 @@
+{
+  "schema_version": "hok-agent-human-ifo-broad-v1",
+  "sample_hz": 5,
+  "window_frames": 16,
+  "human_train_sessions": 103,
+  "human_dev_sessions": 23,
+  "windows_per_session": 4,
+  "epochs": 1,
+  "batch_size": 16,
+  "learning_rate": 0.00001,
+  "contrast_weight": 1.0,
+  "simulator_auxiliary_weight": 0.25,
+  "cross_domain_alignment_weight": 0.1,
+  "minimum_temporal_neighbor_auc": 0.7,
+  "maximum_simulator_macro_f1_degradation": 0.03,
+  "minimum_nearest_scene_count": 2,
+  "maximum_nearest_scene_fraction": 0.85,
+  "video_test_allowed": false,
+  "human_dev_training_allowed": false,
+  "human_labels_allowed": false,
+  "device_input_allowed": false,
+  "contract_sha256": "0f6afac0c4d8522476aa2f58dd64328d0711af83eb875cb2120bac9c51ad62fa"
+}
