@@ -1,0 +1,52 @@
+{
+  "schema_version": "hok-agent-global-offline-evidence-v1",
+  "implementation_base_commit_sha": "7552e4adbc5c4ec3152e9c330dbcbb185fe11202",
+  "config_sha256": "1b6f336f01c54afc8f80c1d12465ba117a4bc528c3faf493b7d9b0496e260ef9",
+  "dataset_manifest_sha256": "5f46380464d4dd0b479e754dbf9ef58fbef51dd1ec10698849a93ff5a327712f",
+  "rule_teacher": {
+    "frozen_seeds": [17, 36],
+    "non_timeout_terminals": 19,
+    "tower_progress_episodes": 20,
+    "safety_violations": 0,
+    "invalid_actions": 0
+  },
+  "behavior_cloning": {
+    "report_sha256": "0c3ffec99e77800b8ae727622bf6267ccb8c455da04452c6cff920818a538b4d",
+    "checkpoint_sha256": "88c2faed06d969d59809b9fc05a9affa066e5d8a5a6f46bbeb7bf69f29cb13e0",
+    "intent_macro_f1": 0.8464639174029724,
+    "zone_macro_f1": 0.7256706421332731,
+    "simulator_terminals": 7
+  },
+  "dagger": {
+    "acceptance_sha256": "5fac47c028330abba78a0ec42879941fb7965481c5c614fa8502e57b7043ee02",
+    "checkpoint_sha256": "c033264f83d1c667c4dff5f93dec02183535386cfcde1a527a60303647a3e39e",
+    "simulator_terminals": 9,
+    "mean_tower_damage": 12.0,
+    "mean_fallback_rate": 0.05245939072103055
+  },
+  "adapter": {
+    "report_sha256": "d3ae8a94a1a835b8968df1b70c2f1aae238de6fb0bb867de7e3c0d416c0f154c",
+    "promotion_audit_sha256": "f319db8d34164ba836949adc470e0b8f90d30c5bd6935f7dbc7254d8206324d9",
+    "checkpoint_sha256": "af7d37ec8fd53f32e4dd0359e53f3b6d64f7c4715a2263c52bf02ea8894f22a4",
+    "promotion_allowed": false
+  },
+  "fresh_holdout": {
+    "report_sha256": "f8d51e3b6d6551cf068b51e124d534e85c3adc858fdf8ff61f44d056800c293f",
+    "seeds": [4000, 4019],
+    "selected_model": "dagger",
+    "dagger_terminals": 18,
+    "adapted_terminals": 17
+  },
+  "challenge_pack": {
+    "report_sha256": "e90388595398a5479280429b90102b91a6406cd6c0f1f2eb6b2b1db68ba9013a",
+    "teacher_passed": true,
+    "student_passed": false,
+    "student_pass_count": 2,
+    "student_total": 6
+  },
+  "promoted_checkpoint_sha256": "c033264f83d1c667c4dff5f93dec02183535386cfcde1a527a60303647a3e39e",
+  "human_labels_used": false,
+  "video_test_opened": false,
+  "device_input_allowed": false,
+  "mobile_shadow_authorized": false
+}

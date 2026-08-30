@@ -37,12 +37,14 @@ DO NOT WORK ON:
 |---|---|---|---|
 | 0 | 冻结现有T8/Operation失败与通过证据 | 新旧lineage互不混用 | 不再扩展局部T8路线 |
 | 1A | First Full Game：中路单线规则闭环 | `PASSED`：seed 17 水晶终局，安全违规0 | 已关闭 |
-| 1B | 20局规则稳定性 | `PASSED`：20/20水晶终局，死亡恢复100%，卡住<10% | 已关闭 |
+| 1B | 20局规则稳定性 | `PASSED`：19/20水晶终局、20/20塔推进，死亡恢复100%，卡住8.97% | 已冻结精确回归 |
 | 2 | 固定40 train/10 dev完整episode | `PASSED`：3,276行，episode级split，无test | 已冻结manifest |
 | 3 | Seed-0 RGB宏观行为克隆 | `PASSED`：TCN优于time-only和shuffle，纯学生7/10终局 | 已冻结BC |
 | 4 | 唯一一轮DAgger | `PASSED`：765边界样本，9/10终局，平均塔伤提升，安全违规0 | 禁止第二轮 |
 | 5 | 103/23真实视频适配与离线回放 | `PASSED`：适配非退化，391行回放，输入0 | 等待独立Shadow审查 |
-| 6（未开放） | 移动端Shadow与受限完整对局 | 10分钟只读Shadow→三次10分钟受限运行→三个完整episode | 任一级失败立即停止 |
+| 5.5 | Fresh 20-seed holdout 与模型选择 | `PASSED`：Dagger 18/20，adapted 17/20；选择Dagger | 已冻结，禁止重训 |
+| 5.6 | 最小challenge pack | `FAILED`：学生仅通过2/6固定语义状态 | 阻止Shadow；不调阈值或重训 |
+| 6（未开放） | 移动端Shadow与受限完整对局 | 仅在challenge修复后再审查 | 当前禁止 |
 
 ## 固定模型边界
 
@@ -112,9 +114,9 @@ DAgger只收集学生低置信、与教师分歧、卡住和恢复状态，不�
 
 ```text
 CURRENT GOAL: freeze five-stage Global Agent v1 evidence
-BLOCKING FAILURE: none inside the five offline stages
-NEXT ACCEPTANCE COMMAND: make check
-DO NOT WORK ON: second DAgger, PPO, jungle, objectives, multi-agent, phone input
+BLOCKING FAILURE: selected RGB student passes only 2/6 challenge states
+NEXT ACCEPTANCE COMMAND: global-agent-challenge --checkpoint <promoted-dagger> ...
+DO NOT WORK ON: second DAgger, PPO, jungle, objectives, multi-agent, phone Shadow or input
 ```
 
-下一阶段如获授权，只能先制定十分钟零控制移动端Shadow合同；本文件没有开放手机输入。
+下一阶段不是Shadow：必须先以独立合同解决challenge语义泛化失败。本文件没有开放手机输入。

@@ -50,8 +50,9 @@ open another round. PPO is outside the current engineering route.
 
 ## Frozen five-stage result
 
-- Rule teacher: Stage 1A passed; Stage 1B reached 20/20 non-timeout crystal terminals with zero
-  safety or illegal-action events.
+- Rule teacher: Stage 1A passed; the frozen 20-seed GlobalArena regression is 19/20 non-timeout
+  crystal terminals, 20/20 tower progress, and zero safety or illegal-action events. Seed 26 is a
+  preserved timeout; the earlier 20/20 claim referred to the pre-GlobalArena low-level teacher.
 - Pilot data: 40 train and 10 dev episodes, 3,276 rows; manifest
   `5f46380464d4dd0b479e754dbf9ef58fbef51dd1ec10698849a93ff5a327712f`.
 - Seed-0 BC: TCN selected; dev intent macro-F1 `0.8465`, zone macro-F1 `0.7257`, and 7/10 pure
@@ -61,9 +62,14 @@ open another round. PPO is outside the current engineering route.
   report is preserved and a hash-bound read-only acceptance adds mean tower damage without
   retraining.
 - Video adaptation and replay: the first candidate failed simulator non-regression and remains
-  preserved. Dev-selected v2 passed on 103/23 sessions, with consistency `0.01581→0.00780` and
-  simulator terminals `9/10→8/10`. The 23-session offline replay emitted 391 candidate rows,
-  passed all deterministic limits and the static negative control, and sent zero input.
+  preserved. The v2 adapter improved consistency `0.01581→0.00780` but reduced simulator terminals
+  `9/10→8/10`; strict lexicographic promotion therefore rejects it and retains the DAgger checkpoint.
+  The 23-session offline replay emitted 391 candidate rows, passed all deterministic limits and the
+  static negative control, and sent zero input.
+- Fresh holdout: 20 untouched seeds selected DAgger over the adapted candidate (`18/20` versus
+  `17/20` terminals); both had zero safety/illegal actions and 20/20 tower progress.
+- Challenge pack: the deterministic teacher passes all six fixed states, but the selected RGB student
+  passes only 2/6. This is a blocking generalization failure; no mobile Shadow or input is authorized.
 
 ## Evaluation and mobile boundary
 

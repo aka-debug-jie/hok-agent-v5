@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 import torch
@@ -21,6 +22,10 @@ from hok_agent.global_policy import (
     GlobalMacroPolicy,
     GlobalPolicyError,
     GlobalWindowDataset,
+    _adapter_promotion_allowed,
+    _challenge_arena,
+    _holdout_eligible,
+    _holdout_order,
     _is_static_window,
     _selected_video_shards,
     load_global_manifest,
@@ -95,8 +100,8 @@ def test_stage_1a_seed_17_reaches_crystal_terminal() -> None:
 def test_stage_1b_twenty_seed_gate_passes() -> None:
     result = evaluate_teacher(20, 17)
     assert result["status"] == "PASSED"
-    assert result["non_timeout_terminals"] >= 16
-    assert result["tower_progress_episodes"] >= 14
+    assert result["non_timeout_terminals"] == 19
+    assert result["tower_progress_episodes"] == 20
     assert result["death_recovery_rate"] == 1.0
     assert result["stuck_time_ratio"] < 0.10
 
@@ -162,3 +167,51 @@ def test_real_video_views_and_static_negative_are_deterministic() -> None:
     assert minimap.shape == (64, 64, 3)
     assert hud.shape == (32, 128, 3)
     assert _is_static_window([frame] * 16)
+
+
+def test_adapter_promotion_never_trades_terminal_for_consistency() -> None:
+    assert _adapter_promotion_allowed(9, 9)
+    assert not _adapter_promotion_allowed(9, 8)
+
+
+def test_holdout_selector_uses_lexicographic_episode_metrics() -> None:
+    base = {
+        "non_timeout_terminals": 17,
+        "tower_progress_episodes": 20,
+        "mean_stuck_time_ratio": 0.05,
+        "mean_fallback_rate": 0.06,
+        "safety_violations": 0,
+        "invalid_actions": 0,
+    }
+    dagger = {**base, "non_timeout_terminals": 18, "mean_fallback_rate": 0.05}
+    assert _holdout_eligible(base)
+    assert max(
+        (("adapted", base), ("dagger", dagger)), key=lambda item: _holdout_order(*item)
+    )[0] == "dagger"
+
+
+def test_challenge_teacher_has_all_six_expected_semantics() -> None:
+    teacher = GlobalRuleTeacher()
+    expected = {
+        "low_health_far_from_base": (MacroIntent.DISENGAGE, TargetZone.OWN_BASE),
+        "low_health_at_base": (MacroIntent.RECALL, TargetZone.OWN_BASE),
+        "wave_in_tower_range": (MacroIntent.PUSH_STRUCTURE, TargetZone.ENEMY_BASE),
+        "enemy_hero_contact": (MacroIntent.ENGAGE, TargetZone.HOLD_CURRENT_ZONE),
+        "ordinary_lane_advance": (MacroIntent.FARM_LANE, TargetZone.MID_LANE),
+        "tower_destroyed_crystal_range": (MacroIntent.PUSH_STRUCTURE, TargetZone.ENEMY_BASE),
+    }
+    for name, value in expected.items():
+        arena, intent, zone = _challenge_arena(name)
+        assert (intent, zone) == value
+        decision = teacher.decide("blue", arena.legal_actions("blue"), arena.observe("blue"))
+        assert (decision.command.intent, decision.command.target_zone) == value
+
+
+def test_public_offline_evidence_is_path_free_and_keeps_shadow_closed() -> None:
+    path = Path(__file__).resolve().parents[1] / "docs/GLOBAL_AGENT_V1_OFFLINE_EVIDENCE.json"
+    evidence = json.loads(path.read_text(encoding="utf-8"))
+    assert evidence["promoted_checkpoint_sha256"] == evidence["dagger"]["checkpoint_sha256"]
+    assert evidence["adapter"]["promotion_allowed"] is False
+    assert evidence["challenge_pack"]["student_passed"] is False
+    assert evidence["mobile_shadow_authorized"] is False
+    assert "/" not in path.read_text(encoding="utf-8")
