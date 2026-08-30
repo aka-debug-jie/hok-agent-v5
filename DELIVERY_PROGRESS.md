@@ -18,6 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
+| Global Agent v1 | `ACTIVE`: protocol frozen; GlobalArena and full-episode rule teacher not yet implemented | No RGB macro training before 20-game rule gate |
 | V1/V2/V3 | Frozen regression baselines | No schema or identity changes |
 | V4 | Offline video and explicit V4L2 read-only inference | No control output |
 | V5 | Zero-label real-video adaptation pipeline implemented | Non-promoting without frozen local evidence |
@@ -169,6 +170,11 @@ The repository safety check also requires exactly four root Markdown authority f
 boundary findings, and no checked-in large-data or mobile-private artifacts.
 
 ## Current limitation
+
+The active objective is now Global Agent v1: one fixed hero, complete simulator episodes,
+structured rule-teacher labels, RGB macro intent/zone imitation, simulator DAgger, and only then
+mobile Shadow. Earlier T8 and operation-policy results remain evidence and reusable execution
+components, not the active learning roadmap.
 
 The project demonstrates reproducible RGB policy research in project-owned PixelArena and
 read-only/strictly bounded mobile-testbed infrastructure. It does not establish commercial-game

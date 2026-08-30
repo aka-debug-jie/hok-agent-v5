@@ -5,6 +5,14 @@
 
 ## Active route
 
+- Global Agent v1 is the only active learning route and is governed by
+  `docs/GLOBAL_AGENT_V1_PROTOCOL.md`. A structured simulator rule teacher must first complete full
+  games and label only `intent_id`, `target_zone_id`, and an auxiliary `scene_id`. The RGB student
+  receives main/minimap/HUD sequences only. Target-zone navigation, combat modes, purchase, hero
+  profiles, layout adaptation, and safety remain deterministic execution modules. Behavior
+  cloning precedes simulator DAgger; PPO and mobile control remain blocked by complete-episode
+  gates.
+
 - V4: read a privacy-reviewed local recording or an explicitly selected Linux V4L2 UVC
   capture node and emit host-side JSON/terminal hypotheses. The separately bounded
   `mobile-testbed` route may capture and send bounded ADB touchscreen tap/swipe events only to
@@ -47,7 +55,7 @@
   `docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md`. Its seed-0 movement-transition and combat gates
   failed. Automated actuator schedules must not be described as gameplay-state demonstrations;
   this route is frozen without Shadow or input.
-- Operation Movement Teacher v1 is the active modular route governed by
+- Operation Movement Teacher v1 is a supporting deterministic module governed by
   `docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md`. It replaces fixed patrol with the frozen
   high-resolution minimap detector, uses the existing persistent joystick executor, and trains
   only a movement head. The selected T8-v2.6 seed-1 combat model is immutable and bound by hash.

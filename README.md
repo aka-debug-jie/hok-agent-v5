@@ -233,11 +233,11 @@ round-robin schedules. Operation Base therefore closes the actuator and data-bin
 tactical policy supervision. See
 [docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md](docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md).
 
-The active engineering route is now Operation Movement Teacher v1. It keeps the existing selected
-combat model and learns only movement from a state-conditioned high-resolution minimap teacher.
-Its offline 1,485-frame audit passed with 0.7838 coverage, all eight directions, and 3.59-pixel
-player-jump P95. Live collection remains staged and fail-closed. See
-[docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md](docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md).
+The active route is Global Agent v1: a structured simulator rule teacher completes full games and
+labels macro intent plus semantic target zone; an RGB student learns those high-level decisions,
+while the existing deterministic navigation, combat, purchase, layout, hero-profile, and safety
+modules execute them. Behavior cloning precedes simulator DAgger, and mobile validation is last.
+See [docs/GLOBAL_AGENT_V1_PROTOCOL.md](docs/GLOBAL_AGENT_V1_PROTOCOL.md).
 
 Adaptive Layout and Hero Profiles v1 separates device geometry from hero skill behavior. Button
 groups are located by structure rather than skill-icon appearance; local hero profiles define how
@@ -249,6 +249,8 @@ the three fixed skill slots execute. Unknown heroes remain skill-disabled. See
 - [AGENTS.md](AGENTS.md): implementation authority and module constraints.
 - [BOUNDARIES.md](BOUNDARIES.md): permitted and forbidden execution surfaces.
 - [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md): concise current-state ledger.
+- [docs/GLOBAL_AGENT_V1_PROTOCOL.md](docs/GLOBAL_AGENT_V1_PROTOCOL.md): active full-episode macro-policy route.
+- [docs/GLOBAL_AGENT_V1_CONVERGENCE_ROADMAP.md](docs/GLOBAL_AGENT_V1_CONVERGENCE_ROADMAP.md): active route, gates, and stop conditions.
 - [docs/T8_V4_PROTOCOL.md](docs/T8_V4_PROTOCOL.md): frozen T8-v4 diagnostic and promotion protocol.
 - [docs/T8_V5_ROI_PROTOCOL.md](docs/T8_V5_ROI_PROTOCOL.md): T8-v5 isolated-ROI evidence gate.
 - [docs/T8_BASIC_MVP_PROTOCOL.md](docs/T8_BASIC_MVP_PROTOCOL.md): deterministic basic-only gates.
