@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check storage-show storage-preflight storage-init accept accept-v2 pixel-smoke accept-v3 shadow-live-smoke mobile-testbed-smoke t8-smoke t8-data-smoke t8-shadow-smoke t8-contract-smoke t8-v2-contract-smoke t8-v4-contract-smoke t8-v5-roi-contract-smoke t8-basic-mvp-contract-smoke t8-v2-keyboard-smoke t8-v2-live-smoke t8-v2-live-inverse-probe t8-v2-live-collect t8-v2-live-pilot-freeze t8-v2-live-freeze t8-v2-live-pilot t8-video-three-class-pilot t8-video-retrospective-materialize t8-video-retrospective-pilot t8-video-retrospective-roi-evaluate t8-retrospective-v1-verify t8-retrospective-v1-batch t8-retrospective-v2-calibrate t8-causal-video-materialize t8-causal-video-pilot t8-causal-video-diagnose t8-causal-pixel-materialize t8-causal-pixel-probe t8-visual-teacher-replay t8-visible-onset-audit t8-combat-causal-materialize t8-combat-causal-pilot t8-combat-causal-diagnostic-materialize t8-combat-causal-diagnostic-pilot t8-v25-dry-run t8-v25-probe-20 t8-v25-smoke-60 t8-v25-collect t8-v25-pilot-freeze t8-v25-freeze t8-v25-pilot t8-v26-train-seed t8-v26-select t8-v26-evaluate-offline t8-v26-shadow t8-v26-shadow-replay t8-v26-execute-probe t8-v27-calibration-pilot t8-v27-freeze t8-v3-state-materialize t8-v3-state-train t8-v3-hybrid-replay t8-v2-touch-smoke t8-v2-collect t8-v2-freeze t8-v2-adapt t8-v2-pilot alignment-smoke temporal-smoke rich-smoke accept-v7 v5-source-produce v5-build-cohort v5-ingest-zero-label v5-validate-zero-target v5-freeze-training-config v5-train-simsiam-adapted v5-model-predict v5-materialize-pseudo v5-run-mean-teacher-round v6-zero-smoke operation-policy-contract-smoke operation-idm-pilot operation-video-pseudolabel operation-policy-pilot operation-direct-policy-contract-smoke operation-direct-policy-pilot operation-minimap-teacher-audit operation-teacher-readonly-smoke operation-teacher-input-smoke operation-teacher-collect operation-movement-contract-smoke operation-movement-pilot-freeze operation-movement-pilot
+.PHONY: install lint typecheck test check storage-show storage-preflight storage-init accept accept-v2 pixel-smoke accept-v3 shadow-live-smoke mobile-testbed-smoke t8-smoke t8-data-smoke t8-shadow-smoke t8-contract-smoke t8-v2-contract-smoke t8-v4-contract-smoke t8-v5-roi-contract-smoke t8-basic-mvp-contract-smoke t8-v2-keyboard-smoke t8-v2-live-smoke t8-v2-live-inverse-probe t8-v2-live-collect t8-v2-live-pilot-freeze t8-v2-live-freeze t8-v2-live-pilot t8-video-three-class-pilot t8-video-retrospective-materialize t8-video-retrospective-pilot t8-video-retrospective-roi-evaluate t8-retrospective-v1-verify t8-retrospective-v1-batch t8-retrospective-v2-calibrate t8-causal-video-materialize t8-causal-video-pilot t8-causal-video-diagnose t8-causal-pixel-materialize t8-causal-pixel-probe t8-visual-teacher-replay t8-visible-onset-audit t8-combat-causal-materialize t8-combat-causal-pilot t8-combat-causal-diagnostic-materialize t8-combat-causal-diagnostic-pilot t8-v25-dry-run t8-v25-probe-20 t8-v25-smoke-60 t8-v25-collect t8-v25-pilot-freeze t8-v25-freeze t8-v25-pilot t8-v26-train-seed t8-v26-select t8-v26-evaluate-offline t8-v26-shadow t8-v26-shadow-replay t8-v26-execute-probe t8-v27-calibration-pilot t8-v27-freeze t8-v3-state-materialize t8-v3-state-train t8-v3-hybrid-replay t8-v2-touch-smoke t8-v2-collect t8-v2-freeze t8-v2-adapt t8-v2-pilot alignment-smoke temporal-smoke rich-smoke accept-v7 v5-source-produce v5-build-cohort v5-ingest-zero-label v5-validate-zero-target v5-freeze-training-config v5-train-simsiam-adapted v5-model-predict v5-materialize-pseudo v5-run-mean-teacher-round v6-zero-smoke operation-policy-contract-smoke operation-idm-pilot operation-video-pseudolabel operation-policy-pilot operation-direct-policy-contract-smoke operation-direct-policy-pilot operation-minimap-teacher-audit operation-teacher-readonly-smoke operation-teacher-input-smoke operation-teacher-collect operation-movement-contract-smoke operation-movement-pilot-freeze operation-movement-pilot global-agent-stage-1a global-agent-stage-1b global-agent-materialize global-agent-train global-agent-dagger global-agent-domain-adapt global-agent-replay
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
 WZRY_DATA_ROOT ?= $(CURDIR)/.local-data
@@ -84,6 +84,12 @@ OPERATION_MOBILE_IDENTITY ?=configs/mobile_testbed_identity.local.json
 OPERATION_MOVEMENT_POLICY_CONTRACT ?=configs/operation_movement_policy_v1.json
 OPERATION_MOVEMENT_PILOT_SPLIT ?=$(OPERATION_TEACHER_DATASET)/movement-pilot-split.json
 OPERATION_MOVEMENT_PILOT_RUN ?=$(HOK_RUNS_ROOT)/operation-movement-policy-v1/pilot-seed0-v1
+GLOBAL_AGENT_DATASET ?=$(HOK_DATASETS_ROOT)/global-agent-v1/pilot-40-10-v1
+GLOBAL_AGENT_BC_RUN ?=$(HOK_RUNS_ROOT)/global-agent-v1/bc-seed0-v1
+GLOBAL_AGENT_DAGGER_RUN ?=$(HOK_RUNS_ROOT)/global-agent-v1/dagger-round1-v1
+GLOBAL_AGENT_VIDEO_COHORT ?=$(HOK_DATASETS_ROOT)/v5-target-file-atomic-v2
+GLOBAL_AGENT_ADAPT_RUN ?=$(HOK_RUNS_ROOT)/global-agent-v1/domain-adapt-v2
+GLOBAL_AGENT_REPLAY_RUN ?=$(HOK_RUNS_ROOT)/global-agent-v1/video-dev-replay-v1
 
 install:
 	$(PYTHON) -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
@@ -120,6 +126,27 @@ storage-init:
 	mkdir -p "$(WZRY_DATA_ROOT)"
 	@findmnt -rn -O rw -T "$(WZRY_DATA_ROOT)" >/dev/null || { echo "storage is not mounted read-write: $(WZRY_DATA_ROOT)" >&2; exit 2; }
 	mkdir -p "$(HOK_DATASETS_ROOT)" "$(HOK_CHECKPOINTS_ROOT)" "$(HOK_RUNS_ROOT)" "$(HOK_CACHE_ROOT)" "$(HOK_AUDIT_ROOT)" "$(HOK_STAGING_ROOT)"
+
+global-agent-stage-1a:
+	$(RUN_PYTHON) -m hok_agent global-agent-evaluate --episodes 1 --seed 17
+
+global-agent-stage-1b:
+	$(RUN_PYTHON) -m hok_agent global-agent-evaluate --episodes 20 --seed 17
+
+global-agent-materialize: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent global-agent-materialize --output-dir "$(GLOBAL_AGENT_DATASET)"
+
+global-agent-train: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent global-agent-train --dataset-root "$(GLOBAL_AGENT_DATASET)" --output-dir "$(GLOBAL_AGENT_BC_RUN)" --device cuda
+
+global-agent-dagger: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent global-agent-dagger --dataset-root "$(GLOBAL_AGENT_DATASET)" --checkpoint "$(GLOBAL_AGENT_BC_RUN)/selected.safetensors" --output-dir "$(GLOBAL_AGENT_DAGGER_RUN)" --device cuda
+
+global-agent-domain-adapt: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent global-agent-domain-adapt --dataset-root "$(GLOBAL_AGENT_DATASET)" --checkpoint "$(GLOBAL_AGENT_DAGGER_RUN)/selected.safetensors" --video-cohort "$(GLOBAL_AGENT_VIDEO_COHORT)" --output-dir "$(GLOBAL_AGENT_ADAPT_RUN)" --device cuda
+
+global-agent-replay: storage-init
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent global-agent-replay --checkpoint "$(GLOBAL_AGENT_ADAPT_RUN)/adapted.safetensors" --video-cohort "$(GLOBAL_AGENT_VIDEO_COHORT)" --output-dir "$(GLOBAL_AGENT_REPLAY_RUN)" --device cuda
 
 accept:
 	$(RUN_PYTHON) -m hok_agent accept-minimal-v1 --seed 101

@@ -7,29 +7,42 @@
 → 规则驱动的完整仿真对局
 → 完整episode数据与宏观标签
 → RGB高层意图模仿学习
-→ 仿真内DAgger修正
-→ 少量PPO改进（条件满足时）
+→ 一轮仿真内DAgger修正
 → RGB域适配与预处理一致性
 → 移动端只读Shadow
 → 受限单英雄完整对局
-→ 多英雄与五智能体协作
 ```
 
 Global Agent v1 只控制一个固定英雄。学习模型只输出宏观意图和目标区域；移动、战斗、购买、英雄技能行为、布局和安全停止继续由确定性模块执行。
+
+## 北极星与WIP限制
+
+所有实验按以下字典序评价，而不是平均局部指标：`safety_violations=0`、
+`non_timeout_terminal`、`tower_progress`、`stuck_time_ratio`、
+`teacher_fallback_rate`、`win_rate`，最后才是局部F1。每个新任务必须说明它将改善哪一个
+一级episode指标；否则不进入主线。
+
+同时只允许一个全局功能任务和一个最高频阻塞bug。每日台账固定为：
+
+```text
+CURRENT GOAL:
+BLOCKING FAILURE:
+NEXT ACCEPTANCE COMMAND:
+DO NOT WORK ON:
+```
 
 ## 阶段与通过条件
 
 | 阶段 | 工作 | 通过条件 | 未通过时的处理 |
 |---|---|---|---|
 | 0 | 冻结现有T8/Operation失败与通过证据 | 新旧lineage互不混用 | 不再扩展局部T8路线 |
-| 1 | 建立GlobalArena与规则教师 | 20局中至少16局正常终局；安全违规0；死亡恢复100%；卡住<10%；70%有塔推进 | 只修完整对局阻塞，不训练模型 |
-| 2 | 生成200/50/50完整episode与场景均衡数据 | episode级split、标签/配置哈希、封存test | 修规则教师或数据合同 |
-| 3 | RGB宏观行为克隆 | 仅dev选模；优于时间先验、类别先验和标签打乱 | 修数据/场景采样，不加局部检测头 |
-| 4 | 仿真内DAgger，最多三轮 | 学生完整终局率≥70%，安全违规0，塔推进和卡住指标改善 | 停止DAgger并审计失败状态 |
-| 5 | 少量PPO | 仅在阶段4通过后，固定英雄、固定脚本对手 | 不做大规模自博弈 |
-| 6 | 真实视频域适配与离线回放 | RGB预处理、时序、置信度与仿真模型绑定 | 不连接手机输入 |
-| 7 | 移动端Shadow与受限完整对局 | 10分钟只读Shadow→三次10分钟受限运行→三个完整episode | 任一级失败立即停止 |
-| 8 | 多英雄、多智能体 | 单英雄完整闭环稳定后 | 不提前扩展 |
+| 1A | First Full Game：中路单线规则闭环 | `PASSED`：seed 17 水晶终局，安全违规0 | 已关闭 |
+| 1B | 20局规则稳定性 | `PASSED`：20/20水晶终局，死亡恢复100%，卡住<10% | 已关闭 |
+| 2 | 固定40 train/10 dev完整episode | `PASSED`：3,276行，episode级split，无test | 已冻结manifest |
+| 3 | Seed-0 RGB宏观行为克隆 | `PASSED`：TCN优于time-only和shuffle，纯学生7/10终局 | 已冻结BC |
+| 4 | 唯一一轮DAgger | `PASSED`：765边界样本，9/10终局，平均塔伤提升，安全违规0 | 禁止第二轮 |
+| 5 | 103/23真实视频适配与离线回放 | `PASSED`：适配非退化，391行回放，输入0 | 等待独立Shadow审查 |
+| 6（未开放） | 移动端Shadow与受限完整对局 | 10分钟只读Shadow→三次10分钟受限运行→三个完整episode | 任一级失败立即停止 |
 
 ## 固定模型边界
 
@@ -38,21 +51,70 @@ Global Agent v1 只控制一个固定英雄。学习模型只输出宏观意图�
 - `ABSTAIN`由安全和置信度派生，不作为首版学习标签。
 - 规则教师可以使用仿真结构化真值；RGB学生、移动端模型和Shadow不能使用。
 - 当前移动教师改为`玩家位置 + target_zone中心 → 八方向`，不再以最近红色目标决定宏观目的地。
+- TargetZoneNavigator只追踪下一个语义waypoint，不直线冲区域中心。第一版仅启用
+  `OWN_BASE → MID_ENTRY → MID_CENTER → ENEMY_MID_TOWER → ENEMY_HIGH_GROUND → ENEMY_BASE`。
 - 当前战斗执行器改为由`combat_mode`路由，不再以固定轮转作为策略标签。
+
+## 第一版能力开关
+
+9类意图和10类区域枚举保持不变，但首个checkpoint只启用：
+
+```text
+FARM_LANE, PUSH_STRUCTURE, ENGAGE, DISENGAGE, RECALL
+OWN_BASE, MID_LANE, ENEMY_BASE, HOLD_CURRENT_ZONE
+```
+
+多线、野区和中立目标不属于当前五阶段。规则教师的首版标签优先级固定为：
+
+```text
+ABSTAIN → RECALL → DISENGAGE → ENGAGE → PUSH_STRUCTURE → FARM_LANE
+```
+
+教师决策必须是RGB可观察状态的函数；近似相同的可观察状态不得因隐藏seed、脚本编号、
+未来事件或未渲染真值获得相反标签。
+
+## 进展监视与失败分类
+
+每个宏观命令记录目标、最小保持时间、最大无进展时间、进展信号和恢复次数。默认：
+2 Hz决策、1.5秒最小保持、3秒最大无进展、每意图最多2次重规划、每局最多3次恢复。
+普通恢复依次为备用waypoint、全局重规划、`NAV_STUCK`安全结束；死亡、未知画面、
+基地受威胁和紧急撤退可以立即覆盖。
+
+每个非正常终局只能归入一个主失败码：
+
+```text
+NAV_STUCK, NO_WAVE_PROGRESS, COMBAT_LOOP, RECALL_LOOP, DEFEND_LOOP,
+DEATH_RECOVERY_FAILED, NO_TOWER_DAMAGE, CRYSTAL_NOT_REACHED,
+SAFETY_STOP, TIMEOUT_OTHER
+```
+
+每10或20局自动统计失败码；只修最高频失败。局部模块只有在阻塞First Full Game、
+造成至少20%失败、安全违规或可明显改善一级episode指标时才准入。
+
+## 唯一一轮DAgger授权
+
+```text
+Teacher only → 25% student authority → student-primary simulator dev
+```
+
+DAgger只收集学生低置信、与教师分歧、卡住和恢复状态，不重复容易导航帧，不启动第二轮。
 
 ## 当前不做的事
 
 - 不再新增敌人可见、按钮就绪、目标可攻击等局部研究lineage。
 - 不训练直接点击坐标、瞄准坐标、目标单位或完整连招。
 - 不把现有手机动作日志直接用于离线强化学习。
-- 不在行为克隆和DAgger闭环前运行PPO。
+- 当前路线不运行PPO。
 - 不在仿真完成前让移动端模型输出控制动作。
 - 不在单英雄闭环前做多英雄或五智能体协作。
 
-## 当前第一主提交
+## 当前状态
 
 ```text
-feat: add global macro-goal planner and target-zone navigation
+CURRENT GOAL: freeze five-stage Global Agent v1 evidence
+BLOCKING FAILURE: none inside the five offline stages
+NEXT ACCEPTANCE COMMAND: make check
+DO NOT WORK ON: second DAgger, PPO, jungle, objectives, multi-agent, phone input
 ```
 
-交付：`GlobalArena`、9类意图、10类区域、规则教师、目标区域导航、宏观命令到既有确定性执行器的路由，以及20局规则闭环报告。
+下一阶段如获授权，只能先制定十分钟零控制移动端Shadow合同；本文件没有开放手机输入。

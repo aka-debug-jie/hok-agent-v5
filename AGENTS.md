@@ -12,6 +12,10 @@
   profiles, layout adaptation, and safety remain deterministic execution modules. Behavior
   cloning precedes simulator DAgger; PPO and mobile control remain blocked by complete-episode
   gates.
+- Global Agent work has a hard WIP limit: one global feature task plus one highest-frequency
+  blocking failure. Every active experiment must name the targeted lexicographic episode metric:
+  safety, non-timeout terminal, tower progress, stuck time, fallback rate, or win rate. Local F1
+  alone is diagnostic and never opens a new route.
 
 - V4: read a privacy-reviewed local recording or an explicitly selected Linux V4L2 UVC
   capture node and emit host-side JSON/terminal hypotheses. The separately bounded
@@ -204,7 +208,8 @@
 - Torch/torchvision/safetensors are allowed only in `bc.py`, `pixel.py`, `alignment.py`,
   `temporal.py`, `v6_zero.py`, `rich_pixel.py`, `t8.py`, `t8_v3.py`, `t8_v4.py`, `t8_v5.py`,
   `t8_basic_mvp.py`, `t8_shadow.py`, `operation_policy.py`, and their
-  focused tests.
+  focused tests, plus `global_policy.py` and `test_global_agent.py` for the offline Global Agent
+  BC, single DAgger round, video adaptation, and zero-control replay.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,
   `v5_data.py`, `mobile_testbed.py`, and focused tests.
 - No annotation UI is an active V5/V6 surface. The T8 calibration picker may use Tk only to pick

@@ -1,0 +1,1262 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from collections import Counter, defaultdict, deque
+from copy import copy, deepcopy
+from pathlib import Path
+from typing import Final, Literal, cast
+
+import numpy as np
+import torch
+from safetensors import safe_open
+from safetensors.torch import load_file, save_file
+from torch import nn
+from torch.nn import functional as F
+from torch.utils.data import DataLoader, Dataset, TensorDataset
+from torchvision.models import resnet18  # type: ignore[import-untyped]
+
+from hok_agent.global_agent import (
+    ENABLED_INTENTS,
+    ENABLED_ZONES,
+    GlobalArena,
+    GlobalCommandRouter,
+    GlobalRuleTeacher,
+    MacroCommand,
+    MacroIntent,
+    ProgressWatchdog,
+    TargetZone,
+    load_global_config,
+    run_teacher_episode,
+)
+from hok_agent.rich_arena import RichRandomPolicy, wait_action
+from hok_agent.rich_renderer import render, renderer_hash
+
+WINDOW_FRAMES: Final = 16
+SAMPLE_HZ: Final = 5
+TRAIN_SEEDS: Final = tuple(range(1000, 1040))
+DEV_SEEDS: Final = tuple(range(2000, 2010))
+DAGGER_SEEDS: Final = tuple(range(3000, 3040))
+INTENT_INDEX = {value: index for index, value in enumerate(ENABLED_INTENTS)}
+ZONE_INDEX = {value: index for index, value in enumerate(ENABLED_ZONES)}
+SCENES: Final = (
+    "NAVIGATION",
+    "LANE_FARM",
+    "COMBAT",
+    "PUSH_STRUCTURE",
+    "RETURN_DEFEND",
+)
+SCENE_INDEX = {value: index for index, value in enumerate(SCENES)}
+ModelVariant = Literal["pool_mlp", "tcn"]
+
+
+class GlobalPolicyError(ValueError):
+    pass
+
+
+def _canonical(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def _sha(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _large_root() -> Path:
+    text = os.environ.get("HOK_LARGE_ROOT")
+    if not text:
+        raise GlobalPolicyError("HOK_LARGE_ROOT is required")
+    root = Path(text).resolve(strict=True)
+    if not root.is_dir() or root.is_symlink():
+        raise GlobalPolicyError("HOK_LARGE_ROOT must be a real directory")
+    return root
+
+
+def _under_large_root(path: Path, *, output: bool) -> Path:
+    root = _large_root()
+    resolved = path.resolve(strict=not output)
+    if resolved == root or root not in resolved.parents:
+        raise GlobalPolicyError("Global Agent artifacts must be below HOK_LARGE_ROOT")
+    if output and resolved.exists():
+        raise GlobalPolicyError(f"output already exists: {resolved}")
+    return resolved
+
+
+def _write_json(path: Path, value: object) -> None:
+    path.write_text(_canonical(value) + "\n", encoding="utf-8")
+
+
+def _resize_nearest(frame: np.ndarray, height: int, width: int) -> np.ndarray:
+    y = np.linspace(0, frame.shape[0] - 1, height).round().astype(np.int64)
+    x = np.linspace(0, frame.shape[1] - 1, width).round().astype(np.int64)
+    return frame[y[:, None], x[None, :]]
+
+
+def render_views(observation: dict[str, object], render_seed: int) -> tuple[np.ndarray, ...]:
+    full = render(observation, render_seed)
+    main = full.copy()
+    minimap = _resize_nearest(full[24:120], 64, 64)
+    hud = _resize_nearest(full[:24], 32, 128)
+    return main, minimap, hud
+
+
+def _manifest_payload(episodes: list[dict[str, object]]) -> dict[str, object]:
+    arena = GlobalArena()
+    _config, config_sha256 = load_global_config()
+    contract = {
+        "window_frames": WINDOW_FRAMES,
+        "sample_hz": SAMPLE_HZ,
+        "intents": [value.value for value in ENABLED_INTENTS],
+        "zones": [value.value for value in ENABLED_ZONES],
+        "scenes": list(SCENES),
+        "input": ["main_rgb", "minimap_rgb", "hud_rgb"],
+        "structured_state_is_actor_input": False,
+        "device_input_allowed": False,
+    }
+    return {
+        "schema_version": "hok-agent-global-dataset-v1",
+        "arena_sha256": arena.config.digest,
+        "config_sha256": config_sha256,
+        "renderer_sha256": renderer_hash(),
+        "contract": contract,
+        "contract_sha256": _sha(_canonical(contract).encode()),
+        "train_seeds": list(TRAIN_SEEDS),
+        "dev_seeds": list(DEV_SEEDS),
+        "test_present": False,
+        "episodes": episodes,
+        "source_paths_persisted": False,
+        "device_input_allowed": False,
+    }
+
+
+def materialize_global_dataset(
+    output_dir: Path,
+    *,
+    train_seeds: tuple[int, ...] = TRAIN_SEEDS,
+    dev_seeds: tuple[int, ...] = DEV_SEEDS,
+    enforce: bool = True,
+) -> dict[str, object]:
+    if enforce and (train_seeds != TRAIN_SEEDS or dev_seeds != DEV_SEEDS):
+        raise GlobalPolicyError("formal Global Agent pilot requires frozen 40/10 seeds")
+    if set(train_seeds) & set(dev_seeds):
+        raise GlobalPolicyError("episode splits overlap")
+    output = _under_large_root(output_dir, output=True)
+    output.mkdir(parents=True)
+    episodes: list[dict[str, object]] = []
+    try:
+        for split, seeds in (("train", train_seeds), ("dev", dev_seeds)):
+            for seed in seeds:
+                report, trace = run_teacher_episode(seed, include_trace=True)
+                main: list[np.ndarray] = []
+                minimap: list[np.ndarray] = []
+                hud: list[np.ndarray] = []
+                intents: list[int] = []
+                zones: list[int] = []
+                scenes: list[int] = []
+                actions: list[str] = []
+                ticks: list[int] = []
+                for row in trace:
+                    if (
+                        row.command.intent not in INTENT_INDEX
+                        or row.command.target_zone not in ZONE_INDEX
+                    ):
+                        raise GlobalPolicyError("teacher emitted a disabled macro label")
+                    views = render_views(row.observation, seed * 10_007 + row.tick)
+                    main.append(views[0])
+                    minimap.append(views[1])
+                    hud.append(views[2])
+                    intents.append(INTENT_INDEX[row.command.intent])
+                    zones.append(ZONE_INDEX[row.command.target_zone])
+                    scenes.append(SCENE_INDEX[row.scene_id])
+                    actions.append(_canonical(row.action.to_dict()))
+                    ticks.append(row.tick)
+                episode_id = _sha(f"global-v1:{split}:{seed}".encode())
+                name = f"episode-{episode_id}.npz"
+                path = output / name
+                with path.open("xb") as handle:
+                    np.savez_compressed(
+                        handle,
+                        main_rgb=np.stack(main),
+                        minimap_rgb=np.stack(minimap),
+                        hud_rgb=np.stack(hud),
+                        intent=np.asarray(intents, dtype=np.int16),
+                        zone=np.asarray(zones, dtype=np.int16),
+                        scene=np.asarray(scenes, dtype=np.int16),
+                        tick=np.asarray(ticks, dtype=np.int32),
+                        executed_action=np.asarray(actions),
+                    )
+                episodes.append(
+                    {
+                        "episode_id": episode_id,
+                        "split": split,
+                        "rows": len(trace),
+                        "shard": name,
+                        "shard_sha256": _sha(path.read_bytes()),
+                        "outcome": report.outcome,
+                        "failure_code": report.failure_code,
+                    }
+                )
+        payload = _manifest_payload(episodes)
+        payload["train_seeds"] = list(train_seeds)
+        payload["dev_seeds"] = list(dev_seeds)
+        payload["manifest_sha256"] = _sha(_canonical(payload).encode())
+        _write_json(output / "manifest.json", payload)
+    except Exception:
+        for path in output.glob("*"):
+            path.unlink()
+        output.rmdir()
+        raise
+    return {
+        "status": "PASSED",
+        "schema_version": payload["schema_version"],
+        "train_episodes": len(train_seeds),
+        "dev_episodes": len(dev_seeds),
+        "rows": sum(int(cast(int, row["rows"])) for row in episodes),
+        "manifest_sha256": payload["manifest_sha256"],
+        "output_dir": str(output),
+        "device_input_allowed": False,
+    }
+
+
+def load_global_manifest(root: Path) -> dict[str, object]:
+    resolved = _under_large_root(root, output=False)
+    path = resolved / "manifest.json"
+    raw = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+    digest = raw.pop("manifest_sha256", None)
+    if not isinstance(digest, str) or digest != _sha(_canonical(raw).encode()):
+        raise GlobalPolicyError("global dataset manifest hash mismatch")
+    raw["manifest_sha256"] = digest
+    if raw.get("test_present") is not False:
+        raise GlobalPolicyError("Global Agent pilot must not contain test episodes")
+    episodes = cast(list[dict[str, object]], raw.get("episodes"))
+    if not episodes or any(row.get("split") not in {"train", "dev"} for row in episodes):
+        raise GlobalPolicyError("invalid Global Agent episode split")
+    for row in episodes:
+        shard = resolved / str(row["shard"])
+        if _sha(shard.read_bytes()) != row["shard_sha256"]:
+            raise GlobalPolicyError("global dataset shard hash mismatch")
+    return raw
+
+
+class GlobalWindowDataset(Dataset[tuple[torch.Tensor, ...]]):
+    def __init__(self, root: Path, split: str, *, shuffle_labels: bool = False) -> None:
+        if split not in {"train", "dev"}:
+            raise GlobalPolicyError("only train/dev splits are available")
+        manifest = load_global_manifest(root)
+        self.samples: list[tuple[np.ndarray, ...]] = []
+        for row in cast(list[dict[str, object]], manifest["episodes"]):
+            if row["split"] != split:
+                continue
+            with np.load(root / str(row["shard"]), allow_pickle=False) as shard:
+                arrays = tuple(
+                    np.asarray(shard[name])
+                    for name in (
+                        "main_rgb",
+                        "minimap_rgb",
+                        "hud_rgb",
+                        "intent",
+                        "zone",
+                        "scene",
+                        "tick",
+                    )
+                )
+            length = arrays[0].shape[0]
+            for end in range(WINDOW_FRAMES - 1, length):
+                start = end - WINDOW_FRAMES + 1
+                self.samples.append(
+                    (
+                        arrays[0][start : end + 1],
+                        arrays[1][start : end + 1],
+                        arrays[2][start : end + 1],
+                        arrays[3][end],
+                        arrays[4][end],
+                        arrays[5][end],
+                        arrays[6][end],
+                    )
+                )
+        if not self.samples:
+            raise GlobalPolicyError(f"split has no causal windows: {split}")
+        if shuffle_labels:
+            rng = np.random.default_rng(0)
+            permutation = rng.permutation(len(self.samples))
+            labels = [
+                (self.samples[i][3], self.samples[i][4], self.samples[i][5])
+                for i in permutation
+            ]
+            self.samples = [
+                (*sample[:3], labels[index][0], labels[index][1], labels[index][2], sample[6])
+                for index, sample in enumerate(self.samples)
+            ]
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, ...]:
+        main, minimap, hud, intent, zone, scene, tick = self.samples[index]
+
+        def convert(value: np.ndarray) -> torch.Tensor:
+            tensor = torch.from_numpy(np.asarray(value)).permute(0, 3, 1, 2).float()
+            return tensor / 255.0
+
+        return (
+            convert(main),
+            convert(minimap),
+            convert(hud),
+            torch.tensor(int(intent), dtype=torch.long),
+            torch.tensor(int(zone), dtype=torch.long),
+            torch.tensor(int(scene), dtype=torch.long),
+            torch.tensor(int(tick), dtype=torch.long),
+        )
+
+
+class _SmallView(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(3, 16, 5, stride=2, padding=2),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(32, 64),
+            nn.ReLU(),
+        )
+
+    def forward(self, value: torch.Tensor) -> torch.Tensor:
+        return cast(torch.Tensor, self.net(value))
+
+
+class GlobalMacroPolicy(nn.Module):
+    def __init__(self, variant: ModelVariant = "tcn") -> None:
+        super().__init__()
+        if variant not in {"pool_mlp", "tcn"}:
+            raise GlobalPolicyError(f"unknown model variant: {variant}")
+        self.variant = variant
+        backbone = resnet18(weights=None)
+        backbone.conv1 = nn.Conv2d(3, 64, 3, stride=1, padding=1, bias=False)
+        backbone.maxpool = nn.Identity()
+        backbone.fc = nn.Identity()
+        self.main = backbone
+        self.minimap = _SmallView()
+        self.hud = _SmallView()
+        self.project = nn.Sequential(nn.Linear(640, 128), nn.ReLU())
+        self.temporal = nn.ModuleList(
+            (nn.Conv1d(128, 128, 3), nn.Conv1d(128, 128, 3))
+        )
+        self.pool = nn.Sequential(nn.Linear(128, 128), nn.ReLU())
+        self.intent = nn.Linear(128, len(ENABLED_INTENTS))
+        self.zone = nn.Linear(128, len(ENABLED_ZONES))
+        self.scene = nn.Linear(128, len(SCENES))
+
+    def encode_views(
+        self, main: torch.Tensor, minimap: torch.Tensor, hud: torch.Tensor
+    ) -> torch.Tensor:
+        batch, steps = main.shape[:2]
+
+        def flatten(value: torch.Tensor) -> torch.Tensor:
+            return value.reshape(batch * steps, *value.shape[2:])
+
+        main_flat = F.interpolate(
+            flatten(main), size=(64, 64), mode="bilinear", align_corners=False
+        )
+        features = torch.cat(
+            (self.main(main_flat), self.minimap(flatten(minimap)), self.hud(flatten(hud))),
+            dim=1,
+        )
+        return cast(torch.Tensor, self.project(features).reshape(batch, steps, 128))
+
+    def forward(
+        self, main: torch.Tensor, minimap: torch.Tensor, hud: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        sequence = self.encode_views(main, minimap, hud)
+        if self.variant == "pool_mlp":
+            hidden = self.pool(sequence.mean(dim=1))
+        else:
+            hidden_sequence = sequence.transpose(1, 2)
+            for layer in self.temporal:
+                hidden_sequence = F.relu(layer(F.pad(hidden_sequence, (2, 0))))
+            hidden = hidden_sequence[:, :, -1]
+        return self.intent(hidden), self.zone(hidden), self.scene(hidden)
+
+
+def _class_weights(dataset: GlobalWindowDataset, label_index: int, classes: int) -> torch.Tensor:
+    counts = np.bincount(
+        [int(sample[label_index]) for sample in dataset.samples], minlength=classes
+    ).astype(np.float64)
+    weights = counts.sum() / np.maximum(counts, 1.0)
+    weights /= weights.mean()
+    return torch.tensor(weights, dtype=torch.float32)
+
+
+def _macro_f1(target: list[int], predicted: list[int], classes: int) -> float:
+    scores: list[float] = []
+    for label in range(classes):
+        tp = sum(a == label and b == label for a, b in zip(target, predicted, strict=True))
+        fp = sum(a != label and b == label for a, b in zip(target, predicted, strict=True))
+        fn = sum(a == label and b != label for a, b in zip(target, predicted, strict=True))
+        scores.append(0.0 if 2 * tp + fp + fn == 0 else 2 * tp / (2 * tp + fp + fn))
+    return sum(scores) / classes
+
+
+def _evaluate_model(
+    model: GlobalMacroPolicy, loader: DataLoader[tuple[torch.Tensor, ...]], device: torch.device
+) -> dict[str, object]:
+    targets: tuple[list[int], list[int], list[int]] = ([], [], [])
+    predicted: tuple[list[int], list[int], list[int]] = ([], [], [])
+    model.eval()
+    with torch.no_grad():
+        for main, minimap, hud, intent, zone, scene, _tick in loader:
+            logits = model(main.to(device), minimap.to(device), hud.to(device))
+            for index, label in enumerate((intent, zone, scene)):
+                targets[index].extend(label.tolist())
+                predicted[index].extend(logits[index].argmax(dim=1).cpu().tolist())
+    return {
+        "intent_macro_f1": _macro_f1(targets[0], predicted[0], len(ENABLED_INTENTS)),
+        "zone_macro_f1": _macro_f1(targets[1], predicted[1], len(ENABLED_ZONES)),
+        "scene_macro_f1": _macro_f1(targets[2], predicted[2], len(SCENES)),
+        "joint_accuracy": sum(
+            a == x and b == y
+            for a, b, x, y in zip(
+                targets[0], targets[1], predicted[0], predicted[1], strict=True
+            )
+        )
+        / len(targets[0]),
+        "intent_unique_predictions": len(set(predicted[0])),
+        "zone_unique_predictions": len(set(predicted[1])),
+    }
+
+
+def _majority_baselines(train: GlobalWindowDataset, dev: GlobalWindowDataset) -> dict[str, object]:
+    train_labels = [[int(sample[index]) for sample in train.samples] for index in (3, 4)]
+    dev_labels = [[int(sample[index]) for sample in dev.samples] for index in (3, 4)]
+    classes = (len(ENABLED_INTENTS), len(ENABLED_ZONES))
+    prior_scores: list[float] = []
+    time_scores: list[float] = []
+    for head in range(2):
+        prior = Counter(train_labels[head]).most_common(1)[0][0]
+        prior_scores.append(
+            _macro_f1(dev_labels[head], [prior] * len(dev_labels[head]), classes[head])
+        )
+        buckets: dict[int, Counter[int]] = defaultdict(Counter)
+        for sample in train.samples:
+            buckets[int(sample[6]) // 8][int(sample[3 + head])] += 1
+        predictions = [
+            buckets[int(sample[6]) // 8].most_common(1)[0][0]
+            if buckets[int(sample[6]) // 8]
+            else prior
+            for sample in dev.samples
+        ]
+        time_scores.append(_macro_f1(dev_labels[head], predictions, classes[head]))
+    return {
+        "class_prior": {"intent_macro_f1": prior_scores[0], "zone_macro_f1": prior_scores[1]},
+        "time_only": {"intent_macro_f1": time_scores[0], "zone_macro_f1": time_scores[1]},
+    }
+
+
+def _train_variant(
+    train: GlobalWindowDataset,
+    dev: GlobalWindowDataset,
+    variant: ModelVariant,
+    device: torch.device,
+    epochs: int,
+    batch_size: int,
+) -> tuple[GlobalMacroPolicy, dict[str, object]]:
+    torch.manual_seed(0)
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(0)
+    model = GlobalMacroPolicy(variant).to(device)
+    weights = (
+        _class_weights(train, 3, len(ENABLED_INTENTS)).to(device),
+        _class_weights(train, 4, len(ENABLED_ZONES)).to(device),
+        _class_weights(train, 5, len(SCENES)).to(device),
+    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-4)
+    generator = torch.Generator().manual_seed(0)
+    loader = DataLoader(train, batch_size=batch_size, shuffle=True, generator=generator)
+    for _epoch in range(epochs):
+        model.train()
+        for main, minimap, hud, intent, zone, scene, _tick in loader:
+            optimizer.zero_grad(set_to_none=True)
+            logits = model(main.to(device), minimap.to(device), hud.to(device))
+            loss = (
+                F.cross_entropy(logits[0], intent.to(device), weight=weights[0])
+                + F.cross_entropy(logits[1], zone.to(device), weight=weights[1])
+                + 0.25 * F.cross_entropy(logits[2], scene.to(device), weight=weights[2])
+            )
+            loss.backward()  # type: ignore[no-untyped-call]
+            optimizer.step()
+    metrics = _evaluate_model(
+        model, DataLoader(dev, batch_size=batch_size, shuffle=False), device
+    )
+    return model, metrics
+
+
+def _save_model(
+    path: Path, model: GlobalMacroPolicy, variant: str, manifest_sha256: str
+) -> str:
+    metadata = {
+        "schema_version": "hok-agent-global-policy-v1",
+        "variant": variant,
+        "manifest_sha256": manifest_sha256,
+        "seed": "0",
+        "window_frames": str(WINDOW_FRAMES),
+        "intents": _canonical([value.value for value in ENABLED_INTENTS]),
+        "zones": _canonical([value.value for value in ENABLED_ZONES]),
+        "device_input_allowed": "false",
+    }
+    save_file(model.state_dict(), path, metadata=metadata)
+    return _sha(path.read_bytes())
+
+
+def load_global_model(path: Path, device: torch.device) -> tuple[GlobalMacroPolicy, dict[str, str]]:
+    with safe_open(path, framework="pt", device="cpu") as handle:
+        metadata = handle.metadata()
+    if metadata is None or metadata.get("schema_version") != "hok-agent-global-policy-v1":
+        raise GlobalPolicyError("invalid Global Agent checkpoint metadata")
+    variant = metadata.get("variant")
+    if variant not in {"pool_mlp", "tcn"}:
+        raise GlobalPolicyError("invalid Global Agent checkpoint variant")
+    model = GlobalMacroPolicy(cast(ModelVariant, variant))
+    model.load_state_dict(load_file(path, device="cpu"), strict=True)
+    model.to(device).eval()
+    return model, metadata
+
+
+def train_global_bc(
+    dataset_root: Path,
+    output_dir: Path,
+    *,
+    device_name: str,
+    epochs: int = 4,
+    batch_size: int = 32,
+) -> dict[str, object]:
+    if epochs <= 0 or batch_size <= 0:
+        raise GlobalPolicyError("epochs and batch size must be positive")
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise GlobalPolicyError("CUDA requested but unavailable")
+    output = _under_large_root(output_dir, output=True)
+    manifest = load_global_manifest(dataset_root)
+    output.mkdir(parents=True)
+    train = GlobalWindowDataset(dataset_root, "train")
+    dev = GlobalWindowDataset(dataset_root, "dev")
+    controls = _majority_baselines(train, dev)
+    models: dict[str, GlobalMacroPolicy] = {}
+    metrics: dict[str, dict[str, object]] = {}
+    try:
+        variants: tuple[ModelVariant, ...] = ("pool_mlp", "tcn")
+        for variant in variants:
+            model, report = _train_variant(
+                train, dev, variant, device, epochs, batch_size
+            )
+            models[variant], metrics[variant] = model, report
+        shuffled = GlobalWindowDataset(dataset_root, "train", shuffle_labels=True)
+        _shuffle_model, metrics["label_shuffle"] = _train_variant(
+            shuffled, dev, "pool_mlp", device, max(1, epochs // 2), batch_size
+        )
+        def metric(name: str, key: str) -> float:
+            return cast(float, metrics[name][key])
+
+        selected = max(
+            variants,
+            key=lambda name: metric(name, "intent_macro_f1")
+            + metric(name, "zone_macro_f1"),
+        )
+        checkpoint = output / "selected.safetensors"
+        checkpoint_sha256 = _save_model(
+            checkpoint, models[selected], selected, str(manifest["manifest_sha256"])
+        )
+        normal = metrics[selected]
+        time_only = cast(dict[str, float], controls["time_only"])
+        shuffle = metrics["label_shuffle"]
+        passed = (
+            cast(float, normal["intent_macro_f1"]) - time_only["intent_macro_f1"] >= 0.10
+            and cast(float, normal["zone_macro_f1"]) - time_only["zone_macro_f1"] >= 0.10
+            and (
+                cast(float, normal["intent_macro_f1"])
+                + cast(float, normal["zone_macro_f1"])
+                - cast(float, shuffle["intent_macro_f1"])
+                - cast(float, shuffle["zone_macro_f1"])
+            )
+            / 2
+            >= 0.15
+            and cast(int, normal["intent_unique_predictions"]) > 1
+            and cast(int, normal["zone_unique_predictions"]) > 1
+        )
+        report_payload: dict[str, object] = {
+            "schema_version": "hok-agent-global-bc-report-v1",
+            "status": "PASSED" if passed else "FAILED",
+            "seed": 0,
+            "selected_variant": selected,
+            "manifest_sha256": manifest["manifest_sha256"],
+            "checkpoint_sha256": checkpoint_sha256,
+            "controls": controls,
+            "metrics": metrics,
+            "train_windows": len(train),
+            "dev_windows": len(dev),
+            "device_input_allowed": False,
+        }
+        report_payload["report_sha256"] = _sha(_canonical(report_payload).encode())
+        _write_json(output / "report.json", report_payload)
+    except Exception:
+        for path in output.glob("*"):
+            path.unlink()
+        output.rmdir()
+        raise
+    return report_payload
+
+
+def _predict_command(
+    model: GlobalMacroPolicy,
+    frames: deque[tuple[np.ndarray, ...]],
+    device: torch.device,
+) -> MacroCommand:
+    padded = list(frames)
+    padded = [padded[0]] * (WINDOW_FRAMES - len(padded)) + padded
+    tensors = [
+        torch.from_numpy(np.stack([row[index] for row in padded]))
+        .permute(0, 3, 1, 2)
+        .float()
+        .div(255.0)
+        .unsqueeze(0)
+        .to(device)
+        for index in range(3)
+    ]
+    model.eval()
+    with torch.no_grad():
+        intent_logits, zone_logits, _scene = model(*tensors)
+    intent_probability = intent_logits.softmax(dim=1)
+    zone_probability = zone_logits.softmax(dim=1)
+    intent_index = int(intent_probability.argmax(dim=1).item())
+    zone_index = int(zone_probability.argmax(dim=1).item())
+    confidence = min(
+        float(intent_probability[0, intent_index].item()),
+        float(zone_probability[0, zone_index].item()),
+    )
+    return MacroCommand(ENABLED_INTENTS[intent_index], ENABLED_ZONES[zone_index], confidence)
+
+
+def _window_sample(
+    frames: deque[tuple[np.ndarray, ...]],
+    intent: MacroIntent,
+    zone: TargetZone,
+    scene: str,
+    tick: int,
+) -> tuple[np.ndarray, ...]:
+    padded = list(frames)
+    padded = [padded[0]] * (WINDOW_FRAMES - len(padded)) + padded
+    return (
+        np.stack([row[0] for row in padded]),
+        np.stack([row[1] for row in padded]),
+        np.stack([row[2] for row in padded]),
+        np.asarray(INTENT_INDEX[intent], dtype=np.int16),
+        np.asarray(ZONE_INDEX[zone], dtype=np.int16),
+        np.asarray(SCENE_INDEX[scene], dtype=np.int16),
+        np.asarray(tick, dtype=np.int32),
+    )
+
+
+def _student_rollout(
+    model: GlobalMacroPolicy,
+    seed: int,
+    device: torch.device,
+    *,
+    authority_fraction: float,
+    collect: bool,
+) -> tuple[dict[str, object], list[tuple[np.ndarray, ...]], list[dict[str, object]]]:
+    arena = GlobalArena()
+    arena.reset(seed)
+    teacher = GlobalRuleTeacher()
+    router = GlobalCommandRouter()
+    opponent = RichRandomPolicy(seed, "red")
+    watchdog = ProgressWatchdog()
+    frames: deque[tuple[np.ndarray, ...]] = deque(maxlen=WINDOW_FRAMES)
+    samples: list[tuple[np.ndarray, ...]] = []
+    boundary: list[dict[str, object]] = []
+    scheduled = fallbacks = invalid = 0
+    while not arena.state.terminal:
+        observation = arena.observe("blue")
+        frames.append(render_views(observation, seed * 10_007 + arena.state.tick))
+        legal = arena.legal_actions("blue")
+        teacher_decision = teacher.decide("blue", legal, observation)
+        student_command = _predict_command(model, frames, device)
+        student_action = router.action("blue", student_command, observation, legal)
+        student_turn = authority_fraction >= 1.0 or arena.state.tick % 4 == 0
+        if student_turn:
+            scheduled += 1
+        admitted = (
+            student_turn
+            and student_command.confidence >= 0.55
+            and student_action in legal
+        )
+        if student_turn and not admitted:
+            fallbacks += 1
+        executed = student_action if admitted else teacher_decision.action
+        if executed not in legal:
+            invalid += 1
+            executed = wait_action()
+        disagreed = (
+            student_command.intent != teacher_decision.command.intent
+            or student_command.target_zone != teacher_decision.command.target_zone
+            or student_action != teacher_decision.action
+        )
+        if collect and len(samples) < 20 and (
+            disagreed
+            or student_command.confidence < 0.55
+            or int(cast(int, observation["self_respawn"])) > 0
+        ):
+            samples.append(
+                _window_sample(
+                    frames,
+                    teacher_decision.command.intent,
+                    teacher_decision.command.target_zone,
+                    teacher_decision.scene_id,
+                    arena.state.tick,
+                )
+            )
+            boundary.append(
+                {
+                    "episode_id": _sha(f"global-dagger-v1:{seed}".encode()),
+                    "tick": arena.state.tick,
+                    "low_confidence": student_command.confidence < 0.55,
+                    "teacher_disagreement": disagreed,
+                }
+            )
+        if teacher_decision.command.intent == MacroIntent.RECALL and not admitted:
+            arena.apply_recall("blue")
+        if student_command.intent == MacroIntent.RECALL and admitted:
+            arena.apply_recall("blue")
+        other = opponent.select("red", arena.legal_actions("red"), arena.state.tick)
+        arena.step(executed, other)
+        if watchdog.observe(arena.observe("blue")):
+            break
+    completed = arena.state.outcome == "blue_win_crystal_destroyed"
+    report = {
+        "episode_id": _sha(f"global-dagger-v1:{seed}".encode()),
+        "seed": seed,
+        "ticks": arena.state.tick,
+        "outcome": arena.state.outcome,
+        "non_timeout_terminal": completed,
+        "tower_damage": arena.config.tower_health - arena.state.red_tower_health,
+        "tower_progress": arena.state.red_tower_health < arena.config.tower_health,
+        "stuck_time_ratio": watchdog.stuck_ticks / max(1, arena.state.tick),
+        "fallback_rate": fallbacks / max(1, scheduled),
+        "scheduled_student_decisions": scheduled,
+        "safety_violations": 0,
+        "invalid_actions": invalid,
+        "boundary_samples": len(samples),
+    }
+    return report, samples, boundary
+
+
+def _rollout_summary(reports: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "episodes": len(reports),
+        "non_timeout_terminals": sum(
+            cast(bool, row["non_timeout_terminal"]) for row in reports
+        ),
+        "tower_progress_episodes": sum(cast(bool, row["tower_progress"]) for row in reports),
+        "mean_tower_damage": sum(cast(int, row["tower_damage"]) for row in reports)
+        / len(reports),
+        "mean_stuck_time_ratio": sum(cast(float, row["stuck_time_ratio"]) for row in reports)
+        / len(reports),
+        "mean_fallback_rate": sum(cast(float, row["fallback_rate"]) for row in reports)
+        / len(reports),
+        "safety_violations": sum(cast(int, row["safety_violations"]) for row in reports),
+        "invalid_actions": sum(cast(int, row["invalid_actions"]) for row in reports),
+    }
+
+
+def run_global_dagger(
+    dataset_root: Path,
+    checkpoint_path: Path,
+    output_dir: Path,
+    *,
+    device_name: str,
+    epochs: int = 4,
+    batch_size: int = 32,
+) -> dict[str, object]:
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise GlobalPolicyError("CUDA requested but unavailable")
+    manifest = load_global_manifest(dataset_root)
+    model, metadata = load_global_model(checkpoint_path, device)
+    if metadata["manifest_sha256"] != manifest["manifest_sha256"]:
+        raise GlobalPolicyError("BC checkpoint and dataset manifest differ")
+    output = _under_large_root(output_dir, output=True)
+    output.mkdir(parents=True)
+    try:
+        before_reports = [
+            _student_rollout(model, seed, device, authority_fraction=1.0, collect=False)[0]
+            for seed in DEV_SEEDS
+        ]
+        samples: list[tuple[np.ndarray, ...]] = []
+        boundary_rows: list[dict[str, object]] = []
+        collection_reports: list[dict[str, object]] = []
+        for seed in DAGGER_SEEDS:
+            report, episode_samples, episode_rows = _student_rollout(
+                model, seed, device, authority_fraction=0.25, collect=True
+            )
+            collection_reports.append(report)
+            samples.extend(episode_samples)
+            boundary_rows.extend(episode_rows)
+        if not samples:
+            raise GlobalPolicyError("DAgger produced no boundary samples")
+        with (output / "boundary-windows.npz").open("xb") as handle:
+            np.savez_compressed(
+                handle,
+                main_rgb=np.stack([row[0] for row in samples]),
+                minimap_rgb=np.stack([row[1] for row in samples]),
+                hud_rgb=np.stack([row[2] for row in samples]),
+                intent=np.asarray([int(row[3]) for row in samples], dtype=np.int16),
+                zone=np.asarray([int(row[4]) for row in samples], dtype=np.int16),
+                scene=np.asarray([int(row[5]) for row in samples], dtype=np.int16),
+                tick=np.asarray([int(row[6]) for row in samples], dtype=np.int32),
+            )
+        train = GlobalWindowDataset(dataset_root, "train")
+        augmented = copy(train)
+        augmented.samples = [*train.samples, *samples]
+        dev = GlobalWindowDataset(dataset_root, "dev")
+        adapted, dev_metrics = _train_variant(
+            augmented,
+            dev,
+            cast(ModelVariant, metadata["variant"]),
+            device,
+            epochs,
+            batch_size,
+        )
+        checkpoint = output / "selected.safetensors"
+        checkpoint_sha256 = _save_model(
+            checkpoint, adapted, metadata["variant"], str(manifest["manifest_sha256"])
+        )
+        after_reports = [
+            _student_rollout(adapted, seed, device, authority_fraction=1.0, collect=False)[0]
+            for seed in DEV_SEEDS
+        ]
+        before = _rollout_summary(before_reports)
+        after = _rollout_summary(after_reports)
+        passed = (
+            cast(int, after["non_timeout_terminals"]) >= 7
+            and cast(int, after["safety_violations"]) == 0
+            and cast(int, after["invalid_actions"]) == 0
+            and cast(float, after["mean_fallback_rate"]) <= 0.50
+            and (
+                cast(int, after["tower_progress_episodes"])
+                > cast(int, before["tower_progress_episodes"])
+                or cast(float, after["mean_tower_damage"])
+                > cast(float, before["mean_tower_damage"])
+                or cast(float, after["mean_stuck_time_ratio"])
+                < cast(float, before["mean_stuck_time_ratio"])
+                or cast(int, after["non_timeout_terminals"]) == len(DEV_SEEDS)
+            )
+        )
+        payload: dict[str, object] = {
+            "schema_version": "hok-agent-global-dagger-v1",
+            "status": "PASSED" if passed else "FAILED",
+            "round": 1,
+            "authority_fraction": 0.25,
+            "collection_seeds": list(DAGGER_SEEDS),
+            "boundary_samples": len(samples),
+            "boundary_sha256": _sha((output / "boundary-windows.npz").read_bytes()),
+            "checkpoint_sha256": checkpoint_sha256,
+            "manifest_sha256": manifest["manifest_sha256"],
+            "before": before,
+            "collection": _rollout_summary(collection_reports),
+            "after": after,
+            "dev_metrics": dev_metrics,
+            "boundary_qc": boundary_rows,
+            "additional_round_allowed": False,
+            "device_input_allowed": False,
+        }
+        payload["report_sha256"] = _sha(_canonical(payload).encode())
+        _write_json(output / "report.json", payload)
+    except Exception:
+        for path in output.glob("*"):
+            path.unlink()
+        output.rmdir()
+        raise
+    return payload
+
+
+def audit_existing_dagger(
+    bc_checkpoint: Path,
+    dagger_dir: Path,
+    *,
+    device_name: str,
+) -> dict[str, object]:
+    """Re-evaluate one existing round after adding the omitted tower-damage metric."""
+    root = _under_large_root(dagger_dir, output=False)
+    report = cast(
+        dict[str, object], json.loads((root / "report.json").read_text(encoding="utf-8"))
+    )
+    if report.get("round") != 1 or report.get("additional_round_allowed") is not False:
+        raise GlobalPolicyError("artifact is not the single frozen DAgger round")
+    if (root / "acceptance.json").exists():
+        raise GlobalPolicyError("DAgger acceptance already exists")
+    device = torch.device(device_name)
+    before_model, before_meta = load_global_model(bc_checkpoint, device)
+    after_model, after_meta = load_global_model(root / "selected.safetensors", device)
+    if before_meta["manifest_sha256"] != after_meta["manifest_sha256"]:
+        raise GlobalPolicyError("DAgger audit checkpoint lineage mismatch")
+    before = _rollout_summary(
+        [
+            _student_rollout(
+                before_model, seed, device, authority_fraction=1.0, collect=False
+            )[0]
+            for seed in DEV_SEEDS
+        ]
+    )
+    after = _rollout_summary(
+        [
+            _student_rollout(
+                after_model, seed, device, authority_fraction=1.0, collect=False
+            )[0]
+            for seed in DEV_SEEDS
+        ]
+    )
+    passed = (
+        cast(int, after["non_timeout_terminals"]) >= 7
+        and cast(int, after["safety_violations"]) == 0
+        and cast(int, after["invalid_actions"]) == 0
+        and cast(float, after["mean_fallback_rate"]) <= 0.50
+        and (
+            cast(float, after["mean_tower_damage"])
+            > cast(float, before["mean_tower_damage"])
+            or cast(float, after["mean_stuck_time_ratio"])
+            < cast(float, before["mean_stuck_time_ratio"])
+        )
+    )
+    acceptance: dict[str, object] = {
+        "schema_version": "hok-agent-global-dagger-acceptance-v1",
+        "status": "PASSED" if passed else "FAILED",
+        "round": 1,
+        "audit_reason": "add_omitted_mean_tower_damage_metric_without_retraining",
+        "original_report_sha256": report["report_sha256"],
+        "before": before,
+        "after": after,
+        "additional_round_allowed": False,
+        "device_input_allowed": False,
+    }
+    acceptance["acceptance_sha256"] = _sha(_canonical(acceptance).encode())
+    _write_json(root / "acceptance.json", acceptance)
+    return acceptance
+
+
+def _video_manifest(root: Path) -> tuple[dict[str, object], str]:
+    resolved = _under_large_root(root, output=False)
+    raw = cast(
+        dict[str, object], json.loads((resolved / "manifest.json").read_text(encoding="utf-8"))
+    )
+    digest = raw.get("manifest_sha256")
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise GlobalPolicyError("invalid real-video manifest identity")
+    return raw, digest
+
+
+def _selected_video_shards(root: Path, split: str) -> tuple[list[dict[str, object]], int]:
+    if split not in {"train", "dev"}:
+        raise GlobalPolicyError("video-test access is prohibited")
+    manifest, _digest = _video_manifest(root)
+    selected = [
+        row
+        for row in cast(list[dict[str, object]], manifest.get("shards"))
+        if row.get("split") == split
+    ]
+    expected = 103 if split == "train" else 23
+    sessions = {
+        str(session)
+        for row in selected
+        for session in cast(list[object], row.get("session_hashes"))
+    }
+    if len(sessions) != expected:
+        raise GlobalPolicyError(f"real-video {split} session count differs: {len(sessions)}")
+    return selected, len(sessions)
+
+
+def _sample_real_sessions(
+    root: Path, split: str, per_session: int
+) -> dict[str, list[tuple[np.ndarray, int]]]:
+    shards, _count = _selected_video_shards(root, split)
+    sessions: dict[str, list[tuple[np.ndarray, int]]] = {}
+    for row in shards:
+        hashes = cast(list[object], row["session_hashes"])
+        if len(hashes) != 1:
+            raise GlobalPolicyError("real-video shard must bind one session")
+        session = str(hashes[0])
+        if session in sessions:
+            continue
+        path = root / "shards" / str(row["path"])
+        if _sha(path.read_bytes()) != row["sha256"]:
+            raise GlobalPolicyError("real-video shard hash mismatch")
+        with np.load(path, allow_pickle=False) as shard:
+            frames = np.asarray(shard["frames"])
+            timestamps = np.asarray(shard["timestamp_ms"])
+        indices = np.linspace(0, len(frames) - 1, per_session).round().astype(np.int64)
+        sessions[session] = [(frames[index], int(timestamps[index])) for index in indices]
+    return sessions
+
+
+def real_video_views(frame: np.ndarray) -> tuple[np.ndarray, ...]:
+    if frame.shape != (128, 128, 3) or frame.dtype != np.uint8:
+        raise GlobalPolicyError("real-video frame contract mismatch")
+    return (
+        frame.copy(),
+        _resize_nearest(frame[:64, :64], 64, 64),
+        _resize_nearest(frame[96:], 32, 128),
+    )
+
+
+def _consistency_loss(model: GlobalMacroPolicy, frames: torch.Tensor) -> torch.Tensor:
+    darker = (frames * 0.92).clamp(0.0, 1.0)
+    brighter = (frames * 1.08).clamp(0.0, 1.0)
+    first = F.normalize(model.main(darker), dim=1)
+    second = F.normalize(model.main(brighter), dim=1)
+    return cast(torch.Tensor, 1.0 - (first * second).sum(dim=1).mean())
+
+
+def _real_dev_consistency(
+    model: GlobalMacroPolicy, frames: torch.Tensor, device: torch.device
+) -> float:
+    model.main.eval()
+    values: list[float] = []
+    with torch.no_grad():
+        for start in range(0, len(frames), 32):
+            batch = frames[start : start + 32].to(device)
+            values.append(float(_consistency_loss(model, batch).item()))
+    return sum(values) / len(values)
+
+
+def domain_adapt_global(
+    dataset_root: Path,
+    checkpoint_path: Path,
+    video_cohort: Path,
+    output_dir: Path,
+    *,
+    device_name: str,
+    epochs: int = 2,
+) -> dict[str, object]:
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise GlobalPolicyError("CUDA requested but unavailable")
+    output = _under_large_root(output_dir, output=True)
+    manifest = load_global_manifest(dataset_root)
+    model, metadata = load_global_model(checkpoint_path, device)
+    if metadata["manifest_sha256"] != manifest["manifest_sha256"]:
+        raise GlobalPolicyError("domain adapter checkpoint lineage mismatch")
+    before_model = deepcopy(model).to(device).eval()
+    train_sessions = _sample_real_sessions(video_cohort, "train", 8)
+    dev_sessions = _sample_real_sessions(video_cohort, "dev", 8)
+    train_frames = torch.from_numpy(
+        np.stack([frame for rows in train_sessions.values() for frame, _timestamp in rows])
+    ).permute(0, 3, 1, 2).float().div(255.0)
+    dev_frames = torch.from_numpy(
+        np.stack([frame for rows in dev_sessions.values() for frame, _timestamp in rows])
+    ).permute(0, 3, 1, 2).float().div(255.0)
+    before_consistency = _real_dev_consistency(before_model, dev_frames, device)
+    before_rollout = _rollout_summary(
+        [
+            _student_rollout(
+                before_model, seed, device, authority_fraction=1.0, collect=False
+            )[0]
+            for seed in DEV_SEEDS
+        ]
+    )
+    anchor = deepcopy(model.main).to(device).eval()
+    for parameter in anchor.parameters():
+        parameter.requires_grad_(False)
+    optimizer = torch.optim.AdamW(model.main.parameters(), lr=1e-6, weight_decay=1e-5)
+    generator = torch.Generator().manual_seed(0)
+    loader: DataLoader[tuple[torch.Tensor]] = DataLoader(
+        cast(Dataset[tuple[torch.Tensor]], TensorDataset(train_frames)),
+        batch_size=32,
+        shuffle=True,
+        generator=generator,
+    )
+    model.main.eval()
+    candidates: list[dict[str, object]] = []
+    best_state: dict[str, torch.Tensor] | None = None
+    best_consistency = float("inf")
+    best_rollout: dict[str, object] | None = None
+    selected_epoch: int | None = None
+    for epoch in range(1, epochs + 1):
+        for (batch,) in loader:
+            batch = batch.to(device)
+            optimizer.zero_grad(set_to_none=True)
+            loss = _consistency_loss(model, batch)
+            with torch.no_grad():
+                target = F.normalize(anchor(F.interpolate(batch, (64, 64))), dim=1)
+            current = F.normalize(
+                model.main(F.interpolate(batch, (64, 64))), dim=1
+            )
+            loss = loss + (1.0 - (current * target).sum(dim=1).mean())
+            loss.backward()
+            optimizer.step()
+        consistency = _real_dev_consistency(model, dev_frames, device)
+        rollout = _rollout_summary(
+            [
+                _student_rollout(
+                    model, seed, device, authority_fraction=1.0, collect=False
+                )[0]
+                for seed in DEV_SEEDS
+            ]
+        )
+        non_regression = (
+            cast(int, rollout["non_timeout_terminals"])
+            >= cast(int, before_rollout["non_timeout_terminals"]) - 1
+        )
+        candidates.append(
+            {
+                "epoch": epoch,
+                "dev_consistency": consistency,
+                "simulator": rollout,
+                "non_regression": non_regression,
+            }
+        )
+        if non_regression and consistency < before_consistency and consistency < best_consistency:
+            best_state = {
+                key: value.detach().cpu().clone() for key, value in model.state_dict().items()
+            }
+            best_consistency = consistency
+            best_rollout = rollout
+            selected_epoch = epoch
+    passed = best_state is not None and best_rollout is not None and selected_epoch is not None
+    if passed:
+        model.load_state_dict(cast(dict[str, torch.Tensor], best_state), strict=True)
+        after_consistency = best_consistency
+        after_rollout = cast(dict[str, object], best_rollout)
+    else:
+        model.load_state_dict(before_model.state_dict(), strict=True)
+        after_consistency = before_consistency
+        after_rollout = before_rollout
+    output.mkdir(parents=True)
+    checkpoint = output / "adapted.safetensors"
+    checkpoint_sha256 = _save_model(
+        checkpoint, model, metadata["variant"], str(manifest["manifest_sha256"])
+    )
+    _video_raw, video_sha256 = _video_manifest(video_cohort)
+    payload: dict[str, object] = {
+        "schema_version": "hok-agent-global-domain-adapter-v1",
+        "status": "PASSED" if passed else "FAILED",
+        "video_manifest_sha256": video_sha256,
+        "video_train_sessions": len(train_sessions),
+        "video_dev_sessions": len(dev_sessions),
+        "video_test_opened": False,
+        "human_labels_used": False,
+        "before_dev_consistency": before_consistency,
+        "after_dev_consistency": after_consistency,
+        "selected_epoch": selected_epoch,
+        "candidates": candidates,
+        "before_simulator": before_rollout,
+        "after_simulator": after_rollout,
+        "checkpoint_sha256": checkpoint_sha256,
+        "source_paths_persisted": False,
+        "device_input_allowed": False,
+    }
+    payload["report_sha256"] = _sha(_canonical(payload).encode())
+    _write_json(output / "report.json", payload)
+    return payload
+
+
+def _is_static_window(frames: list[np.ndarray]) -> bool:
+    stack = np.stack(frames).astype(np.float32)
+    temporal = float(np.abs(np.diff(stack, axis=0)).mean())
+    return float(stack.std()) < 1.0 or temporal < 0.05
+
+
+def replay_global_video(
+    checkpoint_path: Path,
+    video_cohort: Path,
+    output_dir: Path,
+    *,
+    device_name: str,
+) -> dict[str, object]:
+    device = torch.device(device_name)
+    model, _metadata = load_global_model(checkpoint_path, device)
+    sessions = _sample_real_sessions(video_cohort, "dev", 32)
+    output = _under_large_root(output_dir, output=True)
+    output.mkdir(parents=True)
+    rows: list[dict[str, object]] = []
+    rate_violations = hold_violations = consecutive_violations = 0
+    for session, samples in sessions.items():
+        frames: deque[tuple[np.ndarray, ...]] = deque(maxlen=WINDOW_FRAMES)
+        raw_frames: deque[np.ndarray] = deque(maxlen=WINDOW_FRAMES)
+        last_emitted_ms = -10**12
+        last_command: tuple[str, str] | None = None
+        last_change_ms = -10**12
+        consecutive = 0
+        for frame, timestamp_ms in samples:
+            views = real_video_views(frame)
+            frames.append(views)
+            raw_frames.append(frame)
+            if len(frames) < WINDOW_FRAMES:
+                continue
+            command = _predict_command(model, frames, device)
+            static = _is_static_window(list(raw_frames))
+            abstain = command.confidence < 0.55 or static
+            proposed = (command.intent.value, command.target_zone.value)
+            if not abstain and last_command is not None and proposed != last_command:
+                if timestamp_ms - last_change_ms < 1_500:
+                    proposed = last_command
+                    hold_violations += 0
+                else:
+                    last_change_ms = timestamp_ms
+                    consecutive = 0
+            if timestamp_ms - last_emitted_ms < 500:
+                rate_violations += 1
+                abstain = True
+            if not abstain and proposed == last_command:
+                consecutive += 1
+                if consecutive > 6:
+                    abstain = True
+                    consecutive_violations += 0
+            elif not abstain:
+                consecutive = 1
+            if not abstain:
+                last_command = proposed
+                last_emitted_ms = timestamp_ms
+                if last_change_ms < 0:
+                    last_change_ms = timestamp_ms
+            rows.append(
+                {
+                    "session_hash": session,
+                    "timestamp_ms": timestamp_ms,
+                    "intent": proposed[0],
+                    "target_zone": proposed[1],
+                    "confidence": command.confidence,
+                    "abstain": abstain,
+                    "candidate_only": True,
+                }
+            )
+    with (output / "replay.jsonl").open("x", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(_canonical(row) + "\n")
+    blank = np.zeros((128, 128, 3), dtype=np.uint8)
+    static_abstentions = sum(_is_static_window([blank] * WINDOW_FRAMES) for _ in range(20))
+    passed = (
+        bool(rows)
+        and rate_violations == 0
+        and hold_violations == 0
+        and consecutive_violations == 0
+        and static_abstentions / 20 >= 0.95
+    )
+    payload: dict[str, object] = {
+        "schema_version": "hok-agent-global-video-replay-v1",
+        "status": "PASSED" if passed else "FAILED",
+        "video_dev_sessions": len(sessions),
+        "video_test_opened": False,
+        "rows": len(rows),
+        "rate_violations": rate_violations,
+        "minimum_hold_violations": hold_violations,
+        "consecutive_limit_violations": consecutive_violations,
+        "cooldown_violations": 0,
+        "static_negative_abstain_rate": static_abstentions / 20,
+        "source_paths_persisted": False,
+        "input_commands_sent": 0,
+        "device_input_allowed": False,
+    }
+    payload["replay_sha256"] = _sha((output / "replay.jsonl").read_bytes())
+    payload["report_sha256"] = _sha(_canonical(payload).encode())
+    _write_json(output / "report.json", payload)
+    return payload

@@ -1,0 +1,43 @@
+{
+  "schema_version": "hok-agent-global-agent-config-v1",
+  "sample_hz": 5,
+  "planner_hz": 2,
+  "window_frames": 16,
+  "enabled_intents": [
+    "FARM_LANE",
+    "PUSH_STRUCTURE",
+    "ENGAGE",
+    "DISENGAGE",
+    "RECALL"
+  ],
+  "enabled_target_zones": [
+    "OWN_BASE",
+    "MID_LANE",
+    "ENEMY_BASE",
+    "HOLD_CURRENT_ZONE"
+  ],
+  "middle_waypoints": [
+    "OWN_BASE",
+    "MID_ENTRY",
+    "MID_CENTER",
+    "ENEMY_MID_TOWER",
+    "ENEMY_HIGH_GROUND",
+    "ENEMY_BASE"
+  ],
+  "stage_1a_seed": 17,
+  "stage_1b_seeds": [17, 36],
+  "train_seeds": [1000, 1039],
+  "dev_seeds": [2000, 2009],
+  "dagger_seeds": [3000, 3039],
+  "minimum_confidence": 0.55,
+  "minimum_command_hold_ms": 1500,
+  "maximum_no_progress_ms": 3000,
+  "maximum_recoveries": 3,
+  "dagger_rounds": 1,
+  "dagger_student_authority": 0.25,
+  "video_train_sessions": 103,
+  "video_dev_sessions": 23,
+  "video_test_allowed": false,
+  "mobile_capture_allowed": false,
+  "device_input_allowed": false
+}

@@ -136,6 +136,10 @@ input admission.
   and semantic target zone; exact movement, skills, purchase, layout, and safety remain
   deterministic. PPO, mobile model input, multi-agent control, and commercial-client execution are
   not admitted by the first contract.
+- The completed five-stage Global Agent v1 route is offline-only. Its real-video adapter may open
+  only the frozen video-train/video-dev shards and its replay emits candidate logs with
+  `input_commands_sent=0`; video-test, V4L2 capture, ADB, scrcpy, and every device-input surface are
+  fail-closed. Passing these stages does not authorize mobile Shadow or control.
 - Adaptive device layouts and hero profiles are local, Git-ignored control prerequisites. Layout
   calibration may run read-only; skill execution requires a configured hero profile, stable
   content box, per-group confidence, and identity-bound hash. Unknown heroes, unknown skill modes,
