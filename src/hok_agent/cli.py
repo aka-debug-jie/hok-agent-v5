@@ -706,6 +706,11 @@ def _parser() -> argparse.ArgumentParser:
     operation_base.add_argument("--execution-layout", type=Path, required=True)
     operation_base.add_argument("--observation-rois", type=Path, required=True)
     operation_base.add_argument("--output-dir", type=Path, required=True)
+    operation_side = commands.add_parser(
+        "mobile-operation-team-side",
+        help="detect blue or red side from the loading-panel self highlight",
+    )
+    operation_side.add_argument("--serial", required=True)
     operation_teacher = commands.add_parser(
         "mobile-operation-teacher",
         help="run state-conditioned minimap movement through the operation base",
@@ -2146,6 +2151,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 observation_rois_path=args.observation_rois,
                 output_dir=args.output_dir,
             )
+        elif args.command == "mobile-operation-team-side":
+            from hok_agent.mobile_testbed import detect_mobile_operation_team_side
+
+            result = detect_mobile_operation_team_side(args.serial)
         elif args.command == "mobile-operation-teacher":
             from hok_agent.mobile_testbed import run_mobile_operation_base
 

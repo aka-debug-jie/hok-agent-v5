@@ -13,6 +13,11 @@ consistent frames are required before a direction change, every direction is hel
 second, and a missing detection keeps the current direction for at most one second before `wait`.
 No fixed patrol or random fallback is permitted.
 
+Before collection, one read-only loading-panel check may locate the unique yellow self-name
+highlight. A top-row highlight means blue side and a bottom-row highlight means red side. The
+loading-screen cue and highlight margin must both pass; otherwise side is unknown. The frame is not
+persisted, the result is not a movement label, and this check sends no input.
+
 The frozen offline audit over 1,485 existing minimap frames passed: detection coverage was 0.7838,
 all eight directions were present, and player-position jump P95 was 3.59 pixels against a 5-pixel
 limit. No phone or control output was used for this audit.

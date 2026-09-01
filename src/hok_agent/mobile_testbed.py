@@ -404,6 +404,15 @@ class MinimapTeacherDecision:
     confidence: float
 
 
+@dataclass(frozen=True)
+class LoadingPanelSideDecision:
+    team_side: str
+    player_row: str
+    player_slot: int
+    score: float
+    margin: float
+
+
 class MinimapDirectionFilter:
     def __init__(
         self, confirmation_frames: int, minimum_hold_ms: int, missing_hold_ms: int
@@ -1939,6 +1948,67 @@ def _frame(serial: str) -> np.ndarray:
     if rgb.ndim != 3 or rgb.shape[2] != 3:
         raise MobileTestbedError("test device screen must be RGB")
     return rgb
+
+
+def loading_panel_team_side(frame: np.ndarray) -> LoadingPanelSideDecision | None:
+    if frame.ndim != 3 or frame.shape[2] != 3 or frame.dtype != np.uint8:
+        raise MobileTestbedError("loading panel frame must be uint8 RGB")
+    if frame.shape[:2] != (720, 1600):
+        rows = np.linspace(0, frame.shape[0] - 1, 720).astype(np.int64)
+        columns = np.linspace(0, frame.shape[1] - 1, 1600).astype(np.int64)
+        frame = frame[rows[:, None], columns[None, :], :]
+    center = frame[280:390, 760:840].astype(np.int16)
+    center_chroma = center.max(axis=2) - center.min(axis=2)
+    if float(((center.min(axis=2) > 170) & (center_chroma < 60)).mean()) < 0.10:
+        return None
+    card_ranges = tuple((310 + 200 * index, 491 + 200 * index) for index in range(5))
+    name_bands = ((250, 275), (650, 675))
+    scores: list[float] = []
+    for y0, y1 in name_bands:
+        for x0, x1 in card_ranges:
+            region = frame[y0:y1, x0:x1].astype(np.int16)
+            red, green, blue = (region[..., index] for index in range(3))
+            gold = (
+                (red > 140)
+                & (green > 90)
+                & (red > blue * 1.5)
+                & (green > blue * 1.2)
+            )
+            scores.append(float(gold.mean()))
+    ranked = sorted(range(len(scores)), key=lambda index: scores[index], reverse=True)
+    best, second = ranked[:2]
+    margin = scores[best] - scores[second]
+    if scores[best] < 0.05 or margin < 0.03:
+        return None
+    top = best < 5
+    return LoadingPanelSideDecision(
+        "blue" if top else "red",
+        "top" if top else "bottom",
+        best % 5,
+        round(scores[best], 8),
+        round(margin, 8),
+    )
+
+
+def detect_mobile_operation_team_side(serial: str) -> dict[str, object]:
+    _require_mobile_input_identity()
+    guard = _open_device_guard(serial)
+    guard.check()
+    decision = loading_panel_team_side(_frame(guard.serial))
+    if decision is None:
+        raise MobileTestbedError("loading panel team side is unavailable")
+    return {
+        "schema_version": "hok-agent-mobile-operation-team-side-v1",
+        "status": "PASSED",
+        "team_side": decision.team_side,
+        "player_row": decision.player_row,
+        "player_slot": decision.player_slot,
+        "score": decision.score,
+        "margin": decision.margin,
+        "raw_frame_persisted": False,
+        "input_commands_sent": 0,
+        "control_output": False,
+    }
 
 
 def _open_v3_predictor(

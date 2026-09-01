@@ -239,6 +239,8 @@ sessions, freezes exactly three train and one dev session only after real eight-
 then runs a balanced 32-window overfit before one offline seed-0 pilot. It does not use human
 labels, PPO, Shadow, or model-driven phone input. See
 [docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md](docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md).
+The read-only `mobile-operation-team-side` preflight detects blue versus red from the unique
+yellow self-card highlight on the loading panel and fails closed on gameplay or ambiguous frames.
 
 The active route is Global Agent v1: a structured simulator rule teacher completes full games and
 labels macro intent plus semantic target zone; an RGB student learns those high-level decisions,

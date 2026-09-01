@@ -282,6 +282,29 @@ def test_operation_movement_teacher_contract_and_state_filter() -> None:
     assert movement_filter.update(None, 1901) == ("wait", True)
 
 
+def test_loading_panel_team_side_uses_unique_self_highlight() -> None:
+    frame = np.zeros((720, 1600, 3), dtype=np.uint8)
+    frame[280:390, 760:840] = 220
+    frame[250:275, 910:1091] = np.asarray([210, 160, 20], dtype=np.uint8)
+    blue = mobile_testbed.loading_panel_team_side(frame)
+    assert blue is not None
+    assert (blue.team_side, blue.player_row, blue.player_slot) == ("blue", "top", 3)
+
+    frame.fill(0)
+    frame[280:390, 760:840] = 220
+    frame[650:675, 510:691] = np.asarray([210, 160, 20], dtype=np.uint8)
+    red = mobile_testbed.loading_panel_team_side(frame)
+    assert red is not None
+    assert (red.team_side, red.player_row, red.player_slot) == ("red", "bottom", 1)
+
+    frame[250:275, 310:491] = np.asarray([210, 160, 20], dtype=np.uint8)
+    assert mobile_testbed.loading_panel_team_side(frame) is None
+
+    frame[280:390, 760:840] = 0
+    frame[250:275, 310:491] = 0
+    assert mobile_testbed.loading_panel_team_side(frame) is None
+
+
 def test_operation_movement_teacher_uses_player_and_separate_target() -> None:
     root = Path(__file__).resolve().parents[1]
     contract, _digest = mobile_testbed._movement_teacher_contract(

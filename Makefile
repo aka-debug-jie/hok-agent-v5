@@ -306,6 +306,12 @@ operation-direct-policy-pilot: storage-preflight
 operation-minimap-teacher-audit: storage-preflight
 	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent operation-minimap-teacher-audit --session-dir "$(OPERATION_POLICY_TRAIN)" --contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --output-dir "$(OPERATION_MOVEMENT_TEACHER_AUDIT)"
 
+.PHONY: operation-team-side
+
+operation-team-side:
+	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
+	HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-operation-team-side --serial "$(T8_SERIAL)"
+
 operation-teacher-readonly-smoke: storage-preflight
 	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
 	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-operation-teacher --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_60s_v1.json --movement-contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --output-dir "$(HOK_RUNS_ROOT)/operation-movement-teacher-v1/read-only-$$(date +%s)"
