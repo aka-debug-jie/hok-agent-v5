@@ -22,6 +22,7 @@ V5     PixelArena source teacher -> SimSiam -> pseudo labels -> Mean Teacher
 V6     RGB-derived tracking and causal temporal diagnostics
 V7     Rich PixelArena -> factorized ResNet-18 policy -> PixelArena-only loop
 T8     mobile/video demonstrations -> causal policy diagnostics -> Shadow -> bounded gates
+HP-v0  FrameBus -> RGB events + shared temporal policy -> deterministic Router -> unified Replay
 ```
 
 V5/V6 base training uses no human action, frame, HUD, tracking, or temporal labels. T8 is a
@@ -33,6 +34,22 @@ The visual-policy organization was informed by
 [WZCQ](https://github.com/FengQuanLi/WZCQ), and
 [wzry_ai](https://github.com/myBoris/wzry_ai). This repository does not copy their device-control
 code, data, weights, coordinates, assets, or recordings.
+
+## Hierarchical Policy v0 development route
+
+The next development route keeps one RGB PolicyBundle with a shared temporal representation and
+three logical heads: Macro, Movement, and Combat. An independent, versioned VisualEventEngine
+derives terminal, death/respawn, and self-health events from RGB for RewardHub. A deterministic
+Router owns freshness, masks, pointer conflicts, and persistent-joystick execution. Demo, simulator,
+controller, online, and failure rows share one episode-major TransitionStore with different source
+tags and samplers.
+
+The first implementation is deliberately smaller than the long-term architecture: E0 FrameBus,
+VisualEvent schema, and UnifiedTransition validation, followed by the minimal E1 event set. It does
+not yet implement a trained Bundle, online RL, MoE, continuous joystick output, PPO, or model-driven
+mobile input. The full contracts, data roles, parameter tiers, training order, and 1/3/10-episode
+gates are in
+[docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md](docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md).
 
 ## Quick start
 
@@ -249,7 +266,7 @@ the verified side, the same opener, a deterministic advance/hold lane cycle, exi
 combat and purchase rules, and opener replay after death. See
 [docs/MARKSMAN_LANE_CONTROLLER_PROTOCOL.md](docs/MARKSMAN_LANE_CONTROLLER_PROTOCOL.md).
 
-The active route is Global Agent v1: a structured simulator rule teacher completes full games and
+The frozen simulator foundation is Global Agent v1: a structured simulator rule teacher completes full games and
 labels macro intent plus semantic target zone; an RGB student learns those high-level decisions,
 while the existing deterministic navigation, combat, purchase, layout, hero-profile, and safety
 modules execute them. Its five offline stages are complete: the frozen GlobalArena rule regression
@@ -261,7 +278,7 @@ diagnostics passed runtime safety but produced constant `DISENGAGE/OWN_BASE`; th
 and every input stage remain closed.
 See [docs/GLOBAL_AGENT_V1_PROTOCOL.md](docs/GLOBAL_AGENT_V1_PROTOCOL.md).
 
-The active repair is Human IfO Bridge v1. It uses complete human-match videos as observation-only
+The completed non-promoted repair is Human IfO Bridge v1. It uses complete human-match videos as observation-only
 behavior demonstrations, learns Human/Sim temporal representations, trains inverse macro dynamics
 from GlobalArena truth, and then fits Human-BC with frozen-Dagger distillation. Scenario cards are
 diagnostic-only; direct pixel-similarity reward and early reinforcement learning are not admitted.
@@ -283,8 +300,10 @@ the three fixed skill slots execute. Unknown heroes remain skill-disabled. See
 - [AGENTS.md](AGENTS.md): implementation authority and module constraints.
 - [BOUNDARIES.md](BOUNDARIES.md): permitted and forbidden execution surfaces.
 - [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md): concise current-state ledger.
-- [docs/GLOBAL_AGENT_V1_PROTOCOL.md](docs/GLOBAL_AGENT_V1_PROTOCOL.md): active full-episode macro-policy route.
-- [docs/GLOBAL_AGENT_V1_CONVERGENCE_ROADMAP.md](docs/GLOBAL_AGENT_V1_CONVERGENCE_ROADMAP.md): active route, gates, and stop conditions.
+- [docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md](docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md): active
+  development architecture, contracts, training order, and acceptance gates.
+- [docs/GLOBAL_AGENT_V1_PROTOCOL.md](docs/GLOBAL_AGENT_V1_PROTOCOL.md): frozen full-episode macro-policy foundation.
+- [docs/GLOBAL_AGENT_V1_CONVERGENCE_ROADMAP.md](docs/GLOBAL_AGENT_V1_CONVERGENCE_ROADMAP.md): frozen v1 route, gates, and stop conditions.
 - [docs/T8_V4_PROTOCOL.md](docs/T8_V4_PROTOCOL.md): frozen T8-v4 diagnostic and promotion protocol.
 - [docs/T8_V5_ROI_PROTOCOL.md](docs/T8_V5_ROI_PROTOCOL.md): T8-v5 isolated-ROI evidence gate.
 - [docs/T8_BASIC_MVP_PROTOCOL.md](docs/T8_BASIC_MVP_PROTOCOL.md): deterministic basic-only gates.

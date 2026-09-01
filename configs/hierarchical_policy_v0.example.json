@@ -1,0 +1,85 @@
+{
+  "schema_version": "hok-agent-hierarchical-policy-v0-config-v1",
+  "status": "development_default_not_promotion_evidence",
+  "actor_input": {
+    "modality": "causal_rgb_only",
+    "views": ["main", "minimap", "hud"],
+    "sequence_frames": 16,
+    "episode_metadata_enters_actor": false,
+    "reward_or_event_enters_actor": false,
+    "legal_mask_enters_actor": false
+  },
+  "episode_binding": {
+    "scope": "one_declared_marksman_one_role_one_lane",
+    "side_binding": "loading_panel_result_frozen_for_episode",
+    "hero_adapter_selected_before_episode": true,
+    "bundle_swap": "episode_boundary_only"
+  },
+  "clocks": {
+    "frame_bus_target_hz": 10,
+    "frame_bus_minimum_measured_hz": 5,
+    "macro_hz": 1,
+    "movement_hz": 10,
+    "combat_hz": 10,
+    "latest_frame_only": true,
+    "settle_interval_status": "must_be_measured_and_frozen_before_live_gate"
+  },
+  "policy": {
+    "parameter_tier": "v0_s",
+    "policy_parameter_budget_millions": [35, 60],
+    "critic": "single_scalar_value_training_only",
+    "macro_actions": [
+      "FARM_LANE",
+      "PUSH_STRUCTURE",
+      "ENGAGE",
+      "DISENGAGE",
+      "RECALL",
+      "HOLD"
+    ],
+    "movement_actions": ["NONE", "N", "NE", "E", "SE", "S", "SW", "W", "NW"],
+    "combat_actions": ["WAIT", "BASIC_ATTACK", "SKILL1", "SKILL2", "SKILL3"],
+    "continuous_joystick_parameters_enabled": false,
+    "combat_moe_enabled": false
+  },
+  "movement_executor": {
+    "persistent_pointer": true,
+    "direction_change_uses_move_without_release": true,
+    "unchanged_direction_sends_no_duplicate_command": true,
+    "none_releases_pointer": true,
+    "hysteresis_is_deterministic": true
+  },
+  "router": {
+    "learned": false,
+    "checks": [
+      "observation_id",
+      "bundle_version",
+      "proposal_freshness",
+      "confidence",
+      "life_and_terminal_state",
+      "action_mask",
+      "pointer_conflict"
+    ]
+  },
+  "visual_event_engine": {
+    "online_input": "rgb_only",
+    "action_timestamp_online_input": false,
+    "e1_events": ["GAME_END", "WIN", "LOSS", "DEATH", "RESPAWN", "SELF_HP_DELTA"],
+    "e1_5_events_enabled": false,
+    "frozen_during_policy_training": true,
+    "version_and_sha256_required": true
+  },
+  "replay": {
+    "physical_stores": 1,
+    "episode_major": true,
+    "sources": ["demo", "sim", "controller", "online", "offline_video"],
+    "logical_samplers": ["demo", "online", "failure", "joint"],
+    "terminal_transition_stored_before_stop": true,
+    "schema": "game_rules/hierarchical_transition_contract_v0.json"
+  },
+  "permissions": {
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false,
+    "online_learning_allowed": false,
+    "new_input_transport_allowed": false
+  }
+}

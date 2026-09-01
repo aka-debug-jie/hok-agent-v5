@@ -11,6 +11,11 @@ input admission.
 
 - Deterministic structured and RGB closed loops inside project-owned PixelArena V1 and the
   independently versioned Rich PixelArena V2.
+- Hierarchical Policy v0 development preparation may define FrameBus, RGB VisualEvent,
+  UnifiedTransition, PolicyBundle, and deterministic Router contracts. E0/E1 are offline or
+  synthetic development surfaces and grant no phone capture, device input, online learning, or
+  checkpoint promotion. A later owner-testbed episode gate must reuse the existing guarded Mobile
+  Operation Base transport rather than add another input path.
 - Offline analysis of a non-symlink regular local recording.
 - Read-only capture from one explicitly named, non-symlink `/dev/videoN` Linux V4L2
   character device through PyAV. Capture is latest-frame-only, bounded, local, and emits
@@ -200,6 +205,9 @@ input admission.
   selection.
 - Online learning from a commercial client, reward adaptation, real-client policy
   promotion, or mapping Rich PixelArena skills to a real-client control surface.
+- A learned PolicyRouter, an online EventEngine that consumes action timestamps, or simultaneous
+  online updates of the Policy and its Reward/Event model. Offline action timestamps may locate
+  weak-label candidates but cannot affect online event existence or confidence.
 - A trained checkpoint, learned policy, generic vision model, or mutable online rule choosing
   T8-v2.5 collection actions. The v2.5 collector is one frozen deterministic rule contract;
   trained-model input remains blocked until offline, Shadow, and separately reviewed probe gates.
@@ -246,6 +254,13 @@ offline supervision targets, never actor inputs. Tracking values used by V6 must
 be produced internally from RGB. A caller cannot supply legal actions, structured state,
 teacher identity, reward, truth, account, or device state. PixelArena legal domains are
 transient teacher/execution-boundary data and never enter an encoder or hidden state.
+
+The Hierarchical Policy Actor follows the same RGB-only rule. Episode configuration may select a
+bundle or hero adapter before inference, but hero, role, lane, side, visual events, reward,
+executed actions, legal masks, and device state are not Actor tensors. Macro, Movement, and Combat
+proposals bind one observation ID and bundle version. Proposal freshness, masks, pointer conflicts,
+continuous joystick lifecycle, and hard stops belong to a deterministic Router/Executor outside
+the graph.
 
 V5/V6 base data, training, validation, model selection, and diagnostics contain no manually
 provided action, frame, HUD, tracking, or temporal labels. T8 may consume its own automatically

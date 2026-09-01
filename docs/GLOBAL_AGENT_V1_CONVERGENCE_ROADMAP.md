@@ -1,6 +1,9 @@
 # Global Agent v1 收束路线
 
-## 唯一主线
+> 状态：`FROZEN_HISTORICAL_ROUTE`。本文件保留 v1 的阶段、门槛和失败证据；当前开发路线见
+> `docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md`，不得用新路线重写本文件中的冻结结论。
+
+## v1 冻结主线
 
 ```text
 现有安全执行底座
@@ -130,6 +133,6 @@ DO NOT WORK ON: scenario-card training, preprocessing variants, second DAgger, e
 独立授权的活跃场景只读Shadow已验证传输与运行时安全，但未证明候选多样性。它没有开放
 手机输入。任何受限完整对局仍必须先以独立合同解决challenge语义泛化失败。
 
-当前修复主线是Human IfO Bridge v1：人类视频教行为分布，GlobalArena教状态转移对应的
+冻结时的后继修复是 Human IfO Bridge v1：人类视频教行为分布，GlobalArena 教状态转移对应的
 宏观动作，冻结DAgger保护完整终局能力。场景卡片仅保留为备用诊断。权威协议见
 `docs/HUMAN_IFO_V1_PROTOCOL.md`。

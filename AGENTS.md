@@ -5,6 +5,13 @@
 
 ## Active route
 
+- Hierarchical Policy v0 is the active development-preparation successor governed by
+  `docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md`. It keeps one RGB PolicyBundle with a shared temporal
+  representation and separate Macro, Movement, and Combat heads; VisualEventEngine and the
+  deterministic Router remain outside the Actor. The first implementation task is E0 FrameBus,
+  VisualEvent schema, and UnifiedTransition validation only. It does not authorize model-driven
+  mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
+  model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.
 - Global Agent v1 is the frozen simulator foundation and is governed by
   `docs/GLOBAL_AGENT_V1_PROTOCOL.md`. A structured simulator rule teacher must first complete full
   games and label only `intent_id`, `target_zone_id`, and an auxiliary `scene_id`. The RGB student
@@ -12,11 +19,11 @@
   profiles, layout adaptation, and safety remain deterministic execution modules. Behavior
   cloning precedes simulator DAgger; PPO and mobile control remain blocked by complete-episode
   gates.
-- Human IfO Bridge v1 is the active successor repair governed by
+- Human IfO Bridge v1 is a completed, non-promoted representation repair governed by
   `docs/HUMAN_IFO_V1_PROTOCOL.md`. It may learn a shared Human/Sim temporal representation, train
   inverse macro dynamics only from GlobalArena truth, pseudolabel only video-train/video-dev, and
-  fit one seed-0 Human-BC model with frozen-Dagger distillation. It is the only active learning
-  repair; scenario cards are diagnostic-only.
+  fit one seed-0 Human-BC model with frozen-Dagger distillation. Its frozen encoder-rebind result
+  is reusable evidence, not an active retraining route; scenario cards remain diagnostic-only.
   Gate A-D cannot capture from or send input to a phone. Human-dev is diagnostics-only and must be
   mechanically excluded from Human-BC; H5 is not planned and remains simulator-only.
   Gate A reads exactly one Git-ignored local cohort manifest that binds 20 train and 5 dev anonymous
@@ -227,6 +234,11 @@
   training and never actor inputs at training or inference. Legal actions and structured state may be used by a
   PixelArena teacher or execution boundary, never by an encoder, temporal hidden state, or
   commercial-domain input.
+- Hierarchical Policy episode metadata selects a frozen configuration or hero adapter before an
+  episode; it does not enter the RGB Actor tensor or hidden state. Visual events, reward components,
+  action masks, executed-action acknowledgements, and action timestamps likewise remain outside
+  Actor inputs. The EventEngine is frozen and hash-bound during each Policy training batch, and the
+  Router remains deterministic.
 - Do not copy code, weights, action maps, coordinates, assets, recordings, or device setup
   from the three reference repositories.
 

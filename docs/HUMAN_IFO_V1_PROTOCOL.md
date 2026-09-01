@@ -1,5 +1,8 @@
 # Human IfO Bridge v1 protocol
 
+Status: `FROZEN_NON_PROMOTED`. This document preserves the evaluated repair contract; the current
+development route is `docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md`.
+
 ## Objective
 
 Human IfO Bridge v1 learns macro behavior from complete human-match videos without requiring human
@@ -7,7 +10,7 @@ action logs or manual frame labels. Human videos teach when high-level behavior 
 teaches which `MacroCommand` commonly explains a latent state transition; the frozen DAgger policy
 protects complete-episode behavior from regression.
 
-The active chain is:
+The frozen evaluated chain was:
 
 ```text
 human full-match videos

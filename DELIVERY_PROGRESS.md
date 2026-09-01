@@ -18,6 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
+| Hierarchical Policy v0 | `READY_FOR_DEVELOPMENT`: architecture, v0 scope, example config, and machine-readable transition contract are defined | E0 must implement FrameBus, Event schema, and transition validation; no model, training, phone input, or capability claim exists yet |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -175,12 +176,22 @@ boundary findings, and no checked-in large-data or mobile-private artifacts.
 
 ## Current limitation
 
-The active objective is Human IfO Bridge v1: learn a shared temporal representation from human and
-simulator videos, train inverse macro dynamics from GlobalArena truth, pseudolabel human transitions,
-and fit Human-BC while retaining the frozen DAgger complete-episode behavior. Earlier Global Agent,
-T8, and operation-policy results remain evidence and reusable components, not parallel routes.
+Hierarchical Policy v0 is ready for development but has no implementation or new training evidence.
+The project has reusable capture/execution components and frozen simulator/video evidence, but it
+does not yet have the new FrameBus/Event/Transition data plane, a trained three-head PolicyBundle,
+or EventEngine-backed online replay. Earlier Global Agent, Human IfO, T8, and operation-policy
+results remain evidence and reusable components, not reopened parallel routes.
 
-## Global Agent execution state
+## Hierarchical Policy v0 execution state
+
+```text
+CURRENT GOAL: E0 FrameBus + VisualEvent schema + UnifiedTransition validator
+BLOCKING FAILURE: none; development contracts exist but implementation has not started
+NEXT ACCEPTANCE COMMAND: focused E0 tests, then make check and git diff --check
+DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
+```
+
+## Frozen Global Agent execution state
 
 ```text
 CURRENT GOAL: Freeze Global Agent v1 model evidence
@@ -217,9 +228,9 @@ only `DISENGAGE/OWN_BASE`. This excludes the previous whole-screen resize path a
 explanation and closes further preprocessing variants in this lineage.
 
 The frozen training labels are not retreat-dominated, while both video-dev replay and mobile Shadow
-are. The remaining blocker is cross-domain imitation from action-free human observations, not
-device transport, layout geometry, or a retriable threshold. Human IfO Bridge v1 replaces the
-scenario-card training proposal; Gate A-D remain offline and cannot open device input.
+are. At v1 freeze time, the remaining blocker was cross-domain imitation from action-free human
+observations, not device transport, layout geometry, or a retriable threshold. Human IfO Bridge v1
+replaced the scenario-card proposal for that bounded repair; its result is now frozen non-promoted.
 
 The project demonstrates reproducible RGB policy research in project-owned PixelArena and
 read-only/strictly bounded mobile-testbed infrastructure. It does not establish commercial-game

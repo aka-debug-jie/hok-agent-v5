@@ -1,9 +1,10 @@
 # Global Agent v1
 
-Global Agent v1 is the active project route for one fixed hero in a project-owned or explicitly
-authorized complete-match test environment. It learns only high-level intent and target region
+Global Agent v1 is the frozen simulator foundation for one fixed hero in a project-owned or
+explicitly authorized complete-match test environment. It learns only high-level intent and target region
 from RGB. Existing deterministic navigation, combat, purchase, hero-profile, layout, and safety
 modules execute the command. It does not add another T8 lineage or train direct touch coordinates.
+Its preserved evidence may be reused by Hierarchical Policy v0, but this lineage is not retrained.
 
 ## Architecture
 
