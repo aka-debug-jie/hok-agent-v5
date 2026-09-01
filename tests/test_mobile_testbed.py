@@ -347,6 +347,13 @@ def test_operation_base_contracts_freeze_movement_and_purchase_caps() -> None:
     assert long["run_seconds"] == 300.0
     assert long["maximum_combat_actions"] == 60
     assert short["movement_directions"] == list(mobile_testbed.MOVEMENTS[1:])
+    assert not mobile_testbed._skill3_available_at_warmup(
+        0.2, 0.55, movement_teacher_enabled=True
+    )
+    with pytest.raises(mobile_testbed.MobileTestbedError, match="skill3 was not ready"):
+        mobile_testbed._skill3_available_at_warmup(
+            0.2, 0.55, movement_teacher_enabled=False
+        )
     data_contract = json.loads(
         (root / "configs/mobile_operation_base_data_v1.json").read_text(encoding="utf-8")
     )

@@ -41,6 +41,11 @@ existing selected T8-v2.6 seed-1 combat model remains immutable and is bound by 
 retrained. Purchase, skill3 handling, cooldowns, touch lifecycles, and hard stops remain
 deterministic.
 
+An opening-level teacher session may observe skill3 still locked during warmup. In that case only
+the Movement Teacher disables skill3 for the complete bounded session; movement, basic attack,
+skill1, skill2, purchase, and hard stops continue unchanged. The frozen Mobile Operation Base
+still requires skill3 to be ready and retains its original failure behavior.
+
 The separately versioned spatial pilot keeps the same frozen encoder and thresholds but uses eight
 past frames and a 2x4 grid from each main/minimap feature map. Before the full seed-0 pilot it must
 memorize exactly four stable automatic-teacher windows per non-wait direction. This repair follows

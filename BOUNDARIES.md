@@ -137,6 +137,9 @@ input admission.
   Its loading-panel side check is read-only, stores no frame, and returns unknown unless one
   uniquely highlighted self card is detected on a verified loading screen. Side is deterministic
   opener context only and never enters the movement supervision target.
+  If skill3 is locked at opening warmup, only the automatic Movement Teacher may disable that one
+  combat action for the session; it cannot guess readiness or relax the frozen Mobile Operation
+  Base contract.
 - Global Agent v1 may train only inside project-owned GlobalArena/Rich PixelArena until its
   complete-episode behavior-cloning and DAgger gates pass. The structured teacher may generate
   labels but never enter the RGB student input. Its learned outputs are limited to macro intent

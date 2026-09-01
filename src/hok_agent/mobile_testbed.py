@@ -5057,6 +5057,16 @@ def _combat_visual_score(frame: np.ndarray, layout: Layout, ability: str) -> flo
     return _combat_visual_score_from_hud(hud, layout, ability)
 
 
+def _skill3_available_at_warmup(
+    baseline: float, minimum: float, *, movement_teacher_enabled: bool
+) -> bool:
+    if baseline >= minimum:
+        return True
+    if movement_teacher_enabled:
+        return False
+    raise MobileTestbedError("skill3 was not ready during operation base warmup")
+
+
 def _basic_rule_probability(
     frame: np.ndarray, layout: Layout, calibration: RGBTeacherCalibration
 ) -> float:
@@ -5981,6 +5991,7 @@ def run_mobile_operation_base(
     pointer = 0
     failure: str | None = None
     baseline3: float | None = None
+    skill3_available = False
     previous_minimap: np.ndarray | None = None
     minimap_observations = 0
     run_seconds = cast(float, contract["run_seconds"])
@@ -6045,8 +6056,11 @@ def run_mobile_operation_base(
             _timestamp_ns, frame = session.frame()
             warmup.append(_combat_visual_score(frame, visual_layout, "skill3"))
         baseline3 = float(np.median(warmup))
-        if baseline3 < cast(float, contract["minimum_skill3_ready_baseline"]):
-            raise MobileTestbedError("skill3 was not ready during operation base warmup")
+        skill3_available = _skill3_available_at_warmup(
+            baseline3,
+            cast(float, contract["minimum_skill3_ready_baseline"]),
+            movement_teacher_enabled=movement_teacher is not None,
+        )
         next_direction = time.monotonic()
         last_combat = started - cast(int, contract["minimum_global_combat_interval_ms"]) / 1000
         while time.monotonic() - started < run_seconds:
@@ -6145,7 +6159,11 @@ def run_mobile_operation_base(
             hud_frames.append(_observation_roi_frame(frame, rois.hud))
             recommended_frames.append(_observation_roi_frame(frame, rois.recommended_equipment))
             probabilities = _combat_rule_probabilities(frame, visual_layout, calibration)
-            skill3_ratio = _combat_visual_score(frame, visual_layout, "skill3") / baseline3
+            skill3_ratio = (
+                _combat_visual_score(frame, visual_layout, "skill3") / baseline3
+                if skill3_available
+                else 0.0
+            )
             ready = {
                 "basic_attack": probabilities["basic_attack"]
                 >= cast(float, contract["absolute_ready_probability"]),
@@ -6153,14 +6171,16 @@ def run_mobile_operation_base(
                 >= cast(float, contract["absolute_ready_probability"]),
                 "skill2": probabilities["skill2"]
                 >= cast(float, contract["absolute_ready_probability"]),
-                "skill3": skill3_ratio >= cast(float, contract["skill3_ready_ratio"]),
+                "skill3": skill3_available
+                and skill3_ratio >= cast(float, contract["skill3_ready_ratio"]),
             }
             cooling = {
                 "skill1": probabilities["skill1"]
                 < cast(float, contract["absolute_ready_probability"]),
                 "skill2": probabilities["skill2"]
                 < cast(float, contract["absolute_ready_probability"]),
-                "skill3": skill3_ratio < cast(float, contract["skill3_cooldown_ratio"]),
+                "skill3": skill3_available
+                and skill3_ratio < cast(float, contract["skill3_cooldown_ratio"]),
             }
             for action in actions:
                 combat_stable[action] = (
@@ -6411,6 +6431,7 @@ def run_mobile_operation_base(
         ),
         "combat_action_counts": dict(combat_counts),
         "combat_actions": combat_total,
+        "skill3_available_at_warmup": skill3_available,
         "recommended_purchases": purchase_count,
         "parallel_action_cycles": parallel_action_cycles,
         "minimap_observations": minimap_observations,
