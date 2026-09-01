@@ -19,9 +19,10 @@ loading-screen cue and highlight margin must both pass; otherwise side is unknow
 persisted, the result is not a movement label, and this check sends no input.
 
 For the fixed marksman role, the verified side selects one deterministic continuous opening
-prelude: blue holds east toward bottom lane and red holds west toward top lane for ten seconds.
-The prelude runs before formal rows begin, is recorded only in the session summary, and never uses
-the minimap-teacher label. A missing side disables collection rather than choosing a route.
+prelude derived from the existing blue-bottom human trace. Blue alternates north-east/east for
+1/6/6/7 seconds; red uses the center-mirrored south-west/west route. The prelude runs before formal
+rows begin, is recorded only in the session summary, and never uses the minimap-teacher label. A
+missing side disables collection rather than choosing a route.
 
 The frozen offline audit over 1,485 existing minimap frames passed: detection coverage was 0.7838,
 all eight directions were present, and player-position jump P95 was 3.59 pixels against a 5-pixel

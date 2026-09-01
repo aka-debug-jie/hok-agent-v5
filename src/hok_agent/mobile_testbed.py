@@ -103,7 +103,12 @@ MOVEMENTS = (
     "west",
     "north_west",
 )
-MARKSMAN_OPENING_SECONDS: Final = 10.0
+BLUE_MARKSMAN_OPENING: Final = (
+    ("north_east", 1.0),
+    ("east", 6.0),
+    ("north_east", 6.0),
+    ("east", 7.0),
+)
 ABILITIES = ("none", "basic_attack", "skill1", "skill2", "skill3")
 AIMS = ("none", *MOVEMENTS[1:])
 TARGETS = ("none",)
@@ -2518,11 +2523,15 @@ def _direction_vector(direction: str, layout: Layout) -> tuple[float, float]:
     return (x / scale, y / scale)
 
 
-def _marksman_opening_direction(side: str) -> str:
+def _marksman_opening_route(side: str) -> tuple[tuple[str, float], ...]:
     if side == "blue":
-        return "east"
+        return BLUE_MARKSMAN_OPENING
     if side == "red":
-        return "west"
+        opposite = {
+            "north_east": "south_west",
+            "east": "west",
+        }
+        return tuple((opposite[direction], duration) for direction, duration in BLUE_MARKSMAN_OPENING)
     raise MobileTestbedError("marksman opening side is invalid")
 
 
@@ -5941,8 +5950,8 @@ def run_mobile_operation_base(
     )
     if marksman_opening_side is not None and movement_teacher is None:
         raise MobileTestbedError("marksman opening requires the movement teacher")
-    opening_direction = (
-        _marksman_opening_direction(marksman_opening_side)
+    opening_route = (
+        _marksman_opening_route(marksman_opening_side)
         if marksman_opening_side is not None
         else None
     )
@@ -6080,24 +6089,28 @@ def run_mobile_operation_base(
             cast(float, contract["minimum_skill3_ready_baseline"]),
             movement_teacher_enabled=movement_teacher is not None,
         )
-        if opening_direction is not None:
-            opening_operations = joystick.set_direction(opening_direction)
-            opening_input_sent = bool(opening_operations and enable_input)
-            dispatch(opening_operations)
+        if opening_route is not None:
             opening_started = time.monotonic()
-            while time.monotonic() - opening_started < MARKSMAN_OPENING_SECONDS:
-                watchdog.ensure_fresh()
-                _timestamp_ns, opening_frame = session.frame()
-                opening_model_frame = _model_frame(opening_frame)
-                if (
-                    float(opening_model_frame.mean())
-                    < cast(float, contract["minimum_screen_mean"])
-                    or float(opening_model_frame.std())
-                    < cast(float, contract["minimum_screen_standard_deviation"])
-                    or _death_replay_visible(opening_frame, rois)
-                ):
-                    raise MobileTestbedError("marksman opening screen became invalid")
-                time.sleep(0.05)
+            for direction, duration in opening_route:
+                opening_operations = joystick.set_direction(direction)
+                opening_input_sent = opening_input_sent or bool(
+                    opening_operations and enable_input
+                )
+                dispatch(opening_operations)
+                segment_started = time.monotonic()
+                while time.monotonic() - segment_started < duration:
+                    watchdog.ensure_fresh()
+                    _timestamp_ns, opening_frame = session.frame()
+                    opening_model_frame = _model_frame(opening_frame)
+                    if (
+                        float(opening_model_frame.mean())
+                        < cast(float, contract["minimum_screen_mean"])
+                        or float(opening_model_frame.std())
+                        < cast(float, contract["minimum_screen_standard_deviation"])
+                        or _death_replay_visible(opening_frame, rois)
+                    ):
+                        raise MobileTestbedError("marksman opening screen became invalid")
+                    time.sleep(0.05)
             opening_elapsed = time.monotonic() - opening_started
             started = time.monotonic() - cast(float, contract["warmup_seconds"])
             next_due = time.monotonic()
@@ -6472,12 +6485,15 @@ def run_mobile_operation_base(
         "marksman_opening": (
             {
                 "team_side": marksman_opening_side,
-                "movement": opening_direction,
+                "segments": [
+                    {"movement": direction, "duration_seconds": duration}
+                    for direction, duration in opening_route
+                ],
                 "duration_seconds": round(opening_elapsed, 8),
                 "input_sent": opening_input_sent,
                 "included_in_training_rows": False,
             }
-            if opening_direction is not None
+            if opening_route is not None
             else None
         ),
         "combat_action_counts": dict(combat_counts),

@@ -354,10 +354,20 @@ def test_operation_base_contracts_freeze_movement_and_purchase_caps() -> None:
         mobile_testbed._skill3_available_at_warmup(
             0.2, 0.55, movement_teacher_enabled=False
         )
-    assert mobile_testbed._marksman_opening_direction("blue") == "east"
-    assert mobile_testbed._marksman_opening_direction("red") == "west"
+    assert mobile_testbed._marksman_opening_route("blue") == (
+        ("north_east", 1.0),
+        ("east", 6.0),
+        ("north_east", 6.0),
+        ("east", 7.0),
+    )
+    assert mobile_testbed._marksman_opening_route("red") == (
+        ("south_west", 1.0),
+        ("west", 6.0),
+        ("south_west", 6.0),
+        ("west", 7.0),
+    )
     with pytest.raises(mobile_testbed.MobileTestbedError, match="opening side is invalid"):
-        mobile_testbed._marksman_opening_direction("unknown")
+        mobile_testbed._marksman_opening_route("unknown")
     data_contract = json.loads(
         (root / "configs/mobile_operation_base_data_v1.json").read_text(encoding="utf-8")
     )

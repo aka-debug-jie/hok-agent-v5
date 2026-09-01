@@ -241,8 +241,8 @@ labels, PPO, Shadow, or model-driven phone input. See
 [docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md](docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md).
 The read-only `mobile-operation-team-side` preflight detects blue versus red from the unique
 yellow self-card highlight on the loading panel and fails closed on gameplay or ambiguous frames.
-The formal collector then uses that result for a summary-only ten-second marksman opener
-(blue-to-bottom or red-to-top) before any training row is recorded.
+The formal collector then uses that result for a summary-only 20-second marksman opener derived
+from the existing blue-bottom human trace, mirrored for red, before any training row is recorded.
 
 The active route is Global Agent v1: a structured simulator rule teacher completes full games and
 labels macro intent plus semantic target zone; an RGB student learns those high-level decisions,
