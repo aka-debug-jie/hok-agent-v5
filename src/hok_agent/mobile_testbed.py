@@ -3010,7 +3010,9 @@ def _publish_operation_base_dataset(
     shard_size: int = 256,
 ) -> None:
     frame_groups = (main_frames, minimap_frames, hud_frames, recommended_frames)
-    if not rows or any(len(values) != len(rows) for values in frame_groups):
+    if any(len(values) != len(rows) for values in frame_groups) or (
+        not rows and summary.get("status") != "FAILED"
+    ):
         raise MobileTestbedError("operation base dataset frames differ from events")
     with tempfile.TemporaryDirectory(prefix=f".{output.name}-", dir=output.parent) as temporary:
         staging = Path(temporary)

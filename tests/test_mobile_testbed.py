@@ -305,6 +305,18 @@ def test_loading_panel_team_side_uses_unique_self_highlight() -> None:
     assert mobile_testbed.loading_panel_team_side(frame) is None
 
 
+def test_operation_dataset_preserves_failure_before_first_event(tmp_path: Path) -> None:
+    output = tmp_path / "failed-session"
+    summary: dict[str, object] = {"status": "FAILED", "failure": "warmup failed"}
+    mobile_testbed._publish_operation_base_dataset(
+        output, [], [], [], [], [], summary
+    )
+    stored = json.loads((output / "summary.json").read_text(encoding="utf-8"))
+    assert stored["status"] == "FAILED"
+    assert stored["failure"] == "warmup failed"
+    assert stored["observation_shards"] == []
+
+
 def test_operation_movement_teacher_uses_player_and_separate_target() -> None:
     root = Path(__file__).resolve().parents[1]
     contract, _digest = mobile_testbed._movement_teacher_contract(
