@@ -723,6 +723,7 @@ def _parser() -> argparse.ArgumentParser:
     operation_teacher.add_argument("--execution-layout", type=Path, required=True)
     operation_teacher.add_argument("--observation-rois", type=Path, required=True)
     operation_teacher.add_argument("--output-dir", type=Path, required=True)
+    operation_teacher.add_argument("--marksman-opening-side", choices=("blue", "red"))
     operation_teacher.add_argument("--enable-input", action="store_true")
     movement_teacher_audit = commands.add_parser(
         "operation-minimap-teacher-audit",
@@ -2167,6 +2168,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 observation_rois_path=args.observation_rois,
                 output_dir=args.output_dir,
                 movement_teacher_contract_path=args.movement_contract,
+                marksman_opening_side=args.marksman_opening_side,
                 enable_input=args.enable_input,
             )
         elif args.command == "operation-minimap-teacher-audit":

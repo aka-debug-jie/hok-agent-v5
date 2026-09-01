@@ -80,6 +80,7 @@ OPERATION_OBSERVATION_ROIS ?=configs/mobile_observation_rois.local.json
 OPERATION_TEACHER_REPORT ?=$(HOK_RUNS_ROOT)/t8-policy-v2.3/visual-teacher-replay-v1/report.json
 OPERATION_TEACHER_DATASET ?=$(HOK_DATASETS_ROOT)/operation-movement-teacher-v1
 OPERATION_TEACHER_SESSION ?=
+OPERATION_TEAM_SIDE ?=
 OPERATION_MOBILE_IDENTITY ?=configs/mobile_testbed_identity.local.json
 OPERATION_MOVEMENT_POLICY_CONTRACT ?=configs/operation_movement_policy_v1.json
 OPERATION_MOVEMENT_PILOT_SPLIT ?=$(OPERATION_TEACHER_DATASET)/movement-pilot-split.json
@@ -320,10 +321,18 @@ operation-teacher-input-smoke: storage-preflight
 	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
 	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-operation-teacher --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_60s_v1.json --movement-contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --enable-input --output-dir "$(HOK_RUNS_ROOT)/operation-movement-teacher-v1/input-$$(date +%s)"
 
+.PHONY: operation-teacher-opening-smoke
+
+operation-teacher-opening-smoke: storage-preflight
+	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
+	@test "$(OPERATION_TEAM_SIDE)" = "blue" -o "$(OPERATION_TEAM_SIDE)" = "red" || { echo "OPERATION_TEAM_SIDE must be blue or red" >&2; exit 2; }
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-operation-teacher --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_60s_v1.json --movement-contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --marksman-opening-side "$(OPERATION_TEAM_SIDE)" --enable-input --output-dir "$(HOK_RUNS_ROOT)/operation-movement-teacher-v1/opening-smoke-$$(date +%s)"
+
 operation-teacher-collect: storage-preflight
 	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
 	@test -n "$(OPERATION_TEACHER_SESSION)" || { echo "OPERATION_TEACHER_SESSION is required" >&2; exit 2; }
-	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-operation-teacher --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_5m_v1.json --movement-contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --enable-input --output-dir "$(OPERATION_TEACHER_DATASET)/$(OPERATION_TEACHER_SESSION)"
+	@test "$(OPERATION_TEAM_SIDE)" = "blue" -o "$(OPERATION_TEAM_SIDE)" = "red" || { echo "OPERATION_TEAM_SIDE must be blue or red" >&2; exit 2; }
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-operation-teacher --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_5m_v1.json --movement-contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --marksman-opening-side "$(OPERATION_TEAM_SIDE)" --enable-input --output-dir "$(OPERATION_TEACHER_DATASET)/$(OPERATION_TEACHER_SESSION)"
 
 operation-movement-contract-smoke:
 	$(RUN_PYTHON) -m hok_agent operation-movement-policy-contract-check --contract "$(OPERATION_MOVEMENT_POLICY_CONTRACT)"

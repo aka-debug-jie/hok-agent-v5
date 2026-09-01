@@ -137,6 +137,9 @@ input admission.
   Its loading-panel side check is read-only, stores no frame, and returns unknown unless one
   uniquely highlighted self card is detected on a verified loading screen. Side is deterministic
   opener context only and never enters the movement supervision target.
+  The marksman opener may hold only east for verified blue or west for verified red for ten
+  seconds before formal collection. It is summary-only, cannot run without a verified side, and
+  cannot be relabeled as minimap-teacher supervision.
   If skill3 is locked at opening warmup, only the automatic Movement Teacher may disable that one
   combat action for the session; it cannot guess readiness or relax the frozen Mobile Operation
   Base contract.

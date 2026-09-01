@@ -18,6 +18,11 @@ highlight. A top-row highlight means blue side and a bottom-row highlight means 
 loading-screen cue and highlight margin must both pass; otherwise side is unknown. The frame is not
 persisted, the result is not a movement label, and this check sends no input.
 
+For the fixed marksman role, the verified side selects one deterministic continuous opening
+prelude: blue holds east toward bottom lane and red holds west toward top lane for ten seconds.
+The prelude runs before formal rows begin, is recorded only in the session summary, and never uses
+the minimap-teacher label. A missing side disables collection rather than choosing a route.
+
 The frozen offline audit over 1,485 existing minimap frames passed: detection coverage was 0.7838,
 all eight directions were present, and player-position jump P95 was 3.59 pixels against a 5-pixel
 limit. No phone or control output was used for this audit.
