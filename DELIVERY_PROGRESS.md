@@ -40,7 +40,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 | Mobile Operation Base | `PASSED`: 5-minute movement+combat+purchase+minimap and live death stop | First part frozen; no enemy/target/aim/tactics yet |
 | Operation Policy v1 | `FROZEN_FAILED`: source-clock/spatial IDM still failed movement and combat gates | No pseudolabel, policy, test, Shadow, capture, or input |
 | Operation Direct Policy v1 | `FROZEN_FAILED`: executed schedules failed transition and combat gates | No Shadow, capture, or input |
-| Operation Movement Teacher v1 | Spatial v1.1 candidate-pool audit implemented; loading-panel side preflight verified on blue; 004 preserved the locked-skill3 failure and 005 was operator-stopped because side was not yet connected to lane opening | Validate the new summary-only blue-east/red-west marksman opener before another formal session |
+| Operation Movement Teacher v1 | Spatial v1.1 candidate-pool audit implemented; loading-panel side preflight and the trace-derived blue marksman opener reached bottom lane; the late-game v2 smoke then lost teacher coverage after 20 s and remained non-training | Run session 005 only from a fresh match; no split or training until real eight-direction coverage exists |
 | Adaptive Layout / Hero Profiles v1 | Geometry and behavior contracts implemented with synthetic tests | Read-only per-device calibration required before integration |
 | Global combat feature cache v1 | 32x1024 float16 cache completed; frozen-feature TCN head failed dev evidence | Preserve cache; do not promote the new head |
 
