@@ -143,6 +143,10 @@ input admission.
   If skill3 is locked at opening warmup, only the automatic Movement Teacher may disable that one
   combat action for the session; it cannot guess readiness or relax the frozen Mobile Operation
   Base contract.
+- Deterministic Marksman Lane Controller v1 may use the same guarded two-pointer transport only
+  with a verified blue/red loading-panel result. It may replay only the frozen side-specific
+  opener, alternate lane advance and hold, run the existing visual combat/purchase rules, and
+  replay the opener after a detected death. It cannot load a model or create training labels.
 - Global Agent v1 may train only inside project-owned GlobalArena/Rich PixelArena until its
   complete-episode behavior-cloning and DAgger gates pass. The structured teacher may generate
   labels but never enter the RGB student input. Its learned outputs are limited to macro intent

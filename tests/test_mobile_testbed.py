@@ -368,6 +368,22 @@ def test_operation_base_contracts_freeze_movement_and_purchase_caps() -> None:
     )
     with pytest.raises(mobile_testbed.MobileTestbedError, match="opening side is invalid"):
         mobile_testbed._marksman_opening_route("unknown")
+
+    blue = mobile_testbed.MarksmanLaneController("blue")
+    assert blue.update(0) == ("north", "lane_advance")
+    assert blue.update(8_000) == ("wait", "lane_hold")
+    assert blue.update(12_000) == ("north", "lane_advance")
+    blue.restart_after_respawn(20_000)
+    assert blue.update(20_000) == ("north_east", "opening")
+    assert blue.update(21_000) == ("east", "opening")
+    assert blue.update(27_000) == ("north_east", "opening")
+    assert blue.update(33_000) == ("east", "opening")
+    assert blue.update(40_000) == ("north", "lane_advance")
+
+    red = mobile_testbed.MarksmanLaneController("red")
+    assert red.update(0) == ("south", "lane_advance")
+    red.restart_after_respawn(1_000)
+    assert red.update(1_000) == ("south_west", "opening")
     data_contract = json.loads(
         (root / "configs/mobile_operation_base_data_v1.json").read_text(encoding="utf-8")
     )

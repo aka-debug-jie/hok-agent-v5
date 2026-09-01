@@ -328,6 +328,18 @@ operation-teacher-opening-smoke: storage-preflight
 	@test "$(OPERATION_TEAM_SIDE)" = "blue" -o "$(OPERATION_TEAM_SIDE)" = "red" || { echo "OPERATION_TEAM_SIDE must be blue or red" >&2; exit 2; }
 	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-operation-teacher --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_60s_v1.json --movement-contract "$(OPERATION_MOVEMENT_TEACHER_CONTRACT)" --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --marksman-opening-side "$(OPERATION_TEAM_SIDE)" --enable-input --output-dir "$(HOK_RUNS_ROOT)/operation-movement-teacher-v1/opening-smoke-$$(date +%s)"
 
+.PHONY: marksman-lane-smoke marksman-lane-run
+
+marksman-lane-smoke: storage-preflight
+	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
+	@test "$(OPERATION_TEAM_SIDE)" = "blue" -o "$(OPERATION_TEAM_SIDE)" = "red" || { echo "OPERATION_TEAM_SIDE must be blue or red" >&2; exit 2; }
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-marksman-lane-controller --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_60s_v1.json --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --team-side "$(OPERATION_TEAM_SIDE)" --enable-input --output-dir "$(HOK_RUNS_ROOT)/marksman-lane-controller-v1/smoke-$$(date +%s)"
+
+marksman-lane-run: storage-preflight
+	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
+	@test "$(OPERATION_TEAM_SIDE)" = "blue" -o "$(OPERATION_TEAM_SIDE)" = "red" || { echo "OPERATION_TEAM_SIDE must be blue or red" >&2; exit 2; }
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(OPERATION_MOBILE_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-marksman-lane-controller --serial "$(T8_SERIAL)" --base-contract configs/mobile_operation_base_5m_v1.json --teacher-report "$(OPERATION_TEACHER_REPORT)" --visual-layout "$(OPERATION_VISUAL_LAYOUT)" --execution-layout "$(OPERATION_EXECUTION_LAYOUT)" --observation-rois "$(OPERATION_OBSERVATION_ROIS)" --team-side "$(OPERATION_TEAM_SIDE)" --enable-input --output-dir "$(HOK_RUNS_ROOT)/marksman-lane-controller-v1/run-$$(date +%s)"
+
 operation-teacher-collect: storage-preflight
 	@test -n "$(T8_SERIAL)" || { echo "T8_SERIAL is required" >&2; exit 2; }
 	@test -n "$(OPERATION_TEACHER_SESSION)" || { echo "OPERATION_TEACHER_SESSION is required" >&2; exit 2; }

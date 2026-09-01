@@ -244,6 +244,11 @@ yellow self-card highlight on the loading panel and fails closed on gameplay or 
 The formal collector then uses that result for a summary-only 20-second marksman opener derived
 from the existing blue-bottom human trace, mirrored for red, before any training row is recorded.
 
+The separate `mobile-marksman-lane-controller` command skips movement learning entirely. It uses
+the verified side, the same opener, a deterministic advance/hold lane cycle, existing visual
+combat and purchase rules, and opener replay after death. See
+[docs/MARKSMAN_LANE_CONTROLLER_PROTOCOL.md](docs/MARKSMAN_LANE_CONTROLLER_PROTOCOL.md).
+
 The active route is Global Agent v1: a structured simulator rule teacher completes full games and
 labels macro intent plus semantic target zone; an RGB student learns those high-level decisions,
 while the existing deterministic navigation, combat, purchase, layout, hero-profile, and safety

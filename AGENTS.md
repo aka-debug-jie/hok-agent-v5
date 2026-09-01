@@ -90,6 +90,10 @@
   Its direction-diversity repair may select exactly four sessions from a larger automatic
   candidate pool and train one separately versioned 8-frame 2x4-spatial pilot. The nearest-target
   teacher, frozen gates, human-label prohibition, and zero model-input boundary do not change.
+- Deterministic Marksman Lane Controller v1 is a separate non-learning owner-testbed route governed
+  by `docs/MARKSMAN_LANE_CONTROLLER_PROTOCOL.md`. It may use only the verified side, frozen
+  marksman opener, eight-second lane advance/four-second hold cycle, existing visual combat and
+  purchase rules, and death-triggered opener replay. It produces no movement training target.
 - Adaptive Layout and Hero Profiles v1 is governed by
   `docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md`. Device geometry is icon-independent and local;
   hero profiles define only fixed-slot behavior. Until a local profile and adaptive-layout hash

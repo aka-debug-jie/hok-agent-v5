@@ -62,6 +62,7 @@ VISUAL_COMBAT_ARBITER_SCHEMA = "hok-agent-visual-combat-arbiter-v1"
 OBSERVATION_ROI_SCHEMA = "hok-agent-mobile-observation-rois-v1"
 MOBILE_OPERATION_BASE_CONTRACT_SCHEMA = "hok-agent-mobile-operation-base-contract-v1"
 MOBILE_OPERATION_BASE_SCHEMA = "hok-agent-mobile-operation-base-v1"
+MOBILE_MARKSMAN_LANE_SCHEMA = "hok-agent-mobile-marksman-lane-controller-v1"
 MOVEMENT_TEACHER_CONTRACT_SCHEMA = "hok-agent-operation-movement-teacher-contract-v1"
 MOVEMENT_TEACHER_AUDIT_SCHEMA = "hok-agent-operation-movement-teacher-audit-v1"
 MOBILE_OPERATION_TEACHER_SCHEMA = "hok-agent-mobile-operation-teacher-v1"
@@ -417,6 +418,40 @@ class LoadingPanelSideDecision:
     player_slot: int
     score: float
     margin: float
+
+
+class MarksmanLaneController:
+    def __init__(self, side: str) -> None:
+        self.side = side
+        self.opening = _marksman_opening_route(side)
+        self.advance = "north" if side == "blue" else "south"
+        self.phase = "lane_advance"
+        self.index = 0
+        self.deadline_ms = 8_000
+
+    def restart_after_respawn(self, timestamp_ms: int) -> None:
+        self.phase = "opening"
+        self.index = 0
+        self.deadline_ms = timestamp_ms + round(self.opening[0][1] * 1000)
+
+    def update(self, timestamp_ms: int) -> tuple[str, str]:
+        while timestamp_ms >= self.deadline_ms:
+            if self.phase == "opening":
+                self.index += 1
+                if self.index < len(self.opening):
+                    self.deadline_ms += round(self.opening[self.index][1] * 1000)
+                    continue
+                self.phase = "lane_advance"
+                self.deadline_ms += 8_000
+            elif self.phase == "lane_advance":
+                self.phase = "lane_hold"
+                self.deadline_ms += 4_000
+            else:
+                self.phase = "lane_advance"
+                self.deadline_ms += 8_000
+        if self.phase == "opening":
+            return self.opening[self.index][0], self.phase
+        return (self.advance if self.phase == "lane_advance" else "wait"), self.phase
 
 
 class MinimapDirectionFilter:
@@ -5939,6 +5974,7 @@ def run_mobile_operation_base(
     output_dir: Path,
     movement_teacher_contract_path: Path | None = None,
     marksman_opening_side: str | None = None,
+    deterministic_lane_controller: bool = False,
     enable_input: bool = True,
 ) -> dict[str, object]:
     contract, contract_sha = _mobile_operation_base_contract(contract_path)
@@ -5948,7 +5984,15 @@ def run_mobile_operation_base(
         if movement_teacher_contract_path is not None
         else (None, None)
     )
-    if marksman_opening_side is not None and movement_teacher is None:
+    if deterministic_lane_controller and marksman_opening_side is None:
+        raise MobileTestbedError("deterministic lane controller requires a verified side")
+    if deterministic_lane_controller and movement_teacher is not None:
+        raise MobileTestbedError("deterministic lane controller cannot load the movement teacher")
+    if (
+        marksman_opening_side is not None
+        and movement_teacher is None
+        and not deterministic_lane_controller
+    ):
         raise MobileTestbedError("marksman opening requires the movement teacher")
     opening_route = (
         _marksman_opening_route(marksman_opening_side)
@@ -5999,6 +6043,11 @@ def run_mobile_operation_base(
         if movement_teacher is not None
         else None
     )
+    lane_controller = (
+        MarksmanLaneController(cast(str, marksman_opening_side))
+        if deterministic_lane_controller
+        else None
+    )
     directions_seen: set[str] = set()
     movement_transitions = 0
     movement_teacher_detections = 0
@@ -6009,6 +6058,7 @@ def run_mobile_operation_base(
     hard_stop_recovery_frames = 0
     hard_stop_cycles = 0
     hard_stop_releases = 0
+    lane_reopen_count = 0
     actions_during_hard_stop = 0
     parallel_action_cycles = 0
     combat_total = 0
@@ -6087,7 +6137,9 @@ def run_mobile_operation_base(
         skill3_available = _skill3_available_at_warmup(
             baseline3,
             cast(float, contract["minimum_skill3_ready_baseline"]),
-            movement_teacher_enabled=movement_teacher is not None,
+            movement_teacher_enabled=(
+                movement_teacher is not None or deterministic_lane_controller
+            ),
         )
         if opening_route is not None:
             opening_started = time.monotonic()
@@ -6156,6 +6208,9 @@ def run_mobile_operation_base(
                 movement_teacher_confidence_sum += movement_decision.confidence
                 previous_teacher_player = movement_decision.player_yx
             movement_sent = False
+            movement_phase: str | None = (
+                "hard_stop" if lane_controller is not None else None
+            )
             if hard_stop_reason is not None:
                 hard_stop_recovery_frames = 0
                 if not hard_stop_latched:
@@ -6170,8 +6225,26 @@ def run_mobile_operation_base(
                     hard_stop_latched = False
                     hard_stop_recovery_frames = 0
                     next_direction = now
+                    if lane_controller is not None:
+                        lane_controller.restart_after_respawn(
+                            round((scheduled - started) * 1000)
+                        )
+                        lane_reopen_count += 1
             if hard_stop_latched:
                 hard_stop_cycles += 1
+            elif lane_controller is not None:
+                filtered_direction, movement_phase = lane_controller.update(
+                    round((scheduled - started) * 1000)
+                )
+                movement_operations = joystick.set_direction(filtered_direction)
+                movement_sent = bool(movement_operations and enable_input)
+                dispatch(
+                    movement_operations,
+                    expected_up=filtered_direction == "wait",
+                )
+                if filtered_direction != "wait":
+                    directions_seen.add(filtered_direction)
+                movement_transitions += int(bool(movement_operations))
             elif movement_teacher is not None:
                 assert direction_filter is not None
                 filtered_direction, changed = direction_filter.update(
@@ -6338,7 +6411,9 @@ def run_mobile_operation_base(
             rows.append(
                 {
                     "schema_version": (
-                        MOBILE_OPERATION_TEACHER_SCHEMA
+                        MOBILE_MARKSMAN_LANE_SCHEMA
+                        if lane_controller is not None
+                        else MOBILE_OPERATION_TEACHER_SCHEMA
                         if movement_teacher is not None
                         else MOBILE_OPERATION_BASE_SCHEMA
                     ),
@@ -6361,9 +6436,14 @@ def run_mobile_operation_base(
                     "movement_candidate": movement_candidate,
                     "movement_confidence": round(movement_confidence, 8),
                     "movement_label_source": (
-                        "rgb_minimap_teacher_v1"
+                        "deterministic_marksman_lane_v1"
+                        if lane_controller is not None
+                        else "rgb_minimap_teacher_v1"
                         if movement_teacher is not None
                         else "fixed_operation_schedule_v1"
+                    ),
+                    "movement_phase": (
+                        movement_phase if lane_controller is not None else None
                     ),
                     "movement_input_sent": movement_sent,
                     "movement_player_yx": (
@@ -6416,7 +6496,18 @@ def run_mobile_operation_base(
         )
     )
     teacher_coverage = movement_teacher_detections / max(len(rows), 1)
-    if movement_teacher is None:
+    if lane_controller is not None:
+        strict = bool(
+            failure is None
+            and len(rows) >= int(run_seconds * infer_hz * 0.95)
+            and not pointer0_up_before_end
+            and actions_during_hard_stop == 0
+            and parallel_action_cycles > 0
+            and combat_total > 0
+            and purchase_count >= cast(int, contract["minimum_purchases"])
+            and frame_integrity
+        )
+    elif movement_teacher is None:
         strict = bool(
             failure is None
             and len(rows) >= int(run_seconds * infer_hz * 0.95)
@@ -6457,7 +6548,9 @@ def run_mobile_operation_base(
     )
     summary: dict[str, object] = {
         "schema_version": (
-            MOBILE_OPERATION_TEACHER_SCHEMA
+            MOBILE_MARKSMAN_LANE_SCHEMA
+            if lane_controller is not None
+            else MOBILE_OPERATION_TEACHER_SCHEMA
             if movement_teacher is not None
             else MOBILE_OPERATION_BASE_SCHEMA
         ),
@@ -6472,10 +6565,13 @@ def run_mobile_operation_base(
         "directions_seen": sorted(directions_seen),
         "movement_transitions": movement_transitions,
         "movement_label_source": (
-            "rgb_minimap_teacher_v1"
+            "deterministic_marksman_lane_v1"
+            if lane_controller is not None
+            else "rgb_minimap_teacher_v1"
             if movement_teacher is not None
             else "fixed_operation_schedule_v1"
         ),
+        "lane_reopen_count": lane_reopen_count,
         "movement_teacher_contract_sha256": movement_teacher_sha,
         "movement_teacher_detections": movement_teacher_detections,
         "movement_teacher_coverage": round(teacher_coverage, 8),

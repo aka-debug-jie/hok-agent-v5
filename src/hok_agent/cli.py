@@ -711,6 +711,19 @@ def _parser() -> argparse.ArgumentParser:
         help="detect blue or red side from the loading-panel self highlight",
     )
     operation_side.add_argument("--serial", required=True)
+    lane_controller = commands.add_parser(
+        "mobile-marksman-lane-controller",
+        help="run deterministic marksman lane movement with visual combat",
+    )
+    lane_controller.add_argument("--serial", required=True)
+    lane_controller.add_argument("--base-contract", type=Path, required=True)
+    lane_controller.add_argument("--teacher-report", type=Path, required=True)
+    lane_controller.add_argument("--visual-layout", type=Path, required=True)
+    lane_controller.add_argument("--execution-layout", type=Path, required=True)
+    lane_controller.add_argument("--observation-rois", type=Path, required=True)
+    lane_controller.add_argument("--team-side", choices=("blue", "red"), required=True)
+    lane_controller.add_argument("--output-dir", type=Path, required=True)
+    lane_controller.add_argument("--enable-input", action="store_true")
     operation_teacher = commands.add_parser(
         "mobile-operation-teacher",
         help="run state-conditioned minimap movement through the operation base",
@@ -2156,6 +2169,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             from hok_agent.mobile_testbed import detect_mobile_operation_team_side
 
             result = detect_mobile_operation_team_side(args.serial)
+        elif args.command == "mobile-marksman-lane-controller":
+            from hok_agent.mobile_testbed import run_mobile_operation_base
+
+            result = run_mobile_operation_base(
+                serial=args.serial,
+                contract_path=args.base_contract,
+                teacher_report=args.teacher_report,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                marksman_opening_side=args.team_side,
+                deterministic_lane_controller=True,
+                enable_input=args.enable_input,
+            )
         elif args.command == "mobile-operation-teacher":
             from hok_agent.mobile_testbed import run_mobile_operation_base
 
