@@ -6357,6 +6357,9 @@ def run_mobile_operation_base(
         "manual_annotation_required": False,
         "control_output": pointer_messages > 0,
     }
+    for frames in (main_view_frames, minimap_frames, hud_frames, recommended_frames):
+        if len(frames) > len(rows):
+            del frames[len(rows) :]
     _publish_operation_base_dataset(
         output,
         rows,
