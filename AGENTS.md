@@ -87,6 +87,9 @@
   only a movement head. The selected T8-v2.6 seed-1 combat model is immutable and bound by hash.
   A zero-input smoke, bounded input smoke, four-session pilot, and movement gate are mandatory
   before more collection, fusion Shadow, or model input.
+  Its direction-diversity repair may select exactly four sessions from a larger automatic
+  candidate pool and train one separately versioned 8-frame 2x4-spatial pilot. The nearest-target
+  teacher, frozen gates, human-label prohibition, and zero model-input boundary do not change.
 - Adaptive Layout and Hero Profiles v1 is governed by
   `docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md`. Device geometry is icon-independent and local;
   hero profiles define only fixed-slot behavior. Until a local profile and adaptive-layout hash

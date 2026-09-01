@@ -49,6 +49,13 @@ def test_operation_movement_policy_contract_binds_existing_combat_model() -> Non
     assert result["combat_model_sha256"].startswith("bce47dc1")
     assert result["device_input_allowed"] is False
 
+    spatial = operation_policy.verify_operation_movement_policy_contract(
+        root / "configs/operation_movement_spatial_policy_v1.json"
+    )
+    assert spatial["window_frames"] == 8
+    assert spatial["feature_grid"] == [2, 4]
+    assert spatial["device_input_allowed"] is False
+
 
 def test_operation_policy_crop_uses_private_screen_mapping() -> None:
     frames = np.zeros((2, 20, 40, 3), dtype=np.uint8)
@@ -190,3 +197,79 @@ def test_operation_movement_examples_require_teacher_source_and_are_causal() -> 
         model = operation_policy._MovementModel(kind).eval()
         with torch.no_grad():
             assert model(torch.zeros((2, 16, 1024))).shape == (2, 9)
+
+    spatial = operation_policy._movement_examples(
+        [session], 3, seed=0, window_frames=8, feature_grid=(2, 4)
+    )
+    assert spatial.windows.shape == (33, 8, 8192)
+    assert spatial.confidence.shape == (33,)
+    assert spatial.stable.tolist().count(True) == 26
+    model = operation_policy._MovementModel("causal_tcn", 8192, 8).eval()
+    with torch.no_grad():
+        assert model(torch.zeros((2, 8, 8192))).shape == (2, 9)
+
+
+def _movement_candidate(
+    name: str, stable_counts: tuple[int, ...], transitions: int = 1
+) -> operation_policy.MovementCandidate:
+    rows = 8
+    frames = np.zeros((rows, 3, 4, 4), dtype=np.float16)
+    session = operation_policy.SourceSession(
+        name * 64,
+        frames,
+        frames,
+        frames,
+        np.arange(rows, dtype=np.int64) * 200,
+        np.ones(rows, dtype=np.int64),
+        np.zeros(rows, dtype=np.int64),
+        np.zeros(rows, dtype=np.uint8),
+        np.ones(rows, dtype=np.float32),
+        np.ones(rows, dtype=np.uint8),
+    )
+    return operation_policy.MovementCandidate(
+        name,
+        Path(name),
+        name * 64,
+        session,
+        stable_counts,
+        stable_counts,
+        transitions,
+    )
+
+
+def test_operation_movement_candidate_pool_selection_is_deterministic() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract = operation_policy._movement_policy_contract(
+        root / "configs/operation_movement_spatial_policy_v1.json"
+    )
+    full = (0, 4, 4, 4, 4, 4, 4, 4, 4)
+    partial_a = (0, 4, 4, 4, 4, 0, 0, 0, 0)
+    partial_b = (0, 0, 0, 0, 0, 4, 4, 4, 4)
+    candidates = [
+        _movement_candidate("teacher-session-002", partial_a, 3),
+        _movement_candidate("teacher-session-003", partial_b, 4),
+        _movement_candidate("teacher-session-004", full, 5),
+        _movement_candidate("teacher-session-005", full, 6),
+        _movement_candidate("teacher-session-006", full, 7),
+    ]
+    first = operation_policy._select_movement_pilot(candidates, contract)
+    second = operation_policy._select_movement_pilot(candidates, contract)
+    assert first is not None and second is not None
+    assert [item.name for item in first[0]] == [item.name for item in second[0]]
+    assert first[1].name == second[1].name
+    assert min(first[1].stable_window_counts[1:]) >= 1
+    train_counts = np.sum([item.stable_window_counts for item in first[0]], axis=0)
+    assert int(np.min(train_counts[1:])) >= 4
+
+
+def test_operation_movement_candidate_pool_rejects_missing_direction() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract = operation_policy._movement_policy_contract(
+        root / "configs/operation_movement_spatial_policy_v1.json"
+    )
+    missing_north_west = (0, 8, 8, 8, 8, 8, 8, 8, 0)
+    candidates = [
+        _movement_candidate(f"teacher-session-00{index}", missing_north_west)
+        for index in range(2, 7)
+    ]
+    assert operation_policy._select_movement_pilot(candidates, contract) is None

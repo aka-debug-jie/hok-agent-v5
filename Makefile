@@ -84,6 +84,10 @@ OPERATION_MOBILE_IDENTITY ?=configs/mobile_testbed_identity.local.json
 OPERATION_MOVEMENT_POLICY_CONTRACT ?=configs/operation_movement_policy_v1.json
 OPERATION_MOVEMENT_PILOT_SPLIT ?=$(OPERATION_TEACHER_DATASET)/movement-pilot-split.json
 OPERATION_MOVEMENT_PILOT_RUN ?=$(HOK_RUNS_ROOT)/operation-movement-policy-v1/pilot-seed0-v1
+OPERATION_MOVEMENT_SPATIAL_CONTRACT ?=configs/operation_movement_spatial_policy_v1.json
+OPERATION_MOVEMENT_SPATIAL_SPLIT ?=$(OPERATION_TEACHER_DATASET)/movement-pilot-split-v1.1.json
+OPERATION_MOVEMENT_OVERFIT_RUN ?=$(HOK_RUNS_ROOT)/operation-movement-policy-v1.1/overfit32-spatial-v1
+OPERATION_MOVEMENT_SPATIAL_RUN ?=$(HOK_RUNS_ROOT)/operation-movement-policy-v1.1/pilot-seed0-spatial-v1
 GLOBAL_AGENT_DATASET ?=$(HOK_DATASETS_ROOT)/global-agent-v1/pilot-40-10-v1
 GLOBAL_AGENT_BC_RUN ?=$(HOK_RUNS_ROOT)/global-agent-v1/bc-seed0-v1
 GLOBAL_AGENT_DAGGER_RUN ?=$(HOK_RUNS_ROOT)/global-agent-v1/dagger-round1-v1
@@ -323,6 +327,20 @@ operation-movement-pilot-freeze: storage-preflight
 
 operation-movement-pilot: storage-preflight
 	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-movement-pilot --dataset-root "$(OPERATION_TEACHER_DATASET)" --split "$(OPERATION_MOVEMENT_PILOT_SPLIT)" --contract "$(OPERATION_MOVEMENT_POLICY_CONTRACT)" --adapter-checkpoint "$(OPERATION_POLICY_ADAPTER)" --output-dir "$(OPERATION_MOVEMENT_PILOT_RUN)" --device cuda --batch-size 128
+
+.PHONY: operation-movement-diversity-audit operation-movement-v11-pilot-freeze operation-movement-v11-overfit32 operation-movement-v11-pilot
+
+operation-movement-diversity-audit: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent operation-movement-diversity-audit --dataset-root "$(OPERATION_TEACHER_DATASET)" --contract "$(OPERATION_MOVEMENT_SPATIAL_CONTRACT)" --output-dir "$(HOK_AUDIT_ROOT)/operation-movement-diversity-v1/audit-$$(date +%s)"
+
+operation-movement-v11-pilot-freeze: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent operation-movement-freeze-split --dataset-root "$(OPERATION_TEACHER_DATASET)" --contract "$(OPERATION_MOVEMENT_SPATIAL_CONTRACT)" --output "$(OPERATION_MOVEMENT_SPATIAL_SPLIT)" --pilot --select-from-pool
+
+operation-movement-v11-overfit32: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-movement-overfit32 --dataset-root "$(OPERATION_TEACHER_DATASET)" --split "$(OPERATION_MOVEMENT_SPATIAL_SPLIT)" --contract "$(OPERATION_MOVEMENT_SPATIAL_CONTRACT)" --adapter-checkpoint "$(OPERATION_POLICY_ADAPTER)" --output-dir "$(OPERATION_MOVEMENT_OVERFIT_RUN)" --device cuda --batch-size 128
+
+operation-movement-v11-pilot: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-movement-pilot --dataset-root "$(OPERATION_TEACHER_DATASET)" --split "$(OPERATION_MOVEMENT_SPATIAL_SPLIT)" --contract "$(OPERATION_MOVEMENT_SPATIAL_CONTRACT)" --adapter-checkpoint "$(OPERATION_POLICY_ADAPTER)" --output-dir "$(OPERATION_MOVEMENT_SPATIAL_RUN)" --device cuda --batch-size 128
 
 t8-data-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_mobile_testbed.py tests/test_t8.py

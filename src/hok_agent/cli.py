@@ -806,6 +806,25 @@ def _parser() -> argparse.ArgumentParser:
     movement_split.add_argument("--contract", type=Path, required=True)
     movement_split.add_argument("--output", type=Path, required=True)
     movement_split.add_argument("--pilot", action="store_true")
+    movement_split.add_argument("--select-from-pool", action="store_true")
+    movement_diversity = commands.add_parser(
+        "operation-movement-diversity-audit",
+        help="audit automatic teacher sessions for a complete movement pilot split",
+    )
+    movement_diversity.add_argument("--dataset-root", type=Path, required=True)
+    movement_diversity.add_argument("--contract", type=Path, required=True)
+    movement_diversity.add_argument("--output-dir", type=Path, required=True)
+    movement_overfit = commands.add_parser(
+        "operation-movement-overfit32",
+        help="overfit 32 balanced automatic movement-teacher windows",
+    )
+    movement_overfit.add_argument("--dataset-root", type=Path, required=True)
+    movement_overfit.add_argument("--split", type=Path, required=True)
+    movement_overfit.add_argument("--contract", type=Path, required=True)
+    movement_overfit.add_argument("--adapter-checkpoint", type=Path, required=True)
+    movement_overfit.add_argument("--output-dir", type=Path, required=True)
+    movement_overfit.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    movement_overfit.add_argument("--batch-size", type=int, default=128)
     movement_pilot = commands.add_parser(
         "operation-movement-pilot",
         help="train the seed-0 state-conditioned movement learnability pilot",
@@ -2220,6 +2239,27 @@ def main(argv: Sequence[str] | None = None) -> int:
                 contract_path=args.contract,
                 output_path=args.output,
                 pilot=args.pilot,
+                select_from_pool=args.select_from_pool,
+            )
+        elif args.command == "operation-movement-diversity-audit":
+            from hok_agent.operation_policy import audit_operation_movement_diversity
+
+            result = audit_operation_movement_diversity(
+                dataset_root=args.dataset_root,
+                contract_path=args.contract,
+                output_dir=args.output_dir,
+            )
+        elif args.command == "operation-movement-overfit32":
+            from hok_agent.operation_policy import run_operation_movement_overfit32
+
+            result = run_operation_movement_overfit32(
+                dataset_root=args.dataset_root,
+                split_path=args.split,
+                contract_path=args.contract,
+                adapter_checkpoint=args.adapter_checkpoint,
+                output_dir=args.output_dir,
+                device=args.device,
+                batch_size=args.batch_size,
             )
         elif args.command == "operation-movement-pilot":
             from hok_agent.operation_policy import run_operation_movement_pilot

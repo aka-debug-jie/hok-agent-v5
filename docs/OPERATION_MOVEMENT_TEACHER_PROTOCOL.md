@@ -24,11 +24,23 @@ derived main/minimap/HUD/recommended RGB, continuous movement state, teacher con
 execution events, timestamps, and hashes. Raw video, source paths, serials, and coordinates are
 not persisted.
 
+The direction-diversity repair does not change the teacher or its nearest-target rule. Failed and
+extra automatic sessions form an auditable candidate pool; exactly three train sessions and one
+dev session are selected deterministically only when both splits contain usable causal windows for
+all eight directions. Unselected sessions remain audit-only. The current bounded repair may add at
+most four five-minute attempts and stops without a split if real visual labels remain incomplete.
+
 The movement model uses V5/SimSiam ResNet-18 initialization and 16 past main/minimap frames. It is
 compared with time-only, last-frame, pooled MLP, causal TCN, and label-shuffle controls. The
 existing selected T8-v2.6 seed-1 combat model remains immutable and is bound by hash; it is not
 retrained. Purchase, skill3 handling, cooldowns, touch lifecycles, and hard stops remain
 deterministic.
+
+The separately versioned spatial pilot keeps the same frozen encoder and thresholds but uses eight
+past frames and a 2x4 grid from each main/minimap feature map. Before the full seed-0 pilot it must
+memorize exactly four stable automatic-teacher windows per non-wait direction. This repair follows
+the preserved 32-sample diagnosis that global pooling discarded direction layout; it does not add
+human labels, PPO, Shadow, or model-driven phone input.
 
 No movement model, fusion Shadow, or device-input stage is admitted until the four-session pilot
 passes every frozen movement and transition gate. A missing foreground package or build identity

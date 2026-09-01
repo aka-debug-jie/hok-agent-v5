@@ -130,6 +130,10 @@ input admission.
   evidence becomes a bounded hold then `wait`. Zero-input smoke precedes input smoke, and input
   smoke precedes four automatic five-minute pilot sessions. The route cannot load a movement model
   or open fusion Shadow before the frozen pilot gate passes.
+  A direction-diversity candidate pool may retain extra automatic sessions as audit-only and
+  deterministically freeze exactly three train plus one dev session. It cannot synthesize
+  directions, alter the nearest-target teacher, lower movement gates, or execute the trained
+  spatial pilot on the phone.
 - Global Agent v1 may train only inside project-owned GlobalArena/Rich PixelArena until its
   complete-episode behavior-cloning and DAgger gates pass. The structured teacher may generate
   labels but never enter the RGB student input. Its learned outputs are limited to macro intent

@@ -7,6 +7,7 @@ import json
 import tempfile
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import combinations
 from pathlib import Path
 from typing import Final, cast
 
@@ -37,8 +38,13 @@ DECISION_SCHEMA: Final = "hok-agent-operation-policy-decision-v1"
 DIRECT_CONTRACT_SCHEMA: Final = "hok-agent-operation-direct-policy-contract-v1"
 DIRECT_POLICY_SCHEMA: Final = "hok-agent-operation-direct-policy-pilot-v1"
 MOVEMENT_POLICY_CONTRACT_SCHEMA: Final = "hok-agent-operation-movement-policy-contract-v1"
+MOVEMENT_SPATIAL_POLICY_CONTRACT_SCHEMA: Final = (
+    "hok-agent-operation-movement-spatial-policy-contract-v1"
+)
 MOVEMENT_SPLIT_SCHEMA: Final = "hok-agent-operation-movement-split-v1"
 MOVEMENT_POLICY_SCHEMA: Final = "hok-agent-operation-movement-policy-pilot-v1"
+MOVEMENT_DIVERSITY_SCHEMA: Final = "hok-agent-operation-movement-diversity-audit-v1"
+MOVEMENT_OVERFIT_SCHEMA: Final = "hok-agent-operation-movement-overfit32-v1"
 FEATURE_SIZE: Final = 512
 WINDOW_FRAMES: Final = 16
 MOVEMENT_SIZE: Final = 9
@@ -145,6 +151,42 @@ EXPECTED_MOVEMENT_CONTRACT: Final[dict[str, object]] = {
     "device_input_allowed": False,
 }
 
+EXPECTED_MOVEMENT_SPATIAL_CONTRACT: Final[dict[str, object]] = {
+    "schema_version": MOVEMENT_SPATIAL_POLICY_CONTRACT_SCHEMA,
+    "seed": 0,
+    "sample_hz": 5,
+    "window_frames": 8,
+    "feature_grid": [2, 4],
+    "feature_size": 4096,
+    "views": ["main_view", "minimap"],
+    "movement_vocabulary": list(MOVEMENTS),
+    "pilot_sessions": 4,
+    "pilot_split": [3, 1],
+    "formal_sessions": 12,
+    "formal_split": [8, 2, 2],
+    "epochs": 50,
+    "overfit_samples_per_direction": 4,
+    "overfit_max_steps": 2000,
+    "overfit_stable_steps": 25,
+    "overfit_max_loss": 0.05,
+    "maximum_wait_to_movement_ratio": 3,
+    "minimum_movement_macro_f1": 0.6,
+    "minimum_per_class_recall": 0.4,
+    "minimum_transition_accuracy": 0.5,
+    "minimum_rgb_gain_over_time_only": 0.1,
+    "minimum_normal_gain_over_shuffle": 0.15,
+    "minimum_tcn_gain": 0.03,
+    "required_label_source": "rgb_minimap_teacher_v1",
+    "combat_model_sha256": (
+        "bce47dc1dc6332b7e348cfc6d6a9874efbbffadca14301dbfbe3bffa6063bd74"
+    ),
+    "human_labels_used": False,
+    "semantic_accuracy_verified": False,
+    "promotion_allowed": False,
+    "control_output": False,
+    "device_input_allowed": False,
+}
+
 
 def _self_hash(value: Mapping[str, object], field: str) -> str:
     unsigned = {key: item for key, item in value.items() if key != field}
@@ -208,10 +250,15 @@ def verify_operation_direct_policy_contract(path: Path) -> dict[str, object]:
 
 def _movement_policy_contract(path: Path) -> dict[str, object]:
     value = _read_object(path, "Operation Movement Policy contract is unreadable")
+    expected = {
+        MOVEMENT_POLICY_CONTRACT_SCHEMA: EXPECTED_MOVEMENT_CONTRACT,
+        MOVEMENT_SPATIAL_POLICY_CONTRACT_SCHEMA: EXPECTED_MOVEMENT_SPATIAL_CONTRACT,
+    }.get(cast(str, value.get("schema_version")))
     if (
-        value.get("contract_sha256") != _self_hash(value, "contract_sha256")
+        expected is None
+        or value.get("contract_sha256") != _self_hash(value, "contract_sha256")
         or {key: item for key, item in value.items() if key != "contract_sha256"}
-        != EXPECTED_MOVEMENT_CONTRACT
+        != expected
     ):
         raise OperationPolicyError("Operation Movement Policy contract differs")
     return value
@@ -225,6 +272,8 @@ def verify_operation_movement_policy_contract(path: Path) -> dict[str, object]:
         "contract_sha256": contract["contract_sha256"],
         "required_label_source": contract["required_label_source"],
         "combat_model_sha256": contract["combat_model_sha256"],
+        "window_frames": contract["window_frames"],
+        "feature_grid": contract.get("feature_grid"),
         "control_output": False,
         "device_input_allowed": False,
     }
@@ -1922,60 +1971,228 @@ def run_operation_direct_policy_pilot(
     return report
 
 
+@dataclass(frozen=True)
+class MovementCandidate:
+    name: str
+    path: Path
+    summary_sha256: str
+    session: SourceSession
+    direction_counts: tuple[int, ...]
+    stable_window_counts: tuple[int, ...]
+    transition_count: int
+
+
+def _stable_movement_counts(session: SourceSession, window_frames: int) -> tuple[int, ...]:
+    counts = np.zeros(MOVEMENT_SIZE, dtype=np.int64)
+    for index in range(window_frames - 1, len(session.movement_id)):
+        labels = session.movement_id[index - window_frames + 1 : index + 1]
+        hard_stop = session.hard_stop[index - window_frames + 1 : index + 1]
+        if not np.any(hard_stop) and np.all(labels == labels[-1]):
+            counts[int(labels[-1])] += 1
+    return tuple(int(value) for value in counts)
+
+
+def _movement_candidate(
+    path: Path, contract: Mapping[str, object]
+) -> MovementCandidate:
+    summary = _read_object(path / "summary.json", "movement teacher summary is unreadable")
+    if (
+        summary.get("schema_version") != "hok-agent-mobile-operation-teacher-v1"
+        or summary.get("status") != "PASSED"
+        or summary.get("training_eligible") is not True
+        or summary.get("movement_label_source") != contract["required_label_source"]
+        or summary.get("summary_sha256") != _self_hash(summary, "summary_sha256")
+    ):
+        raise OperationPolicyError("movement teacher session is not training eligible")
+    session = _load_operation_session(path)
+    if session.movement_label_source is None or set(session.movement_label_source.tolist()) != {1}:
+        raise OperationPolicyError("movement teacher shard label source differs")
+    valid = session.hard_stop == 0
+    counts = np.bincount(session.movement_id[valid], minlength=MOVEMENT_SIZE)
+    transitions = np.sum(
+        valid[1:]
+        & valid[:-1]
+        & (session.movement_id[1:] != session.movement_id[:-1])
+    )
+    return MovementCandidate(
+        path.name,
+        path,
+        cast(str, summary["summary_sha256"]),
+        session,
+        tuple(int(value) for value in counts),
+        _stable_movement_counts(session, cast(int, contract["window_frames"])),
+        int(transitions),
+    )
+
+
+def _movement_candidate_pool(
+    root: Path, contract: Mapping[str, object]
+) -> tuple[list[MovementCandidate], list[dict[str, object]]]:
+    candidates: list[MovementCandidate] = []
+    excluded: list[dict[str, object]] = []
+    for path in sorted(
+        item
+        for item in root.iterdir()
+        if item.is_dir() and item.name.startswith("teacher-session-")
+    ):
+        summary = _read_object(path / "summary.json", "movement teacher summary is unreadable")
+        if summary.get("training_eligible") is not True:
+            excluded.append(
+                {
+                    "session": path.name,
+                    "status": summary.get("status"),
+                    "failure": summary.get("failure"),
+                }
+            )
+            continue
+        candidates.append(_movement_candidate(path, contract))
+    return candidates, excluded
+
+
+def _select_movement_pilot(
+    candidates: Sequence[MovementCandidate], contract: Mapping[str, object]
+) -> tuple[tuple[MovementCandidate, ...], MovementCandidate] | None:
+    train_count, dev_count = cast(list[int], contract["pilot_split"])
+    if train_count != 3 or dev_count != 1:
+        raise OperationPolicyError("movement pilot split contract differs")
+    minimum_train = cast(int, contract.get("overfit_samples_per_direction", 1))
+    choices: list[
+        tuple[
+            tuple[int, int, int],
+            tuple[str, ...],
+            tuple[MovementCandidate, ...],
+            MovementCandidate,
+        ]
+    ] = []
+    for dev in candidates:
+        dev_minimum = min(dev.stable_window_counts[1:])
+        if dev_minimum < 1:
+            continue
+        remaining = [candidate for candidate in candidates if candidate.name != dev.name]
+        for train in combinations(remaining, train_count):
+            train_counts = np.sum(
+                np.asarray([candidate.stable_window_counts for candidate in train]), axis=0
+            )
+            train_minimum = int(np.min(train_counts[1:]))
+            if train_minimum < minimum_train:
+                continue
+            transitions = sum(candidate.transition_count for candidate in (*train, dev))
+            names = tuple(candidate.name for candidate in (*train, dev))
+            choices.append(
+                ((dev_minimum, train_minimum, transitions), names, train, dev)
+            )
+    if not choices:
+        return None
+    choices.sort(key=lambda item: tuple(-value for value in item[0]) + item[1])
+    _, _, train, dev = choices[0]
+    return tuple(sorted(train, key=lambda item: item.name)), dev
+
+
+def audit_operation_movement_diversity(
+    *, dataset_root: Path, contract_path: Path, output_dir: Path
+) -> dict[str, object]:
+    contract = _movement_policy_contract(contract_path)
+    root = _large_existing(dataset_root)
+    candidates, excluded = _movement_candidate_pool(root, contract)
+    selected = _select_movement_pilot(candidates, contract)
+    session_rows = [
+        {
+            "session": candidate.name,
+            "summary_sha256": candidate.summary_sha256,
+            "direction_counts": list(candidate.direction_counts),
+            "stable_window_counts": list(candidate.stable_window_counts),
+            "transition_count": candidate.transition_count,
+        }
+        for candidate in candidates
+    ]
+    pool_identity = hashlib.sha256(
+        _canonical(
+            [
+                {"session": row["session"], "summary_sha256": row["summary_sha256"]}
+                for row in session_rows
+            ]
+        )
+    ).hexdigest()
+    report: dict[str, object] = {
+        "schema_version": MOVEMENT_DIVERSITY_SCHEMA,
+        "status": "READY_TO_FREEZE" if selected is not None else "DIRECTION_COVERAGE_INCOMPLETE",
+        "contract_sha256": contract["contract_sha256"],
+        "candidate_pool_sha256": pool_identity,
+        "eligible_session_count": len(candidates),
+        "sessions": session_rows,
+        "excluded_sessions": excluded,
+        "selected_sessions": (
+            {
+                "train": [candidate.name for candidate in selected[0]],
+                "dev": [selected[1].name],
+            }
+            if selected is not None
+            else None
+        ),
+        "human_labels_used": False,
+        "control_output": False,
+        "device_input_allowed": False,
+    }
+    report["report_sha256"] = hashlib.sha256(_canonical(report)).hexdigest()
+    output = _large_new(output_dir)
+    with tempfile.TemporaryDirectory(prefix=f".{output.name}-", dir=output.parent) as temporary:
+        staging = Path(temporary)
+        (staging / "report.json").write_text(
+            json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
+        staging.rename(output)
+    return report
+
+
 def freeze_operation_movement_split(
-    *, dataset_root: Path, contract_path: Path, output_path: Path, pilot: bool
+    *,
+    dataset_root: Path,
+    contract_path: Path,
+    output_path: Path,
+    pilot: bool,
+    select_from_pool: bool = False,
 ) -> dict[str, object]:
     contract = _movement_policy_contract(contract_path)
     root = _large_existing(dataset_root)
     expected = cast(int, contract["pilot_sessions" if pilot else "formal_sessions"])
-    candidate_paths = tuple(
-        sorted(
-            path
-            for path in root.iterdir()
-            if path.is_dir() and path.name.startswith("teacher-session-")
-        )
-    )
-    paths: list[Path] = []
-    for path in candidate_paths:
-        summary = _read_object(path / "summary.json", "movement teacher summary is unreadable")
-        if summary.get("training_eligible") is True:
-            paths.append(path)
-    if len(paths) != expected:
-        raise OperationPolicyError(
-            f"movement split requires exactly {expected} training-eligible teacher sessions"
-        )
-    sessions: list[SourceSession] = []
-    for path in paths:
-        summary = _read_object(path / "summary.json", "movement teacher summary is unreadable")
-        if (
-            summary.get("schema_version") != "hok-agent-mobile-operation-teacher-v1"
-            or summary.get("status") != "PASSED"
-            or summary.get("training_eligible") is not True
-            or summary.get("movement_label_source") != contract["required_label_source"]
-            or summary.get("summary_sha256") != _self_hash(summary, "summary_sha256")
-        ):
-            raise OperationPolicyError("movement teacher session is not training eligible")
-        session = _load_operation_session(path)
-        if session.movement_label_source is None or set(session.movement_label_source.tolist()) != {
-            1
-        }:
-            raise OperationPolicyError("movement teacher shard label source differs")
-        sessions.append(session)
+    candidates, _excluded = _movement_candidate_pool(root, contract)
+    pool_identity: str | None = None
+    if select_from_pool:
+        if not pilot:
+            raise OperationPolicyError("movement candidate-pool selection is pilot-only")
+        selected = _select_movement_pilot(candidates, contract)
+        if selected is None:
+            raise OperationPolicyError("movement candidate pool lacks a complete pilot split")
+        chosen = [*selected[0], selected[1]]
+        pool_identity = hashlib.sha256(
+            _canonical(
+                [
+                    {"session": item.name, "summary_sha256": item.summary_sha256}
+                    for item in candidates
+                ]
+            )
+        ).hexdigest()
+    else:
+        if len(candidates) != expected:
+            raise OperationPolicyError(
+                f"movement split requires exactly {expected} training-eligible teacher sessions"
+            )
+        chosen = candidates
     counts = cast(list[int], contract["pilot_split" if pilot else "formal_split"])
-    names = ["train", "dev"] if pilot else ["train", "dev", "test"]
-    assignments: dict[str, list[str]] = {name: [] for name in names}
+    split_names = ["train", "dev"] if pilot else ["train", "dev", "test"]
+    assignments: dict[str, list[str]] = {name: [] for name in split_names}
     start = 0
-    for name, count in zip(names, counts, strict=True):
-        assignments[name] = [session.identity for session in sessions[start : start + count]]
+    for name, count in zip(split_names, counts, strict=True):
+        assignments[name] = [item.session.identity for item in chosen[start : start + count]]
         start += count
-    by_identity = {session.identity: session for session in sessions}
+    by_identity = {item.session.identity: item.session for item in chosen}
     direction_counts: dict[str, list[int]] = {}
     for name, identities in assignments.items():
         labels = np.concatenate(
             [
-                by_identity[identity].movement_id[
-                    by_identity[identity].hard_stop == 0
-                ].astype(np.int64)
+                by_identity[identity].movement_id[by_identity[identity].hard_stop == 0].astype(
+                    np.int64
+                )
                 for identity in identities
             ]
         )
@@ -1988,7 +2205,10 @@ def freeze_operation_movement_split(
         "status": "FROZEN",
         "mode": "pilot" if pilot else "formal",
         "contract_sha256": contract["contract_sha256"],
-        "session_count": len(sessions),
+        "session_count": len(chosen),
+        "selection_mode": "coverage_candidate_pool_v1" if select_from_pool else "ordered_v1",
+        "candidate_pool_sha256": pool_identity,
+        "selected_session_names": [item.name for item in chosen],
         "assignments": assignments,
         "direction_counts": direction_counts,
         "label_source": contract["required_label_source"],
@@ -2007,28 +2227,53 @@ class MovementExamples:
     labels: np.ndarray
     transitions: np.ndarray
     normalized_time: np.ndarray
+    confidence: np.ndarray
+    stable: np.ndarray
 
 
 def _movement_examples(
-    sessions: Sequence[EncodedSession], wait_ratio: int, *, seed: int
+    sessions: Sequence[EncodedSession],
+    wait_ratio: int,
+    *,
+    seed: int,
+    window_frames: int = WINDOW_FRAMES,
+    feature_grid: tuple[int, int] | None = None,
 ) -> MovementExamples:
     windows: list[np.ndarray] = []
     labels: list[np.ndarray] = []
     transitions: list[np.ndarray] = []
     times: list[np.ndarray] = []
-    offsets = np.arange(WINDOW_FRAMES - 1, -1, -1, dtype=np.int64)
+    confidences: list[np.ndarray] = []
+    stable: list[np.ndarray] = []
+    offsets = np.arange(window_frames - 1, -1, -1, dtype=np.int64)
     for session in sessions:
         if session.movement_label_source is None or set(session.movement_label_source.tolist()) != {
             1
         }:
             raise OperationPolicyError("movement examples require the minimap teacher source")
-        pooled = np.concatenate(
-            (session.main.mean(axis=(2, 3)), session.minimap.mean(axis=(2, 3))), axis=1
-        ).astype(np.float16, copy=False)
-        candidate = np.arange(WINDOW_FRAMES - 1, len(pooled), dtype=np.int64)
+        if feature_grid is None:
+            main = session.main.mean(axis=(2, 3))
+            minimap = session.minimap.mean(axis=(2, 3))
+        else:
+            main = (
+                nn.functional.adaptive_avg_pool2d(
+                    torch.from_numpy(session.main).float(), feature_grid
+                )
+                .flatten(1)
+                .numpy()
+            )
+            minimap = (
+                nn.functional.adaptive_avg_pool2d(
+                    torch.from_numpy(session.minimap).float(), feature_grid
+                )
+                .flatten(1)
+                .numpy()
+            )
+        pooled = np.concatenate((main, minimap), axis=1).astype(np.float16, copy=False)
+        candidate = np.arange(window_frames - 1, len(pooled), dtype=np.int64)
         valid = np.asarray(
             [
-                not np.any(session.hard_stop[index - WINDOW_FRAMES + 1 : index + 1])
+                not np.any(session.hard_stop[index - window_frames + 1 : index + 1])
                 for index in candidate
             ],
             dtype=bool,
@@ -2040,6 +2285,23 @@ def _movement_examples(
         transitions.append(
             (session.movement_id[indexes] != session.movement_id[indexes - 1]).astype(bool)
         )
+        stable.append(
+            np.asarray(
+                [
+                    np.all(
+                        session.movement_id[index - window_frames + 1 : index + 1]
+                        == session.movement_id[index]
+                    )
+                    for index in indexes
+                ],
+                dtype=bool,
+            )
+        )
+        confidences.append(
+            session.movement_confidence[indexes]
+            if session.movement_confidence is not None
+            else np.zeros(len(indexes), dtype=np.float32)
+        )
         times.append(
             ((session.timestamp_ms[indexes] - session.timestamp_ms[0]) / denominator).astype(
                 np.float32
@@ -2049,6 +2311,8 @@ def _movement_examples(
     all_labels = np.concatenate(labels)
     all_transitions = np.concatenate(transitions)
     all_times = np.concatenate(times)
+    all_confidence = np.concatenate(confidences).astype(np.float32)
+    all_stable = np.concatenate(stable)
     moving = np.flatnonzero(all_labels != 0)
     waiting = np.flatnonzero(all_labels == 0)
     maximum_wait = len(moving) * wait_ratio
@@ -2060,24 +2324,40 @@ def _movement_examples(
         all_labels = all_labels[keep]
         all_transitions = all_transitions[keep]
         all_times = all_times[keep]
-    return MovementExamples(all_windows, all_labels, all_transitions, all_times)
+        all_confidence = all_confidence[keep]
+        all_stable = all_stable[keep]
+    return MovementExamples(
+        all_windows,
+        all_labels,
+        all_transitions,
+        all_times,
+        all_confidence,
+        all_stable,
+    )
 
 
 class _MovementModel(nn.Module):
-    def __init__(self, kind: str) -> None:
+    def __init__(
+        self,
+        kind: str,
+        feature_size: int = FEATURE_SIZE * 2,
+        window_frames: int = WINDOW_FRAMES,
+    ) -> None:
         super().__init__()
         self.kind = kind
+        self.feature_size = feature_size
+        self.window_frames = window_frames
         self.representation: nn.Module
         self.mix: nn.Module = nn.Identity()
         self.temporal: nn.Module = nn.Identity()
         if kind == "last_frame":
             self.representation = nn.Identity()
-            hidden = FEATURE_SIZE * 2
+            hidden = feature_size
         elif kind == "pool_mlp":
-            self.representation = nn.Sequential(nn.Linear(FEATURE_SIZE * 2, 256), nn.ReLU())
+            self.representation = nn.Sequential(nn.Linear(feature_size, 256), nn.ReLU())
             hidden = 256
         elif kind == "causal_tcn":
-            self.mix = nn.Conv1d(FEATURE_SIZE * 2, 256, 1)
+            self.mix = nn.Conv1d(feature_size, 256, 1)
             self.temporal = nn.Sequential(*(_V2ResidualBlock(value) for value in (1, 2, 4)))
             self.representation = nn.Identity()
             hidden = 256
@@ -2086,8 +2366,11 @@ class _MovementModel(nn.Module):
         self.head = nn.Linear(hidden, MOVEMENT_SIZE)
 
     def forward(self, values: torch.Tensor) -> torch.Tensor:
-        if values.ndim != 3 or values.shape[1:] != (WINDOW_FRAMES, FEATURE_SIZE * 2):
-            raise OperationPolicyError("movement model requires Bx16x1024 features")
+        if values.ndim != 3 or values.shape[1:] != (
+            self.window_frames,
+            self.feature_size,
+        ):
+            raise OperationPolicyError("movement model input shape differs")
         if self.kind == "last_frame":
             encoded = self.representation(values[:, -1])
         elif self.kind == "pool_mlp":
@@ -2136,7 +2419,7 @@ def _fit_movement_model(
     train_labels = train.labels.copy()
     if shuffled:
         randomizer.shuffle(train_labels)
-    model = _MovementModel(kind).to(device)
+    model = _MovementModel(kind, train.windows.shape[2], train.windows.shape[1]).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-4)
     loss_function = nn.CrossEntropyLoss(weight=_class_weights(train_labels, MOVEMENT_SIZE, device))
     best_score = -1.0
@@ -2180,6 +2463,157 @@ def _movement_time_only(train: MovementExamples, dev: MovementExamples) -> dict[
     return _head_metrics(rule[dev_bins], dev.labels, MOVEMENT_SIZE)
 
 
+def run_operation_movement_overfit32(
+    *,
+    dataset_root: Path,
+    split_path: Path,
+    contract_path: Path,
+    adapter_checkpoint: Path,
+    output_dir: Path,
+    device: str,
+    batch_size: int = 128,
+) -> dict[str, object]:
+    contract = _movement_policy_contract(contract_path)
+    if contract.get("schema_version") != MOVEMENT_SPATIAL_POLICY_CONTRACT_SCHEMA:
+        raise OperationPolicyError("movement overfit32 requires the spatial policy contract")
+    if device not in {"cpu", "cuda"} or batch_size < 8:
+        raise OperationPolicyError("movement overfit32 runtime settings are invalid")
+    if device == "cuda" and not torch.cuda.is_available():
+        raise OperationPolicyError("CUDA is unavailable")
+    root = _large_existing(dataset_root)
+    split = _read_object(split_path, "movement split is unreadable")
+    if (
+        split.get("schema_version") != MOVEMENT_SPLIT_SCHEMA
+        or split.get("status") != "FROZEN"
+        or split.get("mode") != "pilot"
+        or split.get("contract_sha256") != contract["contract_sha256"]
+        or split.get("split_sha256") != _self_hash(split, "split_sha256")
+        or split.get("test_opened") is not False
+    ):
+        raise OperationPolicyError("movement overfit32 split is invalid")
+    assignments = cast(dict[str, list[str]], split["assignments"])
+    requested = set(assignments["train"])
+    candidates, _excluded = _movement_candidate_pool(root, contract)
+    sessions = {candidate.session.identity: candidate.session for candidate in candidates}
+    if not requested.issubset(sessions):
+        raise OperationPolicyError("movement overfit32 train sessions are unavailable")
+    target = torch.device(device)
+    encoder, adapter_metadata = _encoder(adapter_checkpoint, target)
+    encoded = [
+        _encode_session(encoder, sessions[identity], target, batch_size)
+        for identity in assignments["train"]
+    ]
+    grid = cast(tuple[int, int], tuple(cast(list[int], contract["feature_grid"])))
+    examples = _movement_examples(
+        encoded,
+        cast(int, contract["maximum_wait_to_movement_ratio"]),
+        seed=0,
+        window_frames=cast(int, contract["window_frames"]),
+        feature_grid=grid,
+    )
+    per_direction = cast(int, contract["overfit_samples_per_direction"])
+    selected: list[int] = []
+    counts: dict[str, int] = {}
+    for label in range(1, MOVEMENT_SIZE):
+        available = np.flatnonzero((examples.labels == label) & examples.stable)
+        order = np.lexsort((available, -examples.confidence[available]))
+        chosen = available[order[:per_direction]]
+        if len(chosen) != per_direction:
+            raise OperationPolicyError("movement overfit32 lacks stable direction samples")
+        selected.extend(int(value) for value in chosen)
+        counts[MOVEMENTS[label]] = len(chosen)
+    indexes = np.asarray(selected, dtype=np.int64)
+    values = torch.from_numpy(examples.windows[indexes]).to(target).float()
+    labels = torch.from_numpy(examples.labels[indexes]).to(target)
+    torch.manual_seed(cast(int, contract["seed"]))
+    model = _MovementModel("causal_tcn", values.shape[2], values.shape[1]).to(target)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=0.0)
+    loss_function = nn.CrossEntropyLoss()
+    required_stable = cast(int, contract["overfit_stable_steps"])
+    maximum_steps = cast(int, contract["overfit_max_steps"])
+    maximum_loss = cast(float, contract["overfit_max_loss"])
+    stable_steps = 0
+    final_loss = float("inf")
+    final_accuracy = 0.0
+    completed_steps = 0
+    for step in range(1, maximum_steps + 1):
+        model.train()
+        logits = model(values)
+        loss = loss_function(logits, labels)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        model.eval()
+        with torch.no_grad():
+            checked = model(values)
+            final_loss = float(loss_function(checked, labels).item())
+            final_accuracy = float((checked.argmax(1) == labels).float().mean().item())
+        stable_steps = (
+            stable_steps + 1
+            if final_loss <= maximum_loss and final_accuracy == 1.0
+            else 0
+        )
+        completed_steps = step
+        if stable_steps >= required_stable:
+            break
+    output = _large_new(output_dir)
+    with tempfile.TemporaryDirectory(prefix=f".{output.name}-", dir=output.parent) as temporary:
+        staging = Path(temporary)
+        model_path = staging / "movement-overfit32-seed-0.safetensors"
+        save_file(
+            {name: value.detach().cpu() for name, value in model.state_dict().items()},
+            model_path,
+            metadata={
+                "schema": MOVEMENT_OVERFIT_SCHEMA,
+                "contract_sha256": cast(str, contract["contract_sha256"]),
+                "split_sha256": cast(str, split["split_sha256"]),
+                "adapter_sha256": _sha(adapter_checkpoint),
+            },
+        )
+        reloaded = _MovementModel("causal_tcn", values.shape[2], values.shape[1]).to(target)
+        reloaded.load_state_dict(load_file(model_path, device=str(target)), strict=True)
+        reloaded.eval()
+        with torch.no_grad():
+            reload_logits = reloaded(values)
+            reload_loss = float(loss_function(reload_logits, labels).item())
+            reload_accuracy = float((reload_logits.argmax(1) == labels).float().mean().item())
+        passed = bool(
+            stable_steps >= required_stable
+            and reload_loss <= maximum_loss
+            and reload_accuracy == 1.0
+        )
+        report: dict[str, object] = {
+            "schema_version": MOVEMENT_OVERFIT_SCHEMA,
+            "status": "PASSED" if passed else "FAILED",
+            "contract_sha256": contract["contract_sha256"],
+            "split_sha256": split["split_sha256"],
+            "adapter_sha256": _sha(adapter_checkpoint),
+            "adapter_source_sha256": adapter_metadata.get("v5_source_model_sha256"),
+            "sample_count": len(indexes),
+            "samples_per_direction": counts,
+            "window_frames": values.shape[1],
+            "feature_grid": list(grid),
+            "feature_size": values.shape[2],
+            "completed_steps": completed_steps,
+            "stable_steps": stable_steps,
+            "final_loss": final_loss,
+            "final_accuracy": final_accuracy,
+            "reload_loss": reload_loss,
+            "reload_accuracy": reload_accuracy,
+            "model_sha256": _sha(model_path),
+            "test_opened": False,
+            "shadow_allowed": False,
+            "control_output": False,
+            "device_input_allowed": False,
+        }
+        report["report_sha256"] = hashlib.sha256(_canonical(report)).hexdigest()
+        (staging / "report.json").write_text(
+            json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
+        staging.rename(output)
+    return report
+
+
 def run_operation_movement_pilot(
     *,
     dataset_root: Path,
@@ -2206,28 +2640,42 @@ def run_operation_movement_pilot(
         or split.get("test_opened") is not False
     ):
         raise OperationPolicyError("movement pilot split is invalid")
-    paths = tuple(
-        sorted(
-            path
-            for path in root.iterdir()
-            if path.is_dir() and path.name.startswith("teacher-session-")
-        )
-    )
-    sessions = {_load_operation_session(path).identity: path for path in paths}
     assignments = cast(dict[str, list[str]], split["assignments"])
-    if set(sessions) != set(assignments["train"] + assignments["dev"]):
-        raise OperationPolicyError("movement pilot sessions differ from frozen split")
+    requested = set(assignments["train"] + assignments["dev"])
+    pool_candidates, _excluded = _movement_candidate_pool(root, contract)
+    sessions = {
+        candidate.session.identity: candidate.session for candidate in pool_candidates
+    }
+    if not requested.issubset(sessions) or len(requested) != cast(int, split["session_count"]):
+        raise OperationPolicyError("movement pilot split sessions are unavailable")
     target = torch.device(device)
     encoder, adapter_metadata = _encoder(adapter_checkpoint, target)
     encoded = {
-        identity: _encode_session(encoder, _load_operation_session(path), target, batch_size)
-        for identity, path in sessions.items()
+        identity: _encode_session(encoder, sessions[identity], target, batch_size)
+        for identity in requested
     }
     ratio = cast(int, contract["maximum_wait_to_movement_ratio"])
-    train = _movement_examples(
-        [encoded[identity] for identity in assignments["train"]], ratio, seed=0
+    window_frames = cast(int, contract["window_frames"])
+    grid_value = contract.get("feature_grid")
+    feature_grid = (
+        cast(tuple[int, int], tuple(cast(list[int], grid_value)))
+        if grid_value is not None
+        else None
     )
-    dev = _movement_examples([encoded[identity] for identity in assignments["dev"]], ratio, seed=1)
+    train = _movement_examples(
+        [encoded[identity] for identity in assignments["train"]],
+        ratio,
+        seed=0,
+        window_frames=window_frames,
+        feature_grid=feature_grid,
+    )
+    dev = _movement_examples(
+        [encoded[identity] for identity in assignments["dev"]],
+        ratio,
+        seed=1,
+        window_frames=window_frames,
+        feature_grid=feature_grid,
+    )
     time_only = _movement_time_only(train, dev)
     candidates: dict[str, dict[str, object]] = {}
     states: dict[str, dict[str, torch.Tensor]] = {}
@@ -2285,6 +2733,9 @@ def run_operation_movement_pilot(
             "adapter_sha256": _sha(adapter_checkpoint),
             "adapter_source_sha256": adapter_metadata.get("v5_source_model_sha256"),
             "combat_model_sha256": contract["combat_model_sha256"],
+            "window_frames": window_frames,
+            "feature_grid": list(feature_grid) if feature_grid is not None else None,
+            "feature_size": train.windows.shape[2],
             "train_rows": len(train.windows),
             "dev_rows": len(dev.windows),
             "time_only": time_only,
