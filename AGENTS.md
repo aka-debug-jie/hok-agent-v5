@@ -8,8 +8,9 @@
 - Hierarchical Policy v0 is the active development-preparation successor governed by
   `docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md`. It keeps one RGB PolicyBundle with a shared temporal
   representation and separate Macro, Movement, and Combat heads; VisualEventEngine and the
-  deterministic Router remain outside the Actor. The first implementation task is E0 FrameBus,
-  VisualEvent schema, and UnifiedTransition validation only. It does not authorize model-driven
+  deterministic Router remain outside the Actor. E0 FrameBus, VisualEvent schema, and
+  UnifiedTransition validation are complete offline; the next task is the minimal E1 RGB event
+  detectors and session-disjoint evidence. It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.
 - Global Agent v1 is the frozen simulator foundation and is governed by

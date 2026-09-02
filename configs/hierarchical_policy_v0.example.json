@@ -11,6 +11,10 @@
   },
   "episode_binding": {
     "scope": "one_declared_marksman_one_role_one_lane",
+    "declared_hero": "HOU_YI",
+    "declared_role": "MARKSMAN",
+    "blue_lane": "BOTTOM",
+    "red_lane": "TOP",
     "side_binding": "loading_panel_result_frozen_for_episode",
     "hero_adapter_selected_before_episode": true,
     "bundle_swap": "episode_boundary_only"
@@ -70,6 +74,8 @@
   },
   "replay": {
     "physical_stores": 1,
+    "metadata_backend": "sqlite_wal",
+    "frame_bundle_storage": "external_hash_referenced",
     "episode_major": true,
     "sources": ["demo", "sim", "controller", "online", "offline_video"],
     "logical_samplers": ["demo", "online", "failure", "joint"],

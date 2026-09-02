@@ -2,7 +2,7 @@
 
 ## 1. 状态与目的
 
-当前状态：`READY_FOR_DEVELOPMENT`。
+当前状态：`E0_PASSED_OFFLINE`。后羿 v0-S 配置已冻结；E1 尚未实现。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -14,7 +14,7 @@ Replay 和真实闭环后训练。首版只实现长期架构中形成自动训�
 
 ## 2. v0 的能力边界
 
-v0 只面向一个预先声明的射手英雄、一个固定角色和一条固定分路。英雄、角色、分路和分方
+v0 只面向预先声明的后羿、固定射手角色和一条固定分路。蓝方走下路，红方走上路。英雄、角色、分路和分方
 在 episode 开始前完成绑定，用于选择配置、英雄 adapter 和确定性开局模板；这些元数据不作为
 RGB Actor 的张量输入，也不进入视觉编码器或时序隐藏状态。自动分方结果一旦绑定，在当前
 episode 内不可漂移。
@@ -72,7 +72,9 @@ RGB capture ------------>| FrameBus              |
 
 三个策略在逻辑上独立训练和评估，但不是三个完整 RGB 大模型。主画面、小地图和 HUD 可以使用
 各自的轻量视觉 stem；融合后的时序表征由三个 Head 共享。一次 observation 只产生一个
-`observation_id`，同一调度周期的三个 proposal 必须绑定该 ID 和同一 `policy_bundle_version`。
+`observation_id`。每个 proposal 分别记录产生它的 source observation 和本步 applied
+observation；未复用的三个 Head 必须使用当前 source ID，跨频率复用必须显式标记
+`carried_forward=true`、仍在 `valid_until_ns` 内，并保持同一 `policy_bundle_version`。
 
 ## 4. 模块合同
 
@@ -140,8 +142,9 @@ Value Head。
 ### 4.4 多频率策略
 
 FrameBus 的开发目标是 10 Hz，5 Hz 是首轮最低可测运行频率。Macro 约 1 Hz，Movement 和
-Combat 约 10 Hz。未到调度时刻的 Head 可以复用仍在 `valid_until_ns` 内的 proposal；过期
-proposal 必须变为 `HOLD/NONE/WAIT`，不能静默复用。
+Combat 约 10 Hz。未到调度时刻的 Head 可以复用仍在 `valid_until_ns` 内的 proposal，但必须
+保留原 source observation，并绑定当前 applied observation；过期 proposal 必须变为
+`HOLD/NONE/WAIT`，不能静默复用。
 
 Movement 的离散分类不等于间歇移动。执行器保持 pointer 0 的真实生命周期：第一次移动发
 DOWN，方向改变只发 MOVE，方向未变不重复发送，`NONE`、硬停止或清理才发 UP。方向滞回和
@@ -155,7 +158,7 @@ Combat 只提出按钮类别。技能亮度、冷却、英雄固定槽位行为�
 
 Router 没有可训练参数，只执行以下合同：
 
-- 检查 observation ID、Bundle 版本、proposal 时效和置信度。
+- 检查 source/applied observation ID、carried-forward 状态、Bundle 版本、proposal 时效和置信度。
 - 应用死亡/终局/未知画面、技能可用性和动作词表 mask。
 - 解决 pointer 资源、移动锁和执行优先级冲突。
 - 将 Macro 的约束映射为 Movement/Combat 的允许范围。
@@ -190,8 +193,10 @@ pointer 0 可以在两个 step 之间持续按下；`action_dispatch_ack_ns` 表
 
 ### 4.7 UnifiedTransitionStore
 
-项目只建立一个物理 TransitionStore。`demo`、`sim`、`controller`、`online` 和 `failure` 是
-source/tag，不是五套 schema。Sampler 在统一数据上提供 demo、online、failure 和 joint 视图。
+项目只建立一个物理 TransitionStore。E0 使用标准库 SQLite WAL 保存事务式元数据，帧本体仍在
+外部数据根，通过匿名 basename 和 hash 引用。`demo`、`sim`、`controller`、`online` 和
+`offline_video` 是 source，`failure` 是 tag，不是多套 schema。Sampler 在统一数据上提供
+demo、online、failure 和 joint 视图。
 序列 replay 必须按完整 episode 保存，支持 recurrent burn-in，并机械排除：
 
 - 因果时间顺序失败；
@@ -231,7 +236,7 @@ Q-learning（R2D2-style）。DQfD 只在存在合格同步示范时使用；P-DQ
 | 阶段 | 实现内容 | 退出门 |
 |---|---|---|
 | D0 | 本协议、示例配置、机器合同 | JSON 可解析，权威文件同步，`make check` 通过 |
-| E0 | FrameBus、VisualState/Event、Transition validator | 合成序列证明 observation 单一来源与因果排序 |
+| E0（PASSED） | FrameBus、VisualState/Event、Transition validator | 16项聚焦测试通过；全仓329项测试通过 |
 | E1 | 终局、死亡/复活、自身血量检测与 exact-once fusion | session-disjoint 离线片段报告；阈值在 dev 前冻结 |
 | L0 | 离线录像 replay：事件→reward→transition | terminal 先存后停；无重复事件、断步或版本缺失 |
 | L1 | 自建测试 App 一个完整 episode，模型不更新 | Capture→Action→Event→Reward→Replay 完整可恢复 |
@@ -249,7 +254,7 @@ Q-learning（R2D2-style）。DQfD 只在存在合格同步示范时使用；P-DQ
 
 ## 7. 最小开发文件图
 
-下一轮代码按以下责任拆分，首个任务只实现前三项：
+代码按以下责任拆分；前三项已在 E0 实现：
 
 ```text
 src/hok_agent/frame_bus.py              immutable FramePacket / latest-frame transport
@@ -263,8 +268,8 @@ tests/test_visual_events.py
 tests/test_transition_store.py
 ```
 
-不要在第一个实现提交中同时创建全部模块。E0 的最小提交只需要 FrameBus、Event schema、
-Transition validator 和聚焦测试；RewardHub、模型和在线入口依次等待前一门通过。
+E0 没有创建 RewardHub、模型或在线入口。E1 只在 `visual_events.py` 周围增加最小 RGB
+detector/fusion 和离线片段报告；RewardHub 继续等待 E1 门通过。
 
 ## 8. 当前停止条件与不确定性
 
@@ -275,5 +280,5 @@ Transition validator 和聚焦测试；RewardHub、模型和在线入口依次�
 - 塔血量、敌人血量、经济和经验仍缺少稳定身份与时序证据，当前只能列为后续事件。
 - 现有 50 GB 数据足够开始视觉预训练，但没有证据证明它足以训练成熟的三策略闭环。
 
-当前唯一下一开发任务：`E0 FrameBus + VisualEvent schema + UnifiedTransition validator`。
-
+当前唯一下一开发任务：`E1 GAME_END + DEATH/RESPAWN + SELF_HP_DELTA` 离线检测与
+session-disjoint 证据。

@@ -44,11 +44,12 @@ Router owns freshness, masks, pointer conflicts, and persistent-joystick executi
 controller, online, and failure rows share one episode-major TransitionStore with different source
 tags and samplers.
 
-The first implementation is deliberately smaller than the long-term architecture: E0 FrameBus,
-VisualEvent schema, and UnifiedTransition validation, followed by the minimal E1 event set. It does
-not yet implement a trained Bundle, online RL, MoE, continuous joystick output, PPO, or model-driven
-mobile input. The full contracts, data roles, parameter tiers, training order, and 1/3/10-episode
-gates are in
+The deliberately small E0 implementation is complete: an immutable latest-frame FrameBus,
+VisualState/Event plus exact-once fusion, and a transactional SQLite UnifiedTransitionStore now
+validate proposal freshness, action/capture ordering, terminal retention, and episode continuity.
+It is offline-only and has no detector, trained Bundle, online RL, MoE, continuous joystick output,
+PPO, or model-driven mobile input. Run its focused regression with `make hierarchical-e0-smoke`.
+The full contracts, data roles, parameter tiers, training order, and 1/3/10-episode gates are in
 [docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md](docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md).
 
 ## Quick start

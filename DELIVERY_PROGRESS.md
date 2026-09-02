@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `READY_FOR_DEVELOPMENT`: architecture, v0 scope, example config, and machine-readable transition contract are defined | E0 must implement FrameBus, Event schema, and transition validation; no model, training, phone input, or capability claim exists yet |
+| Hierarchical Policy v0 | `E0_PASSED_OFFLINE`: immutable latest-frame bus, exact-once event protocol, causal/continuous transition validation, and transactional metadata store implemented | E1 must prove terminal, death/respawn, and self-HP events on session-disjoint offline evidence; no model, phone input, online learning, or capability claim exists |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -176,18 +176,28 @@ boundary findings, and no checked-in large-data or mobile-private artifacts.
 
 ## Current limitation
 
-Hierarchical Policy v0 is ready for development but has no implementation or new training evidence.
-The project has reusable capture/execution components and frozen simulator/video evidence, but it
-does not yet have the new FrameBus/Event/Transition data plane, a trained three-head PolicyBundle,
-or EventEngine-backed online replay. Earlier Global Agent, Human IfO, T8, and operation-policy
+Hierarchical Policy v0 E0 is implemented and tested offline, but it has no E1 RGB detector or new
+training evidence. The project now has the FrameBus/Event/Transition data plane, but not a trained
+three-head PolicyBundle, RewardHub, or EventEngine-backed replay. Earlier Global Agent, Human IfO, T8, and operation-policy
 results remain evidence and reusable components, not reopened parallel routes.
+
+## Hierarchical Policy v0 E0 closure
+
+- `FramePacket` carries immutable in-memory RGB views and persists only anonymous references and hashes.
+- `LatestFrameBus` keeps one newest frame and cannot accumulate a capture backlog.
+- Visual events are version-bound and deduplicated once per episode; E0 contains no detector.
+- Proposals preserve source/applied observation IDs, carried-forward state, freshness, and Bundle version.
+- `UnifiedTransitionStore` uses SQLite transactions, retains invalid rows as non-training evidence,
+  checks episode continuity, and stores terminal transitions before the caller exits.
+- Focused E0 tests: 16 passed. Full repository: 329 passed, strict mypy 40 modules, safety check passed.
+- No dataset, GPU, phone capture, input command, model inference, or gradient update was used.
 
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: E0 FrameBus + VisualEvent schema + UnifiedTransition validator
-BLOCKING FAILURE: none; development contracts exist but implementation has not started
-NEXT ACCEPTANCE COMMAND: focused E0 tests, then make check and git diff --check
+CURRENT GOAL: E1 terminal + death/respawn + self-HP RGB event evidence
+BLOCKING FAILURE: no frozen session-disjoint E1 detector report exists yet
+NEXT ACCEPTANCE COMMAND: make hierarchical-e0-smoke, then the future focused E1 offline gate
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

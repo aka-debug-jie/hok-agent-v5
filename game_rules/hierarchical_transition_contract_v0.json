@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/hok-agent/hierarchical-transition-v0.schema.json",
+  "$id": "urn:hok-agent:hierarchical-transition:v0",
   "title": "HoK-Agent Hierarchical Transition v0",
   "type": "object",
   "additionalProperties": false,
@@ -130,7 +130,7 @@
     },
     "causal_order_valid": {
       "type": "boolean",
-      "description": "capture_end <= decision <= dispatch_ack <= settle_end <= next_capture_start"
+      "description": "step timing and adjacent episode observation chain are causal"
     },
     "training_eligible": {
       "type": "boolean"
@@ -204,7 +204,8 @@
           "properties": {
             "main": {"$ref": "#/$defs/sha256"},
             "minimap": {"$ref": "#/$defs/sha256"},
-            "hud": {"$ref": "#/$defs/sha256"}
+            "hud": {"$ref": "#/$defs/sha256"},
+            "equipment": {"$ref": "#/$defs/sha256"}
           }
         },
         "capture_latency_ms": {
@@ -221,6 +222,8 @@
       "additionalProperties": false,
       "required": [
         "observation_id",
+        "applied_observation_id",
+        "carried_forward",
         "value",
         "confidence",
         "decision_start_ns",
@@ -230,6 +233,8 @@
       ],
       "properties": {
         "observation_id": {"$ref": "#/$defs/nonempty_string"},
+        "applied_observation_id": {"$ref": "#/$defs/nonempty_string"},
+        "carried_forward": {"type": "boolean"},
         "value": {"$ref": "#/$defs/nonempty_string"},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "decision_start_ns": {"$ref": "#/$defs/timestamp_ns"},
