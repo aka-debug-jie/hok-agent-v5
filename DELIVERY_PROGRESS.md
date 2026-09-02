@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `E1C_PROBE_BLOCKED_TIME_CONFOUND`: 34/7 fixed-offset triplets materialized, but time-only ordinal gives train/dev macro-F1 1.0/1.0 | Freeze fixed-offset visual training; require event-derived terminal labels; Reward, phone input, and online learning remain closed |
+| Hierarchical Policy v0 | `E1D_CRYSTAL_CONSENSUS_PASSED_NON_PROMOTING`: event-derived visual consensus found 33 train and 7 dev crystal-transition candidates | Rebuild event-centered clips and rerun time controls; Reward, phone input, and online learning remain closed |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -251,9 +251,9 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: event-derived crystal-state terminal label redesign
-BLOCKING FAILURE: fixed anchor offsets are perfectly predicted by time-only metadata
-NEXT ACCEPTANCE COMMAND: make hierarchical-e1c-probe-smoke, then a new label-contract review
+CURRENT GOAL: E1d event-centered clips and time-confound recheck
+BLOCKING FAILURE: event-derived candidates are not yet evaluated as clips
+NEXT ACCEPTANCE COMMAND: make hierarchical-e1d-crystal-smoke, then a new clip contract
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

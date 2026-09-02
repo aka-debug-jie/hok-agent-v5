@@ -84,6 +84,10 @@ predicts all three labels with train/dev macro-F1 `1.0/1.0`. Visual accuracy on 
 not distinguish terminal semantics from match-time progression. The fixed-offset lineage is frozen;
 no GPU model was trained. Run `make hierarchical-e1c-probe-smoke`.
 
+E1d replaces fixed offsets with visual consensus: temporal change, white explosion, and persistent
+structure change. One preserved repair produced 33 train and 7 dev weak candidates. WIN/LOSS and
+Reward remain closed. Run `make hierarchical-e1d-crystal-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

@@ -1,0 +1,31 @@
+{
+  "schema_version": "hok-agent-hierarchical-event-e1d-crystal-config-v1",
+  "status": "exploratory_visual_consensus_audit",
+  "repair_history": {
+    "repairs_allowed": 1,
+    "repairs_used": 1,
+    "repair": "minimum_pre_post_change_0.05_to_0.03_after_letterbox_dilution",
+    "other_thresholds_changed": false
+  },
+  "features": {
+    "final_state_similarity_max": 0.12,
+    "search_last_frames": 60,
+    "minimum_temporal_difference": 0.3,
+    "minimum_white_fraction": 0.55,
+    "minimum_pre_post_change": 0.03,
+    "pre_post_radius_frames": 4
+  },
+  "gate": {
+    "minimum_train_candidates": 30,
+    "minimum_dev_candidates": 6
+  },
+  "claim_boundary": {
+    "automatic_weak_label_only": true,
+    "semantic_accuracy_verified": false,
+    "win_loss_verified": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "video_test_allowed": false,
+    "gpu_required": false
+  }
+}
