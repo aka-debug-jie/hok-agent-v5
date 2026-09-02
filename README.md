@@ -47,10 +47,17 @@ tags and samplers.
 The deliberately small E0 implementation is complete: an immutable latest-frame FrameBus,
 VisualState/Event plus exact-once fusion, and a transactional SQLite UnifiedTransitionStore now
 validate proposal freshness, action/capture ordering, terminal retention, and episode continuity.
-It is offline-only and has no detector, trained Bundle, online RL, MoE, continuous joystick output,
+E0 itself is offline-only and has no detector, trained Bundle, online RL, MoE, continuous joystick output,
 PPO, or model-driven mobile input. Run its focused regression with `make hierarchical-e0-smoke`.
 The full contracts, data roles, parameter tiers, training order, and 1/3/10-episode gates are in
 [docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md](docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md).
+
+E1a now adds an offline centered-health-bar diagnostic for HP-change candidates and temporal
+death/respawn events. Its first cross-session width contract failed; the single preserved repair
+passed the engineering gate with zero train/challenge false deaths and one dev death/respawn pair.
+It remains explicitly non-promoting: numeric HP accuracy and independent semantic accuracy are not
+verified, so Reward stays disabled. Run its synthetic regression with
+`make hierarchical-e1-health-smoke`.
 
 ## Quick start
 

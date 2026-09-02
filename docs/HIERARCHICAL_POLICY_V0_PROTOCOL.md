@@ -2,7 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`E0_PASSED_OFFLINE`。后羿 v0-S 配置已冻结；E1 尚未实现。
+当前状态：`E1A_ENGINEERING_DIAGNOSTIC_PASSED_NON_PROMOTING`。后羿 v0-S 配置已冻结；
+E1b终局弱标签和完整E1门尚未通过。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -112,6 +113,15 @@ SELF_HP_DELTA
 
 `TOWER_DAMAGE / TOWER_DESTROYED` 为 E1.5。只有固定布局下的离线片段证明其身份、可见性和
 时序去抖可靠，才加入 reward；它不阻塞第一条完整 transition。
+
+E1a 使用128x128 main RGB中央区域的绿色血条候选，连续三帧确认死亡与复活。首个宽度上限
+16像素的诊断在challenge session产生7次假死亡，报告已保留；唯一一次实现修复把允许宽度
+改为24像素，没有改变确认帧数或通过门槛。修复后两个正常train session零假死亡，dev产生
+一次死亡和一次复活，challenge零假死亡。通过的报告为
+`HOK_LARGE_ROOT/audit/hierarchical-event-e1/health-engineering-v2-width-repair/report.json`，
+report SHA-256为`454f28198d6f388f3975eadd3770d256920a967d02e921e91bafb9dcfc2d4a90`。
+这是dev已见的工程诊断，不是独立语义准确率。`SELF_HP_DELTA`只保留候选事件，数值精度、
+Reward和promotion仍为false。
 
 动态事件由短视频窗口判断，静态状态由按视觉状态分层采样的截图判断。禁止按固定对局时间
 抽取静态样本，以免模型学习时间先验。每个事件必须包含 `event_id`、起止时间、旧值、新值、
@@ -237,7 +247,9 @@ Q-learning（R2D2-style）。DQfD 只在存在合格同步示范时使用；P-DQ
 |---|---|---|
 | D0 | 本协议、示例配置、机器合同 | JSON 可解析，权威文件同步，`make check` 通过 |
 | E0（PASSED） | FrameBus、VisualState/Event、Transition validator | 16项聚焦测试通过；全仓329项测试通过 |
-| E1 | 终局、死亡/复活、自身血量检测与 exact-once fusion | session-disjoint 离线片段报告；阈值在 dev 前冻结 |
+| E1a（诊断通过，不晋级） | 中心血条、死亡/复活、HP变化候选 | 一次宽度修复后工程门通过；Reward仍关闭 |
+| E1b（进行中） | 终局OCR弱标签与结果页覆盖 | train/dev分局报告；test关闭 |
+| E1（未通过） | 合并终局、死亡/复活、自身血量 | 独立语义与HP精度证据齐全后才能接RewardHub |
 | L0 | 离线录像 replay：事件→reward→transition | terminal 先存后停；无重复事件、断步或版本缺失 |
 | L1 | 自建测试 App 一个完整 episode，模型不更新 | Capture→Action→Event→Reward→Replay 完整可恢复 |
 | L2 | 连续 3 局 | 无动作积压、帧引用损坏、checkpoint 损坏 |
@@ -268,8 +280,8 @@ tests/test_visual_events.py
 tests/test_transition_store.py
 ```
 
-E0 没有创建 RewardHub、模型或在线入口。E1 只在 `visual_events.py` 周围增加最小 RGB
-detector/fusion 和离线片段报告；RewardHub 继续等待 E1 门通过。
+E0 没有创建 RewardHub、模型或在线入口。E1a在`hierarchical_e1.py`实现离线中心血条诊断、
+时序事件和自校验报告；RewardHub继续等待完整E1门通过。
 
 ## 8. 当前停止条件与不确定性
 
@@ -280,5 +292,5 @@ detector/fusion 和离线片段报告；RewardHub 继续等待 E1 门通过。
 - 塔血量、敌人血量、经济和经验仍缺少稳定身份与时序证据，当前只能列为后续事件。
 - 现有 50 GB 数据足够开始视觉预训练，但没有证据证明它足以训练成熟的三策略闭环。
 
-当前唯一下一开发任务：`E1 GAME_END + DEATH/RESPAWN + SELF_HP_DELTA` 离线检测与
-session-disjoint 证据。
+当前唯一下一开发任务：E1b使用PP-OCR在train/dev完整视频生成`GAME_END/WIN/LOSS`弱标签
+覆盖报告；不开test，不接RewardHub。

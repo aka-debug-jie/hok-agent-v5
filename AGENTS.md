@@ -9,8 +9,10 @@
   `docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md`. It keeps one RGB PolicyBundle with a shared temporal
   representation and separate Macro, Movement, and Combat heads; VisualEventEngine and the
   deterministic Router remain outside the Actor. E0 FrameBus, VisualEvent schema, and
-  UnifiedTransition validation are complete offline; the next task is the minimal E1 RGB event
-  detectors and session-disjoint evidence. It does not authorize model-driven
+  UnifiedTransition validation are complete offline. E1a health/death/respawn passed only its
+  non-promoting engineering diagnostic after the single allowed cross-session bar-width repair;
+  numeric HP accuracy, semantic accuracy, Reward, and promotion remain false. The next task is E1b
+  terminal OCR weak-label coverage. It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.
 - Global Agent v1 is the frozen simulator foundation and is governed by

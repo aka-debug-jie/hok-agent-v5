@@ -1,0 +1,54 @@
+{
+  "schema_version": "hok-agent-hierarchical-event-e1-health-config-v1",
+  "status": "exploratory_dev_seen_engineering_diagnostic",
+  "repair_history": {
+    "repairs_allowed": 1,
+    "repairs_used": 1,
+    "repair": "maximum_bar_run_px_16_to_24_after_cross_session_width_failure",
+    "gate_thresholds_changed": false
+  },
+  "hero": "HOU_YI",
+  "input": {
+    "view": "main",
+    "shape": [128, 128, 3],
+    "dtype": "uint8",
+    "rgb_only": true,
+    "action_timestamp_input": false
+  },
+  "green_mask": {
+    "minimum_green": 90,
+    "minimum_green_minus_red": 20,
+    "minimum_green_minus_blue": 10
+  },
+  "search": {
+    "minimum_y": 8,
+    "maximum_y_exclusive": 72,
+    "minimum_run_midpoint_x": 48,
+    "maximum_run_midpoint_x": 80,
+    "minimum_bar_run_px": 2,
+    "maximum_bar_run_px": 24,
+    "full_health_run_px": 12
+  },
+  "temporal": {
+    "alive_confirmation_frames": 3,
+    "death_confirmation_frames": 3,
+    "respawn_confirmation_frames": 3,
+    "minimum_hp_delta": 0.1
+  },
+  "diagnostic_gate": {
+    "minimum_train_live_visibility_coverage": 0.95,
+    "maximum_train_false_death_events": 0,
+    "minimum_dev_death_events": 1,
+    "minimum_dev_respawn_events": 1,
+    "maximum_challenge_false_death_events": 0
+  },
+  "claim_boundary": {
+    "death_respawn_engineering_signal_only": true,
+    "self_hp_numeric_accuracy_verified": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "video_test_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

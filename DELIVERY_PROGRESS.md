@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `E0_PASSED_OFFLINE`: immutable latest-frame bus, exact-once event protocol, causal/continuous transition validation, and transactional metadata store implemented | E1 must prove terminal, death/respawn, and self-HP events on session-disjoint offline evidence; no model, phone input, online learning, or capability claim exists |
+| Hierarchical Policy v0 | `E1A_ENGINEERING_DIAGNOSTIC_PASSED_NON_PROMOTING`: E0 data plane passed; one preserved health-width failure and its single repair now produce zero train/challenge false deaths plus one dev death/respawn pair | HP numeric/semantic accuracy and Reward remain false; E1b terminal weak-label coverage is next; no phone input or online learning |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -176,9 +176,10 @@ boundary findings, and no checked-in large-data or mobile-private artifacts.
 
 ## Current limitation
 
-Hierarchical Policy v0 E0 is implemented and tested offline, but it has no E1 RGB detector or new
-training evidence. The project now has the FrameBus/Event/Transition data plane, but not a trained
-three-head PolicyBundle, RewardHub, or EventEngine-backed replay. Earlier Global Agent, Human IfO, T8, and operation-policy
+Hierarchical Policy v0 E0 is implemented and E1a has a non-promoting health/death diagnostic, but
+terminal outcome coverage and numeric HP accuracy remain unverified. The project has the
+FrameBus/Event/Transition data plane, but not a trained three-head PolicyBundle, RewardHub, or
+EventEngine-backed replay. Earlier Global Agent, Human IfO, T8, and operation-policy
 results remain evidence and reusable components, not reopened parallel routes.
 
 ## Hierarchical Policy v0 E0 closure
@@ -192,12 +193,25 @@ results remain evidence and reusable components, not reopened parallel routes.
 - Focused E0 tests: 16 passed. Full repository: 329 passed, strict mypy 40 modules, safety check passed.
 - No dataset, GPU, phone capture, input command, model inference, or gradient update was used.
 
+## Hierarchical Policy v0 E1a health diagnostic
+
+- The initial maximum health-bar width of 16 pixels failed with 7 challenge false deaths; its
+  report is preserved under `HOK_LARGE_ROOT/audit/hierarchical-event-e1/health-engineering-v1/`.
+- The one allowed width repair changed only 16→24 pixels. It kept all temporal and gate thresholds.
+- Repaired metrics: train visibility 1.0, train false deaths 0, dev deaths 1, dev respawns 1,
+  challenge false deaths 0.
+- Repaired report SHA-256: `454f28198d6f388f3975eadd3770d256920a967d02e921e91bafb9dcfc2d4a90`.
+- The report is path-free and self-verifying. It used no test split, phone capture, input, or GPU.
+- `semantic_accuracy_verified=false`, `self_hp_numeric_accuracy_verified=false`,
+  `reward_allowed=false`, and `promotion_allowed=false` remain mandatory.
+- Focused E1a tests: 3 passed. Full repository: 332 passed, strict mypy 41 modules, safety passed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: E1 terminal + death/respawn + self-HP RGB event evidence
-BLOCKING FAILURE: no frozen session-disjoint E1 detector report exists yet
-NEXT ACCEPTANCE COMMAND: make hierarchical-e0-smoke, then the future focused E1 offline gate
+CURRENT GOAL: E1b terminal OCR weak-label coverage on train/dev complete videos
+BLOCKING FAILURE: WIN/LOSS OCR coverage is not yet established; HP numeric accuracy remains unverified
+NEXT ACCEPTANCE COMMAND: make hierarchical-e1-health-smoke, then the future E1b offline audit
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 
