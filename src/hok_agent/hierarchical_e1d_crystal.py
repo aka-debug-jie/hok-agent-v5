@@ -74,6 +74,15 @@ def detect_transition(
     timestamps: np.ndarray,
     config: CrystalConfig,
 ) -> dict[str, object]:
+    _candidate, result = locate_transition(frames, timestamps, config)
+    return result
+
+
+def locate_transition(
+    frames: np.ndarray,
+    timestamps: np.ndarray,
+    config: CrystalConfig,
+) -> tuple[int, dict[str, object]]:
     rgb = frames.astype(np.float32)
     final_difference = np.abs(rgb - rgb[-1]).mean(axis=(1, 2, 3)) / 255.0
     onset = len(rgb) - 1
@@ -98,7 +107,7 @@ def detect_transition(
         and white[candidate] >= config.minimum_white_fraction
         and change >= config.minimum_pre_post_change
     )
-    return {
+    return candidate, {
         "accepted": accepted,
         "candidate_seconds_before_stable_state": float(
             (timestamps[onset] - timestamps[candidate]) / 1000.0

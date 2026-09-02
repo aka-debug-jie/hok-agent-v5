@@ -2,8 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`E1D_CRYSTAL_CONSENSUS_PASSED_NON_PROMOTING`。固定offset训练仍被阻断；E1d
-改用水晶结构变化、白闪和时序差异后通过弱标签支持门；完整E1门仍未通过。
+当前状态：`E1D_CLIP_MATERIALIZATION_PASSED_NON_PROMOTING`。E1d事件中心正负对已物化，
+顺序基线不再满分；完整E1门仍未通过。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -325,4 +325,6 @@ E0 没有创建 RewardHub、模型或在线入口。E1a在`hierarchical_e1.py`�
 
 E1d首版pre/post变化0.05门槛只通过17/5，失败报告保留；唯一修复改为0.03后通过33个train
 和7个dev候选。报告SHA-256为`8d8eda368a479920efa16105e4054c507dd2fa4cc937f66a579005de64ba548e`。
-当前唯一下一开发任务：围绕E1d事件中心重建短视频与同场景负样本，再运行time-only门。
+E1d-clip生成33/7同场景正负对，ordinal-only accuracy为train `0.4242`、dev `0.4286`；报告
+SHA-256为`ab1ad7820434dc2443330b8ce9af6c9d29686ca00062a7cfa97504be73ced909`。
+当前唯一下一开发任务：temporal、last-frame和shuffle可学性诊断；Reward仍关闭。

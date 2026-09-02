@@ -4,6 +4,7 @@
 .PHONY: hierarchical-e1c-clip-smoke
 .PHONY: hierarchical-e1c-probe-smoke
 .PHONY: hierarchical-e1d-crystal-smoke
+.PHONY: hierarchical-e1d-clip-smoke
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
 WZRY_DATA_ROOT ?= $(CURDIR)/.local-data
@@ -162,6 +163,9 @@ hierarchical-e1c-probe-smoke:
 
 hierarchical-e1d-crystal-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_e1d_crystal.py
+
+hierarchical-e1d-clip-smoke:
+	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_e1d_clip.py
 
 storage-show:
 	@echo "WZRY_DATA_ROOT=$(WZRY_DATA_ROOT)"

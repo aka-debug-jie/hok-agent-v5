@@ -1,0 +1,34 @@
+{
+  "schema_version": "hok-agent-hierarchical-event-e1d-clip-config-v1",
+  "status": "frozen_event_centered_clip_materialization",
+  "crystal_report_sha256": "8d8eda368a479920efa16105e4054c507dd2fa4cc937f66a579005de64ba548e",
+  "clip": {
+    "sequence_frames": 16,
+    "positive_before_frames": 8,
+    "positive_after_frames": 7,
+    "negative_exclusion_radius_frames": 16,
+    "negative_search_frames": 60,
+    "negative_selection": "minimum_brightness_and_structure_distance_without_flash"
+  },
+  "model_input": {
+    "fields": ["rgb_sequence"],
+    "timestamp_allowed": false,
+    "relative_offset_allowed": false,
+    "event_index_allowed": false,
+    "session_id_allowed": false
+  },
+  "gate": {
+    "minimum_train_pairs": 30,
+    "minimum_dev_pairs": 6,
+    "maximum_dev_ordinal_accuracy": 0.65,
+    "maximum_cross_split_sessions": 0
+  },
+  "claim_boundary": {
+    "weak_label_only": true,
+    "semantic_accuracy_verified": false,
+    "win_loss_verified": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "video_test_allowed": false
+  }
+}
