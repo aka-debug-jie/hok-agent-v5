@@ -211,6 +211,49 @@ def run_test(
     return payload
 
 
+def record_consumed_runtime_failure(
+    contract_path: Path,
+    checkpoint_contract_path: Path,
+    checkpoint_bundle: Path,
+    output_dir: Path,
+    failure_code: str,
+) -> dict[str, object]:
+    _config, contract, contract_sha = load_test_contract(contract_path)
+    bundle = verify_checkpoint_bundle(checkpoint_bundle, checkpoint_contract_path)
+    if contract["checkpoint_bundle_sha256"] != bundle["bundle_sha256"]:
+        raise E1dTestError("failed-test checkpoint binding differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise E1dTestError("failed-test output already exists")
+    payload: dict[str, object] = {
+        "schema_version": REPORT_SCHEMA,
+        "status": "E1D_ONE_SHOT_TEST_FAILED_RUNTIME",
+        "failure_code": failure_code,
+        "contract_sha256": contract_sha,
+        "checkpoint_bundle_sha256": bundle["bundle_sha256"],
+        "test_frames_opened": True,
+        "test_run_completed": False,
+        "test_sessions_opened": "at_least_one_exact_count_unavailable",
+        "training_called": False,
+        "threshold_tuned_after_test": False,
+        "rerun_allowed": False,
+        "integration_allowed": False,
+        "semantic_accuracy_verified": False,
+        "win_loss_verified": False,
+        "reward_allowed": False,
+        "promotion_allowed": False,
+    }
+    payload["report_sha256"] = _sha(_canonical(payload))
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    try:
+        (staging / "report.json").write_bytes(_canonical(payload) + b"\n")
+        os.replace(staging, output_dir)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return payload
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="One-shot E1d weak-label test")
     for name in (

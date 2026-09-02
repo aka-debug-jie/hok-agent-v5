@@ -27,7 +27,9 @@
   dev temporal macro-F1 1.0 versus 0.8571 for last-frame and shuffle. It remains weak-label-only;
   WIN/LOSS and Reward stay false. The pre-test bundle is now frozen at bundle hash
   `55a679883119cdbf1a6a7703f945d61ce33408bad84013362e66355e83345c79`; the one-shot 23-session
-  test contract is immutable before any test frame is decoded.
+  test contract was immutable before test decoding. The one-shot test is now consumed and frozen
+  failed with `TEST_SESSION_NO_PRE_RESULT_SEQUENCE`; it did not complete metrics. Rerun, repair,
+  threshold tuning, offline EventEngine integration, Reward, and promotion are prohibited.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

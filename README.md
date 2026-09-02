@@ -100,6 +100,11 @@ The three pre-test checkpoints are frozen in safetensors with bundle hash
 reproduce the probe. A one-shot 23-session test contract is frozen before test decoding; it permits
 no retraining or threshold adjustment.
 
+That one-shot test was consumed and failed at runtime on a test session without a usable
+pre-result sequence. No metric report was produced, and the frozen failure explicitly sets
+`rerun_allowed=false` and `integration_allowed=false`. Offline EventEngine integration was not
+started.
+
 ## Quick start
 
 Python 3.11 or newer is required.

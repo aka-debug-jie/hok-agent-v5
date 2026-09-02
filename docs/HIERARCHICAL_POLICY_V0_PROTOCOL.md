@@ -2,8 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`E1D_PRE_TEST_CHECKPOINT_FROZEN`。三条checkpoint与一次性test合同已在读取test前
-冻结；独立语义准确率、WIN/LOSS和完整E1门仍未通过。
+当前状态：`E1D_ONE_SHOT_TEST_FAILED_RUNTIME_FROZEN`。checkpoint与test合同已先冻结；唯一
+一次test因`TEST_SESSION_NO_PRE_RESULT_SEQUENCE`中止，禁止重跑和EventEngine集成。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -334,4 +334,7 @@ seed-0 CPU probe的overfit32 accuracy为1.0，dev temporal macro-F1为1.0，last
 冻结bundle SHA-256为`55a679883119cdbf1a6a7703f945d61ce33408bad84013362e66355e83345c79`，
 Temporal权重SHA-256为`9020bef09a430aef47d321d76464329c2e24ab196650f7894a365bc455f95aeb`。
 三条dev指标逐项复现，bundle记录`test_opened=false`。23-session test合同已绑定checkpoint、
-水晶教师、clip合同、manifest和0.5阈值；下一步只允许一次test运行。
+水晶教师、clip合同、manifest和0.5阈值。test打开后遇到无可用pre-result序列的session并中止，
+没有形成完整指标。失败报告SHA-256为
+`36f3f69ff65158bda3788297975a8c394a992a8b747babee70d21d489fe9991c`；重跑、修复后复测、
+EventEngine集成、Reward和promotion全部关闭。

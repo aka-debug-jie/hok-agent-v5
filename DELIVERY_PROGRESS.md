@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `E1D_PRE_TEST_CHECKPOINT_FROZEN`: three safetensors and one-shot test contract frozen with test unopened | Run exactly one 23-session weak-label test; no retraining/tuning; Reward remains closed |
+| Hierarchical Policy v0 | `E1D_ONE_SHOT_TEST_FAILED_RUNTIME_FROZEN`: frozen test stopped on `TEST_SESSION_NO_PRE_RESULT_SEQUENCE` before metrics | Test consumed; no rerun, repair, EventEngine integration, Reward, phone input, or online learning |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -248,11 +248,21 @@ results remain evidence and reusable components, not reopened parallel routes.
 - Fixed-offset clips remain diagnostic-only and cannot train EventEngine or generate Reward.
 - Focused E1c-probe tests: 3 passed. Full repository: 343 passed, strict mypy 45 modules, safety passed.
 
+## Hierarchical Policy v0 E1d one-shot test closure
+
+- Checkpoint bundle SHA-256: `55a679883119cdbf1a6a7703f945d61ce33408bad84013362e66355e83345c79`.
+- The immutable test contract was committed before any test frame was decoded.
+- The test opened at least one test session, then stopped on `TEST_SESSION_NO_PRE_RESULT_SEQUENCE`.
+- Exact opened-session count is unavailable because the failure occurred before report finalization.
+- No training, threshold tuning, repeat test, or EventEngine integration occurred.
+- Failure report SHA-256: `36f3f69ff65158bda3788297975a8c394a992a8b747babee70d21d489fe9991c`.
+- `rerun_allowed=false`, `integration_allowed=false`, and `reward_allowed=false` are frozen.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: one-shot 23-session E1d weak-label test
-BLOCKING FAILURE: none; checkpoint and test contract are frozen, test frames remain unopened
+CURRENT GOAL: preserve E1d one-shot test failure and stop this lineage
+BLOCKING FAILURE: test runtime encountered a session with no usable pre-result sequence
 NEXT ACCEPTANCE COMMAND: make hierarchical-e1d-checkpoint-smoke and make hierarchical-e1d-test-smoke
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
