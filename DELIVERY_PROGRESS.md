@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `E1C_RESULT_PAGE_ANCHOR_PREFLIGHT_PASSED_NON_PROMOTING`: E1b remains frozen failed; separate E1c found 34 train and 7 dev result-page anchors with zero conflicts | Build anchor-preceding dynamic clips with session-disjoint controls; WIN/LOSS, Reward, phone input, and online learning remain closed |
+| Hierarchical Policy v0 | `E1C_CLIP_MATERIALIZATION_PASSED_NON_PROMOTING`: E1c found 34/7 anchors and materialized 34/7 complete dynamic triplets with zero anchor overlap | Run temporal vs last-frame/shuffle/time-only probe; WIN/LOSS, Reward, phone input, and online learning remain closed |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -229,12 +229,22 @@ results remain evidence and reusable components, not reopened parallel routes.
   remain false.
 - Focused E1c-anchor tests: 2 passed. Full repository: 337 passed, strict mypy 43 modules, safety passed.
 
+## Hierarchical Policy v0 E1c dynamic clip materialization
+
+- Each anchored session contributes a far negative, near negative, and terminal-transition candidate.
+- Train/dev contain 34/7 complete triplets; no session was incomplete and no session crossed splits.
+- Anchor-frame overlap is zero. Model input contains only 16-frame RGB sequences.
+- Train/dev shards contain 102/21 clips and occupy about 37 MB in total.
+- Report SHA-256: `46094be70f37eb1514f2bd9405e8ae14082b28f92b245caefbe340155582ac0f`.
+- Semantic accuracy, WIN/LOSS, Reward, promotion, phone input, and online learning remain false.
+- Focused E1c-clip tests: 3 passed. Full repository: 340 passed, strict mypy 44 modules, safety passed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: E1c-clip anchor-preceding dynamic terminal dataset contract
-BLOCKING FAILURE: dynamic terminal transition accuracy and WIN/LOSS truth remain unverified
-NEXT ACCEPTANCE COMMAND: make hierarchical-e1c-anchor-smoke, then the future E1c-clip preflight
+CURRENT GOAL: E1c-probe temporal terminal-transition learnability
+BLOCKING FAILURE: dynamic terminal accuracy and temporal necessity remain unverified
+NEXT ACCEPTANCE COMMAND: make hierarchical-e1c-clip-smoke, then the future E1c-probe gate
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

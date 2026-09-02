@@ -73,6 +73,12 @@ This passes only the data-support gate for constructing preceding short clips; d
 accuracy, WIN/LOSS, Reward, and promotion remain unverified. Run its regression with
 `make hierarchical-e1c-anchor-smoke`.
 
+E1c-clip materialization produced 34 train and 7 dev same-session triplets: one terminal-transition
+candidate, one nearby late-game negative, and one earlier negative per anchored session. The model
+shards contain only RGB sequences, labels, and split-only anonymous IDs; anchor frames, timestamps,
+relative offsets, OCR, and paths are absent. This passes materialization only, not semantic
+terminal detection. Run `make hierarchical-e1c-clip-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

@@ -1,0 +1,46 @@
+{
+  "schema_version": "hok-agent-hierarchical-event-e1c-clip-config-v1",
+  "status": "frozen_anchor_preceding_clip_materialization",
+  "anchor_binding": {
+    "report_sha256": "68bfee35e70e9de656f783d802daae708bea53a9dfb5025ff7fbf9ebe7aaf27e",
+    "train_anchor_sessions": 34,
+    "dev_anchor_sessions": 7,
+    "anchor_frame_allowed_in_clip": false
+  },
+  "clip": {
+    "sequence_frames": 16,
+    "positive_start_seconds_before_anchor": 7,
+    "positive_end_seconds_before_anchor": 3,
+    "near_negative_start_seconds_before_anchor": 12,
+    "near_negative_end_seconds_before_anchor": 8,
+    "far_negative_start_seconds_before_anchor": 32,
+    "far_negative_end_seconds_before_anchor": 28,
+    "maximum_target_gap_ms": 500,
+    "selection": "nearest_timestamp_uniform_targets"
+  },
+  "labels": ["FAR_NONTERMINAL", "NEAR_NONTERMINAL", "TERMINAL_TRANSITION_CANDIDATE"],
+  "model_input": {
+    "fields": ["rgb_sequence"],
+    "timestamp_allowed": false,
+    "relative_offset_allowed": false,
+    "anchor_frame_allowed": false,
+    "session_id_allowed": false,
+    "ocr_allowed": false
+  },
+  "materialization_gate": {
+    "minimum_complete_train_triplets": 30,
+    "minimum_complete_dev_triplets": 6,
+    "maximum_anchor_frame_overlap": 0,
+    "maximum_cross_split_sessions": 0
+  },
+  "claim_boundary": {
+    "weak_transition_candidate_only": true,
+    "semantic_accuracy_verified": false,
+    "win_loss_verified": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "video_test_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

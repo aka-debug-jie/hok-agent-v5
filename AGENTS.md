@@ -16,7 +16,10 @@
   OCR confidence, tail duration, or sampling rate. The next terminal candidate must be a separately
   versioned dynamic short-clip transition contract. E1c result-page anchor preflight passed with
   34 train and 7 dev anchors and zero conflicts, but anchor frames cannot enter a future model and
-  WIN/LOSS remains unresolved. It does not authorize model-driven
+  WIN/LOSS remains unresolved. E1c-clip materialization produced 34/7 complete same-session
+  triplets with zero anchor overlap and no timestamps in model inputs. These are weak transition
+  candidates only; the next gate must compare temporal, last-frame, shuffle, and time-only controls.
+  It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.
 - Global Agent v1 is the frozen simulator foundation and is governed by
