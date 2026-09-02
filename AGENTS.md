@@ -23,7 +23,9 @@
   these labels. A new label source must identify the visual event rather than a fixed anchor offset.
   E1d crystal consensus is that separate source: after one preserved threshold repair it found
   33 train and 7 dev candidates. E1d-clip then built 33/7 event-centered pairs and reduced
-  ordinal-only accuracy to about `0.424/0.429`. It remains weak-label-only; WIN/LOSS and Reward stay false.
+  ordinal-only accuracy to about `0.424/0.429`. The CPU seed-0 probe passed overfit32 and reached
+  dev temporal macro-F1 1.0 versus 0.8571 for last-frame and shuffle. It remains weak-label-only;
+  WIN/LOSS and Reward stay false.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

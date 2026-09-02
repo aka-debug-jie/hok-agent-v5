@@ -91,6 +91,10 @@ Reward remain closed. Run `make hierarchical-e1d-crystal-smoke`.
 E1d-clip built 33 train and 7 dev event-centered same-scene pairs. Hash-based pair reversal reduced
 ordinal-only accuracy to 0.424/0.429. Run `make hierarchical-e1d-clip-smoke`; Reward remains closed.
 
+The CPU seed-0 probe passed overfit32 and reached dev temporal macro-F1 1.0 versus 0.8571 for
+last-frame and shuffled controls. This is learnability evidence only. Run
+`make hierarchical-e1d-probe-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

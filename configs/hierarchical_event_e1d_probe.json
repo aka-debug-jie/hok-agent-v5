@@ -1,0 +1,40 @@
+{
+  "schema_version": "hok-agent-hierarchical-event-e1d-probe-config-v1",
+  "status": "frozen_seed0_temporal_value_probe",
+  "clip_report_sha256": "ab1ad7820434dc2443330b8ce9af6c9d29686ca00062a7cfa97504be73ced909",
+  "training": {
+    "seed": 0,
+    "device": "cpu",
+    "epochs": 80,
+    "batch_size": 16,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "sequence_frames": 16,
+    "input_size": 32
+  },
+  "overfit32": {
+    "steps": 200,
+    "minimum_accuracy": 0.95,
+    "maximum_final_loss_fraction": 0.25
+  },
+  "gate": {
+    "minimum_temporal_dev_macro_f1": 0.7,
+    "minimum_gain_over_last_frame": 0.1,
+    "minimum_gain_over_shuffled_frames": 0.1
+  },
+  "controls": {
+    "shared_architecture": true,
+    "last_frame": true,
+    "deterministic_frame_shuffle": true,
+    "time_or_offset_input": false
+  },
+  "claim_boundary": {
+    "semantic_accuracy_verified": false,
+    "win_loss_verified": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "video_test_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

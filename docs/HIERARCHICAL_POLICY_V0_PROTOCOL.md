@@ -2,8 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`E1D_CLIP_MATERIALIZATION_PASSED_NON_PROMOTING`。E1d事件中心正负对已物化，
-顺序基线不再满分；完整E1门仍未通过。
+当前状态：`E1D_TEMPORAL_PROBE_PASSED_NON_PROMOTING`。事件中心数据和时序可学性门通过；
+独立语义准确率、WIN/LOSS和完整E1门仍未通过。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -327,4 +327,6 @@ E1d首版pre/post变化0.05门槛只通过17/5，失败报告保留；唯一修�
 和7个dev候选。报告SHA-256为`8d8eda368a479920efa16105e4054c507dd2fa4cc937f66a579005de64ba548e`。
 E1d-clip生成33/7同场景正负对，ordinal-only accuracy为train `0.4242`、dev `0.4286`；报告
 SHA-256为`ab1ad7820434dc2443330b8ce9af6c9d29686ca00062a7cfa97504be73ced909`。
-当前唯一下一开发任务：temporal、last-frame和shuffle可学性诊断；Reward仍关闭。
+seed-0 CPU probe的overfit32 accuracy为1.0，dev temporal macro-F1为1.0，last-frame和shuffle
+均为0.8571；报告SHA-256为`26733ab5195528721c6bc5cdd02082f303acb9da0dc37d9c6043a04bb42e4e51`。
+当前唯一下一开发任务：冻结模型并进行离线回放；Reward仍关闭。
