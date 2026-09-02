@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `E1A_ENGINEERING_DIAGNOSTIC_PASSED_NON_PROMOTING`: E0 data plane passed; one preserved health-width failure and its single repair now produce zero train/challenge false deaths plus one dev death/respawn pair | HP numeric/semantic accuracy and Reward remain false; E1b terminal weak-label coverage is next; no phone input or online learning |
+| Hierarchical Policy v0 | `E1B_WEAK_LABEL_COVERAGE_FAILED`: E0 passed; E1a health diagnostic passed non-promoting; E1b OCR found GAME_END coverage 0.125/0.5 and no WIN/LOSS coverage | Freeze E1b without OCR/tail retuning; E1c dynamic terminal clips need a new contract; Reward, phone input, and online learning remain closed |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -206,12 +206,23 @@ results remain evidence and reusable components, not reopened parallel routes.
   `reward_allowed=false`, and `promotion_allowed=false` remain mandatory.
 - Focused E1a tests: 3 passed. Full repository: 332 passed, strict mypy 41 modules, safety passed.
 
+## Hierarchical Policy v0 E1b terminal OCR closure
+
+- The frozen selection used 8 train and 4 dev sessions; video-test frames remained unopened.
+- Candidate mining used the final 24 seconds at 1 Hz, but time never became a label.
+- Train GAME_END coverage was 0.125 and dev coverage was 0.5; WIN/LOSS coverage was 0 on both.
+- Outcome conflicts were 0, so the failure is missing evidence rather than contradictory OCR.
+- Report SHA-256: `dfbae056925e179f93cd475d081ac4731aba86d3c37dbf422e0ba95efa363b4f`.
+- No arbitrary OCR text, raw frame, source path, phone capture, input, GPU, or test frame was stored.
+- E1b is frozen failed. Confidence, tail duration, and sampling frequency are not retuned.
+- Focused E1b tests: 3 passed. Full repository: 335 passed, strict mypy 42 modules, safety passed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: E1b terminal OCR weak-label coverage on train/dev complete videos
-BLOCKING FAILURE: WIN/LOSS OCR coverage is not yet established; HP numeric accuracy remains unverified
-NEXT ACCEPTANCE COMMAND: make hierarchical-e1-health-smoke, then the future E1b offline audit
+CURRENT GOAL: E1c dynamic short-clip terminal-transition contract
+BLOCKING FAILURE: most recordings end at crystal destruction without result page or WIN/LOSS text
+NEXT ACCEPTANCE COMMAND: make hierarchical-e1-terminal-smoke, then a separately frozen E1c preflight
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

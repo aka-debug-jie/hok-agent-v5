@@ -11,8 +11,10 @@
   deterministic Router remain outside the Actor. E0 FrameBus, VisualEvent schema, and
   UnifiedTransition validation are complete offline. E1a health/death/respawn passed only its
   non-promoting engineering diagnostic after the single allowed cross-session bar-width repair;
-  numeric HP accuracy, semantic accuracy, Reward, and promotion remain false. The next task is E1b
-  terminal OCR weak-label coverage. It does not authorize model-driven
+  numeric HP accuracy, semantic accuracy, Reward, and promotion remain false. E1b terminal OCR is
+  frozen failed at train/dev GAME_END coverage `0.125/0.5` and outcome coverage `0/0`; do not change
+  OCR confidence, tail duration, or sampling rate. The next terminal candidate must be a separately
+  versioned dynamic short-clip transition contract. It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.
 - Global Agent v1 is the frozen simulator foundation and is governed by
@@ -258,7 +260,9 @@
   `global_shadow.py` and `test_global_shadow.py` may use the same frozen Global Agent model only for
   authorized zero-control Shadow; they may never add an input sender.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,
-  `v5_data.py`, `mobile_testbed.py`, and focused tests.
+  `v5_data.py`, `mobile_testbed.py`, `hierarchical_e1_terminal.py`, and focused tests. The E1
+  terminal module may decode only its frozen train/dev tail samples for offline OCR coverage; it
+  cannot open video-test, a live capture source, or any input surface.
 - No annotation UI is an active V5/V6 surface. The T8 calibration picker may use Tk only to pick
   in-memory layout coordinates for the owner-authorized self-built test app; it never writes a
   screenshot or creates training labels. A future Tk/Pillow preference UI, if authorized,

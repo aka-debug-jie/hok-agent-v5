@@ -111,6 +111,7 @@ ALLOWED_VIDEO_PATHS = {
     Path("src/hok_agent/v5_data.py"),
     Path("src/hok_agent/mobile_testbed.py"),
     Path("src/hok_agent/global_shadow.py"),
+    Path("src/hok_agent/hierarchical_e1_terminal.py"),
     Path("tests/test_shadow.py"),
     Path("tests/test_capture.py"),
     Path("tests/test_alignment.py"),

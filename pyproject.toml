@@ -20,6 +20,7 @@ Issues = "https://github.com/aka-debug-jie/hok-agent-v5/issues"
 [project.optional-dependencies]
 dev = ["mypy>=1.10", "pytest>=8.0", "ruff>=0.5"]
 events = ["numpy>=1.26,<3"]
+events-ocr = ["numpy>=1.26,<3", "av==15.1.0", "ppocr-onnx==0.0.3.9"]
 bc = ["numpy>=1.26,<3", "torch>=2.4,<3"]
 vision = [
     "numpy>=1.26,<3",

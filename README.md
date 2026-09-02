@@ -59,6 +59,13 @@ It remains explicitly non-promoting: numeric HP accuracy and independent semanti
 verified, so Reward stays disabled. Run its synthetic regression with
 `make hierarchical-e1-health-smoke`.
 
+The frozen E1b OCR coverage audit failed: only 1/8 train and 2/4 dev sessions exposed a result
+screen in the sampled tail, and neither split produced a reliable `WIN` or `LOSS` token. The report
+contains only allowlisted token counts and anonymous IDs. This lineage is not repaired by changing
+OCR confidence, tail duration, or sampling rate; the next terminal route must use short-video
+crystal-destruction transitions. Run its local regression with
+`make hierarchical-e1-terminal-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.
@@ -67,7 +74,7 @@ Python 3.11 or newer is required.
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e '.[dev,bc,vision,shadow,preingest]'
+python -m pip install -e '.[dev,events,events-ocr,bc,vision,shadow,preingest]'
 
 make check
 make accept

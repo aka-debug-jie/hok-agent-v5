@@ -1,4 +1,5 @@
 .PHONY: install lint typecheck test check storage-show storage-preflight storage-init accept accept-v2 pixel-smoke accept-v3 shadow-live-smoke mobile-testbed-smoke t8-smoke t8-data-smoke t8-shadow-smoke t8-contract-smoke t8-v2-contract-smoke t8-v4-contract-smoke t8-v5-roi-contract-smoke t8-basic-mvp-contract-smoke t8-v2-keyboard-smoke t8-v2-live-smoke t8-v2-live-inverse-probe t8-v2-live-collect t8-v2-live-pilot-freeze t8-v2-live-freeze t8-v2-live-pilot t8-video-three-class-pilot t8-video-retrospective-materialize t8-video-retrospective-pilot t8-video-retrospective-roi-evaluate t8-retrospective-v1-verify t8-retrospective-v1-batch t8-retrospective-v2-calibrate t8-causal-video-materialize t8-causal-video-pilot t8-causal-video-diagnose t8-causal-pixel-materialize t8-causal-pixel-probe t8-visual-teacher-replay t8-visible-onset-audit t8-combat-causal-materialize t8-combat-causal-pilot t8-combat-causal-diagnostic-materialize t8-combat-causal-diagnostic-pilot t8-v25-dry-run t8-v25-probe-20 t8-v25-smoke-60 t8-v25-collect t8-v25-pilot-freeze t8-v25-freeze t8-v25-pilot t8-v26-train-seed t8-v26-select t8-v26-evaluate-offline t8-v26-shadow t8-v26-shadow-replay t8-v26-execute-probe t8-v27-calibration-pilot t8-v27-freeze t8-v3-state-materialize t8-v3-state-train t8-v3-hybrid-replay t8-v2-touch-smoke t8-v2-collect t8-v2-freeze t8-v2-adapt t8-v2-pilot alignment-smoke temporal-smoke rich-smoke accept-v7 v5-source-produce v5-build-cohort v5-ingest-zero-label v5-validate-zero-target v5-freeze-training-config v5-train-simsiam-adapted v5-model-predict v5-materialize-pseudo v5-run-mean-teacher-round v6-zero-smoke operation-policy-contract-smoke operation-idm-pilot operation-video-pseudolabel operation-policy-pilot operation-direct-policy-contract-smoke operation-direct-policy-pilot operation-minimap-teacher-audit operation-teacher-readonly-smoke operation-teacher-input-smoke operation-teacher-collect operation-movement-contract-smoke operation-movement-pilot-freeze operation-movement-pilot global-agent-stage-1a global-agent-stage-1b global-agent-materialize global-agent-train global-agent-dagger global-agent-domain-adapt global-agent-replay global-agent-adapter-audit global-agent-holdout global-agent-challenge global-agent-shadow-smoke global-agent-shadow-roi-smoke global-agent-shadow-10m hierarchical-e0-smoke hierarchical-e1-health-smoke
+.PHONY: hierarchical-e1-terminal-smoke
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
 WZRY_DATA_ROOT ?= $(CURDIR)/.local-data
@@ -123,7 +124,7 @@ GLOBAL_OBSERVABLE_AUX ?=$(HOK_RUNS_ROOT)/global-agent-v1/observable-aux-v1
 
 install:
 	$(PYTHON) -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
-	$(RUN_PYTHON) -m pip install -e '.[dev,bc,vision,shadow,preingest]'
+	$(RUN_PYTHON) -m pip install -e '.[dev,events,events-ocr,bc,vision,shadow,preingest]'
 
 lint:
 	$(RUN_PYTHON) -m ruff check src tests
@@ -142,6 +143,9 @@ hierarchical-e0-smoke:
 
 hierarchical-e1-health-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_e1.py
+
+hierarchical-e1-terminal-smoke:
+	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_e1_terminal.py
 
 storage-show:
 	@echo "WZRY_DATA_ROOT=$(WZRY_DATA_ROOT)"

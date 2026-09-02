@@ -2,8 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`E1A_ENGINEERING_DIAGNOSTIC_PASSED_NON_PROMOTING`。后羿 v0-S 配置已冻结；
-E1b终局弱标签和完整E1门尚未通过。
+当前状态：`E1B_WEAK_LABEL_COVERAGE_FAILED`。E1a工程诊断通过但不晋级；E1b终局OCR覆盖
+失败；完整E1门尚未通过。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -122,6 +122,13 @@ E1a 使用128x128 main RGB中央区域的绿色血条候选，连续三帧确认
 report SHA-256为`454f28198d6f388f3975eadd3770d256920a967d02e921e91bafb9dcfc2d4a90`。
 这是dev已见的工程诊断，不是独立语义准确率。`SELF_HP_DELTA`只保留候选事件，数值精度、
 Reward和promotion仍为false。
+
+E1b按冻结hash顺序选择8个train和4个dev完整视频，只在末24秒以1 Hz挖掘候选帧，时间不
+作为标签。PP-OCR仅保留胜利、失败和结果页白名单命中，不保存任意OCR文字。GAME_END覆盖为
+train `0.125`、dev `0.5`，WIN/LOSS覆盖均为`0`，因此冻结失败。报告位于
+`HOK_LARGE_ROOT/audit/hierarchical-event-e1/terminal-coverage-v1/report.json`，report SHA-256为
+`dfbae056925e179f93cd475d081ac4731aba86d3c37dbf422e0ba95efa363b4f`。多数录像在水晶爆炸阶段
+结束，没有结果页或胜负文字；不得通过调低OCR置信度、延长tail或提高采样率重开该路线。
 
 动态事件由短视频窗口判断，静态状态由按视觉状态分层采样的截图判断。禁止按固定对局时间
 抽取静态样本，以免模型学习时间先验。每个事件必须包含 `event_id`、起止时间、旧值、新值、
@@ -248,7 +255,8 @@ Q-learning（R2D2-style）。DQfD 只在存在合格同步示范时使用；P-DQ
 | D0 | 本协议、示例配置、机器合同 | JSON 可解析，权威文件同步，`make check` 通过 |
 | E0（PASSED） | FrameBus、VisualState/Event、Transition validator | 16项聚焦测试通过；全仓329项测试通过 |
 | E1a（诊断通过，不晋级） | 中心血条、死亡/复活、HP变化候选 | 一次宽度修复后工程门通过；Reward仍关闭 |
-| E1b（进行中） | 终局OCR弱标签与结果页覆盖 | train/dev分局报告；test关闭 |
+| E1b（FROZEN FAILED） | 终局OCR弱标签与结果页覆盖 | GAME_END 0.125/0.5，WIN/LOSS 0/0；不重调 |
+| E1c（下一候选） | 水晶摧毁动态短视频转场 | 新合同后才可实现；不能替代WIN/LOSS真值 |
 | E1（未通过） | 合并终局、死亡/复活、自身血量 | 独立语义与HP精度证据齐全后才能接RewardHub |
 | L0 | 离线录像 replay：事件→reward→transition | terminal 先存后停；无重复事件、断步或版本缺失 |
 | L1 | 自建测试 App 一个完整 episode，模型不更新 | Capture→Action→Event→Reward→Replay 完整可恢复 |
@@ -292,5 +300,5 @@ E0 没有创建 RewardHub、模型或在线入口。E1a在`hierarchical_e1.py`�
 - 塔血量、敌人血量、经济和经验仍缺少稳定身份与时序证据，当前只能列为后续事件。
 - 现有 50 GB 数据足够开始视觉预训练，但没有证据证明它足以训练成熟的三策略闭环。
 
-当前唯一下一开发任务：E1b使用PP-OCR在train/dev完整视频生成`GAME_END/WIN/LOSS`弱标签
-覆盖报告；不开test，不接RewardHub。
+当前唯一下一开发任务：设计E1c水晶摧毁动态短视频转场合同，先区分GAME_END转场与普通
+高亮战斗；不开test，不接RewardHub，不把视频结束时间作为标签。
