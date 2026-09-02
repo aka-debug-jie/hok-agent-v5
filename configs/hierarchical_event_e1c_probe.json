@@ -1,0 +1,22 @@
+{
+  "schema_version": "hok-agent-hierarchical-event-e1c-probe-config-v1",
+  "status": "frozen_time_confound_preflight",
+  "clip_report_sha256": "46094be70f37eb1514f2bd9405e8ae14082b28f92b245caefbe340155582ac0f",
+  "time_only_baseline": {
+    "feature": "within_session_materialization_ordinal",
+    "labels_visible_to_predictor": false,
+    "maximum_dev_macro_f1_to_allow_visual_training": 0.7
+  },
+  "stop_policy": {
+    "block_visual_training_on_time_confound": true,
+    "do_not_run_temporal_model_after_failure": true
+  },
+  "claim_boundary": {
+    "semantic_accuracy_verified": false,
+    "visual_training_allowed": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "video_test_allowed": false,
+    "gpu_required": false
+  }
+}

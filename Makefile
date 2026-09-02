@@ -2,6 +2,7 @@
 .PHONY: hierarchical-e1-terminal-smoke
 .PHONY: hierarchical-e1c-anchor-smoke
 .PHONY: hierarchical-e1c-clip-smoke
+.PHONY: hierarchical-e1c-probe-smoke
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
 WZRY_DATA_ROOT ?= $(CURDIR)/.local-data
@@ -154,6 +155,9 @@ hierarchical-e1c-anchor-smoke:
 
 hierarchical-e1c-clip-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_e1c_clip.py
+
+hierarchical-e1c-probe-smoke:
+	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_e1c_probe.py
 
 storage-show:
 	@echo "WZRY_DATA_ROOT=$(WZRY_DATA_ROOT)"

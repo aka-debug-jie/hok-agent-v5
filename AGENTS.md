@@ -18,7 +18,9 @@
   34 train and 7 dev anchors and zero conflicts, but anchor frames cannot enter a future model and
   WIN/LOSS remains unresolved. E1c-clip materialization produced 34/7 complete same-session
   triplets with zero anchor overlap and no timestamps in model inputs. These are weak transition
-  candidates only; the next gate must compare temporal, last-frame, shuffle, and time-only controls.
+  candidates only. E1c-probe is frozen blocked because within-session materialization ordinal gives
+  train/dev time-only macro-F1 `1.0/1.0`; no temporal, last-frame, or shuffle model may be trained on
+  these labels. A new label source must identify the visual event rather than a fixed anchor offset.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

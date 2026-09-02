@@ -2,8 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`E1C_CLIP_MATERIALIZATION_PASSED_NON_PROMOTING`。E1a工程诊断通过但不晋级，
-E1b终局OCR覆盖冻结失败，E1c锚点与动态短视频物化通过；完整E1门仍未通过。
+当前状态：`E1C_PROBE_BLOCKED_TIME_CONFOUND`。E1a工程诊断通过但不晋级，E1b终局OCR覆盖
+冻结失败，E1c锚点与短视频物化通过，但固定offset标签被时间混杂门阻断；完整E1门未通过。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -144,6 +144,13 @@ E1c-clip从每个锚点局构建三个16帧窗口：锚点前32–28秒远负样
 `46094be70f37eb1514f2bd9405e8ae14082b28f92b245caefbe340155582ac0f`。这仍是弱候选数据，必须
 通过时序、单帧、帧打乱和time-only负对照后才可讨论动态可学性。
 
+E1c-probe在任何视觉训练前运行time-only预检。仅用同session三段素材的物化顺序，不读取
+RGB或标签作为预测输入，即在train/dev得到accuracy和macro-F1 `1.0/1.0`，超过允许视觉训练
+的0.7上限。因此没有启动时序、last-frame或shuffle模型，也未使用GPU。报告位于
+`HOK_LARGE_ROOT/audit/hierarchical-event-e1/time-confound-v1/report.json`，report SHA-256为
+`a7b2675400928eb6ca7a0854ccae2291347c46290d469e91b7bd4e28370aee0e`。固定offset三元组冻结为
+诊断数据，不能训练或生成Reward；下一标签必须来自视觉事件本身。
+
 动态事件由短视频窗口判断，静态状态由按视觉状态分层采样的截图判断。禁止按固定对局时间
 抽取静态样本，以免模型学习时间先验。每个事件必须包含 `event_id`、起止时间、旧值、新值、
 变化量、置信度、ROI 和去重键；同一事实只能产生一次 reward。
@@ -272,7 +279,7 @@ Q-learning（R2D2-style）。DQfD 只在存在合格同步示范时使用；P-DQ
 | E1b（FROZEN FAILED） | 终局OCR弱标签与结果页覆盖 | GAME_END 0.125/0.5，WIN/LOSS 0/0；不重调 |
 | E1c-anchor（PASSED） | 结果页锚点支持 | train/dev 34/7，冲突0；锚点帧禁止入模 |
 | E1c-clip（PASSED） | 锚点前动态短视频物化 | train/dev 34/7完整三元组，锚点重叠0 |
-| E1c-probe（下一步） | 动态可学性诊断 | 时序/单帧/打乱/time-only负对照 |
+| E1c-probe（BLOCKED） | 动态可学性诊断 | time-only macro-F1 1.0/1.0；未启动视觉训练 |
 | E1（未通过） | 合并终局、死亡/复活、自身血量 | 独立语义与HP精度证据齐全后才能接RewardHub |
 | L0 | 离线录像 replay：事件→reward→transition | terminal 先存后停；无重复事件、断步或版本缺失 |
 | L1 | 自建测试 App 一个完整 episode，模型不更新 | Capture→Action→Event→Reward→Replay 完整可恢复 |
@@ -316,5 +323,5 @@ E0 没有创建 RewardHub、模型或在线入口。E1a在`hierarchical_e1.py`�
 - 塔血量、敌人血量、经济和经验仍缺少稳定身份与时序证据，当前只能列为后续事件。
 - 现有 50 GB 数据足够开始视觉预训练，但没有证据证明它足以训练成熟的三策略闭环。
 
-当前唯一下一开发任务：E1c-probe在固定34/7三元组上比较时序模型、last-frame、帧打乱和
-time-only基线。不开test，不接RewardHub；若时序没有独立增益，冻结该动态路线。
+当前唯一下一开发任务：重新定义独立于固定时间offset的终局视觉标签，例如水晶结构存在→
+摧毁的显式视觉状态转移。不开test，不接RewardHub，不重用E1c固定offset标签训练模型。

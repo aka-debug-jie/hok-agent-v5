@@ -79,6 +79,11 @@ shards contain only RGB sequences, labels, and split-only anonymous IDs; anchor 
 relative offsets, OCR, and paths are absent. This passes materialization only, not semantic
 terminal detection. Run `make hierarchical-e1c-clip-smoke`.
 
+The mandatory E1c-probe stopped before visual training: within-session materialization ordinal
+predicts all three labels with train/dev macro-F1 `1.0/1.0`. Visual accuracy on this dataset could
+not distinguish terminal semantics from match-time progression. The fixed-offset lineage is frozen;
+no GPU model was trained. Run `make hierarchical-e1c-probe-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

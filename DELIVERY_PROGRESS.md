@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `E1C_CLIP_MATERIALIZATION_PASSED_NON_PROMOTING`: E1c found 34/7 anchors and materialized 34/7 complete dynamic triplets with zero anchor overlap | Run temporal vs last-frame/shuffle/time-only probe; WIN/LOSS, Reward, phone input, and online learning remain closed |
+| Hierarchical Policy v0 | `E1C_PROBE_BLOCKED_TIME_CONFOUND`: 34/7 fixed-offset triplets materialized, but time-only ordinal gives train/dev macro-F1 1.0/1.0 | Freeze fixed-offset visual training; require event-derived terminal labels; Reward, phone input, and online learning remain closed |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -239,12 +239,21 @@ results remain evidence and reusable components, not reopened parallel routes.
 - Semantic accuracy, WIN/LOSS, Reward, promotion, phone input, and online learning remain false.
 - Focused E1c-clip tests: 3 passed. Full repository: 340 passed, strict mypy 44 modules, safety passed.
 
+## Hierarchical Policy v0 E1c time-confound closure
+
+- The mandatory preflight used only within-session materialization ordinal, not RGB or target labels.
+- Train and dev accuracy/macro-F1 were all 1.0, above the frozen 0.7 maximum.
+- No visual model, temporal model, last-frame control, shuffle control, or GPU run was started.
+- Report SHA-256: `a7b2675400928eb6ca7a0854ccae2291347c46290d469e91b7bd4e28370aee0e`.
+- Fixed-offset clips remain diagnostic-only and cannot train EventEngine or generate Reward.
+- Focused E1c-probe tests: 3 passed. Full repository: 343 passed, strict mypy 45 modules, safety passed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: E1c-probe temporal terminal-transition learnability
-BLOCKING FAILURE: dynamic terminal accuracy and temporal necessity remain unverified
-NEXT ACCEPTANCE COMMAND: make hierarchical-e1c-clip-smoke, then the future E1c-probe gate
+CURRENT GOAL: event-derived crystal-state terminal label redesign
+BLOCKING FAILURE: fixed anchor offsets are perfectly predicted by time-only metadata
+NEXT ACCEPTANCE COMMAND: make hierarchical-e1c-probe-smoke, then a new label-contract review
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 
