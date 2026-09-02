@@ -2,8 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`E1B_WEAK_LABEL_COVERAGE_FAILED`。E1a工程诊断通过但不晋级；E1b终局OCR覆盖
-失败；完整E1门尚未通过。
+当前状态：`E1C_RESULT_PAGE_ANCHOR_PREFLIGHT_PASSED_NON_PROMOTING`。E1a工程诊断通过但
+不晋级，E1b终局OCR覆盖冻结失败，E1c动态短视频的数据锚点前提通过；完整E1门仍未通过。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -129,6 +129,13 @@ train `0.125`、dev `0.5`，WIN/LOSS覆盖均为`0`，因此冻结失败。报�
 `HOK_LARGE_ROOT/audit/hierarchical-event-e1/terminal-coverage-v1/report.json`，report SHA-256为
 `dfbae056925e179f93cd475d081ac4731aba86d3c37dbf422e0ba95efa363b4f`。多数录像在水晶爆炸阶段
 结束，没有结果页或胜负文字；不得通过调低OCR置信度、延长tail或提高采样率重开该路线。
+
+独立E1c预检只OCR每个train/dev视频的最终解码帧，用结果页白名单建立session锚点；视频位置
+本身不是标签，锚点帧禁止进入未来模型输入。103个train中有34个锚点，23个dev中有7个，
+冲突0，通过10/4的预检门。报告位于
+`HOK_LARGE_ROOT/audit/hierarchical-event-e1/anchor-preflight-v1/report.json`，report SHA-256为
+`68bfee35e70e9de656f783d802daae708bea53a9dfb5025ff7fbf9ebe7aaf27e`。该结果只允许构建锚点前
+动态短视频和同session负样本，不证明动态终局准确率，也不解决WIN/LOSS。
 
 动态事件由短视频窗口判断，静态状态由按视觉状态分层采样的截图判断。禁止按固定对局时间
 抽取静态样本，以免模型学习时间先验。每个事件必须包含 `event_id`、起止时间、旧值、新值、
@@ -256,7 +263,8 @@ Q-learning（R2D2-style）。DQfD 只在存在合格同步示范时使用；P-DQ
 | E0（PASSED） | FrameBus、VisualState/Event、Transition validator | 16项聚焦测试通过；全仓329项测试通过 |
 | E1a（诊断通过，不晋级） | 中心血条、死亡/复活、HP变化候选 | 一次宽度修复后工程门通过；Reward仍关闭 |
 | E1b（FROZEN FAILED） | 终局OCR弱标签与结果页覆盖 | GAME_END 0.125/0.5，WIN/LOSS 0/0；不重调 |
-| E1c（下一候选） | 水晶摧毁动态短视频转场 | 新合同后才可实现；不能替代WIN/LOSS真值 |
+| E1c-anchor（PASSED） | 结果页锚点支持 | train/dev 34/7，冲突0；锚点帧禁止入模 |
+| E1c-clip（下一步） | 锚点前水晶摧毁动态短视频 | session-disjoint、时序/单帧/打乱负对照 |
 | E1（未通过） | 合并终局、死亡/复活、自身血量 | 独立语义与HP精度证据齐全后才能接RewardHub |
 | L0 | 离线录像 replay：事件→reward→transition | terminal 先存后停；无重复事件、断步或版本缺失 |
 | L1 | 自建测试 App 一个完整 episode，模型不更新 | Capture→Action→Event→Reward→Replay 完整可恢复 |
@@ -300,5 +308,6 @@ E0 没有创建 RewardHub、模型或在线入口。E1a在`hierarchical_e1.py`�
 - 塔血量、敌人血量、经济和经验仍缺少稳定身份与时序证据，当前只能列为后续事件。
 - 现有 50 GB 数据足够开始视觉预训练，但没有证据证明它足以训练成熟的三策略闭环。
 
-当前唯一下一开发任务：设计E1c水晶摧毁动态短视频转场合同，先区分GAME_END转场与普通
-高亮战斗；不开test，不接RewardHub，不把视频结束时间作为标签。
+当前唯一下一开发任务：构建E1c-clip数据合同，正样本来自结果页锚点前短视频，负样本来自
+同session更早的基地/高亮战斗；要求session-disjoint并比较时序、单帧、打乱和time-only基线。
+不开test，不接RewardHub，锚点帧和视频结束时间都不能进入模型。

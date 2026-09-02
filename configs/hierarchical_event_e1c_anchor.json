@@ -1,0 +1,46 @@
+{
+  "schema_version": "hok-agent-hierarchical-event-e1c-anchor-config-v1",
+  "status": "frozen_result_page_anchor_preflight",
+  "scope": {
+    "train_sessions_expected": 103,
+    "dev_sessions_expected": 23,
+    "test_allowed": false,
+    "all_train_dev_sessions_required": true
+  },
+  "frame_selection": {
+    "frame": "final_decoded_frame",
+    "purpose": "result_page_anchor_inventory_only",
+    "video_end_is_label": false,
+    "anchor_frame_allowed_in_future_model_input": false
+  },
+  "ocr": {
+    "engine": "ppocr-onnx-0.0.3.9",
+    "minimum_confidence": 0.8,
+    "win_tokens": ["胜利", "VICTORY"],
+    "loss_tokens": ["失败", "DEFEAT"],
+    "result_fragments": [
+      "数据表现",
+      "本局奖励",
+      "高光时刻",
+      "组队5v5王者峡谷",
+      "打扫战场"
+    ],
+    "minimum_result_fragments": 2,
+    "arbitrary_ocr_text_persisted": false
+  },
+  "preflight_gate": {
+    "minimum_train_anchor_sessions": 10,
+    "minimum_dev_anchor_sessions": 4,
+    "maximum_outcome_conflicts": 0
+  },
+  "claim_boundary": {
+    "anchor_is_game_end_evidence": true,
+    "anchor_is_win_loss_truth": false,
+    "dynamic_transition_accuracy_verified": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "video_test_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

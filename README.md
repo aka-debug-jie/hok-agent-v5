@@ -66,6 +66,13 @@ OCR confidence, tail duration, or sampling rate; the next terminal route must us
 crystal-destruction transitions. Run its local regression with
 `make hierarchical-e1-terminal-smoke`.
 
+The separate E1c anchor preflight then scanned the final decoded frame of every train/dev session
+and found 34 train plus 7 dev result-page anchors with zero outcome conflicts. Video position was
+not a label, anchor frames are forbidden from future model input, and video-test was not decoded.
+This passes only the data-support gate for constructing preceding short clips; dynamic terminal
+accuracy, WIN/LOSS, Reward, and promotion remain unverified. Run its regression with
+`make hierarchical-e1c-anchor-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.
