@@ -52,6 +52,8 @@ ALLOWED_TORCH_PATHS = {
     Path("src/hok_agent/global_shadow.py"),
     Path("src/hok_agent/human_ifo.py"),
     Path("src/hok_agent/human_inverse.py"),
+    Path("src/hok_agent/hierarchical_e1d_checkpoint.py"),
+    Path("src/hok_agent/hierarchical_e1d_test.py"),
     Path("src/hok_agent/hierarchical_e1d_probe.py"),
     Path("tests/test_bc.py"),
     Path("tests/test_pixel.py"),
@@ -69,6 +71,8 @@ ALLOWED_TORCH_PATHS = {
     Path("tests/test_global_shadow.py"),
     Path("tests/test_human_ifo.py"),
     Path("tests/test_human_inverse.py"),
+    Path("tests/test_hierarchical_e1d_checkpoint.py"),
+    Path("tests/test_hierarchical_e1d_test.py"),
     Path("tests/test_hierarchical_e1d_probe.py"),
 }
 ALLOWED_VISION_PATHS = {
@@ -89,6 +93,8 @@ ALLOWED_VISION_PATHS = {
     Path("src/hok_agent/global_shadow.py"),
     Path("src/hok_agent/human_ifo.py"),
     Path("src/hok_agent/human_inverse.py"),
+    Path("src/hok_agent/hierarchical_e1d_checkpoint.py"),
+    Path("src/hok_agent/hierarchical_e1d_test.py"),
     Path("tests/test_pixel.py"),
     Path("tests/test_alignment.py"),
     Path("tests/test_temporal.py"),
@@ -104,6 +110,8 @@ ALLOWED_VISION_PATHS = {
     Path("tests/test_global_shadow.py"),
     Path("tests/test_human_ifo.py"),
     Path("tests/test_human_inverse.py"),
+    Path("tests/test_hierarchical_e1d_checkpoint.py"),
+    Path("tests/test_hierarchical_e1d_test.py"),
 }
 ALLOWED_VIDEO_PATHS = {
     Path("src/hok_agent/shadow.py"),

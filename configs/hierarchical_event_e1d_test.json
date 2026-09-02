@@ -1,0 +1,33 @@
+{
+  "schema_version": "hok-agent-hierarchical-event-e1d-test-config-v1",
+  "status": "frozen_one_shot_test_contract",
+  "test_authorized_by_owner": true,
+  "test_sessions_expected": 23,
+  "target_manifest_sha256": "692a39675285b9c52e8c787f062641692d6c1e1de0cb908cc60493c485235dc0",
+  "crystal_contract_sha256": "f949986cd828817460531682e4a66a539a3ef84040775d0d6735acb7e94efde1",
+  "clip_contract_sha256": "a859033b891c7d6cbe16d4207a08d65cff5c4092b1e4e7e4b91d6accde1d5321",
+  "checkpoint_bundle_sha256": "55a679883119cdbf1a6a7703f945d61ce33408bad84013362e66355e83345c79",
+  "checkpoint_sha256": {
+    "temporal": "9020bef09a430aef47d321d76464329c2e24ab196650f7894a365bc455f95aeb",
+    "last_frame": "c745f43d2289afbe47b68bcb44216b79c2256c00b7f2731c0e8468c0f5adca5f",
+    "shuffled": "bef922ad6ad27fff614621d717046432a807505f8a5a8631944bce055d8937e6"
+  },
+  "evaluation": {
+    "probability_threshold": 0.5,
+    "minimum_test_pairs": 6,
+    "minimum_temporal_macro_f1": 0.7,
+    "minimum_gain_over_last_frame": 0.1,
+    "minimum_gain_over_shuffled_frames": 0.1,
+    "maximum_split_overlap": 0,
+    "retrain_or_threshold_tuning_after_test": false
+  },
+  "claim_boundary": {
+    "automatic_weak_label_generalization_only": true,
+    "semantic_accuracy_verified": false,
+    "win_loss_verified": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

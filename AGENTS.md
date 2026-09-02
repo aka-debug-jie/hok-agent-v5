@@ -25,7 +25,9 @@
   33 train and 7 dev candidates. E1d-clip then built 33/7 event-centered pairs and reduced
   ordinal-only accuracy to about `0.424/0.429`. The CPU seed-0 probe passed overfit32 and reached
   dev temporal macro-F1 1.0 versus 0.8571 for last-frame and shuffle. It remains weak-label-only;
-  WIN/LOSS and Reward stay false.
+  WIN/LOSS and Reward stay false. The pre-test bundle is now frozen at bundle hash
+  `55a679883119cdbf1a6a7703f945d61ce33408bad84013362e66355e83345c79`; the one-shot 23-session
+  test contract is immutable before any test frame is decoded.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.
@@ -269,6 +271,9 @@
   focused tests, plus `global_policy.py`, `human_ifo.py`, `human_inverse.py`, and their focused tests
   for offline Global Agent BC, Human IfO, inverse macro dynamics, single DAgger round, video
   adaptation, and zero-control replay.
+  `hierarchical_e1d_probe.py`, `hierarchical_e1d_checkpoint.py`, and
+  `hierarchical_e1d_test.py` may use Torch only for the offline E1d diagnostic, checkpoint freeze,
+  and one-shot test; the test module contains no optimizer or backward path.
   `global_shadow.py` and `test_global_shadow.py` may use the same frozen Global Agent model only for
   authorized zero-control Shadow; they may never add an input sender.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,

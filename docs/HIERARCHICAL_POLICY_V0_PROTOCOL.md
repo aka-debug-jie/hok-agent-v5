@@ -2,8 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`E1D_TEMPORAL_PROBE_PASSED_NON_PROMOTING`。事件中心数据和时序可学性门通过；
-独立语义准确率、WIN/LOSS和完整E1门仍未通过。
+当前状态：`E1D_PRE_TEST_CHECKPOINT_FROZEN`。三条checkpoint与一次性test合同已在读取test前
+冻结；独立语义准确率、WIN/LOSS和完整E1门仍未通过。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -330,3 +330,8 @@ SHA-256为`ab1ad7820434dc2443330b8ce9af6c9d29686ca00062a7cfa97504be73ced909`。
 seed-0 CPU probe的overfit32 accuracy为1.0，dev temporal macro-F1为1.0，last-frame和shuffle
 均为0.8571；报告SHA-256为`26733ab5195528721c6bc5cdd02082f303acb9da0dc37d9c6043a04bb42e4e51`。
 当前唯一下一开发任务：冻结模型并进行离线回放；Reward仍关闭。
+
+冻结bundle SHA-256为`55a679883119cdbf1a6a7703f945d61ce33408bad84013362e66355e83345c79`，
+Temporal权重SHA-256为`9020bef09a430aef47d321d76464329c2e24ab196650f7894a365bc455f95aeb`。
+三条dev指标逐项复现，bundle记录`test_opened=false`。23-session test合同已绑定checkpoint、
+水晶教师、clip合同、manifest和0.5阈值；下一步只允许一次test运行。

@@ -95,6 +95,11 @@ The CPU seed-0 probe passed overfit32 and reached dev temporal macro-F1 1.0 vers
 last-frame and shuffled controls. This is learnability evidence only. Run
 `make hierarchical-e1d-probe-smoke`.
 
+The three pre-test checkpoints are frozen in safetensors with bundle hash
+`55a679883119cdbf1a6a7703f945d61ce33408bad84013362e66355e83345c79`. Their dev metrics exactly
+reproduce the probe. A one-shot 23-session test contract is frozen before test decoding; it permits
+no retraining or threshold adjustment.
+
 ## Quick start
 
 Python 3.11 or newer is required.
