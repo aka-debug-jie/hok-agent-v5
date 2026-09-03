@@ -53,6 +53,12 @@
   support was `4 < 16`. Do not retune this teacher, ROI, sampling, confirmation, or gates; no
   Movement Head training is authorized from this lineage. Continue with an independently frozen
   Macro Head data contract while Movement remains blocked.
+  The independent P1 Macro simulator-data audit passed for the three Actor-owned intents:
+  train/dev windows are `1620/412`, every intent appears in all `40/10` episodes, class-prior F1
+  is `0.2019`, and time-only F1 is `0.3893`. Its report SHA-256 is
+  `de7f8c4b265e69694d01210cbec49948907c389041df4792c294a90994bcea7c`. This opens one
+  simulator-only Macro Head learnability run from the frozen P0 representation; it does not verify
+  real-video semantics or reopen Movement, Combat, PolicyBundle assembly, Reward, or input.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

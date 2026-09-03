@@ -137,6 +137,12 @@ display-matrix repair recovered every rotated video, but the frozen teacher stil
 required. The audit is frozen failed; no Movement Head was trained and its labels are explicitly
 teacher recommendations, not observed human actions. Run `make hierarchical-p1-movement-audit-smoke`.
 
+The separate P1 Macro data audit passed on project-owned PixelArena: 1,620 train and 412 dev causal
+windows cover FARM_LANE, PUSH_STRUCTURE, and ENGAGE in every 40/10 episode. Class-prior and
+time-only controls reached only 0.2019 and 0.3893 macro-F1. This permits one simulator-only Macro
+Head learnability run from the frozen P0 representation; it is not real-video semantic evidence.
+Run `make hierarchical-p1-macro-data-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

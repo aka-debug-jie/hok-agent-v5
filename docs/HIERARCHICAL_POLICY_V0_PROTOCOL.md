@@ -2,9 +2,9 @@
 
 ## 1. 状态与目的
 
-当前状态：`P1_MOVEMENT_TEACHER_AUDIT_FAILED`。P0时序SSL v2保持通过并可作为初始化；首个P1
-Movement原视频教师审计在唯一Display Matrix修复后仍因覆盖率和dev west支持不足而冻结失败。
-Macro/Combat策略头、Reward和在线接口仍关闭。
+当前状态：`P1_MACRO_DATA_PASSED`。P0时序SSL v2保持通过；P1 Movement教师审计冻结失败。
+独立Macro Simulator数据门已通过，允许一次从P0表征初始化的Simulator-only Macro Head
+可学性训练；Combat、PolicyBundle、Reward和在线接口仍关闭。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -390,3 +390,10 @@ P1 Movement首先复用149个原始MP4及其冻结103/23/23 split，不要求新
 仍不足以训练八方向Movement Head。该教师输出只代表自动导航建议，不是观察到的人类动作；
 不得调整ROI、视觉规则、采样、确认帧或门槛后重试。Movement Head保持关闭，下一任务改为独立
 冻结Macro Head数据合同。
+
+P1 Macro数据合同只使用项目自有PixelArena的40个train和10个dev完整episode，并过滤由Router
+负责的DISENGAGE/RECALL。FARM_LANE、PUSH_STRUCTURE、ENGAGE得到1,620/412个train/dev causal
+window；三类各覆盖全部40/10个episode，最少类别window为486/105。类别先验macro-F1为0.2019，
+时间分桶基线为0.3893，均未直接解开标签。报告SHA-256为
+`de7f8c4b265e69694d01210cbec49948907c389041df4792c294a90994bcea7c`。该数据门只验证Simulator
+规则教师支持，真实视频语义仍未验证；只允许一次冻结P0表征的Macro Head可学性训练。
