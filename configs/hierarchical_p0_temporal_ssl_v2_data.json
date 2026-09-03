@@ -1,0 +1,47 @@
+{
+  "schema_version": "hok-agent-hierarchical-p0-temporal-ssl-v2-data-config-v1",
+  "status": "frozen_train_only_temporal_index",
+  "target_manifest_sha256": "692a39675285b9c52e8c787f062641692d6c1e1de0cb908cc60493c485235dc0",
+  "selection": {
+    "split": "train",
+    "required_sessions": 103,
+    "windows_per_session": 16,
+    "maximum_shards_per_session": 4,
+    "order": "sha256_contract_session_partition",
+    "video_dev_allowed": false,
+    "video_test_allowed": false
+  },
+  "window": {
+    "sequence_frames": 16,
+    "frame_stride": 2,
+    "maximum_adjacent_gap_ms": 250,
+    "class_0": "CHRONOLOGICAL",
+    "class_1": "MIDDLE_SHUFFLED",
+    "first_frame_fixed": true,
+    "last_frame_fixed": true,
+    "same_frame_multiset": true,
+    "pair_row_order": "sha256_reversed"
+  },
+  "model_input": {
+    "fields": ["rgb_sequence"],
+    "timestamp_allowed": false,
+    "session_id_allowed": false,
+    "shard_reference_allowed": false
+  },
+  "gate": {
+    "minimum_sessions": 103,
+    "minimum_pairs": 1648,
+    "maximum_invalid_windows": 0,
+    "maximum_duplicate_windows": 0
+  },
+  "claim_boundary": {
+    "automatic_self_supervision_only": true,
+    "ssl_training_allowed_only_if_data_gate_passes": true,
+    "p0_initialization_allowed": false,
+    "policy_training_allowed": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

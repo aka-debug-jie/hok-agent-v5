@@ -42,7 +42,12 @@
   non-collapse checks and improved dev macro-F1 to `0.7031`, but missed its frozen `0.75` gate.
   Its sole pre-update repair only set deterministic CuBLAS workspace state; model, data, and gates
   did not change. The run is frozen failed with no encoder checkpoint. Do not retune or rerun this
-  lineage, and do not initialize PolicyBundle from it.
+  lineage, and do not initialize PolicyBundle from it. A separately versioned v2 indexed 1,648
+  train-only pairs across all 103 video-train sessions and used a fixed last epoch without dev
+  selection. It passed at dev macro-F1 `0.7907`; representation SHA-256 is
+  `d1ce0a9c44710586e6df3124371ffa0171dc1806510efe2d9d02d5e733d1c848`. This representation may
+  initialize P0 only. P1 head data and learnability gates must be frozen independently before any
+  policy training.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

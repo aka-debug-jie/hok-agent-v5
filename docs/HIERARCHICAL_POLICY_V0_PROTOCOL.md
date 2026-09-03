@@ -2,9 +2,9 @@
 
 ## 1. 状态与目的
 
-当前状态：`P0_TEMPORAL_SSL_FAILED`。E1保持冻结；旧SimSiam adapter永久拒绝，新seed-0
-时序SSL虽通过overfit和非坍缩检查，但dev macro-F1 0.7031未达到冻结的0.75门槛，也不能作为
-新PolicyBundle初始化。
+当前状态：`P0_TEMPORAL_SSL_V2_PASSED`。E1保持冻结；旧SimSiam adapter和首个小数据时序SSL
+保持失败。独立v2使用全部103个video-train session的1,648个索引时序对，在不以dev选模的
+条件下达到dev macro-F1 0.7907，获准作为P0初始化；P1策略头、Reward和在线接口仍关闭。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -366,3 +366,15 @@ adapter/source/random temporal macro-F1为0.3333/0.4687/0.5142，adapter last-fr
 `P0_TEMPORAL_SSL_FAILED`，未保存encoder。内嵌报告SHA-256为
 `f66fe1c991dc74b3bc81792cd25ddf6a1dd93ae8a758bbf1245d418b8ba169b9`。该lineage不得调门槛或
 重跑，不得初始化PolicyBundle；test、策略训练、Reward、capture、input和promotion保持关闭。
+
+独立v2数据合同仅索引video-train：103个session各16个窗口，共1,648对，0无效、0重复；索引
+SHA-256为`a4f96fb39aa502ad987735ebf513d02e0fc2c420f9659e3e294aa367c21b814d`，数据报告
+SHA-256为`543c811d28cc427c3ff790d3493a710c5f1d5f2703d7c48e24240f1fdae00166`。训练固定seed-0、
+12个epoch和末轮checkpoint，不使用video-dev选择epoch。首次启动在任何梯度更新前因NHWC未
+转换为NCHW而停止；布局修复增加非对称维度回归测试，未改变数据、模型、epoch或门槛。
+overfit32 accuracy为0.9688，冻结dev
+macro-F1为0.7907，相对最佳冻结基线提高0.2765；全部表征门通过。representation SHA-256为
+`d1ce0a9c44710586e6df3124371ffa0171dc1806510efe2d9d02d5e733d1c848`，内嵌报告SHA-256为
+`f39f7d3e84f34944016db935ff13771afe86787231cc60f7ffd6e8c6532dbcb0`。它只允许P0初始化；P1
+三个Head的数据合同、可学性门和负对照必须分别冻结，策略训练、Reward、test、capture、input
+及整体promotion仍关闭。

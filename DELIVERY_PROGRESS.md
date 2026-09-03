@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P0_TEMPORAL_SSL_FAILED`: new seed-0 SSL passed overfit/non-collapse and reached dev F1 0.703, but missed the frozen 0.75 gate | Freeze this failed lineage; no encoder initialization, Reward, phone input, test, or online learning |
+| Hierarchical Policy v0 | `P0_TEMPORAL_SSL_V2_PASSED`: 1,648 train-only pairs produced dev F1 0.791 with all frozen gates passed | Representation may initialize P0 only; freeze separate P1 Head data and learnability contracts before policy training |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -293,12 +293,28 @@ results remain evidence and reusable components, not reopened parallel routes.
 - The lineage is frozen without retuning or rerun; test, PolicyBundle initialization, Reward, capture,
   input, online learning, and promotion remain closed.
 
+## Hierarchical Policy v0 P0 temporal SSL v2
+
+- A train-only index covers all 103 video-train sessions with 1,648 pairs, zero invalid windows,
+  and zero duplicates; video-dev and video-test were not opened during materialization.
+- The first training launch stopped before any gradient update because NHWC input had not been
+  converted to NCHW. The tensor-layout fix added a non-symmetric regression test and changed no
+  data, model, epoch, or gate.
+- Fixed-last-epoch seed-0 training passed overfit32 at 0.9688 and reached frozen dev macro-F1
+  0.7907, 0.2765 above the best frozen baseline. All non-collapse checks passed.
+- Index/report SHA-256: `a4f96fb39aa502ad987735ebf513d02e0fc2c420f9659e3e294aa367c21b814d` /
+  `543c811d28cc427c3ff790d3493a710c5f1d5f2703d7c48e24240f1fdae00166`.
+- Representation/report SHA-256: `d1ce0a9c44710586e6df3124371ffa0171dc1806510efe2d9d02d5e733d1c848` /
+  `f39f7d3e84f34944016db935ff13771afe86787231cc60f7ffd6e8c6532dbcb0`.
+- The representation may initialize P0 only. P1 Head training, Reward, test, capture, input, online
+  learning, and whole-policy promotion remain closed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: freeze the failed P0 temporal SSL pilot and choose a separately versioned next objective
-BLOCKING FAILURE: seed-0 temporal SSL dev macro-F1 0.7031 is below its frozen 0.75 gate
-NEXT ACCEPTANCE COMMAND: make hierarchical-p0-ssl-smoke; no retraining command is authorized
+CURRENT GOAL: freeze separate P1 Macro, Movement, and Combat data/learnability contracts
+BLOCKING FAILURE: no P1 Head is yet authorized to train from the passed P0 representation
+NEXT ACCEPTANCE COMMAND: make hierarchical-p0-ssl-v2-data-smoke hierarchical-p0-ssl-v2-smoke
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

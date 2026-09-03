@@ -1,0 +1,53 @@
+{
+  "schema_version": "hok-agent-hierarchical-p0-temporal-ssl-v2-config-v1",
+  "status": "frozen_seed0_train_only_temporal_ssl",
+  "data_report_sha256": "543c811d28cc427c3ff790d3493a710c5f1d5f2703d7c48e24240f1fdae00166",
+  "index_sha256": "a4f96fb39aa502ad987735ebf513d02e0fc2c420f9659e3e294aa367c21b814d",
+  "evaluation_dataset_report_sha256": "9de1bbe7bb41ac9fc09a180d441eb95dacf85e3f98de8a30f4435fb6085f4783",
+  "architecture": {
+    "encoder": "resnet18_weights_none_fc_identity",
+    "temporal": "gru512x128",
+    "projection": "linear128x64",
+    "input_frames": 16,
+    "input_size": 128,
+    "parameter_scope": "v0_s"
+  },
+  "training": {
+    "seed": 0,
+    "device": "cuda",
+    "cublas_workspace_config": ":4096:8",
+    "epochs": 12,
+    "pair_batch_size": 4,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.0001,
+    "order_loss_weight": 1.0,
+    "invariance_loss_weight": 0.1,
+    "brightness_scales": [0.9, 1.1],
+    "checkpoint_selection": "fixed_last_epoch_without_dev_selection"
+  },
+  "overfit32": {
+    "steps": 100,
+    "minimum_accuracy": 0.95,
+    "maximum_final_loss_fraction": 0.25
+  },
+  "gate": {
+    "minimum_dev_macro_f1": 0.75,
+    "minimum_gain_over_best_frozen_baseline": 0.15,
+    "best_frozen_baseline_macro_f1": 0.5141700404858299,
+    "minimum_feature_std": 0.01,
+    "minimum_effective_rank": 16,
+    "minimum_augmentation_cosine": 0.8
+  },
+  "claim_boundary": {
+    "v1_checkpoint_loaded": false,
+    "old_adapter_loaded": false,
+    "training_video_dev_allowed": false,
+    "video_test_allowed": false,
+    "p0_initialization_allowed_only_if_all_gates_pass": true,
+    "policy_training_allowed": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

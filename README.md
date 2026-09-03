@@ -124,6 +124,13 @@ pre-frozen 0.75 dev gate. The run is frozen failed without an encoder checkpoint
 initialize PolicyBundle or open policy training, Reward, test, capture, or input. Run the contract
 regression with `make hierarchical-p0-ssl-smoke`.
 
+The separately versioned P0 temporal SSL v2 then indexed 1,648 train-only pairs across all 103
+video-train sessions without copying RGB or using video-dev for checkpoint selection. Its fixed
+last epoch reached frozen dev macro-F1 0.7907 and passed every predeclared gate. The resulting
+ResNet-18 plus GRU representation is allowed only as the P0 initializer; no policy head, Reward,
+test, capture, or input is opened. Run `make hierarchical-p0-ssl-v2-data-smoke` and
+`make hierarchical-p0-ssl-v2-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.
