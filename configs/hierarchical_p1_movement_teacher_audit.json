@@ -1,0 +1,50 @@
+{
+  "schema_version": "hok-agent-hierarchical-p1-movement-teacher-audit-config-v1",
+  "status": "frozen_raw_video_minimap_teacher_audit_repair1",
+  "repair_history": {
+    "repairs_allowed": 1,
+    "repairs_used": 1,
+    "repair": "apply_mp4_display_matrix_before_roi_crop",
+    "previous_failure_report_sha256": "e78f464156688e4deefcbafc50c8f5b220bd73243f893f5e961272723833eb49",
+    "sampling_teacher_or_gate_changed": false
+  },
+  "cohort_sha256": "d224a009de4a1d4f31b20d0c9fdcac607f68a6e1d8179a265e9a7c350c40666b",
+  "pre_ingest_sha256": "5d4eea2223c2c8618a20c3fe23467498f1038e0ab86f2fdffc1c4cf68c7496b5",
+  "movement_teacher_contract_sha256": "d875887cbeedbca37770350d8deac1a0c335b021f855c9b996900a59e9098f40",
+  "p0_representation_sha256": "d1ce0a9c44710586e6df3124371ffa0171dc1806510efe2d9d02d5e733d1c848",
+  "sampling": {
+    "splits": ["train", "dev"],
+    "segments_per_session": 3,
+    "segment_fractions": [0.25, 0.5, 0.75],
+    "frames_per_segment": 64,
+    "sample_period_ms": 100,
+    "direction_confirmation_frames": 3,
+    "video_test_allowed": false
+  },
+  "labels": {
+    "vocabulary": ["north", "north_east", "east", "south_east", "south", "south_west", "west", "north_west"],
+    "source": "rgb_minimap_navigation_teacher_v1",
+    "meaning": "teacher_recommended_direction_not_observed_human_action",
+    "wait_label_allowed": false,
+    "human_labels_used": false,
+    "semantic_accuracy_verified": false
+  },
+  "gate": {
+    "minimum_detection_coverage": 0.25,
+    "minimum_detected_session_fraction": 0.6,
+    "minimum_stable_train_samples_per_direction": 64,
+    "minimum_stable_dev_samples_per_direction": 16,
+    "minimum_train_sessions_per_direction": 4,
+    "minimum_dev_sessions_per_direction": 2
+  },
+  "claim_boundary": {
+    "movement_head_training_allowed_only_if_all_gates_pass": true,
+    "macro_head_training_allowed": false,
+    "combat_head_training_allowed": false,
+    "policy_bundle_assembly_allowed": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

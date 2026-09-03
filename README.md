@@ -131,6 +131,12 @@ ResNet-18 plus GRU representation is allowed only as the P0 initializer; no poli
 test, capture, or input is opened. Run `make hierarchical-p0-ssl-v2-data-smoke` and
 `make hierarchical-p0-ssl-v2-smoke`.
 
+P1 began with a raw-resolution Movement teacher audit over 103 train and 23 dev videos. A preserved
+display-matrix repair recovered every rotated video, but the frozen teacher still covered only
+18.44%/18.98% of sampled frames and dev produced only four stable west labels versus sixteen
+required. The audit is frozen failed; no Movement Head was trained and its labels are explicitly
+teacher recommendations, not observed human actions. Run `make hierarchical-p1-movement-audit-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

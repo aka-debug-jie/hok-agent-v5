@@ -141,11 +141,13 @@ ALLOWED_VIDEO_PATHS = {
     Path("src/hok_agent/global_shadow.py"),
     Path("src/hok_agent/hierarchical_e1_terminal.py"),
     Path("src/hok_agent/hierarchical_e1c_anchor.py"),
+    Path("src/hok_agent/hierarchical_p1_movement_audit.py"),
     Path("tests/test_shadow.py"),
     Path("tests/test_capture.py"),
     Path("tests/test_alignment.py"),
     Path("tests/test_mobile_testbed.py"),
     Path("tests/test_global_shadow.py"),
+    Path("tests/test_hierarchical_p1_movement_audit.py"),
 }
 ALLOWED_ANNOTATION_PATHS = {
     Path("src/hok_agent/alignment.py"),

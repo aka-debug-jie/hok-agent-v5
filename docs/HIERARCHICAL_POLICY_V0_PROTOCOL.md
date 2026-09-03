@@ -2,9 +2,9 @@
 
 ## 1. 状态与目的
 
-当前状态：`P0_TEMPORAL_SSL_V2_PASSED`。E1保持冻结；旧SimSiam adapter和首个小数据时序SSL
-保持失败。独立v2使用全部103个video-train session的1,648个索引时序对，在不以dev选模的
-条件下达到dev macro-F1 0.7907，获准作为P0初始化；P1策略头、Reward和在线接口仍关闭。
+当前状态：`P1_MOVEMENT_TEACHER_AUDIT_FAILED`。P0时序SSL v2保持通过并可作为初始化；首个P1
+Movement原视频教师审计在唯一Display Matrix修复后仍因覆盖率和dev west支持不足而冻结失败。
+Macro/Combat策略头、Reward和在线接口仍关闭。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -378,3 +378,15 @@ macro-F1为0.7907，相对最佳冻结基线提高0.2765；全部表征门通过
 `f39f7d3e84f34944016db935ff13771afe86787231cc60f7ffd6e8c6532dbcb0`。它只允许P0初始化；P1
 三个Head的数据合同、可学性门和负对照必须分别冻结，策略训练、Reward、test、capture、input
 及整体promotion仍关闭。
+
+P1 Movement首先复用149个原始MP4及其冻结103/23/23 split，不要求新增录制或人工标签。审计
+只解码train/dev每局25%、50%、75%附近各64帧，连续3帧同方向才计为稳定样本；test不解码。
+首轮错误拒绝依赖MP4 Display Matrix播放的竖向存储视频，失败报告SHA-256为
+`e78f464156688e4deefcbafc50c8f5b220bd73243f893f5e961272723833eb49`。唯一修复只在ROI裁剪前
+应用Display Matrix，不改采样、教师、split或门槛。修复后103个train和23个dev均各采192帧，
+但检测覆盖率仅0.1844/0.1898；可检测session比例为0.5922/0.6087，train低于0.6；dev稳定west
+样本仅4，低于16。修复报告SHA-256为
+`712b122096fec4972e10a579b2daed453bdb4383ab052df4e8f5780695c6ce5e`。方向session支持虽通过，
+仍不足以训练八方向Movement Head。该教师输出只代表自动导航建议，不是观察到的人类动作；
+不得调整ROI、视觉规则、采样、确认帧或门槛后重试。Movement Head保持关闭，下一任务改为独立
+冻结Macro Head数据合同。

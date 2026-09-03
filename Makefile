@@ -13,6 +13,7 @@
 .PHONY: hierarchical-p0-ssl-smoke
 .PHONY: hierarchical-p0-ssl-v2-data-smoke
 .PHONY: hierarchical-p0-ssl-v2-smoke
+.PHONY: hierarchical-p1-movement-audit-smoke
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
 WZRY_DATA_ROOT ?= $(CURDIR)/.local-data
@@ -204,6 +205,9 @@ hierarchical-p0-ssl-v2-data-smoke:
 
 hierarchical-p0-ssl-v2-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_p0_ssl_v2.py
+
+hierarchical-p1-movement-audit-smoke:
+	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_p1_movement_audit.py
 
 storage-show:
 	@echo "WZRY_DATA_ROOT=$(WZRY_DATA_ROOT)"

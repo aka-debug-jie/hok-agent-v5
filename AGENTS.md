@@ -47,7 +47,12 @@
   selection. It passed at dev macro-F1 `0.7907`; representation SHA-256 is
   `d1ce0a9c44710586e6df3124371ffa0171dc1806510efe2d9d02d5e733d1c848`. This representation may
   initialize P0 only. P1 head data and learnability gates must be frozen independently before any
-  policy training.
+  policy training. The first P1 Movement raw-video teacher audit is now frozen failed after its
+  sole display-matrix repair. All 103/23 train/dev sessions were sampled, but detection coverage
+  was only `0.1844/0.1898`, train detected-session fraction was `0.5922 < 0.6`, and dev stable west
+  support was `4 < 16`. Do not retune this teacher, ROI, sampling, confirmation, or gates; no
+  Movement Head training is authorized from this lineage. Continue with an independently frozen
+  Macro Head data contract while Movement remains blocked.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

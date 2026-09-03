@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P0_TEMPORAL_SSL_V2_PASSED`: 1,648 train-only pairs produced dev F1 0.791 with all frozen gates passed | Representation may initialize P0 only; freeze separate P1 Head data and learnability contracts before policy training |
+| Hierarchical Policy v0 | `P1_MOVEMENT_TEACHER_AUDIT_FAILED`: P0 passed, but raw-video Movement coverage was 0.184/0.190 and dev stable west support was 4/16 | Keep Movement closed; freeze an independent Macro Head data contract next |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -309,12 +309,28 @@ results remain evidence and reusable components, not reopened parallel routes.
 - The representation may initialize P0 only. P1 Head training, Reward, test, capture, input, online
   learning, and whole-policy promotion remain closed.
 
+## Hierarchical Policy v0 P1 Movement teacher audit
+
+- The frozen 103/23/23 video split was mapped back to all 149 original MP4 files without persisting
+  source paths. Only train/dev were decoded; video-test remained unopened.
+- Each train/dev session was sampled at three fixed fractions with 64 frames each. Stable labels
+  required three consecutive teacher decisions and mean teacher recommendations, not human actions.
+- The initial run mishandled MP4 Display Matrix rotation. Its failure report SHA-256 is
+  `e78f464156688e4deefcbafc50c8f5b220bd73243f893f5e961272723833eb49`.
+- The sole repair applied the display matrix before ROI cropping and changed no sampling, teacher,
+  split, or gate. All 103 train and 23 dev sessions then yielded their full 192 sampled frames.
+- Detection coverage was only 0.1844/0.1898; detected-session fraction was 0.5922/0.6087, with train
+  below 0.6. Dev stable west support was 4 versus 16 required. Direction-session support passed.
+- Repair report SHA-256: `712b122096fec4972e10a579b2daed453bdb4383ab052df4e8f5780695c6ce5e`.
+- The lineage is frozen failed. No Movement Head training, PolicyBundle assembly, Reward, capture,
+  input, online learning, or promotion is authorized.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: freeze separate P1 Macro, Movement, and Combat data/learnability contracts
-BLOCKING FAILURE: no P1 Head is yet authorized to train from the passed P0 representation
-NEXT ACCEPTANCE COMMAND: make hierarchical-p0-ssl-v2-data-smoke hierarchical-p0-ssl-v2-smoke
+CURRENT GOAL: freeze the P1 Macro Head data contract while Movement remains blocked
+BLOCKING FAILURE: Movement raw-video teacher coverage and dev west samples missed frozen gates
+NEXT ACCEPTANCE COMMAND: make hierarchical-p1-movement-audit-smoke, then Macro data audit
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 
