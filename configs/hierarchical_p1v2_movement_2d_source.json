@@ -1,0 +1,44 @@
+{
+  "schema_version": "hok-agent-hierarchical-p1v2-movement-2d-source-config-v1",
+  "status": "frozen_balanced_visible_target_curriculum",
+  "p1v2_architecture_sha256": "7b67be5605a89d711474fb0671b8b77f5c865cd4633d77c785fcb1b3c47d2c1b",
+  "previous_movement_audit_report_sha256": "2ace0d94c5acb53b99f35b52d2d30f88945bae6d2cdecd2f5d97507063491ec1",
+  "curriculum": {
+    "sequence_frames": 16,
+    "train_groups_per_direction": 64,
+    "dev_groups_per_direction": 16,
+    "sides": ["blue", "red"],
+    "directions": ["north", "north_east", "east", "south_east", "south", "south_west", "west", "north_west"],
+    "target": "visible_enemy_hero_one_step_relative",
+    "render_variation_only_within_sequence": true,
+    "test_allowed": false
+  },
+  "model_input": {
+    "fields": ["rgb_sequence"],
+    "label_allowed": false,
+    "group_id_allowed": false,
+    "side_allowed": false,
+    "structured_state_allowed": false
+  },
+  "gate": {
+    "required_train_sequences": 512,
+    "required_dev_sequences": 128,
+    "required_train_groups_per_direction": 64,
+    "required_dev_groups_per_direction": 16,
+    "maximum_direction_imbalance": 0,
+    "maximum_group_overlap": 0
+  },
+  "claim_boundary": {
+    "capability": "local_visible_target_approach_only",
+    "lane_strategy_verified": false,
+    "real_video_semantics_verified": false,
+    "movement_branch_training_allowed_only_if_all_gates_pass": true,
+    "macro_branch_training_allowed": false,
+    "combat_branch_training_allowed": false,
+    "policy_bundle_assembly_allowed": false,
+    "reward_allowed": false,
+    "online_rl_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

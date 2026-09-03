@@ -81,6 +81,11 @@
   historical V7 fit/acquisition rows found only ego-view east moves, so it cannot repair coverage.
   Do not shrink the eight-direction contract or relabel skill aim. The next source must be a new,
   balanced, visually conditioned 2D PixelArena navigation curriculum.
+  That separate 2D source now passes materialization with 512/128 train/dev sequences, exactly
+  64/16 groups per direction, both ego sides, zero imbalance, and zero group overlap. Its report
+  SHA-256 is `f73e379dfe79ab24a7087e260e6d321f7c0e5f672f6ae2b6cbae4edea946880b`.
+  It opens one task-specific Movement branch learnability run for local visible-target approach
+  only; lane strategy, real-video semantics, Bundle assembly, Reward, online RL, and input stay false.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

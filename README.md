@@ -168,6 +168,12 @@ misused as movement. A read-only check also found that historical V7 fit/acquisi
 all ego-view east. No Movement branch was trained; a new balanced, visually conditioned 2D
 PixelArena navigation source is required. Run `make hierarchical-p1v2-movement-data-smoke`.
 
+The new source materializes 512 train and 128 dev RGB sequences with exact 64/16 support for each
+direction, alternating blue/red ego views and zero group overlap. It permits one task-specific
+Movement branch learnability run, but its claim is limited to approaching a locally visible target;
+lane strategy and real-video transfer remain unverified. Run
+`make hierarchical-p1v2-movement-2d-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P1V2_MOVEMENT_DATA_FAILED`: Global labels cover east/west only; V7 candidate moves are east only | Build a new balanced visible-target 2D PixelArena curriculum; do not shrink or relabel the old data |
+| Hierarchical Policy v0 | `P1V2_MOVEMENT_2D_SOURCE_PASSED`: new 512/128 RGB sequences have exact eight-direction balance | Run one task-specific Movement learnability test; capability remains local visible-target approach only |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -389,12 +389,23 @@ results remain evidence and reusable components, not reopened parallel routes.
 - No Movement branch was trained. The next source must be a separately versioned, balanced,
   visible-target 2D PixelArena curriculum; the old action space and labels are not changed.
 
+## Hierarchical Policy v0 P1v2 balanced Movement source
+
+- The new source contains 512 train and 128 dev 16-frame RGB sequences with alternating blue/red
+  ego views. Each of eight directions has exact 64/16 group support.
+- Train/dev group overlap and direction imbalance are both zero. Structured state, side, group ID,
+  and labels are excluded from model input.
+- Report SHA-256: `f73e379dfe79ab24a7087e260e6d321f7c0e5f672f6ae2b6cbae4edea946880b`.
+- This opens one task-specific Movement branch learnability run for local visible-target approach
+  only. Lane strategy, real-video semantics, PolicyBundle assembly, Reward, online RL, capture,
+  input, and promotion remain closed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: freeze a new balanced visible-target 2D PixelArena Movement source contract
-BLOCKING FAILURE: existing Global/V7 move labels cover only one or two directions
-NEXT ACCEPTANCE COMMAND: make hierarchical-p1v2-movement-data-smoke, then 2D source materialization
+CURRENT GOAL: run one P1v2 task-specific Movement branch learnability test
+BLOCKING FAILURE: old sources remain sparse; new 2D source has no trained branch yet
+NEXT ACCEPTANCE COMMAND: make hierarchical-p1v2-movement-2d-smoke, then frozen branch probe
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

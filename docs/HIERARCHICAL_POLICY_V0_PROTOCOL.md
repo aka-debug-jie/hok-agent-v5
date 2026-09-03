@@ -2,8 +2,9 @@
 
 ## 1. 状态与目的
 
-当前状态：`P1V2_MOVEMENT_DATA_FAILED`。P1v2架构保持冻结，但现有Global/V7 Simulator移动
-标签仍不具备八方向覆盖。尚未开放新分支训练、PolicyBundle、Reward或在线接口。
+当前状态：`P1V2_MOVEMENT_2D_SOURCE_PASSED`。旧Global/V7移动标签保持失败；独立二维可视目标
+课程已通过均衡数据门，允许一次task-specific Movement分支可学性训练。PolicyBundle、Reward和
+在线接口仍关闭。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -430,3 +431,9 @@ P1v2 Movement数据审计只接受`action_type=move`，明确排除skill aim和w
 `2ace0d94c5acb53b99f35b52d2d30f88945bae6d2cdecd2f5d97507063491ec1`。只读检查历史V7
 fit/acquisition move行又全部为ego-view east，不能作为替代来源。不得缩为两方向或用技能瞄准
 伪造移动标签；下一数据源必须是独立、均衡、可视目标驱动的二维PixelArena导航课程。
+
+独立二维课程将敌方可视英雄置于自身八个相对方向之一，生成16帧RGB序列；蓝红ego-view交替，
+结构化状态、side和label均不作为模型输入。train/dev为512/128个group-disjoint序列，每方向
+严格64/16，方向不平衡和group overlap均为0。报告SHA-256为
+`f73e379dfe79ab24a7087e260e6d321f7c0e5f672f6ae2b6cbae4edea946880b`。该课程只验证局部可视
+目标接近，不验证分路策略或真实RGB泛化；只允许一次P1v2 Movement分支可学性训练。
