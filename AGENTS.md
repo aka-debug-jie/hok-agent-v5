@@ -30,6 +30,9 @@
   test contract was immutable before test decoding. The one-shot test is now consumed and frozen
   failed with `TEST_SESSION_NO_PRE_RESULT_SEQUENCE`; it did not complete metrics. Rerun, repair,
   threshold tuning, offline EventEngine integration, Reward, and promotion are prohibited.
+  E1e subsequently evaluated only unused, unanchored train/dev sessions with robust per-session
+  rejection. It found only 6 train and 1 dev eligible pairs versus 10/3 required and is frozen
+  insufficient; it cannot replace the consumed test or reopen integration.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.
@@ -274,8 +277,8 @@
   for offline Global Agent BC, Human IfO, inverse macro dynamics, single DAgger round, video
   adaptation, and zero-control replay.
   `hierarchical_e1d_probe.py`, `hierarchical_e1d_checkpoint.py`, and
-  `hierarchical_e1d_test.py` may use Torch only for the offline E1d diagnostic, checkpoint freeze,
-  and one-shot test; the test module contains no optimizer or backward path.
+  `hierarchical_e1d_test.py`, and `hierarchical_e1e_unused.py` may use Torch only for offline E1d
+  diagnostics, checkpoint freeze, and evaluation; evaluation modules contain no optimizer or backward path.
   `global_shadow.py` and `test_global_shadow.py` may use the same frozen Global Agent model only for
   authorized zero-control Shadow; they may never add an input sender.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,

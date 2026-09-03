@@ -1,0 +1,33 @@
+{
+  "schema_version": "hok-agent-hierarchical-event-e1e-unused-config-v1",
+  "status": "frozen_unused_train_dev_diagnostic",
+  "bindings": {
+    "anchor_report_sha256": "68bfee35e70e9de656f783d802daae708bea53a9dfb5025ff7fbf9ebe7aaf27e",
+    "checkpoint_bundle_sha256": "55a679883119cdbf1a6a7703f945d61ce33408bad84013362e66355e83345c79",
+    "consumed_test_failure_sha256": "36f3f69ff65158bda3788297975a8c394a992a8b747babee70d21d489fe9991c",
+    "target_manifest_sha256": "692a39675285b9c52e8c787f062641692d6c1e1de0cb908cc60493c485235dc0",
+    "crystal_contract_sha256": "f949986cd828817460531682e4a66a539a3ef84040775d0d6735acb7e94efde1",
+    "clip_contract_sha256": "a859033b891c7d6cbe16d4207a08d65cff5c4092b1e4e7e4b91d6accde1d5321"
+  },
+  "selection": {
+    "source_splits": ["train", "dev"],
+    "result_page_anchored": false,
+    "test_allowed": false,
+    "minimum_eligible_train_pairs": 10,
+    "minimum_eligible_dev_pairs": 3
+  },
+  "evaluation": {
+    "probability_threshold": 0.5,
+    "continue_after_ineligible_session": true,
+    "retraining_allowed": false,
+    "threshold_tuning_allowed": false
+  },
+  "claim_boundary": {
+    "engineering_robustness_only": true,
+    "formal_test_replacement": false,
+    "semantic_accuracy_verified": false,
+    "reward_allowed": false,
+    "integration_allowed": false,
+    "promotion_allowed": false
+  }
+}

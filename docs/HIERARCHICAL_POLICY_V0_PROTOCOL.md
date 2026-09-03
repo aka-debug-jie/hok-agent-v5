@@ -2,8 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`E1D_ONE_SHOT_TEST_FAILED_RUNTIME_FROZEN`。checkpoint与test合同已先冻结；唯一
-一次test因`TEST_SESSION_NO_PRE_RESULT_SEQUENCE`中止，禁止重跑和EventEngine集成。
+当前状态：`E1E_UNUSED_SESSION_SUPPORT_INSUFFICIENT_FROZEN`。E1d一次性test失败且禁止重跑；
+E1e未用train/dev诊断仅获得6/1有效对，不能替代test或开放EventEngine。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -338,3 +338,9 @@ Temporal权重SHA-256为`9020bef09a430aef47d321d76464329c2e24ab196650f7894a365bc
 没有形成完整指标。失败报告SHA-256为
 `36f3f69ff65158bda3788297975a8c394a992a8b747babee70d21d489fe9991c`；重跑、修复后复测、
 EventEngine集成、Reward和promotion全部关闭。
+
+E1e只读取未参与E1d训练且没有结果页锚点的train/dev session，逐session记录不合格原因并
+继续。85个session中，63个无pre-result序列、14个无视觉共识、1个无匹配负样本，最终只有
+6个train和1个dev有效对，低于10/3门槛。报告SHA-256为
+`1328583fa99329887a6fa5722b9be06fb6575ab09f9add8ca29cd276629d1fea`。其高模型分数不因小样本
+而晋级；正式test替代、EventEngine、Reward和promotion仍关闭。

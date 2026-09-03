@@ -105,6 +105,10 @@ pre-result sequence. No metric report was produced, and the frozen failure expli
 `rerun_allowed=false` and `integration_allowed=false`. Offline EventEngine integration was not
 started.
 
+The follow-up E1e diagnostic did not reopen test. It continued across all 85 unused unanchored
+train/dev sessions, but only 6 train and 1 dev pairs were eligible versus 10/3 required; 63 sessions
+lacked a usable pre-result sequence. E1e is frozen insufficient and cannot replace the formal test.
+
 ## Quick start
 
 Python 3.11 or newer is required.

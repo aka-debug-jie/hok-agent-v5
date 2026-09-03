@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `E1D_ONE_SHOT_TEST_FAILED_RUNTIME_FROZEN`: frozen test stopped on `TEST_SESSION_NO_PRE_RESULT_SEQUENCE` before metrics | Test consumed; no rerun, repair, EventEngine integration, Reward, phone input, or online learning |
+| Hierarchical Policy v0 | `E1E_UNUSED_SESSION_SUPPORT_INSUFFICIENT_FROZEN`: consumed test remains failed; unused train/dev audit found only 6/1 eligible pairs | Cannot replace test or integrate EventEngine; Reward, phone input, and online learning remain closed |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -258,12 +258,20 @@ results remain evidence and reusable components, not reopened parallel routes.
 - Failure report SHA-256: `36f3f69ff65158bda3788297975a8c394a992a8b747babee70d21d489fe9991c`.
 - `rerun_allowed=false`, `integration_allowed=false`, and `reward_allowed=false` are frozen.
 
+## Hierarchical Policy v0 E1e unused-session diagnostic
+
+- 85 unused unanchored train/dev sessions were processed; test frames were not reopened.
+- Eligible pairs were 6 train and 1 dev versus the frozen 10/3 minimum.
+- Ineligible counts: no pre-result sequence 63, no visual consensus 14, no matched pair 1.
+- Report SHA-256: `1328583fa99329887a6fa5722b9be06fb6575ab09f9add8ca29cd276629d1fea`.
+- This diagnostic cannot replace formal test or reopen EventEngine integration.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: preserve E1d one-shot test failure and stop this lineage
-BLOCKING FAILURE: test runtime encountered a session with no usable pre-result sequence
-NEXT ACCEPTANCE COMMAND: make hierarchical-e1d-checkpoint-smoke and make hierarchical-e1d-test-smoke
+CURRENT GOAL: preserve E1d/E1e frozen failure evidence
+BLOCKING FAILURE: no unused independent terminal-positive evaluation set remains
+NEXT ACCEPTANCE COMMAND: make hierarchical-e1e-unused-smoke
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

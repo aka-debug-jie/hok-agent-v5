@@ -54,6 +54,7 @@ ALLOWED_TORCH_PATHS = {
     Path("src/hok_agent/human_inverse.py"),
     Path("src/hok_agent/hierarchical_e1d_checkpoint.py"),
     Path("src/hok_agent/hierarchical_e1d_test.py"),
+    Path("src/hok_agent/hierarchical_e1e_unused.py"),
     Path("src/hok_agent/hierarchical_e1d_probe.py"),
     Path("tests/test_bc.py"),
     Path("tests/test_pixel.py"),
@@ -73,6 +74,7 @@ ALLOWED_TORCH_PATHS = {
     Path("tests/test_human_inverse.py"),
     Path("tests/test_hierarchical_e1d_checkpoint.py"),
     Path("tests/test_hierarchical_e1d_test.py"),
+    Path("tests/test_hierarchical_e1e_unused.py"),
     Path("tests/test_hierarchical_e1d_probe.py"),
 }
 ALLOWED_VISION_PATHS = {
