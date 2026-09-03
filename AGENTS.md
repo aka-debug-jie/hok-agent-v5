@@ -36,6 +36,9 @@
   P0 adapter-value testing rejected the old epoch-3 SimSiam adapter as a Hierarchical Policy
   initializer: adapter, source, and random frozen encoders all reached dev macro-F1 1.0, so the
   required source/random margins were zero. Do not promote that adapter or retune this easy probe.
+  The harder P0 middle-shuffle task also rejected it: adapter temporal dev macro-F1 `0.3333`,
+  source `0.4687`, and random `0.5142`. The old adapter is permanently unavailable as the new
+  PolicyBundle initializer; the next P0 candidate must be a separately trained temporal SSL encoder.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.
@@ -283,6 +286,7 @@
   `hierarchical_e1d_test.py`, and `hierarchical_e1e_unused.py` may use Torch only for offline E1d
   diagnostics, checkpoint freeze, and evaluation; evaluation modules contain no optimizer or backward path.
   `hierarchical_p0.py` may use frozen Torch/torchvision encoders and train only its small probe head.
+  `hierarchical_p0_temporal_probe.py` has the same frozen-encoder boundary.
   `global_shadow.py` and `test_global_shadow.py` may use the same frozen Global Agent model only for
   authorized zero-control Shadow; they may never add an input sender.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,

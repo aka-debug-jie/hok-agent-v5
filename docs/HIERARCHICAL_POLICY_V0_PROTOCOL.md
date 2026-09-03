@@ -2,8 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`P0_EXISTING_ADAPTER_VALUE_FAILED`。E1终局路线保持冻结；P0旧SimSiam adapter在
-冻结特征价值门中未优于source或random，不能作为新PolicyBundle初始化。
+当前状态：`P0_OLD_ADAPTER_REJECTED_TEMPORAL_FAILED`。E1保持冻结；旧SimSiam adapter在简单
+任务无增益，在严格时间顺序任务又弱于source和random，永久拒绝作为新PolicyBundle初始化。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -350,3 +350,9 @@ P0价值门使用完全冻结的旧epoch-3 adapter、其精确source encoder和�
 0.05/0.1门槛。报告SHA-256为
 `d0f88a86fd8adb3131c389dab5210ea33c746503b97f87368a74e07573198c9e`。旧adapter保持不可变，
 但不进入Hierarchical Policy P0初始化；下一P0任务必须使用更难的空间/时序负对照。
+
+P0时序数据使用32个train、8个dev session，每局4个16帧窗口；正常与middle-shuffled拥有相同
+帧集合及相同首尾帧。共128/32对，ordinal accuracy为0.4688/0.5625。冻结encoder探针结果：
+adapter/source/random temporal macro-F1为0.3333/0.4687/0.5142，adapter last-frame为0.3333。
+报告SHA-256为`331e1fc763416dbc4c1e08520f0a597e20b45be68141d2beeadfccb617fdcf0e`。
+旧adapter不再评估；下一步单独训练真正包含时间目标的新P0 SSL encoder。

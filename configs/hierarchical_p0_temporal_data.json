@@ -1,0 +1,40 @@
+{
+  "schema_version": "hok-agent-hierarchical-p0-temporal-data-config-v1",
+  "status": "frozen_middle_shuffle_materialization",
+  "target_manifest_sha256": "692a39675285b9c52e8c787f062641692d6c1e1de0cb908cc60493c485235dc0",
+  "selection": {
+    "train_sessions": 32,
+    "dev_sessions": 8,
+    "windows_per_session": 4,
+    "sequence_frames": 16,
+    "order": "sha256_contract_plus_session",
+    "test_allowed": false
+  },
+  "pair": {
+    "class_0": "CHRONOLOGICAL",
+    "class_1": "MIDDLE_SHUFFLED",
+    "first_frame_fixed": true,
+    "last_frame_fixed": true,
+    "same_frame_multiset": true,
+    "pair_row_order": "sha256_reversed"
+  },
+  "model_input": {
+    "fields": ["rgb_sequence"],
+    "timestamp_allowed": false,
+    "session_id_allowed": false,
+    "source_order_allowed": false
+  },
+  "gate": {
+    "minimum_train_pairs": 120,
+    "minimum_dev_pairs": 28,
+    "maximum_dev_ordinal_accuracy": 0.6,
+    "maximum_pair_frame_multiset_mismatch": 0
+  },
+  "claim_boundary": {
+    "automatic_self_supervision_only": true,
+    "semantic_accuracy_verified": false,
+    "p0_initialization_allowed": false,
+    "reward_allowed": false,
+    "promotion_allowed": false
+  }
+}

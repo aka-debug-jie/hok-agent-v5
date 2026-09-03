@@ -1,0 +1,29 @@
+{
+  "schema_version": "hok-agent-hierarchical-p0-temporal-probe-config-v1",
+  "status": "frozen_encoder_temporal_order_probe",
+  "dataset_report_sha256": "9de1bbe7bb41ac9fc09a180d441eb95dacf85e3f98de8a30f4435fb6085f4783",
+  "source_checkpoint_sha256": "9e09650445ef3a4c7fdcf6f39e812375e7060c07f1998bb1e8730aec67e4fae4",
+  "adapter_checkpoint_sha256": "05c948c1adbec93293450cb8f42b265790e3e323aa800940e3ef30147bcb684a",
+  "probe": {
+    "seed": 0,
+    "device": "cuda",
+    "steps": 300,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "hidden_size": 64
+  },
+  "gate": {
+    "minimum_adapter_temporal_macro_f1": 0.7,
+    "minimum_gain_over_source": 0.05,
+    "minimum_gain_over_random": 0.1,
+    "minimum_gain_over_adapter_last_frame": 0.15,
+    "maximum_adapter_last_frame_macro_f1": 0.6
+  },
+  "claim_boundary": {
+    "encoders_frozen": true,
+    "test_allowed": false,
+    "p0_initialization_allowed_only_if_all_gates_pass": true,
+    "reward_allowed": false,
+    "promotion_allowed": false
+  }
+}

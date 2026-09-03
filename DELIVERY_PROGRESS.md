@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P0_EXISTING_ADAPTER_VALUE_FAILED`: adapter/source/random frozen encoders all scored dev macro-F1 1.0, giving zero adapter margin | Reject old adapter as P0 initializer; design harder spatial/temporal representation gate; Reward and online learning remain closed |
+| Hierarchical Policy v0 | `P0_OLD_ADAPTER_REJECTED_TEMPORAL_FAILED`: harder temporal F1 adapter/source/random 0.333/0.469/0.514 | Train a new temporal SSL encoder; old adapter, Reward, phone input, and online learning remain closed |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -274,12 +274,20 @@ results remain evidence and reusable components, not reopened parallel routes.
 - Report SHA-256: `d0f88a86fd8adb3131c389dab5210ea33c746503b97f87368a74e07573198c9e`.
 - `p0_initialization_allowed=false`; no test, Reward, phone input, or online learning was used.
 
+## Hierarchical Policy v0 P0 temporal-order gate
+
+- Chronological and middle-shuffled pairs share identical frames and identical first/last frames.
+- Materialization passed with 128 train and 32 dev pairs; ordinal accuracy was 0.469/0.563.
+- Adapter/source/random temporal macro-F1 was 0.333/0.469/0.514; adapter last-frame was 0.333.
+- Report SHA-256: `331e1fc763416dbc4c1e08520f0a597e20b45be68141d2beeadfccb617fdcf0e`.
+- The old adapter is rejected; no test, Reward, phone input, or online learning was used.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: P0 harder spatial/temporal representation gate
-BLOCKING FAILURE: easy terminal probe cannot separate adapter, source, and random encoders
-NEXT ACCEPTANCE COMMAND: make hierarchical-p0-adapter-smoke, then a new P0 contract
+CURRENT GOAL: new P0 temporal SSL encoder contract
+BLOCKING FAILURE: old shallow SimSiam adapter does not encode temporal order
+NEXT ACCEPTANCE COMMAND: make hierarchical-p0-temporal-probe-smoke, then a new SSL contract
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 
