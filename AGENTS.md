@@ -86,6 +86,11 @@
   SHA-256 is `f73e379dfe79ab24a7087e260e6d321f7c0e5f672f6ae2b6cbae4edea946880b`.
   It opens one task-specific Movement branch learnability run for local visible-target approach
   only; lane strategy, real-video semantics, Bundle assembly, Reward, online RL, and input stay false.
+  That branch run is frozen failed after its sole overfit-order repair. Full-data dev macro-F1 and
+  every direction recall were `1.0` versus label-shuffle `0.1748`, but overfit32 reached only
+  `0.9375` accuracy with loss `0.1704`, missing `0.95/0.05`. No checkpoint was saved. Do not change
+  batch size, steps, gates, or BatchNorm behavior in this lineage. A future norm-stable candidate
+  must be separately versioned; the successful full-data metric is learnability evidence only.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

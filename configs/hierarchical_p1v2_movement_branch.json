@@ -1,0 +1,55 @@
+{
+  "schema_version": "hok-agent-hierarchical-p1v2-movement-branch-config-v1",
+  "status": "frozen_seed0_visible_target_movement_branch_repair1",
+  "repair_history": {
+    "repairs_allowed": 1,
+    "repairs_used": 1,
+    "repair": "deterministically_shuffle_overfit32_minibatches",
+    "previous_failure_report_sha256": "4a068f6ebd9031bd142b8a07ca1b523989a27f6d37e742eed148642d4370dbed",
+    "model_data_optimizer_epoch_or_gate_changed": false
+  },
+  "movement_source_report_sha256": "f73e379dfe79ab24a7087e260e6d321f7c0e5f672f6ae2b6cbae4edea946880b",
+  "p0_representation_sha256": "d1ce0a9c44710586e6df3124371ffa0171dc1806510efe2d9d02d5e733d1c848",
+  "architecture": {
+    "shared_frozen_modules": ["conv1", "bn1", "relu", "maxpool", "layer1", "layer2"],
+    "trainable_modules": ["layer3", "layer4", "gru128", "mlp256x256_direction_head"],
+    "directions": ["north", "north_east", "east", "south_east", "south", "south_west", "west", "north_west"],
+    "minimum_trainable_parameters": 8000000,
+    "maximum_trainable_parameters": 14000000
+  },
+  "training": {
+    "seed": 0,
+    "device": "cuda",
+    "cublas_workspace_config": ":4096:8",
+    "epochs": 20,
+    "batch_size": 8,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0001,
+    "checkpoint_selection": "fixed_last_epoch_without_dev_selection"
+  },
+  "overfit32": {
+    "steps": 200,
+    "batch_size": 4,
+    "minimum_accuracy": 0.95,
+    "maximum_loss": 0.05
+  },
+  "gate": {
+    "minimum_dev_macro_f1": 0.9,
+    "minimum_per_direction_recall": 0.85,
+    "minimum_gain_over_label_shuffle": 0.5,
+    "required_unique_predictions": 8
+  },
+  "claim_boundary": {
+    "capability": "local_visible_target_approach_only",
+    "lane_strategy_verified": false,
+    "real_video_semantics_verified": false,
+    "video_test_allowed": false,
+    "macro_branch_training_allowed": false,
+    "combat_branch_training_allowed": false,
+    "policy_bundle_assembly_allowed": false,
+    "reward_allowed": false,
+    "online_rl_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

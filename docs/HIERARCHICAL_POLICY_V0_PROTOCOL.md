@@ -2,9 +2,9 @@
 
 ## 1. 状态与目的
 
-当前状态：`P1V2_MOVEMENT_2D_SOURCE_PASSED`。旧Global/V7移动标签保持失败；独立二维可视目标
-课程已通过均衡数据门，允许一次task-specific Movement分支可学性训练。PolicyBundle、Reward和
-在线接口仍关闭。
+当前状态：`P1V2_MOVEMENT_BRANCH_FAILED`。二维课程数据门保持通过；首个task-specific分支虽在
+完整train/dev达到八方向1.0，但在唯一overfit批次修复后仍未通过overfit32，未保存checkpoint。
+PolicyBundle、Reward和在线接口仍关闭。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -437,3 +437,13 @@ fit/acquisition move行又全部为ego-view east，不能作为替代来源。�
 严格64/16，方向不平衡和group overlap均为0。报告SHA-256为
 `f73e379dfe79ab24a7087e260e6d321f7c0e5f672f6ae2b6cbae4edea946880b`。该课程只验证局部可视
 目标接近，不验证分路策略或真实RGB泛化；只允许一次P1v2 Movement分支可学性训练。
+
+Movement分支冻结P0至layer2，训练layer3/layer4、GRU128和MLP Head，共10,841,096个可训练参数。
+首轮overfit32按类别连续组成单类mini-batch，导致accuracy 0.4062；失败报告SHA-256为
+`4a068f6ebd9031bd142b8a07ca1b523989a27f6d37e742eed148642d4370dbed`。唯一修复只对32样本做
+确定性shuffle，不改模型、数据、优化器、epoch或门槛。修复后正常模型dev macro-F1和八方向
+recall均为1.0，label-shuffle macro-F1为0.1748；但overfit32 accuracy 0.9375、loss 0.1704，仍未
+满足0.95/0.05。修复报告SHA-256为
+`ac6490178f02eec97e1dbe75b4a6875c4bd7bfc8085c36c36de2ba9d9c7bf55c`，未保存checkpoint。
+该完整数据结果只证明课程可学；本lineage不得改batch、steps、门槛或BatchNorm行为。未来候选
+必须以独立norm-stable合同重新版本化。

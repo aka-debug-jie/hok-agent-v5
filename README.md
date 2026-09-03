@@ -174,6 +174,12 @@ Movement branch learnability run, but its claim is limited to approaching a loca
 lane strategy and real-video transfer remain unverified. Run
 `make hierarchical-p1v2-movement-2d-smoke`.
 
+The first task-specific branch reached perfect eight-direction dev macro-F1 and recall, far above
+the 0.1748 label-shuffle control, but failed its mandatory overfit32 gate after the sole batching
+repair: accuracy 0.9375 and loss 0.1704 missed 0.95/0.05. No checkpoint was retained. The result is
+learnability evidence only; a future normalization-stable branch must use a new versioned contract.
+Run `make hierarchical-p1v2-movement-branch-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

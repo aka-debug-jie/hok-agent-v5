@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P1V2_MOVEMENT_2D_SOURCE_PASSED`: new 512/128 RGB sequences have exact eight-direction balance | Run one task-specific Movement learnability test; capability remains local visible-target approach only |
+| Hierarchical Policy v0 | `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; separately version a normalization-stable candidate without reopening old gates |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -400,12 +400,27 @@ results remain evidence and reusable components, not reopened parallel routes.
   only. Lane strategy, real-video semantics, PolicyBundle assembly, Reward, online RL, capture,
   input, and promotion remain closed.
 
+## Hierarchical Policy v0 P1v2 Movement branch
+
+- P0 through layer2 was frozen; layer3/layer4, GRU128, and the eight-direction MLP Head exposed
+  10,841,096 trainable parameters.
+- The initial overfit harness formed consecutive single-class mini-batches and failed at 0.4062.
+  Failure report SHA-256: `4a068f6ebd9031bd142b8a07ca1b523989a27f6d37e742eed148642d4370dbed`.
+- The sole repair deterministically shuffled overfit32 batches without changing model, data,
+  optimizer, epochs, or gates.
+- Full-data dev macro-F1 and every direction recall were 1.0 versus label-shuffle 0.1748, but the
+  repaired overfit32 reached only 0.9375 accuracy and 0.1704 loss versus 0.95/0.05 requirements.
+- Repair report SHA-256: `ac6490178f02eec97e1dbe75b4a6875c4bd7bfc8085c36c36de2ba9d9c7bf55c`.
+- No checkpoint was saved. A future normalization-stable candidate must be separately versioned;
+  PolicyBundle, lane strategy, real-video semantics, Reward, online RL, capture, input, and
+  promotion remain closed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: run one P1v2 task-specific Movement branch learnability test
-BLOCKING FAILURE: old sources remain sparse; new 2D source has no trained branch yet
-NEXT ACCEPTANCE COMMAND: make hierarchical-p1v2-movement-2d-smoke, then frozen branch probe
+CURRENT GOAL: freeze the failed branch and design a separate normalization-stable candidate
+BLOCKING FAILURE: small-batch overfit gate failed despite full-data eight-direction learnability
+NEXT ACCEPTANCE COMMAND: make hierarchical-p1v2-movement-branch-smoke; no rerun is authorized
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 
