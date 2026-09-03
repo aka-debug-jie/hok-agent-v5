@@ -59,6 +59,11 @@
   `de7f8c4b265e69694d01210cbec49948907c389041df4792c294a90994bcea7c`. This opens one
   simulator-only Macro Head learnability run from the frozen P0 representation; it does not verify
   real-video semantics or reopen Movement, Combat, PolicyBundle assembly, Reward, or input.
+  That run is now frozen failed: overfit32 reached `0.9688` accuracy but loss `0.1717 > 0.05`, and
+  dev macro-F1 `0.3868` did not beat time-only `0.3893`; its gain over label-shuffle was only
+  `0.0845`. No Macro Head checkpoint was written. Do not retune the canvas, head, epochs, loss, or
+  gates in this lineage. P0 remains valid only for its temporal-order evidence; it is not proven to
+  expose frozen simulator Macro semantics.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

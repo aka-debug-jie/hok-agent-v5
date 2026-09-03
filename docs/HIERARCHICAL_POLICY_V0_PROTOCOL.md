@@ -2,9 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`P1_MACRO_DATA_PASSED`。P0时序SSL v2保持通过；P1 Movement教师审计冻结失败。
-独立Macro Simulator数据门已通过，允许一次从P0表征初始化的Simulator-only Macro Head
-可学性训练；Combat、PolicyBundle、Reward和在线接口仍关闭。
+当前状态：`P1_MACRO_HEAD_FAILED`。P0时序SSL v2保持其时间顺序门通过；P1 Movement教师审计
+和冻结P0的Macro Head均已冻结失败。Combat、PolicyBundle、Reward和在线接口仍关闭。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -397,3 +396,11 @@ window；三类各覆盖全部40/10个episode，最少类别window为486/105。�
 时间分桶基线为0.3893，均未直接解开标签。报告SHA-256为
 `de7f8c4b265e69694d01210cbec49948907c389041df4792c294a90994bcea7c`。该数据门只验证Simulator
 规则教师支持，真实视频语义仍未验证；只允许一次冻结P0表征的Macro Head可学性训练。
+
+Macro Head试验将main、48×48 minimap和24×96 HUD组合为固定128×128画布，P0 ResNet-18+GRU
+全部冻结，只训练约10万参数的三类MLP Head。固定50个epoch且不以dev选模。overfit32 accuracy
+为0.9688，但loss为0.1717，高于0.05门槛；dev macro-F1为0.3868，未超过time-only 0.3893，
+相对label-shuffle 0.3023仅提高0.0845；ENGAGE/FARM recall为0.2571/0.2291。报告SHA-256为
+`bd781082c4811dd9985f5be694ead7d851dca560979d141cebe38e87a2e94d8f`。未保存Macro Head。
+不得重调画布、Head、epoch、loss或门槛；该结论不否定P0的时间顺序证据，但证明冻结P0不能在
+本合同下直接暴露Simulator Macro语义。

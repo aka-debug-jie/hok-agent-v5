@@ -143,6 +143,12 @@ time-only controls reached only 0.2019 and 0.3893 macro-F1. This permits one sim
 Head learnability run from the frozen P0 representation; it is not real-video semantic evidence.
 Run `make hierarchical-p1-macro-data-smoke`.
 
+The frozen-P0 Macro Head run then failed: dev macro-F1 was 0.3868 versus 0.3893 for the time-only
+control, and its gain over label shuffle was only 0.0845. Overfit32 also missed its loss gate.
+No Macro Head checkpoint was saved. This does not invalidate P0 temporal-order learning, but it
+does show that the frozen representation cannot directly supply the required simulator Macro
+semantics through this fixed canvas/head. Run `make hierarchical-p1-macro-head-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

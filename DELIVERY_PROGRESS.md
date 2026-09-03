@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P1_MACRO_DATA_PASSED`: Movement is blocked; Macro has 1,620/412 simulator windows with controls below gate | Run one frozen-P0 simulator-only Macro Head learnability test; all other heads and integration remain closed |
+| Hierarchical Policy v0 | `P1_MACRO_HEAD_FAILED`: data passed, but frozen-P0 Macro F1 0.387 did not beat time-only 0.389 | No Macro/Movement checkpoint or PolicyBundle assembly; audit Combat data independently next |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -337,12 +337,25 @@ results remain evidence and reusable components, not reopened parallel routes.
 - This opens one frozen-P0 simulator-only Macro Head learnability run. Real-video semantics,
   Movement, Combat, PolicyBundle assembly, Reward, test, capture, input, and promotion remain closed.
 
+## Hierarchical Policy v0 P1 Macro Head
+
+- The P0 ResNet-18 plus GRU was frozen. Only a roughly 100K-parameter three-class MLP Head trained
+  on a fixed main/minimap/HUD policy canvas for 50 fixed epochs without dev selection.
+- Overfit32 accuracy was 0.9688, but loss 0.1717 missed the frozen 0.05 ceiling.
+- Dev macro-F1 was 0.3868 versus time-only 0.3893 and label-shuffle 0.3023. ENGAGE/FARM recall was
+  only 0.2571/0.2291.
+- Report SHA-256: `bd781082c4811dd9985f5be694ead7d851dca560979d141cebe38e87a2e94d8f`.
+- No Macro Head checkpoint was saved. The canvas, Head, epochs, loss, and gates are not retuned.
+- P0 keeps its temporal-order evidence, but frozen P0 is not proven to expose simulator Macro
+  semantics. PolicyBundle assembly, Reward, test, capture, input, online learning, and promotion
+  remain closed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: run one P1 simulator-only Macro Head learnability test from frozen P0
-BLOCKING FAILURE: Movement remains blocked; Macro real-video semantics remain unverified
-NEXT ACCEPTANCE COMMAND: make hierarchical-p1-macro-data-smoke, then frozen Macro Head probe
+CURRENT GOAL: audit P1 Combat data independently; do not repair failed Macro or Movement lineages
+BLOCKING FAILURE: frozen P0 does not expose Macro semantics; Movement teacher support is insufficient
+NEXT ACCEPTANCE COMMAND: make hierarchical-p1-macro-head-smoke, then Combat data audit
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 
