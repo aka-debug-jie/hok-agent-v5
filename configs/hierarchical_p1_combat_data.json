@@ -1,0 +1,38 @@
+{
+  "schema_version": "hok-agent-hierarchical-p1-combat-data-config-v1",
+  "status": "frozen_visual_combat_execution_audit",
+  "p0_representation_sha256": "d1ce0a9c44710586e6df3124371ffa0171dc1806510efe2d9d02d5e733d1c848",
+  "selection": {
+    "session_prefix": "formal-session-",
+    "required_sessions": 8,
+    "split": [6, 2],
+    "sample_period_ms": 200,
+    "test_allowed": false
+  },
+  "labels": {
+    "vocabulary": ["none", "basic_attack", "skill1", "skill2", "skill3"],
+    "source": "executed_cooldown_round_robin_v1",
+    "meaning": "executed_button_not_tactical_choice",
+    "hero_declared": "houyi",
+    "hero_identity_artifact_verified": false,
+    "human_labels_used": false,
+    "semantic_accuracy_verified": false
+  },
+  "gate": {
+    "minimum_train_samples_per_positive_class": 40,
+    "minimum_dev_samples_per_positive_class": 16,
+    "maximum_time_only_macro_f1": 0.5,
+    "minimum_unique_positive_sequences": 4,
+    "hero_identity_artifact_required": true
+  },
+  "claim_boundary": {
+    "combat_head_training_allowed_only_if_all_gates_pass": true,
+    "macro_head_training_allowed": false,
+    "movement_head_training_allowed": false,
+    "policy_bundle_assembly_allowed": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

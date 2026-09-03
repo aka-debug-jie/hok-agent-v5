@@ -2,8 +2,9 @@
 
 ## 1. 状态与目的
 
-当前状态：`P1_MACRO_HEAD_FAILED`。P0时序SSL v2保持其时间顺序门通过；P1 Movement教师审计
-和冻结P0的Macro Head均已冻结失败。Combat、PolicyBundle、Reward和在线接口仍关闭。
+当前状态：`P1_THREE_HEAD_BLOCKED`。P0时序SSL v2保持其时间顺序门通过；Movement数据门失败，
+Macro数据通过但冻结P0 Head失败，Combat执行数据又被200 ms时钟直接解开。三个Head和
+PolicyBundle均未形成；Reward和在线接口仍关闭。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -404,3 +405,15 @@ Macro Head试验将main、48×48 minimap和24×96 HUD组合为固定128×128画�
 `bd781082c4811dd9985f5be694ead7d851dca560979d141cebe38e87a2e94d8f`。未保存Macro Head。
 不得重调画布、Head、epoch、loss或门槛；该结论不否定P0的时间顺序证据，但证明冻结P0不能在
 本合同下直接暴露Simulator Macro语义。
+
+P1 Combat数据审计验证8个五分钟visual-combat session及48个shard，固定前6局train、后2局
+dev。每局均为1,485行，动作计数完全相同：basic 30、skill1/2各10、skill3 8。正样本数量通过，
+但200 ms scheduled-clock基线macro-F1为0.9331，八局仅有2种正动作序列，且artifact未机械绑定
+声明的后羿身份。报告SHA-256为
+`f3709da7d6d5df05e6a44fec34976f092e1eef01f37bc82cf817a9912e54be3e`。这些标签只能证明
+cooldown round-robin执行稳定，不代表战术选择；不训练Combat Head，现有视觉冷却仲裁器保持
+确定性逻辑。
+
+至此P1不能按“冻结一个P0表征后分别接三个Head”的首版假设继续。下一步必须先冻结新的架构
+决策：Macro可评估task-specific可训练adapter；Movement需要非时间混杂的方向监督；Combat在
+获得英雄绑定和非固定时钟的战术样本前保持确定性。不得用降低旧门槛恢复三条失败lineage。

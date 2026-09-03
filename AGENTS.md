@@ -64,6 +64,11 @@
   `0.0845`. No Macro Head checkpoint was written. Do not retune the canvas, head, epochs, loss, or
   gates in this lineage. P0 remains valid only for its temporal-order evidence; it is not proven to
   expose frozen simulator Macro semantics.
+  The independent P1 Combat data audit is also frozen failed. Although all positive classes have
+  numerical support, a 200 ms time-only lookup reaches macro-F1 `0.9331`, the eight sessions contain
+  only two positive action sequences, and no artifact binds the declared Houyi identity. These are
+  cooldown round-robin execution labels, not tactical choices. Do not train a Combat Head from them;
+  the existing visual cooldown arbiter remains deterministic only.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

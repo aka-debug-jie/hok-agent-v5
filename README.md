@@ -149,6 +149,12 @@ No Macro Head checkpoint was saved. This does not invalidate P0 temporal-order l
 does show that the frozen representation cannot directly supply the required simulator Macro
 semantics through this fixed canvas/head. Run `make hierarchical-p1-macro-head-smoke`.
 
+The P1 Combat data audit also stopped before training. Eight five-minute sessions contain adequate
+button counts, but a 200 ms clock-only lookup reaches macro-F1 0.9331 and the sessions expose only
+two positive action sequences. The artifacts also do not bind a verified Houyi identity. These
+rows validate deterministic cooldown execution, not tactical action selection. Run
+`make hierarchical-p1-combat-data-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

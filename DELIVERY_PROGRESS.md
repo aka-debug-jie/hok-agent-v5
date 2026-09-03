@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P1_MACRO_HEAD_FAILED`: data passed, but frozen-P0 Macro F1 0.387 did not beat time-only 0.389 | No Macro/Movement checkpoint or PolicyBundle assembly; audit Combat data independently next |
+| Hierarchical Policy v0 | `P1_THREE_HEAD_BLOCKED`: Movement data failed, frozen-P0 Macro failed, Combat is time-confounded | Freeze a task-specific-adapter architecture decision; do not repair old gates or assemble PolicyBundle |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -350,12 +350,26 @@ results remain evidence and reusable components, not reopened parallel routes.
   semantics. PolicyBundle assembly, Reward, test, capture, input, online learning, and promotion
   remain closed.
 
+## Hierarchical Policy v0 P1 Combat data audit
+
+- Eight five-minute visual-combat sessions passed shard and split verification. Each session has
+  1,485 rows and the same class counts: basic 30, skill1/2 10 each, and skill3 8.
+- Positive numerical support passed, but a 200 ms scheduled-clock lookup reached dev macro-F1
+  0.9331 versus the frozen 0.5 ceiling.
+- The eight sessions exposed only two unique positive action sequences versus four required, and
+  the artifacts do not mechanically bind the declared Houyi identity.
+- Report SHA-256: `f3709da7d6d5df05e6a44fec34976f092e1eef01f37bc82cf817a9912e54be3e`.
+- These rows validate cooldown round-robin execution only, not tactical choice. No Combat Head was
+  trained; the visual cooldown arbiter remains deterministic.
+- All three P1 Head routes are now blocked. No PolicyBundle assembly, Reward, test, capture, input,
+  online learning, or promotion is authorized.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: audit P1 Combat data independently; do not repair failed Macro or Movement lineages
-BLOCKING FAILURE: frozen P0 does not expose Macro semantics; Movement teacher support is insufficient
-NEXT ACCEPTANCE COMMAND: make hierarchical-p1-macro-head-smoke, then Combat data audit
+CURRENT GOAL: freeze a P1v2 task-specific-adapter decision before any further model training
+BLOCKING FAILURE: Movement supervision is sparse, Macro frozen transfer failed, Combat labels follow time
+NEXT ACCEPTANCE COMMAND: make hierarchical-p1-combat-data-smoke, then architecture-only review
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 
