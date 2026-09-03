@@ -69,6 +69,12 @@
   only two positive action sequences, and no artifact binds the declared Houyi identity. These are
   cooldown round-robin execution labels, not tactical choices. Do not train a Combat Head from them;
   the existing visual cooldown arbiter remains deterministic only.
+  P1v2 now freezes the corrective architecture decision without reopening those failures: P0 through
+  layer2 is a shared frozen trunk, while Macro and Movement receive separate trainable layer3/layer4,
+  GRU, and Head branches with 8–14M parameters each. They train independently and propose at 2/10 Hz.
+  Combat v0 remains the deterministic visual cooldown arbiter at 10 Hz until hero-bound, non-clock
+  tactical data exists. The deterministic Router alone owns version checks, pointer concurrency,
+  death, and hard stop. No branch training is opened until its new data contract passes.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

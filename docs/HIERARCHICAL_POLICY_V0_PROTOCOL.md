@@ -2,9 +2,9 @@
 
 ## 1. 状态与目的
 
-当前状态：`P1_THREE_HEAD_BLOCKED`。P0时序SSL v2保持其时间顺序门通过；Movement数据门失败，
-Macro数据通过但冻结P0 Head失败，Combat执行数据又被200 ms时钟直接解开。三个Head和
-PolicyBundle均未形成；Reward和在线接口仍关闭。
+当前状态：`P1V2_ARCHITECTURE_FROZEN`。P1首版三条失败线保持冻结；P1v2改为共享冻结浅层主干
+加Macro/Movement独立可训练深层分支，Combat v0保留确定性视觉仲裁。当前只冻结架构，尚未
+开放新分支训练、PolicyBundle、Reward或在线接口。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -417,3 +417,10 @@ cooldown round-robin执行稳定，不代表战术选择；不训练Combat Head�
 至此P1不能按“冻结一个P0表征后分别接三个Head”的首版假设继续。下一步必须先冻结新的架构
 决策：Macro可评估task-specific可训练adapter；Movement需要非时间混杂的方向监督；Combat在
 获得英雄绑定和非固定时钟的战术样本前保持确定性。不得用降低旧门槛恢复三条失败lineage。
+
+P1v2固定P0 ResNet-18至layer2为共享冻结主干。Macro和Movement各自复制并训练layer3、layer4、
+GRU128与Head，单分支预算8–14M参数，训练与checkpoint完全独立；Macro为2 Hz三类意图，
+Movement为10 Hz八方向并由持久摇杆执行。Combat v0不训练模型，继续以10 Hz视觉冷却仲裁。
+三者只提交同一FrameBus版本的proposal；确定性Router处理新鲜度、死亡/急停和双指针并行。
+训练顺序固定为Movement Simulator标签审计、Macro分支、Movement分支、离线Bundle组装，最后
+才讨论离线RL。架构合同本身不授权任何训练或输入。

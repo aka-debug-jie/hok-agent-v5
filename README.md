@@ -155,6 +155,13 @@ two positive action sequences. The artifacts also do not bind a verified Houyi i
 rows validate deterministic cooldown execution, not tactical action selection. Run
 `make hierarchical-p1-combat-data-smoke`.
 
+P1v2 therefore replaces the failed fully frozen transfer assumption with a bounded task-specific
+adapter design. P0 through layer2 remains shared and frozen; Macro and Movement each own an
+independently trained 8–14M layer3/layer4 plus GRU branch at 2 Hz and 10 Hz. Combat v0 remains the
+10 Hz deterministic visual cooldown arbiter until non-clock, hero-bound data exists. Models emit
+proposals only; the deterministic Router owns freshness, concurrent pointers, death, and hard stop.
+Run `make hierarchical-p1v2-architecture-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

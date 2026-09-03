@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P1_THREE_HEAD_BLOCKED`: Movement data failed, frozen-P0 Macro failed, Combat is time-confounded | Freeze a task-specific-adapter architecture decision; do not repair old gates or assemble PolicyBundle |
+| Hierarchical Policy v0 | `P1V2_ARCHITECTURE_FROZEN`: old P1 is blocked; shared shallow trunk plus separate Macro/Movement adapters is frozen | Audit simulator Movement labels before opening either task branch; Combat remains deterministic |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -364,12 +364,25 @@ results remain evidence and reusable components, not reopened parallel routes.
 - All three P1 Head routes are now blocked. No PolicyBundle assembly, Reward, test, capture, input,
   online learning, or promotion is authorized.
 
+## Hierarchical Policy v0 P1v2 architecture decision
+
+- The failed fully frozen transfer assumption is not reopened. P0 through ResNet layer2 becomes a
+  shared frozen trunk only.
+- Macro and Movement each own separate trainable layer3/layer4, GRU128, and Head branches with an
+  8–14M parameter budget. They train independently and propose at 2 Hz and 10 Hz.
+- Movement outputs eight directions to persistent-joystick execution. Combat v0 stays the 10 Hz
+  deterministic visual cooldown arbiter until hero-bound, non-clock tactical data exists.
+- Models never write input. The deterministic Router owns observation-version checks, concurrent
+  movement/combat pointers, death, and hard stop.
+- The decision is architecture-only. Branch training, PolicyBundle assembly, Reward, online RL,
+  capture, input, and promotion remain closed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: freeze a P1v2 task-specific-adapter decision before any further model training
-BLOCKING FAILURE: Movement supervision is sparse, Macro frozen transfer failed, Combat labels follow time
-NEXT ACCEPTANCE COMMAND: make hierarchical-p1-combat-data-smoke, then architecture-only review
+CURRENT GOAL: audit simulator Movement direction labels for the P1v2 task-specific branch
+BLOCKING FAILURE: real-video Movement labels remain sparse; old Macro/Combat lineages stay frozen
+NEXT ACCEPTANCE COMMAND: make hierarchical-p1v2-architecture-smoke, then Movement simulator audit
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

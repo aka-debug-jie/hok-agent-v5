@@ -1,0 +1,64 @@
+{
+  "schema_version": "hok-agent-hierarchical-p1v2-architecture-v1",
+  "status": "frozen_task_specific_adapter_decision",
+  "p0_representation_sha256": "d1ce0a9c44710586e6df3124371ffa0171dc1806510efe2d9d02d5e733d1c848",
+  "shared_trunk": {
+    "source": "p0_resnet18",
+    "modules": ["conv1", "bn1", "relu", "maxpool", "layer1", "layer2"],
+    "frozen_during_p1": true,
+    "single_framebus_version_required": true
+  },
+  "branches": {
+    "macro": {
+      "modules": ["layer3", "layer4", "gru128", "mlp_head"],
+      "trainable": true,
+      "parameter_budget_millions": [8, 14],
+      "frequency_hz": 2,
+      "outputs": ["FARM_LANE", "PUSH_STRUCTURE", "ENGAGE"],
+      "training_source": "pixelarena_structured_teacher",
+      "training_independent": true
+    },
+    "movement": {
+      "modules": ["layer3", "layer4", "gru128", "direction_head"],
+      "trainable": true,
+      "parameter_budget_millions": [8, 14],
+      "frequency_hz": 10,
+      "outputs": ["north", "north_east", "east", "south_east", "south", "south_west", "west", "north_west"],
+      "training_source": "pixelarena_router_teacher_then_offline_rl",
+      "training_independent": true,
+      "persistent_joystick_execution": true
+    },
+    "combat": {
+      "trainable": false,
+      "frequency_hz": 10,
+      "implementation": "deterministic_visual_cooldown_arbiter_v1",
+      "hero_profile": "houyi",
+      "learned_branch_requires_future_hero_bound_nonclock_data": true
+    }
+  },
+  "router": {
+    "learned": false,
+    "proposal_only_models": true,
+    "same_observation_version_required": true,
+    "movement_and_combat_may_execute_concurrently": true,
+    "pointer_ownership_remains_deterministic": true,
+    "hard_stop_and_death_override_all": true
+  },
+  "training_order": [
+    "audit_simulator_movement_labels",
+    "train_macro_branch",
+    "train_movement_branch",
+    "assemble_offline_bundle",
+    "offline_rl_only_after_bundle_gate"
+  ],
+  "claim_boundary": {
+    "old_p1_lineages_reopened": false,
+    "architecture_decision_only": true,
+    "branch_training_allowed": false,
+    "policy_bundle_assembly_allowed": false,
+    "reward_allowed": false,
+    "online_rl_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}
