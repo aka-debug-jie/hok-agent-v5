@@ -33,6 +33,9 @@
   E1e subsequently evaluated only unused, unanchored train/dev sessions with robust per-session
   rejection. It found only 6 train and 1 dev eligible pairs versus 10/3 required and is frozen
   insufficient; it cannot replace the consumed test or reopen integration.
+  P0 adapter-value testing rejected the old epoch-3 SimSiam adapter as a Hierarchical Policy
+  initializer: adapter, source, and random frozen encoders all reached dev macro-F1 1.0, so the
+  required source/random margins were zero. Do not promote that adapter or retune this easy probe.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.
@@ -279,6 +282,7 @@
   `hierarchical_e1d_probe.py`, `hierarchical_e1d_checkpoint.py`, and
   `hierarchical_e1d_test.py`, and `hierarchical_e1e_unused.py` may use Torch only for offline E1d
   diagnostics, checkpoint freeze, and evaluation; evaluation modules contain no optimizer or backward path.
+  `hierarchical_p0.py` may use frozen Torch/torchvision encoders and train only its small probe head.
   `global_shadow.py` and `test_global_shadow.py` may use the same frozen Global Agent model only for
   authorized zero-control Shadow; they may never add an input sender.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,

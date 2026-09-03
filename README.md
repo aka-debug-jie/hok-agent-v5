@@ -109,6 +109,11 @@ The follow-up E1e diagnostic did not reopen test. It continued across all 85 unu
 train/dev sessions, but only 6 train and 1 dev pairs were eligible versus 10/3 required; 63 sessions
 lacked a usable pre-result sequence. E1e is frozen insufficient and cannot replace the formal test.
 
+P0 then compared the existing epoch-3 SimSiam adapter with its exact source encoder and a random
+ResNet-18 on frozen E1d features. All three reached dev macro-F1 1.0, so the adapter showed no
+incremental value and is rejected as the new PolicyBundle initializer. Run
+`make hierarchical-p0-adapter-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.

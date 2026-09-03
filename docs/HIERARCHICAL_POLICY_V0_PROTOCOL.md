@@ -2,8 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`E1E_UNUSED_SESSION_SUPPORT_INSUFFICIENT_FROZEN`。E1d一次性test失败且禁止重跑；
-E1e未用train/dev诊断仅获得6/1有效对，不能替代test或开放EventEngine。
+当前状态：`P0_EXISTING_ADAPTER_VALUE_FAILED`。E1终局路线保持冻结；P0旧SimSiam adapter在
+冻结特征价值门中未优于source或random，不能作为新PolicyBundle初始化。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -344,3 +344,9 @@ E1e只读取未参与E1d训练且没有结果页锚点的train/dev session，逐
 6个train和1个dev有效对，低于10/3门槛。报告SHA-256为
 `1328583fa99329887a6fa5722b9be06fb6575ab09f9add8ca29cd276629d1fea`。其高模型分数不因小样本
 而晋级；正式test替代、EventEngine、Reward和promotion仍关闭。
+
+P0价值门使用完全冻结的旧epoch-3 adapter、其精确source encoder和随机ResNet-18，并对三者
+训练相同小探针。三者dev macro-F1均为1.0，adapter相对source/random增益均为0，未通过
+0.05/0.1门槛。报告SHA-256为
+`d0f88a86fd8adb3131c389dab5210ea33c746503b97f87368a74e07573198c9e`。旧adapter保持不可变，
+但不进入Hierarchical Policy P0初始化；下一P0任务必须使用更难的空间/时序负对照。

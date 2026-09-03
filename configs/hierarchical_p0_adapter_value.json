@@ -1,0 +1,37 @@
+{
+  "schema_version": "hok-agent-hierarchical-p0-adapter-value-config-v1",
+  "status": "frozen_existing_adapter_value_probe",
+  "source_checkpoint_sha256": "9e09650445ef3a4c7fdcf6f39e812375e7060c07f1998bb1e8730aec67e4fae4",
+  "adapter_checkpoint_sha256": "05c948c1adbec93293450cb8f42b265790e3e323aa800940e3ef30147bcb684a",
+  "adapter_report_selected_epoch": 3,
+  "dataset_report_sha256": "ab1ad7820434dc2443330b8ce9af6c9d29686ca00062a7cfa97504be73ced909",
+  "feature": {
+    "backbone": "resnet18_layer4_global_average",
+    "sequence_descriptor": ["last", "mean", "mean_absolute_delta"],
+    "normalization": "uint8_div_127.5_minus_1",
+    "feature_dimension": 1536
+  },
+  "probe": {
+    "seed": 0,
+    "device": "cuda",
+    "steps": 300,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001
+  },
+  "gate": {
+    "minimum_adapter_dev_macro_f1": 0.7,
+    "minimum_gain_over_source": 0.05,
+    "minimum_gain_over_random": 0.1,
+    "minimum_feature_std": 0.01
+  },
+  "claim_boundary": {
+    "existing_adapter_immutable": true,
+    "encoder_frozen": true,
+    "test_allowed": false,
+    "p0_initialization_allowed_only_if_all_gates_pass": true,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `E1E_UNUSED_SESSION_SUPPORT_INSUFFICIENT_FROZEN`: consumed test remains failed; unused train/dev audit found only 6/1 eligible pairs | Cannot replace test or integrate EventEngine; Reward, phone input, and online learning remain closed |
+| Hierarchical Policy v0 | `P0_EXISTING_ADAPTER_VALUE_FAILED`: adapter/source/random frozen encoders all scored dev macro-F1 1.0, giving zero adapter margin | Reject old adapter as P0 initializer; design harder spatial/temporal representation gate; Reward and online learning remain closed |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -266,12 +266,20 @@ results remain evidence and reusable components, not reopened parallel routes.
 - Report SHA-256: `1328583fa99329887a6fa5722b9be06fb6575ab09f9add8ca29cd276629d1fea`.
 - This diagnostic cannot replace formal test or reopen EventEngine integration.
 
+## Hierarchical Policy v0 P0 existing-adapter value gate
+
+- Exact source hash `9e0965…` and selected adapter hash `05c948…` were compared with random ResNet-18.
+- Adapter, source, and random dev macro-F1 were all 1.0; adapter margins were zero.
+- Adapter features did not collapse, but the task was too easy to demonstrate representation value.
+- Report SHA-256: `d0f88a86fd8adb3131c389dab5210ea33c746503b97f87368a74e07573198c9e`.
+- `p0_initialization_allowed=false`; no test, Reward, phone input, or online learning was used.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: preserve E1d/E1e frozen failure evidence
-BLOCKING FAILURE: no unused independent terminal-positive evaluation set remains
-NEXT ACCEPTANCE COMMAND: make hierarchical-e1e-unused-smoke
+CURRENT GOAL: P0 harder spatial/temporal representation gate
+BLOCKING FAILURE: easy terminal probe cannot separate adapter, source, and random encoders
+NEXT ACCEPTANCE COMMAND: make hierarchical-p0-adapter-smoke, then a new P0 contract
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

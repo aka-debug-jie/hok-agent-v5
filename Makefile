@@ -8,6 +8,7 @@
 .PHONY: hierarchical-e1d-probe-smoke
 .PHONY: hierarchical-e1d-checkpoint-smoke hierarchical-e1d-test-smoke
 .PHONY: hierarchical-e1e-unused-smoke
+.PHONY: hierarchical-p0-adapter-smoke
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
 WZRY_DATA_ROOT ?= $(CURDIR)/.local-data
@@ -181,6 +182,9 @@ hierarchical-e1d-test-smoke:
 
 hierarchical-e1e-unused-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_e1e_unused.py
+
+hierarchical-p0-adapter-smoke:
+	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_p0.py
 
 storage-show:
 	@echo "WZRY_DATA_ROOT=$(WZRY_DATA_ROOT)"
