@@ -2,9 +2,8 @@
 
 ## 1. 状态与目的
 
-当前状态：`P1V2_ARCHITECTURE_FROZEN`。P1首版三条失败线保持冻结；P1v2改为共享冻结浅层主干
-加Macro/Movement独立可训练深层分支，Combat v0保留确定性视觉仲裁。当前只冻结架构，尚未
-开放新分支训练、PolicyBundle、Reward或在线接口。
+当前状态：`P1V2_MOVEMENT_DATA_FAILED`。P1v2架构保持冻结，但现有Global/V7 Simulator移动
+标签仍不具备八方向覆盖。尚未开放新分支训练、PolicyBundle、Reward或在线接口。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -424,3 +423,10 @@ Movement为10 Hz八方向并由持久摇杆执行。Combat v0不训练模型，�
 三者只提交同一FrameBus版本的proposal；确定性Router处理新鲜度、死亡/急停和双指针并行。
 训练顺序固定为Movement Simulator标签审计、Macro分支、Movement分支、离线Bundle组装，最后
 才讨论离线RL。架构合同本身不授权任何训练或输入。
+
+P1v2 Movement数据审计只接受`action_type=move`，明确排除skill aim和wait。Global Agent 40/10
+数据仅有east/west：train 376/226、dev 115/45，其余六方向均为0；主导方向比例0.6246/0.7188，
+也高于0.6门槛。报告SHA-256为
+`2ace0d94c5acb53b99f35b52d2d30f88945bae6d2cdecd2f5d97507063491ec1`。只读检查历史V7
+fit/acquisition move行又全部为ego-view east，不能作为替代来源。不得缩为两方向或用技能瞄准
+伪造移动标签；下一数据源必须是独立、均衡、可视目标驱动的二维PixelArena导航课程。

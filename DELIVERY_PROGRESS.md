@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P1V2_ARCHITECTURE_FROZEN`: old P1 is blocked; shared shallow trunk plus separate Macro/Movement adapters is frozen | Audit simulator Movement labels before opening either task branch; Combat remains deterministic |
+| Hierarchical Policy v0 | `P1V2_MOVEMENT_DATA_FAILED`: Global labels cover east/west only; V7 candidate moves are east only | Build a new balanced visible-target 2D PixelArena curriculum; do not shrink or relabel the old data |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -377,12 +377,24 @@ results remain evidence and reusable components, not reopened parallel routes.
 - The decision is architecture-only. Branch training, PolicyBundle assembly, Reward, online RL,
   capture, input, and promotion remain closed.
 
+## Hierarchical Policy v0 P1v2 Movement simulator audit
+
+- Only executed `move` actions were accepted. Skill aim and wait were excluded from Movement labels.
+- Global Agent train/dev contained 602/160 move rows but only east/west: 376/226 and 115/45.
+  All other six directions had zero samples and zero episode support.
+- Dominant-direction fractions were 0.6246/0.7188 versus a frozen 0.6 ceiling.
+- Report SHA-256: `2ace0d94c5acb53b99f35b52d2d30f88945bae6d2cdecd2f5d97507063491ec1`.
+- A read-only diagnostic of historical V7 fit/acquisition rows found only ego-view east moves, so
+  that frozen dataset cannot repair the coverage gap.
+- No Movement branch was trained. The next source must be a separately versioned, balanced,
+  visible-target 2D PixelArena curriculum; the old action space and labels are not changed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: audit simulator Movement direction labels for the P1v2 task-specific branch
-BLOCKING FAILURE: real-video Movement labels remain sparse; old Macro/Combat lineages stay frozen
-NEXT ACCEPTANCE COMMAND: make hierarchical-p1v2-architecture-smoke, then Movement simulator audit
+CURRENT GOAL: freeze a new balanced visible-target 2D PixelArena Movement source contract
+BLOCKING FAILURE: existing Global/V7 move labels cover only one or two directions
+NEXT ACCEPTANCE COMMAND: make hierarchical-p1v2-movement-data-smoke, then 2D source materialization
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

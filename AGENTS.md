@@ -75,6 +75,12 @@
   Combat v0 remains the deterministic visual cooldown arbiter at 10 Hz until hero-bound, non-clock
   tactical data exists. The deterministic Router alone owns version checks, pointer concurrency,
   death, and hard stop. No branch training is opened until its new data contract passes.
+  The first P1v2 Movement simulator audit is frozen failed: Global Agent train/dev contain only
+  east/west move labels (`376/226` and `115/45`), with all other six directions absent and dominant
+  fractions `0.6246/0.7188`. Skill aim and wait were correctly excluded. A read-only check of the
+  historical V7 fit/acquisition rows found only ego-view east moves, so it cannot repair coverage.
+  Do not shrink the eight-direction contract or relabel skill aim. The next source must be a new,
+  balanced, visually conditioned 2D PixelArena navigation curriculum.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

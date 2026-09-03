@@ -18,6 +18,7 @@
 .PHONY: hierarchical-p1-macro-head-smoke
 .PHONY: hierarchical-p1-combat-data-smoke
 .PHONY: hierarchical-p1v2-architecture-smoke
+.PHONY: hierarchical-p1v2-movement-data-smoke
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
 WZRY_DATA_ROOT ?= $(CURDIR)/.local-data
@@ -224,6 +225,9 @@ hierarchical-p1-combat-data-smoke:
 
 hierarchical-p1v2-architecture-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_p1v2.py
+
+hierarchical-p1v2-movement-data-smoke:
+	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_p1v2_movement_data.py
 
 storage-show:
 	@echo "WZRY_DATA_ROOT=$(WZRY_DATA_ROOT)"

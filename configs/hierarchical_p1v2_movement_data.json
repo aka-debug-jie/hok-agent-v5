@@ -1,0 +1,39 @@
+{
+  "schema_version": "hok-agent-hierarchical-p1v2-movement-data-config-v1",
+  "status": "frozen_pixelarena_router_movement_audit",
+  "p1v2_architecture_sha256": "7b67be5605a89d711474fb0671b8b77f5c865cd4633d77c785fcb1b3c47d2c1b",
+  "global_dataset_manifest_sha256": "5f46380464d4dd0b479e754dbf9ef58fbef51dd1ec10698849a93ff5a327712f",
+  "selection": {
+    "splits": ["train", "dev"],
+    "window_frames": 16,
+    "required_action_type": "move",
+    "skill_aim_as_movement_allowed": false,
+    "wait_as_direction_allowed": false,
+    "test_allowed": false
+  },
+  "labels": {
+    "vocabulary": ["north", "north_east", "east", "south_east", "south", "south_west", "west", "north_west"],
+    "source": "pixelarena_global_router_executed_move_v1",
+    "meaning": "simulator_executed_move_direction",
+    "real_video_semantics_verified": false,
+    "human_labels_used": false
+  },
+  "gate": {
+    "minimum_train_samples_per_direction": 64,
+    "minimum_dev_samples_per_direction": 16,
+    "minimum_train_episodes_per_direction": 4,
+    "minimum_dev_episodes_per_direction": 2,
+    "maximum_dominant_direction_fraction": 0.6,
+    "required_direction_count": 8
+  },
+  "claim_boundary": {
+    "movement_branch_training_allowed_only_if_all_gates_pass": true,
+    "macro_branch_training_allowed": false,
+    "combat_branch_training_allowed": false,
+    "policy_bundle_assembly_allowed": false,
+    "reward_allowed": false,
+    "online_rl_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

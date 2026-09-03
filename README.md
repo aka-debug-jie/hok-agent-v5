@@ -162,6 +162,12 @@ independently trained 8–14M layer3/layer4 plus GRU branch at 2 Hz and 10 Hz. C
 proposals only; the deterministic Router owns freshness, concurrent pointers, death, and hard stop.
 Run `make hierarchical-p1v2-architecture-smoke`.
 
+The first P1v2 Movement audit found only east/west moves in the Global Agent dataset: 376/226 train
+and 115/45 dev, with all six other directions absent. Skill aim and wait were excluded rather than
+misused as movement. A read-only check also found that historical V7 fit/acquisition move rows are
+all ego-view east. No Movement branch was trained; a new balanced, visually conditioned 2D
+PixelArena navigation source is required. Run `make hierarchical-p1v2-movement-data-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.
