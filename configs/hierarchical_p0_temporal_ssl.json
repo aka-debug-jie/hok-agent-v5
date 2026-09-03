@@ -1,0 +1,54 @@
+{
+  "schema_version": "hok-agent-hierarchical-p0-temporal-ssl-config-v1",
+  "status": "frozen_seed0_temporal_ssl_pilot",
+  "repair_history": {
+    "repairs_allowed": 1,
+    "repairs_used": 1,
+    "repair": "set_cublas_workspace_before_first_training_update",
+    "model_data_or_gate_changed": false
+  },
+  "dataset_report_sha256": "9de1bbe7bb41ac9fc09a180d441eb95dacf85e3f98de8a30f4435fb6085f4783",
+  "architecture": {
+    "encoder": "resnet18_weights_none_fc_identity",
+    "temporal": "gru512x128",
+    "projection": "linear128x64",
+    "input_frames": 16,
+    "input_size": 128,
+    "parameter_scope": "pilot_below_v0_s"
+  },
+  "training": {
+    "seed": 0,
+    "device": "cuda",
+    "cublas_workspace_config": ":4096:8",
+    "epochs": 40,
+    "batch_size": 8,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.0001,
+    "order_loss_weight": 1.0,
+    "invariance_loss_weight": 0.1,
+    "brightness_scales": [0.9, 1.1]
+  },
+  "overfit32": {
+    "steps": 150,
+    "minimum_accuracy": 0.95,
+    "maximum_final_loss_fraction": 0.25
+  },
+  "gate": {
+    "minimum_dev_macro_f1": 0.75,
+    "minimum_gain_over_best_frozen_baseline": 0.15,
+    "best_frozen_baseline_macro_f1": 0.5141700404858299,
+    "minimum_feature_std": 0.01,
+    "minimum_effective_rank": 16,
+    "minimum_augmentation_cosine": 0.8
+  },
+  "claim_boundary": {
+    "old_adapter_loaded": false,
+    "video_test_allowed": false,
+    "p0_initialization_allowed_only_if_all_gates_pass": true,
+    "policy_training_allowed": false,
+    "reward_allowed": false,
+    "promotion_allowed": false,
+    "mobile_capture_allowed": false,
+    "device_input_allowed": false
+  }
+}

@@ -57,6 +57,7 @@ ALLOWED_TORCH_PATHS = {
     Path("src/hok_agent/hierarchical_e1e_unused.py"),
     Path("src/hok_agent/hierarchical_p0.py"),
     Path("src/hok_agent/hierarchical_p0_temporal_probe.py"),
+    Path("src/hok_agent/hierarchical_p0_ssl.py"),
     Path("src/hok_agent/hierarchical_e1d_probe.py"),
     Path("tests/test_bc.py"),
     Path("tests/test_pixel.py"),
@@ -79,6 +80,7 @@ ALLOWED_TORCH_PATHS = {
     Path("tests/test_hierarchical_e1e_unused.py"),
     Path("tests/test_hierarchical_p0.py"),
     Path("tests/test_hierarchical_p0_temporal_probe.py"),
+    Path("tests/test_hierarchical_p0_ssl.py"),
     Path("tests/test_hierarchical_e1d_probe.py"),
 }
 ALLOWED_VISION_PATHS = {
@@ -103,6 +105,7 @@ ALLOWED_VISION_PATHS = {
     Path("src/hok_agent/hierarchical_e1d_test.py"),
     Path("src/hok_agent/hierarchical_p0.py"),
     Path("src/hok_agent/hierarchical_p0_temporal_probe.py"),
+    Path("src/hok_agent/hierarchical_p0_ssl.py"),
     Path("tests/test_pixel.py"),
     Path("tests/test_alignment.py"),
     Path("tests/test_temporal.py"),
@@ -122,6 +125,7 @@ ALLOWED_VISION_PATHS = {
     Path("tests/test_hierarchical_e1d_test.py"),
     Path("tests/test_hierarchical_p0.py"),
     Path("tests/test_hierarchical_p0_temporal_probe.py"),
+    Path("tests/test_hierarchical_p0_ssl.py"),
 }
 ALLOWED_VIDEO_PATHS = {
     Path("src/hok_agent/shadow.py"),

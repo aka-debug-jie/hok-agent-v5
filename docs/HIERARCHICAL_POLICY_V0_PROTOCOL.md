@@ -2,8 +2,9 @@
 
 ## 1. 状态与目的
 
-当前状态：`P0_OLD_ADAPTER_REJECTED_TEMPORAL_FAILED`。E1保持冻结；旧SimSiam adapter在简单
-任务无增益，在严格时间顺序任务又弱于source和random，永久拒绝作为新PolicyBundle初始化。
+当前状态：`P0_TEMPORAL_SSL_FAILED`。E1保持冻结；旧SimSiam adapter永久拒绝，新seed-0
+时序SSL虽通过overfit和非坍缩检查，但dev macro-F1 0.7031未达到冻结的0.75门槛，也不能作为
+新PolicyBundle初始化。
 
 本协议把项目现有的 RGB 感知、完整 episode、双指针执行和离线训练能力收束成一条新的
 分层策略开发线。它是开发合同，不是实现、训练结果或能力证明。Global Agent、Human IfO、
@@ -355,4 +356,13 @@ P0时序数据使用32个train、8个dev session，每局4个16帧窗口；正�
 帧集合及相同首尾帧。共128/32对，ordinal accuracy为0.4688/0.5625。冻结encoder探针结果：
 adapter/source/random temporal macro-F1为0.3333/0.4687/0.5142，adapter last-frame为0.3333。
 报告SHA-256为`331e1fc763416dbc4c1e08520f0a597e20b45be68141d2beeadfccb617fdcf0e`。
-旧adapter不再评估；下一步单独训练真正包含时间目标的新P0 SSL encoder。
+旧adapter不再评估。
+
+独立seed-0 P0时序SSL pilot使用ResNet-18、GRU和顺序分类加亮度一致性目标。首次启动在任何
+训练更新前因确定性CuBLAS工作区未设置而停止；唯一修复只固定
+`CUBLAS_WORKSPACE_CONFIG=:4096:8`，没有改变模型、数据或门槛。修复后overfit32 accuracy为
+1.0，dev macro-F1为0.7031，相对冻结最佳基线提高0.1889；特征标准差0.7751、有效秩22.06、
+增强余弦一致性0.9998均通过。但dev macro-F1低于预先冻结的0.75门槛，因此整体状态为
+`P0_TEMPORAL_SSL_FAILED`，未保存encoder。内嵌报告SHA-256为
+`f66fe1c991dc74b3bc81792cd25ddf6a1dd93ae8a758bbf1245d418b8ba169b9`。该lineage不得调门槛或
+重跑，不得初始化PolicyBundle；test、策略训练、Reward、capture、input和promotion保持关闭。

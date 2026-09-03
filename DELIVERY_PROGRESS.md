@@ -18,7 +18,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P0_OLD_ADAPTER_REJECTED_TEMPORAL_FAILED`: harder temporal F1 adapter/source/random 0.333/0.469/0.514 | Train a new temporal SSL encoder; old adapter, Reward, phone input, and online learning remain closed |
+| Hierarchical Policy v0 | `P0_TEMPORAL_SSL_FAILED`: new seed-0 SSL passed overfit/non-collapse and reached dev F1 0.703, but missed the frozen 0.75 gate | Freeze this failed lineage; no encoder initialization, Reward, phone input, test, or online learning |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -282,12 +282,23 @@ results remain evidence and reusable components, not reopened parallel routes.
 - Report SHA-256: `331e1fc763416dbc4c1e08520f0a597e20b45be68141d2beeadfccb617fdcf0e`.
 - The old adapter is rejected; no test, Reward, phone input, or online learning was used.
 
+## Hierarchical Policy v0 P0 temporal SSL pilot
+
+- The frozen seed-0 ResNet-18 plus GRU pilot used only the 128/32 temporal-order train/dev pairs.
+- Its only repair set deterministic CuBLAS workspace state before the first training update; model,
+  data, and gates were unchanged.
+- Overfit32 reached 1.0 accuracy; dev macro-F1 was 0.7031 versus the frozen 0.75 requirement.
+- Baseline margin and all non-collapse checks passed, but the dev gate failed, so no encoder was saved.
+- Embedded report SHA-256: `f66fe1c991dc74b3bc81792cd25ddf6a1dd93ae8a758bbf1245d418b8ba169b9`.
+- The lineage is frozen without retuning or rerun; test, PolicyBundle initialization, Reward, capture,
+  input, online learning, and promotion remain closed.
+
 ## Hierarchical Policy v0 execution state
 
 ```text
-CURRENT GOAL: new P0 temporal SSL encoder contract
-BLOCKING FAILURE: old shallow SimSiam adapter does not encode temporal order
-NEXT ACCEPTANCE COMMAND: make hierarchical-p0-temporal-probe-smoke, then a new SSL contract
+CURRENT GOAL: freeze the failed P0 temporal SSL pilot and choose a separately versioned next objective
+BLOCKING FAILURE: seed-0 temporal SSL dev macro-F1 0.7031 is below its frozen 0.75 gate
+NEXT ACCEPTANCE COMMAND: make hierarchical-p0-ssl-smoke; no retraining command is authorized
 DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
 ```
 

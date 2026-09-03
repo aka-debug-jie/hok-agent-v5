@@ -10,6 +10,7 @@
 .PHONY: hierarchical-e1e-unused-smoke
 .PHONY: hierarchical-p0-adapter-smoke
 .PHONY: hierarchical-p0-temporal-data-smoke hierarchical-p0-temporal-probe-smoke
+.PHONY: hierarchical-p0-ssl-smoke
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
 WZRY_DATA_ROOT ?= $(CURDIR)/.local-data
@@ -192,6 +193,9 @@ hierarchical-p0-temporal-data-smoke:
 
 hierarchical-p0-temporal-probe-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_p0_temporal_probe.py
+
+hierarchical-p0-ssl-smoke:
+	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_p0_ssl.py
 
 storage-show:
 	@echo "WZRY_DATA_ROOT=$(WZRY_DATA_ROOT)"

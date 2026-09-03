@@ -38,7 +38,11 @@
   required source/random margins were zero. Do not promote that adapter or retune this easy probe.
   The harder P0 middle-shuffle task also rejected it: adapter temporal dev macro-F1 `0.3333`,
   source `0.4687`, and random `0.5142`. The old adapter is permanently unavailable as the new
-  PolicyBundle initializer; the next P0 candidate must be a separately trained temporal SSL encoder.
+  PolicyBundle initializer. The separately trained seed-0 temporal SSL pilot passed overfit32 and
+  non-collapse checks and improved dev macro-F1 to `0.7031`, but missed its frozen `0.75` gate.
+  Its sole pre-update repair only set deterministic CuBLAS workspace state; model, data, and gates
+  did not change. The run is frozen failed with no encoder checkpoint. Do not retune or rerun this
+  lineage, and do not initialize PolicyBundle from it.
   It does not authorize model-driven
   mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
   model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.

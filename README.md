@@ -118,6 +118,12 @@ The harder P0 temporal-order dataset contains 128 train and 32 dev pairs with id
 and endpoints. Adapter temporal macro-F1 was 0.3333 versus source 0.4687 and random 0.5142, so the
 old adapter is rejected again and cannot initialize the new PolicyBundle.
 
+The separate seed-0 temporal SSL pilot passed its 32-sample overfit and non-collapse checks, and
+improved dev macro-F1 to 0.7031, 0.1889 above the best frozen baseline. It nevertheless missed the
+pre-frozen 0.75 dev gate. The run is frozen failed without an encoder checkpoint; it cannot
+initialize PolicyBundle or open policy training, Reward, test, capture, or input. Run the contract
+regression with `make hierarchical-p0-ssl-smoke`.
+
 ## Quick start
 
 Python 3.11 or newer is required.
