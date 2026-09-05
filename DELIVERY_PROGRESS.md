@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `RELATIONAL_OVERFIT32_FAILED`: 93,611-param spatial-slot model reached 0.625 / 1.258 and stopped before formal training | Require explicit synthetic localization supervision plus real player-cue evidence |
+| Engineering convergence | `LOCALIZED_RELATIONAL_OVERFIT32_FAILED`: slot error 3.94 px passed, but slot-cell/action gates failed | Freeze joint training; next hypothesis is two-stage slot pretrain then action fit |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: freeze the failed relational diagnostic and define automatic localization supervision
-CURRENT STATUS: RELATIONAL_OVERFIT32_FAILED; prior 9/24 candidate and R0 remain frozen
-BLOCKING FAILURE: unsupervised attention slots did not learn player/goal identities; real player cue unresolved
-NEXT ACCEPTANCE: new synthetic heatmap/coordinate auxiliary contract before any further formal training
-COMMAND STATUS: relational overfit failed and stopped; holdout/test/real training/device remain unopened
+CURRENT GOAL: freeze the failed joint-localization diagnostic and bound a two-stage correction
+CURRENT STATUS: LOCALIZED_RELATIONAL_OVERFIT32_FAILED; prior candidates and R0 remain frozen
+BLOCKING FAILURE: slots approach coordinates but cell identity and action mapping do not jointly converge
+NEXT ACCEPTANCE: separately versioned slot-pretrain/frozen-slot action overfit; no formal training yet
+COMMAND STATUS: joint localized overfit failed and stopped; holdout/test/real training/device unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -817,6 +817,35 @@ expansion was introduced.
 - Verification passed: 27 focused movement/goal-canvas tests, Ruff, strict mypy (70 source files),
   project safety (250 files, 131 Python files, zero findings, four root Markdown files), and
   `git diff --check`. No full historical suite was rerun for this stopped diagnostic.
+
+## Goal-canvas automatic-localization diagnostic v1
+
+- A new contract adds simulator-derived `player_xy` and `goal_xy` targets for the two attention
+  slots while keeping Actor input exactly `rgb_sequence`. It uses the same 32 clips, action labels,
+  200 updates, batch 8 and learning rate 1e-3. Action and localization losses have weight 1.0.
+  Contract SHA-256:
+  `0ea3077aee7758a3f3dc89911cac594dc1b428e5fb4212511cd28476b46b285c`.
+- The derived dataset passed with STOP 8, eight directions each 3, 16 frame player/goal coordinate
+  sequences and 32 independent episodes. Coordinates are automatic training targets and are not
+  present in the Actor input. Dataset/report SHA-256:
+  `842832fc9fc958835c31ebc205d155499a50b6867e333681634291a076704360` /
+  `2b2b9b55423ba84f320aa3a4672950fa45954375917265879193e5059e24f48d`.
+- The sole joint diagnostic failed. Mean slot error was 3.9356 pixels, passing the 5-pixel gate;
+  player/goal errors were 4.0895/3.7818 pixels. Slot-cell accuracy was only 0.6875 versus 0.95.
+  Action accuracy was 0.4375 and loss 1.05534 versus 0.95/0.05; only STOP, NW and SE recalls were
+  1.0. First update was finite and changed parameters. Formal training was not called.
+- Report/checkpoint SHA-256:
+  `178681bd0df868ba8ec7e3db3f4b137bafe1e279b507e6782d94fa2780d80c33` /
+  `9b6d02d046fd6d6e4cd39e8de1193d3cb502aef763c840c8e6315738f8d9c3f6`.
+  Runtime was 4.25 seconds, peak CUDA allocation 572,406,784 bytes; data/run artifacts use about
+  5.2 MiB/372 KiB. The checkpoint is diagnostic-only and cannot initialize another run.
+- Automatic supervision improved coordinate proximity but did not jointly solve discrete slot
+  identity and action learning. The next admissible hypothesis is a separately frozen two-stage
+  diagnostic: train slots first, freeze them, then fit the action head/GRU. No formal training,
+  test, holdout, real-RGB training, R2, promotion or device input is opened by this result.
+- Verification passed: 15 focused goal-canvas/localization tests, Ruff, strict mypy (70 source
+  files), project safety (251 files, 131 Python files, zero findings, four root Markdown files),
+  and `git diff --check`. No full historical suite was rerun for this stopped diagnostic.
 
 ## Frozen Global Agent execution state
 

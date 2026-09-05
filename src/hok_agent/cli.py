@@ -69,6 +69,8 @@ def _parser() -> argparse.ArgumentParser:
             "real-rgb-goal-canvas",
             "goal-canvas-overfit32-materialize",
             "goal-canvas-trajectories",
+            "goal-canvas-localized-materialize",
+            "goal-canvas-localized-overfit32",
             "materialize-overfit32",
             "overfit32",
             "materialize-trajectories",
@@ -1391,7 +1393,28 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         elif args.command == "movement-mvp":
-            if args.mode == "goal-canvas-trajectories":
+            if args.mode == "goal-canvas-localized-overfit32":
+                if args.dataset is None:
+                    raise ValueError("goal-canvas-localized-overfit32 requires --dataset")
+                from hok_agent.movement_mvp_train import run_localized_overfit32
+
+                result = run_localized_overfit32(
+                    args.config, args.dataset, args.output_dir, device_name=args.device
+                )
+            elif args.mode == "goal-canvas-localized-materialize":
+                if args.prior_report is None or args.dataset is None:
+                    raise ValueError(
+                        "goal-canvas-localized-materialize requires --prior-report and --dataset"
+                    )
+                from hok_agent.movement_goal_canvas import materialize_localized_overfit32
+
+                result = materialize_localized_overfit32(
+                    args.config,
+                    args.prior_report,
+                    args.dataset,
+                    args.output_dir,
+                )
+            elif args.mode == "goal-canvas-trajectories":
                 if args.overfit_report is None:
                     raise ValueError("goal-canvas-trajectories requires --overfit-report")
                 from hok_agent.movement_goal_canvas import materialize_goal_canvas_trajectories

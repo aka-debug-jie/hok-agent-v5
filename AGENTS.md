@@ -31,8 +31,11 @@ trajectories or sampling repairs to this architecture. A future learned correcti
 spatial-relation architecture contract and must still resolve the real player cue before R2. The
 first 93,611-parameter two-slot relational model is now frozen failed at overfit32 accuracy 0.625 /
 loss 1.258; N/S/E/W recalls were zero and no formal training ran. Do not rerun or proceed to Stage C.
-A future correction must explicitly supervise synthetic player/goal localization while keeping
-Actor inputs RGB-only, and remains non-promoting until the real player cue is independently viable.
+The first automatic-localization correction is also frozen failed: mean slot error passed at 3.94
+pixels, but slot-cell accuracy was 0.6875 and action accuracy/loss were 0.4375/1.055. Formal
+training did not run. Do not rerun or change its weights. A future correction may separate slot
+pretraining from action fitting under a new contract; the real player cue remains independently
+required before R2.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

@@ -25,6 +25,7 @@ from hok_agent.movement_mvp_train import (
     _rollout,
     _window,
     evaluate_stage_c_dev,
+    localized_train_step,
     run_overfit32,
     stage_c_dev_gates,
     train_step,
@@ -70,6 +71,34 @@ def test_relational_model_consumes_rgb_without_coordinate_labels() -> None:
     loss, gradient = train_step(model, clips, torch.tensor([1, 2]), optimizer)
     assert math.isfinite(loss) and math.isfinite(gradient)
     assert gradient > 0.0
+    assert not torch.equal(before, model.attention.weight)
+
+
+def test_localized_train_step_updates_attention_from_automatic_targets() -> None:
+    torch.manual_seed(0)
+    model = RelationalMovement()
+    clips = torch.zeros((2, 16, 3, 128, 128))
+    clips[0, :, 0, 16:32, 16:32] = 1.0
+    clips[1, :, 1, 96:112, 96:112] = 1.0
+    coordinates = torch.zeros((2, 16, 2, 2))
+    coordinates[0, :, 0] = torch.tensor([24.0, 24.0])
+    coordinates[0, :, 1] = torch.tensor([104.0, 104.0])
+    coordinates[1, :, 0] = torch.tensor([104.0, 104.0])
+    coordinates[1, :, 1] = torch.tensor([24.0, 24.0])
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.0)
+    before = model.attention.weight.detach().clone()
+    losses = localized_train_step(
+        model,
+        clips,
+        torch.tensor([1, 2]),
+        coordinates,
+        optimizer,
+        action_weight=1.0,
+        localization_weight=1.0,
+        grid_size=16,
+    )
+    assert all(math.isfinite(value) for value in losses)
+    assert losses[-1] > 0.0
     assert not torch.equal(before, model.attention.weight)
 
 

@@ -11,6 +11,7 @@ from hok_agent.movement_goal_canvas import (
     _object_sha256,
     materialize_goal_canvas_overfit32,
     materialize_goal_canvas_trajectories,
+    materialize_localized_overfit32,
     render_goal_minimap,
 )
 from hok_agent.movement_mvp_train import TrajectoryWindowDataset, _rollout
@@ -18,6 +19,7 @@ from hok_agent.movement_mvp_train import TrajectoryWindowDataset, _rollout
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "configs" / "movement_goal_canvas_overfit32_v1.json"
 STAGE_C_CONTRACT = ROOT / "configs" / "movement_goal_canvas_stage_c_v1.json"
+LOCALIZED_CONTRACT = ROOT / "configs" / "movement_goal_canvas_localized_v1.json"
 
 
 def _inputs(tmp_path: Path) -> tuple[Path, Path]:
@@ -131,3 +133,37 @@ def test_goal_canvas_stage_c_trajectories_are_action_driven_and_disjoint(
         marker=contract["marker"],
     )
     assert result["status"] == "success"
+
+
+def test_localized_overfit32_adds_targets_without_actor_leakage(tmp_path: Path) -> None:
+    source_contract, prior = _inputs(tmp_path)
+    source = tmp_path / "source"
+    materialize_goal_canvas_overfit32(source_contract, prior, source)
+    failed = {"status": "FAILED", "next_stage_allowed": False}
+    failed_path = tmp_path / "failed-relational.json"
+    failed_path.write_text(json.dumps(failed), encoding="utf-8")
+    contract = json.loads(LOCALIZED_CONTRACT.read_text(encoding="utf-8"))
+    contract["failed_relational_report_sha256"] = hashlib.sha256(
+        failed_path.read_bytes()
+    ).hexdigest()
+    contract["source_overfit_dataset_sha256"] = hashlib.sha256(
+        (source / "overfit32.npz").read_bytes()
+    ).hexdigest()
+    contract.pop("contract_sha256")
+    contract["contract_sha256"] = _object_sha256(contract)
+    contract_path = tmp_path / "localized-contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    output = tmp_path / "localized"
+    report = materialize_localized_overfit32(
+        contract_path, failed_path, source / "overfit32.npz", output
+    )
+    assert report["status"] == "PASSED"
+    assert report["automatic_targets"] == ["player_xy", "goal_xy"]
+    assert report["actor_inputs"] == ["rgb_sequence"]
+    assert report["coordinate_labels_in_actor_input"] is False
+    with np.load(output / "overfit32-localized.npz", allow_pickle=False) as data:
+        assert data["player_xy_sequence"].shape == (32, 16, 2)
+        assert data["goal_xy_sequence"].shape == (32, 16, 2)
+        frame = data["rgb_sequence"][0, 0]
+        y, x = np.where(np.all(frame == (55, 195, 235), axis=2))
+        assert np.allclose(data["player_xy_sequence"][0, 0], [x.mean(), y.mean()])

@@ -101,6 +101,15 @@ def _warmup(position: tuple[int, int], goal: tuple[int, int]) -> tuple[str, str]
 def _causal_clip(
     position: tuple[int, int], goal: tuple[int, int], render_seed: int, marker: dict[str, object]
 ) -> tuple[np.ndarray, tuple[int, int], tuple[int, int]]:
+    frames, _player_xy, _goal_xy, before, after = _localized_causal_clip(
+        position, goal, render_seed, marker
+    )
+    return frames, before, after
+
+
+def _localized_causal_clip(
+    position: tuple[int, int], goal: tuple[int, int], render_seed: int, marker: dict[str, object]
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, tuple[int, int], tuple[int, int]]:
     arena = RichPixelArena(
         ArenaConfig(
             max_ticks=32,
@@ -113,11 +122,15 @@ def _causal_clip(
     arena.reset(render_seed)
     outgoing, incoming = _warmup(position, goal)
     frames: list[np.ndarray] = []
+    player_xy: list[tuple[int, int]] = []
+    goal_xy = _point(goal)
 
     def observe(count: int) -> None:
         for _ in range(count):
             raw = cast(dict[str, int], arena.observe("blue")["self_position"])
-            frames.append(render_goal_minimap((raw["x"], raw["y"]), goal, render_seed, marker))
+            current = (raw["x"], raw["y"])
+            frames.append(render_goal_minimap(current, goal, render_seed, marker))
+            player_xy.append(_point(current))
 
     observe(4)
     arena.step(move_action(outgoing), wait_action())
@@ -133,7 +146,38 @@ def _causal_clip(
     action = rule_movement_in_range(before, goal)
     arena.step(to_arena_action(action), wait_action())
     after_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
-    return np.stack(frames), before, (after_raw["x"], after_raw["y"])
+    return (
+        np.stack(frames),
+        np.asarray(player_xy, dtype=np.float32),
+        np.repeat(np.asarray(goal_xy, dtype=np.float32)[None], len(frames), axis=0),
+        before,
+        (after_raw["x"], after_raw["y"]),
+    )
+
+
+def _overfit_samples(
+    direction_samples: int,
+) -> list[tuple[StageAMovement, tuple[int, int], tuple[int, int], int]]:
+    direction_positions: dict[StageAMovement, tuple[tuple[int, int], tuple[int, int]]] = {
+        "N": ((7, 4), (7, 2)),
+        "S": ((7, 2), (7, 4)),
+        "W": ((8, 3), (6, 3)),
+        "E": ((6, 3), (8, 3)),
+        "NW": ((8, 4), (6, 2)),
+        "NE": ((6, 4), (8, 2)),
+        "SW": ((8, 2), (6, 4)),
+        "SE": ((6, 2), (8, 4)),
+    }
+    samples: list[tuple[StageAMovement, tuple[int, int], tuple[int, int], int]] = []
+    for replicate in range(direction_samples):
+        for action in MOVEMENT_ACTIONS[1:]:
+            current, goal = direction_positions[action]
+            samples.append((action, current, goal, 100 + replicate * 17 + len(samples)))
+    stop_goals = ((7, 2), (8, 3), (7, 4), (6, 3)) * 2
+    samples.extend(
+        ("STOP", (7, 3), goal, 1000 + index) for index, goal in enumerate(stop_goals)
+    )
+    return samples
 
 
 def materialize_goal_canvas_overfit32(
@@ -155,26 +199,8 @@ def materialize_goal_canvas_overfit32(
         raise ValueError("goal canvas overfit32 contract binding differs")
     if output_dir.exists() or output_dir.is_symlink():
         raise ValueError("goal canvas overfit32 output already exists")
-    direction_positions: dict[StageAMovement, tuple[tuple[int, int], tuple[int, int]]] = {
-        "N": ((7, 4), (7, 2)),
-        "S": ((7, 2), (7, 4)),
-        "W": ((8, 3), (6, 3)),
-        "E": ((6, 3), (8, 3)),
-        "NW": ((8, 4), (6, 2)),
-        "NE": ((6, 4), (8, 2)),
-        "SW": ((8, 2), (6, 4)),
-        "SE": ((6, 2), (8, 4)),
-    }
     marker = cast(dict[str, object], contract["marker"])
-    samples: list[tuple[StageAMovement, tuple[int, int], tuple[int, int], int]] = []
-    for replicate in range(int(cast(int, contract["direction_samples"]))):
-        for action in MOVEMENT_ACTIONS[1:]:
-            current, goal = direction_positions[action]
-            samples.append((action, current, goal, 100 + replicate * 17 + len(samples)))
-    stop_goals = ((7, 2), (8, 3), (7, 4), (6, 3)) * 2
-    samples.extend(
-        ("STOP", (7, 3), goal, 1000 + index) for index, goal in enumerate(stop_goals)
-    )
+    samples = _overfit_samples(int(cast(int, contract["direction_samples"])))
     clips: list[np.ndarray] = []
     labels: list[int] = []
     episode_ids: list[str] = []
@@ -191,6 +217,7 @@ def materialize_goal_canvas_overfit32(
             any(not np.array_equal(clip[frame], clip[frame + 1]) for frame in range(15))
         )
     counterfactual_changes = 0
+    direction_positions = {action: (current, goal) for action, current, goal, _seed in samples[:24]}
     for action in MOVEMENT_ACTIONS[1:]:
         center = direction_positions[action][0]
         first_goal = direction_positions[action][1]
@@ -244,6 +271,110 @@ def materialize_goal_canvas_overfit32(
         report["report_sha256"] = _object_sha256(report)
         path = staging / "report.json"
         path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return report
+
+
+def materialize_localized_overfit32(
+    contract_path: Path,
+    failed_relational_report_path: Path,
+    source_dataset_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract = _load_bound(contract_path, "contract_sha256")
+    try:
+        failed = json.loads(failed_relational_report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("failed relational report is invalid") from exc
+    if (
+        contract.get("schema_version") != "movement-goal-canvas-localized-contract-v1"
+        or _file_sha256(failed_relational_report_path)
+        != contract.get("failed_relational_report_sha256")
+        or failed.get("status") != "FAILED"
+        or failed.get("next_stage_allowed") is not False
+        or _file_sha256(source_dataset_path) != contract.get("source_overfit_dataset_sha256")
+        or contract.get("formal_training_allowed") is not False
+        or contract.get("test_allowed") is not False
+        or contract.get("holdout_allowed") is not False
+        or contract.get("r2_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+    ):
+        raise ValueError("localized overfit32 contract binding differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("localized overfit32 output already exists")
+    marker = cast(dict[str, object], contract["marker"])
+    samples = _overfit_samples(int(cast(int, contract["direction_samples"])))
+    clips: list[np.ndarray] = []
+    player_sequences: list[np.ndarray] = []
+    goal_sequences: list[np.ndarray] = []
+    labels: list[int] = []
+    episode_ids: list[str] = []
+    for index, (expected, current, goal, render_seed) in enumerate(samples):
+        clip, player_xy, goal_xy, before, after = _localized_causal_clip(
+            current, goal, render_seed, marker
+        )
+        if (
+            len(player_xy) != 16
+            or len(goal_xy) != 16
+            or rule_movement_in_range(before, goal) != expected
+            or (before != after) != (expected != "STOP")
+        ):
+            raise ValueError("localized overfit32 causality differs")
+        clips.append(clip)
+        player_sequences.append(player_xy)
+        goal_sequences.append(goal_xy)
+        labels.append(MOVEMENT_ACTIONS.index(expected))
+        episode_ids.append(f"localized-goal-canvas-{index:02d}")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        dataset_path = staging / "overfit32-localized.npz"
+        with dataset_path.open("wb") as handle:
+            np.savez_compressed(
+                handle,
+                rgb_sequence=np.stack(clips).astype(np.uint8),
+                label=np.asarray(labels, dtype=np.int64),
+                player_xy_sequence=np.stack(player_sequences).astype(np.float32),
+                goal_xy_sequence=np.stack(goal_sequences).astype(np.float32),
+                episode_id=np.asarray(episode_ids),
+                contract_sha256=np.asarray([contract["contract_sha256"]]),
+            )
+            handle.flush()
+            os.fsync(handle.fileno())
+        report: dict[str, object] = {
+            "schema_version": "movement-goal-canvas-localized-data-report-v1",
+            "status": "PASSED",
+            "contract_sha256": contract["contract_sha256"],
+            "failed_relational_report_sha256": _file_sha256(
+                failed_relational_report_path
+            ),
+            "source_overfit_dataset_sha256": _file_sha256(source_dataset_path),
+            "dataset_sha256": _file_sha256(dataset_path),
+            "samples": len(samples),
+            "frames_per_sample": 16,
+            "class_counts": {
+                action: labels.count(index) for index, action in enumerate(MOVEMENT_ACTIONS)
+            },
+            "automatic_targets": contract["automatic_targets"],
+            "actor_inputs": contract["actor_inputs"],
+            "coordinate_labels_in_actor_input": False,
+            "unique_episode_ids": len(set(episode_ids)),
+            "real_rgb_training_frames": 0,
+            "test_frames_read": 0,
+            "formal_training_allowed": False,
+            "r2_allowed": False,
+            "device_input_commands_sent": 0,
+        }
+        report["report_sha256"] = _object_sha256(report)
+        (staging / "report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         os.replace(staging, output_dir)
     except BaseException:
         if staging.exists():

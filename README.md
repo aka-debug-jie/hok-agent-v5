@@ -126,6 +126,11 @@ and loss 1.258; its formal training was not started. Pure action supervision did
 player/goal identity to the slots. Any next correction must use automatic simulator localization
 targets under a new contract and must not reuse the diagnostic checkpoint.
 
+The first joint automatic-localization diagnostic then reached 3.94-pixel mean slot error but failed
+slot-cell accuracy (0.6875) and action accuracy/loss (0.4375/1.055). Formal training did not start.
+The next bounded hypothesis is two-stage training: localize slots first, freeze them, then fit the
+action temporal/head layers under a new contract.
+
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
 See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.
