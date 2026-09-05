@@ -24,8 +24,11 @@ frames by taking its semantic goal from Macro instead of detecting red targets. 
 lane-coordinate semantics and policy value remain unresolved. The new simulator goal-canvas
 overfit32 contract passed at accuracy 1.0 / loss 0.00614 with all nine recalls at 1.0. Its sole
 diagnostic attempt is consumed and its checkpoint is not reusable for formal training. The next
-work may create fresh 64/24 simulator trajectories using this input; do not treat the 32-sample
-result as generalization, real-domain value or learned promotion.
+work created fresh 64/24 simulator trajectories and one formal candidate. Training loss reached
+0.01414, but dev rollout reached only 9/24 versus 21/24; it is frozen failed. Geometry reached
+24/24, while failed learned episodes repeatedly requested premature STOP. Do not add epochs,
+trajectories or sampling repairs to this architecture. A future learned correction requires a new
+spatial-relation architecture contract and must still resolve the real player cue before R2.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

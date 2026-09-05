@@ -1,0 +1,50 @@
+{
+  "schema_version": "movement-goal-canvas-stage-c-contract-v1",
+  "contract_sha256": "4bcf99ca5641a80f81045c77de2a2a35a6fbf695d32ef464992008acc1a4bdc6",
+  "overfit_contract_sha256": "a5795ceb46606787aa2ce39bf0d6b549376d9547c2da76d0b4956e0acd8a11af",
+  "overfit_dataset_sha256": "8b7104f55b71fc6a54b9be3d7c6204c50d1d357288c2e2bc30e9abc14ac33cde",
+  "overfit_report_sha256": "a80d84fd7f83ecdbef471ab88ca8ba6cdcd89895a4c27f63099e4ad435de931c",
+  "hero": "houyi",
+  "role": "marksman",
+  "side": "blue",
+  "lane": "bottom",
+  "seed": 0,
+  "marker": {
+    "rgb": [245, 225, 45],
+    "radius": 7,
+    "thickness": 2
+  },
+  "stage_b": {
+    "selected_architecture": "task-specific",
+    "formal_training_initialization": "fresh-seed-0"
+  },
+  "stage_c": {
+    "dev_contract_version": "movement-mvp-dev-v2",
+    "train_episodes": 64,
+    "dev_episodes": 24,
+    "sequence_frames": 16,
+    "step_duration_ms": 100,
+    "maximum_episode_steps": 128,
+    "navigation_only": true,
+    "stop_confirmation_steps": 3,
+    "sampling": "class-balanced",
+    "epochs": 20,
+    "checkpoint_epochs": [10, 20],
+    "batch_size": 8,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "minimum_teacher_successes": 23,
+    "minimum_learned_successes": 21,
+    "maximum_step_cost_ratio_vs_simple": 0.75,
+    "maximum_collision_fraction": 0.05,
+    "maximum_oscillation_fraction": 0.10,
+    "random_baseline_seed": 7001
+  },
+  "actor_input": "synthetic_minimap_rgb_with_hollow_goal_ring",
+  "diagnostic_checkpoint_loaded": false,
+  "real_rgb_training_frames": 0,
+  "test_allowed": false,
+  "holdout_allowed": false,
+  "r2_allowed": false,
+  "device_input_allowed": false
+}

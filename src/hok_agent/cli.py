@@ -68,6 +68,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-rgb-preflight",
             "real-rgb-goal-canvas",
             "goal-canvas-overfit32-materialize",
+            "goal-canvas-trajectories",
             "materialize-overfit32",
             "overfit32",
             "materialize-trajectories",
@@ -87,6 +88,7 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--target-root", type=Path)
     movement_mvp.add_argument("--prior-report", type=Path)
     movement_mvp.add_argument("--goal-canvas-report", type=Path)
+    movement_mvp.add_argument("--overfit-report", type=Path)
     movement_mvp.add_argument("--dataset", type=Path)
     movement_mvp.add_argument("--dataset-root", type=Path)
     movement_mvp.add_argument("--checkpoint", type=Path, action="append", default=[])
@@ -1387,7 +1389,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         elif args.command == "movement-mvp":
-            if args.mode == "goal-canvas-overfit32-materialize":
+            if args.mode == "goal-canvas-trajectories":
+                if args.overfit_report is None:
+                    raise ValueError("goal-canvas-trajectories requires --overfit-report")
+                from hok_agent.movement_goal_canvas import materialize_goal_canvas_trajectories
+
+                result = materialize_goal_canvas_trajectories(
+                    args.config, args.overfit_report, args.output_dir
+                )
+            elif args.mode == "goal-canvas-overfit32-materialize":
                 if args.goal_canvas_report is None:
                     raise ValueError(
                         "goal-canvas-overfit32-materialize requires --goal-canvas-report"

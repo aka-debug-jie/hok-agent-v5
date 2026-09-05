@@ -618,6 +618,8 @@ def _rollout(
     stop_confirmation_steps: int = 1,
     record_trace: bool = False,
     navigation_only: bool = False,
+    goal_canvas: bool = False,
+    marker: dict[str, object] | None = None,
 ) -> dict[str, object]:
     goal = cast(tuple[int, int], tuple(cast(list[int], scenario["goal"])))
     render_seed = int(cast(int, scenario["render_seed"]))
@@ -633,10 +635,17 @@ def _rollout(
     try:
         for step in range(maximum_steps):
             observation = arena.observe("blue")
-            marked = mark_visible_target(render(observation, render_seed), "opponent_hero")
-            frames.append(marked)
             position_raw = cast(dict[str, int], observation["self_position"])
             before = (position_raw["x"], position_raw["y"])
+            if goal_canvas:
+                if marker is None:
+                    raise ValueError("goal canvas rollout requires marker geometry")
+                from hok_agent.movement_goal_canvas import render_goal_minimap
+
+                marked = render_goal_minimap(before, goal, render_seed, marker)
+            else:
+                marked = mark_visible_target(render(observation, render_seed), "opponent_hero")
+            frames.append(marked)
             legal = arena.legal_actions("blue")
             legal_names = tuple(
                 action for action in MOVEMENT_ACTIONS if to_arena_action(action) in legal
@@ -645,7 +654,12 @@ def _rollout(
             if policy == "teacher":
                 action = rule_movement_in_range(before, goal)
             elif policy == "geometry":
-                action = rgb_geometry_movement(marked)
+                if goal_canvas:
+                    from hok_agent.movement_goal_canvas import goal_canvas_geometry_movement
+
+                    action = goal_canvas_geometry_movement(marked)
+                else:
+                    action = rgb_geometry_movement(marked)
             elif policy == "fixed_east":
                 action = "E" if "E" in legal_names else "STOP"
             elif policy == "random":
@@ -781,6 +795,8 @@ def evaluate_stage_c_dev(
     v2 = stage.get("dev_contract_version") == "movement-mvp-dev-v2"
     stop_confirmation_steps = _integer(stage.get("stop_confirmation_steps", 1))
     navigation_only = bool(stage.get("navigation_only", False))
+    goal_canvas = raw.get("actor_input") == "synthetic_minimap_rgb_with_hollow_goal_ring"
+    marker = cast(dict[str, object] | None, raw.get("marker"))
     config_hash = _sha256(config_path)
     device = torch.device(device_name)
     started = time.monotonic()
@@ -795,6 +811,8 @@ def evaluate_stage_c_dev(
                     random_seed,
                     stop_confirmation_steps=stop_confirmation_steps,
                     navigation_only=navigation_only,
+                    goal_canvas=goal_canvas,
+                    marker=marker,
                 )
                 for scenario in scenarios
             ]
@@ -827,6 +845,8 @@ def evaluate_stage_c_dev(
                     stop_confirmation_steps=stop_confirmation_steps,
                     record_trace=v2,
                     navigation_only=navigation_only,
+                    goal_canvas=goal_canvas,
+                    marker=marker,
                 )
                 for scenario in scenarios
             ]
@@ -861,6 +881,7 @@ def evaluate_stage_c_dev(
         "teacher_fallback_used": False,
         "simulator_only": True,
         "input_commands_sent": 0,
+        "actor_input": raw.get("actor_input", "goal_marked_rgb_only"),
     }
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return report

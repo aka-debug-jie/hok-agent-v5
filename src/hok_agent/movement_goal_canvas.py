@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import cast
 
@@ -13,6 +14,8 @@ from hok_agent.movement_mvp import (
     MOVEMENT_ACTIONS,
     StageAMovement,
     rule_movement_in_range,
+    stage_c_arena,
+    stage_c_scenarios,
     to_arena_action,
 )
 from hok_agent.rich_arena import ArenaConfig, RichPixelArena, move_action, wait_action
@@ -75,6 +78,16 @@ def render_goal_minimap(
             if (radius - thickness) ** 2 <= squared <= radius**2:
                 frame[y, x] = color
     return frame
+
+
+def goal_canvas_geometry_movement(frame: np.ndarray) -> StageAMovement:
+    player_y, player_x = np.where(np.all(frame == (55, 195, 235), axis=2))
+    goal_y, goal_x = np.where(np.all(frame == (245, 225, 45), axis=2))
+    if not len(player_x) or not len(goal_x):
+        raise ValueError("goal canvas geometry requires player and target marker")
+    delta_x = round((float(goal_x.mean()) - float(player_x.mean())) / (104 / 14))
+    delta_y = round((float(goal_y.mean()) - float(player_y.mean())) / 32)
+    return rule_movement_in_range((0, 0), (delta_x, delta_y))
 
 
 def _warmup(position: tuple[int, int], goal: tuple[int, int]) -> tuple[str, str]:
@@ -236,6 +249,193 @@ def materialize_goal_canvas_overfit32(
         if staging.exists():
             for path in staging.iterdir():
                 path.unlink()
+            staging.rmdir()
+        raise
+    return report
+
+
+def _teacher_episode(
+    scenario: dict[str, object],
+    maximum_steps: int,
+    step_duration_ms: int,
+    stop_confirmation_steps: int,
+    marker: dict[str, object],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, bool]:
+    goal = cast(tuple[int, int], tuple(cast(list[int], scenario["goal"])))
+    render_seed = int(cast(int, scenario["render_seed"]))
+    arena = stage_c_arena(scenario, maximum_steps, navigation_only=True)
+    frames: list[np.ndarray] = []
+    labels: list[int] = []
+    timestamps: list[int] = []
+    stop_streak = 0
+    for step in range(maximum_steps):
+        observation = arena.observe("blue")
+        position_raw = cast(dict[str, int], observation["self_position"])
+        position = (position_raw["x"], position_raw["y"])
+        frames.append(render_goal_minimap(position, goal, render_seed, marker))
+        timestamps.append(step * step_duration_ms)
+        action = rule_movement_in_range(position, goal)
+        labels.append(MOVEMENT_ACTIONS.index(action))
+        arena.step(to_arena_action(action), wait_action())
+        stop_streak = stop_streak + 1 if action == "STOP" else 0
+        if stop_streak >= stop_confirmation_steps:
+            return (
+                np.stack(frames).astype(np.uint8),
+                np.asarray(labels, dtype=np.int64),
+                np.asarray(timestamps, dtype=np.int64),
+                True,
+            )
+    return (
+        np.stack(frames).astype(np.uint8),
+        np.asarray(labels, dtype=np.int64),
+        np.asarray(timestamps, dtype=np.int64),
+        False,
+    )
+
+
+def materialize_goal_canvas_trajectories(
+    contract_path: Path,
+    overfit_report_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract = _load_bound(contract_path, "contract_sha256")
+    try:
+        overfit = json.loads(overfit_report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("goal canvas overfit report is invalid") from exc
+    if (
+        contract.get("schema_version") != "movement-goal-canvas-stage-c-contract-v1"
+        or _file_sha256(overfit_report_path) != contract.get("overfit_report_sha256")
+        or overfit.get("status") != "PASSED"
+        or overfit.get("dataset_sha256") != contract.get("overfit_dataset_sha256")
+        or overfit.get("diagnostic_checkpoint_reusable_for_formal_training") is not False
+        or contract.get("diagnostic_checkpoint_loaded") is not False
+        or contract.get("test_allowed") is not False
+        or contract.get("holdout_allowed") is not False
+        or contract.get("r2_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+    ):
+        raise ValueError("goal canvas stage C contract binding differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("goal canvas stage C output already exists")
+    stage = cast(dict[str, object], contract["stage_c"])
+    maximum_steps = int(cast(int, stage["maximum_episode_steps"]))
+    step_duration_ms = int(cast(int, stage["step_duration_ms"]))
+    stop_steps = int(cast(int, stage["stop_confirmation_steps"]))
+    marker = cast(dict[str, object], contract["marker"])
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        episodes_dir = staging / "episodes"
+        episodes_dir.mkdir()
+        counts: Counter[str] = Counter()
+        successes: Counter[str] = Counter()
+        label_counts = {
+            split: {action: 0 for action in MOVEMENT_ACTIONS} for split in ("train", "dev")
+        }
+        episodes: list[dict[str, object]] = []
+        for scenario in stage_c_scenarios():
+            split = str(scenario["split"])
+            basename = f"{split}-{counts[split]:03d}.npz"
+            frames, labels, timestamps, success = _teacher_episode(
+                scenario, maximum_steps, step_duration_ms, stop_steps, marker
+            )
+            path = episodes_dir / basename
+            with path.open("wb") as handle:
+                np.savez_compressed(
+                    handle,
+                    frames=frames,
+                    labels=labels,
+                    frame_timestamps_ms=timestamps,
+                    window_end=np.arange(len(labels), dtype=np.int64),
+                )
+                handle.flush()
+                os.fsync(handle.fileno())
+            for label in labels.tolist():
+                label_counts[split][MOVEMENT_ACTIONS[int(label)]] += 1
+            episodes.append(
+                {
+                    **scenario,
+                    "basename": basename,
+                    "steps": len(labels),
+                    "supervised_windows": len(labels),
+                    "teacher_success": success,
+                    "artifact_sha256": _file_sha256(path),
+                }
+            )
+            counts[split] += 1
+            successes[split] += int(success)
+        overlap = len(
+            {str(row["scenario_id"]) for row in episodes if row["split"] == "train"}
+            & {str(row["scenario_id"]) for row in episodes if row["split"] == "dev"}
+        )
+        expected = {
+            "train": int(cast(int, stage["train_episodes"])),
+            "dev": int(cast(int, stage["dev_episodes"])),
+        }
+        passed = (
+            dict(counts) == expected
+            and dict(successes) == expected
+            and overlap == 0
+            and all(
+                sum(
+                    row["split"] == split and row["initial_action"] == action
+                    for row in episodes
+                )
+                == required
+                for split, required in (("train", 8), ("dev", 3))
+                for action in MOVEMENT_ACTIONS[1:]
+            )
+        )
+        manifest_without_hash: dict[str, object] = {
+            "schema_version": "movement-mvp-stage-c-trajectories-v0",
+            "contract_sha256": contract["contract_sha256"],
+            "config_sha256": _file_sha256(contract_path),
+            "step_duration_ms": step_duration_ms,
+            "sequence_frames": int(cast(int, stage["sequence_frames"])),
+            "navigation_only": True,
+            "stop_confirmation_steps": stop_steps,
+            "actor_input": contract["actor_input"],
+            "diagnostic_checkpoint_loaded": False,
+            "episodes": episodes,
+        }
+        manifest = {
+            **manifest_without_hash,
+            "manifest_sha256": _object_sha256(manifest_without_hash),
+        }
+        (staging / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        report: dict[str, object] = {
+            "schema_version": "movement-goal-canvas-stage-c-data-report-v1",
+            "status": "PASSED" if passed else "FAILED",
+            "contract_sha256": contract["contract_sha256"],
+            "manifest_sha256": manifest["manifest_sha256"],
+            "episode_counts": dict(counts),
+            "teacher_successes": dict(successes),
+            "label_counts": label_counts,
+            "scenario_overlap": overlap,
+            "actor_input": contract["actor_input"],
+            "frames_stored_once_per_episode": True,
+            "windows_stored_as_indices": True,
+            "diagnostic_checkpoint_loaded": False,
+            "real_rgb_training_frames": 0,
+            "test_frames_read": 0,
+            "holdout_opened": False,
+            "r2_allowed": False,
+            "device_input_commands_sent": 0,
+        }
+        report["report_sha256"] = _object_sha256(report)
+        (staging / "report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        if not passed:
+            raise ValueError("goal canvas stage C trajectory gate failed")
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in sorted(staging.rglob("*"), reverse=True):
+                path.unlink() if path.is_file() else path.rmdir()
             staging.rmdir()
         raise
     return report

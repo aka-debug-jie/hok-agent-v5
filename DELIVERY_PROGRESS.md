@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `GOAL_CANVAS_OVERFIT32_PASSED`: accuracy 1.0, loss 0.00614, all nine recalls 1.0 | Fresh 64/24 simulator trajectories; no R2/promotion |
+| Engineering convergence | `GOAL_CANVAS_STAGE_C_CANDIDATE_FAILED`: train loss 0.01414, dev 9/24; geometry 24/24 | Freeze architecture; require a new spatial-relation contract and real player-cue evidence |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: generate fresh 64/24 simulator trajectories for the minimap goal-canvas input
-CURRENT STATUS: GOAL_CANVAS_OVERFIT32_PASSED; R0 remains valid
-BLOCKING FAILURE: trajectory generalization, player localization and lane-coordinate semantics remain unverified
-NEXT ACCEPTANCE: one fresh simulator-only 64/24 candidate; diagnostic checkpoint must not be loaded
-COMMAND STATUS: 32 causal samples passed all nine actions; test, real training and device unopened
+CURRENT GOAL: freeze the failed goal-canvas candidate and bound a spatial-relation correction
+CURRENT STATUS: GOAL_CANVAS_STAGE_C_CANDIDATE_FAILED; R0 remains valid
+BLOCKING FAILURE: fresh candidate generalizes to only 9/24 and real player localization remains unresolved
+NEXT ACCEPTANCE: separately versioned relational-model contract; no more data/epoch/sampling repair
+COMMAND STATUS: 64/24 teacher data passed; candidate failed dev; holdout/test/device remain unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -750,6 +750,44 @@ expansion was introduced.
 - Verification passed: 15 focused goal-canvas/real-RGB/training tests, Ruff, strict mypy (70 source
   files), project safety (248 files, 131 Python files, zero findings, four root Markdown files),
   and `git diff --check`. No full historical suite was rerun for this bounded diagnostic.
+
+## Minimap goal-canvas Stage C candidate v1
+
+- The formal contract uses the passed overfit dataset/report, fresh seed-0 initialization, 64 train
+  and 24 dev episodes, 16 frames, 100 ms steps, three STOP confirmations, class-balanced sampling,
+  20 epochs and checkpoints at epochs 10/20. The initial jq-computed self-hash was rejected before
+  data creation because jq normalized `0.0` differently; the runtime Python canonical hash was
+  corrected to `4bcf99ca5641a80f81045c77de2a2a35a6fbf695d32ef464992008acc1a4bdc6`.
+  No data or model result existed before that mechanical correction.
+- Trajectory materialization passed with teacher 64/64 train and 24/24 dev, zero scenario overlap,
+  360 train windows and no diagnostic checkpoint load. STOP contributes 192 windows; class-balanced
+  training sampled all nine actions between 755 and 826 times. Data report/manifest file SHA-256:
+  `5e618f1746ad9c690b0e63bde390be4206b46fbb5d68b3f9fa87513768642cf2` /
+  `0bdf86482f1d0d591e0da080f50bbb9d0e7ba29e6eb5f26a9dd636c8d9da3fd9`.
+- Fresh 686,281-parameter training was stable: first update loss 2.20692, gradient norm 4.26885,
+  parameters changed, and epoch loss fell from 1.55928 to 0.01414. Training took 15.84 seconds and
+  peak CUDA allocation was 312,573,440 bytes. Epoch-10/20 checkpoint SHA-256 values are
+  `800d2209528ceb7b7f5584821b2885457defec57a617d3a37eca39eb40a543b9` and
+  `a3e4647ac06f5bfe0a22d38c82669d37ef78005eda8d1c1f6e487226d3c3fc57`.
+- Independent dev failed. Epoch 10 reached 6/24 with collision fraction 0.7292; epoch 20 reached
+  9/24 with collision and oscillation both zero, mean 82.875 steps, but missed the 21/24 success
+  gate. Teacher and exact-RGB geometry each reached 24/24 at 5.625 mean steps; random reached 1/24
+  and fixed-east 0/24. All gates except learned success passed.
+- The selected epoch-20 failed episodes contain 1,525 premature STOP requests. Initial mismatches
+  span cardinal and diagonal relations, so more STOP reweighting alone is not supported. Low train
+  loss plus weak unseen-position rollout is consistent with position memorization, but that causal
+  explanation remains a hypothesis until a relational architecture control is run.
+- Training/dev report file SHA-256:
+  `663a779b153b15115477bb5a1c86a551cd326d099c539b40a5574fae76d3a64d` /
+  `b9c4119394e067f8761ea8e20d3b5ffbd82c4cde6471ab8a59a59e6b6bf20488`.
+  New data/train/dev artifacts use about 5.4/5.3/1.6 MiB. Evaluation took 24.08 seconds.
+- This candidate is frozen failed without holdout, real-RGB training, R2, phone input or promotion.
+  The next admissible learning attempt must separately freeze a spatial-relation model and cannot
+  change data volume, epochs and sampler at the same time. Real player-cue evidence remains an
+  independent prerequisite for any R2 claim.
+- Verification passed: 30 focused movement/goal-canvas/real-RGB tests, Ruff, strict mypy (70 source
+  files), project safety (249 files, 131 Python files, zero findings, four root Markdown files),
+  and `git diff --check`. No full historical suite was rerun for this failed experimental candidate.
 
 ## Frozen Global Agent execution state
 

@@ -116,6 +116,11 @@ python -m hok_agent movement-mvp --mode overfit32 \
 The frozen run passed accuracy 1.0 and loss 0.00614 with all nine recalls at 1.0. Its checkpoint is
 diagnostic-only; formal trajectory training must initialize a fresh model.
 
+The fresh 64/24 goal-canvas candidate has also completed. Teacher and exact-RGB geometry reached
+24/24, but the learned epoch-20 checkpoint reached only 9/24 despite training loss 0.01414. It is
+frozen failed; no holdout or R2 stage opened. The next learned correction must change only the
+model's spatial-relation bias under a new contract, rather than add more epochs or data to this run.
+
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
 See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.
