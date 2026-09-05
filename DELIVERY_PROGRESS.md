@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `CAUSAL_OVERFIT32_PASSED_TASK_SPECIFIC`: causal overfit32; task-specific 686K model 1.0 accuracy / 0.00745 loss | Stage C 64/24 simulator trajectories and fresh-init BC next; real video/phone/RL remain closed |
+| Engineering convergence | `STAGE_C_INITIAL_CANDIDATE_FAILED`: 64/24 trajectories passed; epoch-20 reached 15/24 with 0.271 collision fraction | No promotion/holdout; revise the internally infeasible dev comparison contract before any second training |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: implement simulator-only stage C of docs/ENGINEERING_CONVERGENCE_PLAN.md
-CURRENT STATUS: CAUSAL_OVERFIT32_PASSED_TASK_SPECIFIC; no full training, video decoding, device work or model promotion
-BLOCKING UNCERTAINTY: 64/24 trajectory generalization and 24-episode rollout are unproven
-NEXT ACCEPTANCE: initial task-specific BC candidate plus independent 24-episode dev evaluation
-COMMAND STATUS: make movement-mvp-stage-b-smoke passes; stage C entrypoint is not implemented
+CURRENT GOAL: close the failed initial Stage C candidate and version a feasible dev contract
+CURRENT STATUS: STAGE_C_INITIAL_CANDIDATE_FAILED; no promotion, holdout, video or device work
+BLOCKING FAILURE: epoch-20 is 15/24 with collision 0.271; random is 18/24, making +8 impossible
+NEXT ACCEPTANCE: a pre-run v2 dev contract with feasible paired metrics; no second training yet
+COMMAND STATUS: materialize/train/evaluate modes completed; holdout remains unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -499,6 +499,37 @@ expansion was introduced.
   change after the first optimizer update. A focused CPU failure-path test proves a failed gate
   still writes a diagnostic checkpoint, reports `full_training_called=false`, and forbids reusing
   that checkpoint for formal training. Stage C must create a fresh seed-0 model.
+
+## Engineering convergence stage C initial candidate
+
+- Materialized 64 train and 24 dev action-driven trajectories with zero scenario overlap and exact
+  initial-direction support of 8/3 per direction. Teacher completed 64/64 and 24/24. Frames are
+  stored once per episode and windows are indices with 100 ms timestamps. Manifest self-hash:
+  `a4d9499e367e165f7f9a1f33507a507b21754e690069e9a452e20407ad9dc913`.
+- The fresh 686,281-parameter model trained for 20 epochs on 232 windows. Loss decreased
+  `1.8618→0.0272`; first update was finite and changed parameters. Training took 8.07 seconds and
+  peaked at 312,573,440 CUDA bytes. No diagnostic checkpoint or dev rollout was used in training.
+- Independent dev evaluated only epoch 10 and 20 on the same 24 scenarios. Epoch 10 reached 9/24;
+  epoch 20 reached 15/24 and was selected only within this failed run. Its collision fraction was
+  0.2708 versus the 0.05 gate; it is not promoted. Initial-direction successes for epoch 20 were
+  E 2/3, N 2/3, NE 1/3, NW 2/3, S 3/3, SE 2/3, SW 2/3, W 1/3.
+- Baselines were teacher 24/24, RGB geometry 24/24, random 18/24, and fixed-east 2/24. With 24
+  episodes, the frozen requirement to exceed the better random/fixed baseline by 8 is impossible
+  once random reaches 18 (maximum possible gain is 6). The report remains FAILED; the gate is not
+  relaxed after results. Collision failure independently prevents promotion.
+- Dataset/train/dev report file SHA-256 values are
+  `8165340bd12c493234e3f64744dcd84be37c35f8f68f309dc9ac0bc27e449ba3`,
+  `b6772e72d89cfbe0f18833d047859f13b27c7e2f07bfa45579290f48256fdd41`, and
+  `3c12eba93e85757353d704f9a99458841b21b13c7ac657f569c26bf735c79b7e`.
+  Epoch-20 checkpoint SHA-256 is
+  `c62bfa4af9f507ea594f3a3d2e4dcc23092b4c75b06b765ee7e23d864828b902`.
+- Holdout, real video, phone input and RL remain unopened. No second training run is authorized
+  until a separately versioned evaluation contract fixes the impossible comparison before seeing
+  any new candidate. Class imbalance and absent learner-deviation recovery data are hypotheses,
+  not established causes.
+- New Stage C artifacts use about 5.7 MiB. Focused regression: 24 passed; Ruff, strict mypy
+  (67 source files), project safety (238 files, 125 Python files, 57,130 nonblank Python lines),
+  and diff check passed. The full historical suite was not rerun under the risk-tiered policy.
 
 ## Frozen Global Agent execution state
 

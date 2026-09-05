@@ -243,6 +243,9 @@ movement-mvp-stage-a-smoke:
 movement-mvp-stage-b-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_movement_mvp.py tests/test_movement_mvp_train.py
 
+movement-mvp-stage-c-smoke:
+	$(RUN_PYTHON) -m pytest -q tests/test_movement_mvp.py tests/test_movement_mvp_train.py tests/test_transition_store.py
+
 storage-show:
 	@echo "WZRY_DATA_ROOT=$(WZRY_DATA_ROOT)"
 	@echo "HOK_LARGE_ROOT=$(HOK_LARGE_ROOT)"

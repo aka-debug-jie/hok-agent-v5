@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, cast
@@ -152,8 +153,11 @@ def rule_movement(position: tuple[int, int], goal: tuple[int, int]) -> StageAMov
 def rule_movement_in_range(
     position: tuple[int, int], goal: tuple[int, int], stop_radius: int = 1
 ) -> StageAMovement:
-    if abs(goal[0] - position[0]) + abs(goal[1] - position[1]) <= stop_radius:
+    delta_x, delta_y = goal[0] - position[0], goal[1] - position[1]
+    if abs(delta_x) + abs(delta_y) <= stop_radius:
         return "STOP"
+    if abs(delta_x) == 1 and abs(delta_y) == 1:
+        return "E" if delta_x > 0 else "W"
     return rule_movement(position, goal)
 
 
@@ -172,6 +176,16 @@ def mark_visible_target(rgb: np.ndarray, target_category: str) -> np.ndarray:
             if (radius - 1) ** 2 <= distance <= radius**2:
                 marked[y, x] = marker
     return marked
+
+
+def rgb_geometry_movement(marked_rgb: np.ndarray) -> StageAMovement:
+    own_y, own_x = np.nonzero(np.all(marked_rgb == (55, 195, 235), axis=2))
+    target_y, target_x = np.nonzero(np.all(marked_rgb == (245, 225, 45), axis=2))
+    if not len(own_x) or not len(target_x):
+        raise ValueError("RGB geometry baseline requires visible self and target")
+    dx = int(round((float(target_x.mean()) - float(own_x.mean())) / 8.0))
+    dy = int(round((float(target_y.mean()) - float(own_y.mean())) / 13.0))
+    return rule_movement_in_range((0, 0), (dx, dy))
 
 
 def _warmup_pair(current: tuple[int, int], goal: tuple[int, int]) -> tuple[str, str]:
@@ -285,6 +299,188 @@ def materialize_overfit32(config_path: Path, output_dir: Path) -> dict[str, obje
         "input_commands_sent": 0,
     }
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return report
+
+
+def _canonical_sha256(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def stage_c_scenarios() -> tuple[dict[str, object], ...]:
+    positions = tuple((x, y) for x in range(2, 13) for y in (2, 3, 4))
+    buckets: dict[StageAMovement, list[tuple[tuple[int, int], tuple[int, int]]]] = defaultdict(
+        list
+    )
+    for start in positions:
+        for goal in positions:
+            action = rule_movement_in_range(start, goal)
+            if action != "STOP":
+                buckets[action].append((start, goal))
+    rows: list[dict[str, object]] = []
+    for action in MOVEMENT_ACTIONS[1:]:
+        pairs = sorted(
+            buckets[action],
+            key=lambda pair: _canonical_sha256([action, pair[0], pair[1]]),
+        )
+        for ordinal, (start, goal) in enumerate(pairs[:11]):
+            split = "train" if ordinal < 8 else "dev"
+            identity = _canonical_sha256(["movement-stage-c", action, start, goal])
+            rows.append(
+                {
+                    "scenario_id": identity[:16],
+                    "split": split,
+                    "initial_action": action,
+                    "start": list(start),
+                    "goal": list(goal),
+                    "render_seed": int(identity[:8], 16),
+                }
+            )
+    return tuple(rows)
+
+
+def _materialize_teacher_episode(
+    scenario: dict[str, object], maximum_steps: int, step_duration_ms: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, bool]:
+    start = cast(tuple[int, int], tuple(cast(list[int], scenario["start"])))
+    goal = cast(tuple[int, int], tuple(cast(list[int], scenario["goal"])))
+    render_seed = int(cast(int, scenario["render_seed"]))
+    arena = RichPixelArena(
+        ArenaConfig(max_ticks=maximum_steps + 1, blue_start=start, red_start=goal)
+    )
+    arena.reset(render_seed)
+    frames: list[np.ndarray] = []
+    labels: list[int] = []
+    timestamps_ms: list[int] = []
+    success = False
+    for step in range(maximum_steps):
+        observation = arena.observe("blue")
+        raw = render(observation, render_seed)
+        frames.append(mark_visible_target(raw, "opponent_hero"))
+        timestamps_ms.append(step * step_duration_ms)
+        position_raw = cast(dict[str, int], observation["self_position"])
+        position = (position_raw["x"], position_raw["y"])
+        action = rule_movement_in_range(position, goal)
+        labels.append(MOVEMENT_ACTIONS.index(action))
+        arena.step(to_arena_action(action), wait_action())
+        if action == "STOP":
+            success = True
+            break
+    return (
+        np.stack(frames).astype(np.uint8),
+        np.asarray(labels, dtype=np.int64),
+        np.asarray(timestamps_ms, dtype=np.int64),
+        success,
+    )
+
+
+def materialize_stage_c_trajectories(config_path: Path, output_dir: Path) -> dict[str, object]:
+    raw = cast(dict[str, object], json.loads(config_path.read_text(encoding="utf-8")))
+    stage = cast(dict[str, object], raw["stage_c"])
+    maximum_steps = int(cast(int, stage["maximum_episode_steps"]))
+    step_duration_ms = int(cast(int, stage["step_duration_ms"]))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = output_dir / "manifest.json"
+    report_path = output_dir / "report.json"
+    episodes_dir = output_dir / "episodes"
+    if manifest_path.exists() or report_path.exists() or episodes_dir.exists():
+        raise ValueError("stage C trajectory output already exists")
+    episodes_dir.mkdir()
+
+    episodes: list[dict[str, object]] = []
+    counts: Counter[str] = Counter()
+    teacher_successes: Counter[str] = Counter()
+    for scenario in stage_c_scenarios():
+        split = str(scenario["split"])
+        ordinal = counts[split]
+        basename = f"{split}-{ordinal:03d}.npz"
+        frames, labels, timestamps_ms, success = _materialize_teacher_episode(
+            scenario, maximum_steps, step_duration_ms
+        )
+        np.savez_compressed(
+            episodes_dir / basename,
+            frames=frames,
+            labels=labels,
+            frame_timestamps_ms=timestamps_ms,
+            window_end=np.arange(len(labels), dtype=np.int64),
+        )
+        episodes.append(
+            {
+                **scenario,
+                "basename": basename,
+                "steps": len(labels),
+                "teacher_success": success,
+                "artifact_sha256": _file_sha256(episodes_dir / basename),
+            }
+        )
+        counts[split] += 1
+        teacher_successes[split] += int(success)
+
+    expected = {
+        "train": int(cast(int, stage["train_episodes"])),
+        "dev": int(cast(int, stage["dev_episodes"])),
+    }
+    initial_support = {
+        split: Counter(str(row["initial_action"]) for row in episodes if row["split"] == split)
+        for split in ("train", "dev")
+    }
+    scenario_overlap = len(
+        {str(row["scenario_id"]) for row in episodes if row["split"] == "train"}
+        & {str(row["scenario_id"]) for row in episodes if row["split"] == "dev"}
+    )
+    passed = (
+        dict(counts) == expected
+        and teacher_successes["train"] == expected["train"]
+        and teacher_successes["dev"] >= int(cast(int, stage["minimum_teacher_successes"]))
+        and scenario_overlap == 0
+        and all(initial_support["train"][action] == 8 for action in MOVEMENT_ACTIONS[1:])
+        and all(initial_support["dev"][action] == 3 for action in MOVEMENT_ACTIONS[1:])
+    )
+    manifest_without_hash: dict[str, object] = {
+        "schema_version": "movement-mvp-stage-c-trajectories-v0",
+        "step_duration_ms": step_duration_ms,
+        "sequence_frames": int(cast(int, stage["sequence_frames"])),
+        "episodes": episodes,
+    }
+    manifest = {
+        **manifest_without_hash,
+        "manifest_sha256": _canonical_sha256(manifest_without_hash),
+    }
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    label_counts = {
+        split: {action: 0 for action in MOVEMENT_ACTIONS} for split in ("train", "dev")
+    }
+    for row in episodes:
+        split = str(row["split"])
+        with np.load(episodes_dir / str(row["basename"]), allow_pickle=False) as data:
+            for label in data["labels"].tolist():
+                label_counts[split][MOVEMENT_ACTIONS[int(label)]] += 1
+    report: dict[str, object] = {
+        "status": "PASSED" if passed else "FAILED",
+        "schema_version": "movement-mvp-stage-c-trajectory-report-v0",
+        "manifest_sha256": manifest["manifest_sha256"],
+        "episode_counts": dict(counts),
+        "teacher_successes": dict(teacher_successes),
+        "initial_direction_support": {
+            split: dict(initial_support[split]) for split in ("train", "dev")
+        },
+        "label_counts": label_counts,
+        "scenario_overlap": scenario_overlap,
+        "frames_stored_once_per_episode": True,
+        "windows_stored_as_indices": True,
+        "actor_input": "goal_marked_rgb_only",
+        "simulator_only": True,
+        "input_commands_sent": 0,
+    }
+    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if not passed:
+        raise ValueError("stage C trajectory gate failed")
     return report
 
 

@@ -60,13 +60,24 @@ def _parser() -> argparse.ArgumentParser:
         "movement-mvp", help="run one offline action-driven Movement MVP stage"
     )
     movement_mvp.add_argument(
-        "--mode", choices=("stage-a", "materialize-overfit32", "overfit32"), required=True
+        "--mode",
+        choices=(
+            "stage-a",
+            "materialize-overfit32",
+            "overfit32",
+            "materialize-trajectories",
+            "train-candidate",
+            "evaluate-dev",
+        ),
+        required=True,
     )
     movement_mvp.add_argument(
         "--config", type=Path, default=Path("configs/movement_mvp.json")
     )
     movement_mvp.add_argument("--output-dir", type=Path, required=True)
     movement_mvp.add_argument("--dataset", type=Path)
+    movement_mvp.add_argument("--dataset-root", type=Path)
+    movement_mvp.add_argument("--checkpoint", type=Path, action="append", default=[])
     movement_mvp.add_argument("--representation", type=Path)
     movement_mvp.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     movement_mvp.add_argument("--freeze-batch-norm", action="store_true")
@@ -1364,7 +1375,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 from hok_agent.movement_mvp import materialize_overfit32
 
                 result = materialize_overfit32(args.config, args.output_dir)
-            else:
+            elif args.mode == "overfit32":
                 if args.dataset is None:
                     raise ValueError("overfit32 requires --dataset")
                 if args.architecture == "p0-branch" and args.representation is None:
@@ -1379,6 +1390,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                     device_name=args.device,
                     freeze_batch_norm=args.freeze_batch_norm,
                     architecture=args.architecture,
+                )
+            elif args.mode == "materialize-trajectories":
+                from hok_agent.movement_mvp import materialize_stage_c_trajectories
+
+                result = materialize_stage_c_trajectories(args.config, args.output_dir)
+            elif args.mode == "train-candidate":
+                if args.dataset_root is None:
+                    raise ValueError("train-candidate requires --dataset-root")
+                from hok_agent.movement_mvp_train import train_stage_c_candidate
+
+                result = train_stage_c_candidate(
+                    args.config,
+                    args.dataset_root,
+                    args.output_dir,
+                    device_name=args.device,
+                )
+            else:
+                if args.dataset_root is None or not args.checkpoint:
+                    raise ValueError("evaluate-dev requires --dataset-root and --checkpoint")
+                from hok_agent.movement_mvp_train import evaluate_stage_c_dev
+
+                result = evaluate_stage_c_dev(
+                    args.config,
+                    args.dataset_root,
+                    tuple(args.checkpoint),
+                    args.output_dir,
+                    device_name=args.device,
                 )
         elif args.command == "shadow-video":
             from hok_agent.shadow import analyze_video

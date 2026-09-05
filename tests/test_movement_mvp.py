@@ -11,8 +11,11 @@ from hok_agent.movement_mvp import (
     load_navigation_config,
     mark_visible_target,
     materialize_overfit32,
+    materialize_stage_c_trajectories,
+    rgb_geometry_movement,
     rule_movement,
     run_stage_a,
+    stage_c_scenarios,
     to_arena_action,
 )
 from hok_agent.transition_store import UnifiedTransitionStore, validate_transition
@@ -124,3 +127,41 @@ def test_goal_marker_uses_visible_rgb_target_category() -> None:
     tower = mark_visible_target(rgb, "enemy_tower")
     assert not np.array_equal(hero, tower)
     assert np.array_equal(rgb[8:11, 6:9], hero[8:11, 6:9])
+
+
+def test_stage_c_scenarios_are_balanced_and_disjoint() -> None:
+    rows = stage_c_scenarios()
+    assert sum(row["split"] == "train" for row in rows) == 64
+    assert sum(row["split"] == "dev" for row in rows) == 24
+    train = {str(row["scenario_id"]) for row in rows if row["split"] == "train"}
+    dev = {str(row["scenario_id"]) for row in rows if row["split"] == "dev"}
+    assert not train & dev
+    for split, count in (("train", 8), ("dev", 3)):
+        assert {
+            action: sum(
+                row["split"] == split and row["initial_action"] == action for row in rows
+            )
+            for action in MOVEMENT_ACTIONS[1:]
+        } == {action: count for action in MOVEMENT_ACTIONS[1:]}
+
+
+def test_stage_c_stores_episode_frames_and_window_indices(tmp_path: Path) -> None:
+    output = tmp_path / "stage-c"
+    report = materialize_stage_c_trajectories(CONFIG, output)
+    assert report["status"] == "PASSED"
+    assert report["episode_counts"] == {"train": 64, "dev": 24}
+    assert report["teacher_successes"] == {"train": 64, "dev": 24}
+    assert report["scenario_overlap"] == 0
+    assert len(tuple((output / "episodes").glob("*.npz"))) == 88
+    with np.load(output / "episodes" / "train-000.npz", allow_pickle=False) as data:
+        assert len(data["frames"]) == len(data["labels"])
+        assert np.array_equal(data["window_end"], np.arange(len(data["labels"])))
+        assert np.array_equal(data["frame_timestamps_ms"], np.arange(len(data["labels"])) * 100)
+
+
+def test_rgb_geometry_baseline_reads_self_and_marked_target() -> None:
+    rgb = np.zeros((64, 64, 3), dtype=np.uint8)
+    rgb[30:33, 20:23] = (55, 195, 235)
+    rgb[17:20, 36:39] = (225, 70, 65)
+    marked = mark_visible_target(rgb, "opponent_hero")
+    assert rgb_geometry_movement(marked) == "NE"

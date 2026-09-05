@@ -6,8 +6,9 @@
 ## Current planning authority (2026-09-05)
 
 `docs/ENGINEERING_CONVERGENCE_PLAN.md` governs future work ordering and resource budgets.
-Stages A and B passed offline for simulator engineering and 32-sample learnability. The next task
-is stage C 64/24 action-driven trajectory BC plus independent 24-episode dev evaluation.
+Stages A/B passed, but the first Stage C simulator candidate failed: epoch 20 reached 15/24 with
+collision fraction 0.271. Random reached 18/24, so the frozen +8 comparison is infeasible on 24
+episodes. The next task is a separately versioned feasible dev contract, not a second training run.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

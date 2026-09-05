@@ -9,7 +9,14 @@ import pytest
 import torch
 from torch import nn
 
-from hok_agent.movement_mvp_train import TaskSpecificMovement, run_overfit32, train_step
+from hok_agent.movement_mvp import materialize_stage_c_trajectories
+from hok_agent.movement_mvp_train import (
+    TaskSpecificMovement,
+    TrajectoryWindowDataset,
+    _rollout,
+    run_overfit32,
+    train_step,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "movement_mvp.json"
@@ -79,3 +86,18 @@ def test_failed_overfit_records_first_update_and_checkpoint(tmp_path: Path) -> N
             device_name="cpu",
             architecture="p0-branch",
         )
+
+
+def test_stage_c_windows_never_cross_episode_and_rule_baselines_reach(tmp_path: Path) -> None:
+    root = tmp_path / "dataset"
+    materialize_stage_c_trajectories(CONFIG, root)
+    dataset = TrajectoryWindowDataset(root, "train")
+    clip, label = dataset[0]
+    assert clip.shape == (16, 128, 128, 3)
+    assert label.ndim == 0
+    assert torch.equal(clip[0], clip[-1])
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    scenario = next(row for row in manifest["episodes"] if row["split"] == "dev")
+    for policy in ("teacher", "geometry"):
+        result = _rollout(scenario, policy, 128, 16, 7001)
+        assert result["status"] == "success"

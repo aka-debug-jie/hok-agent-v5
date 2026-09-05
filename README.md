@@ -24,9 +24,13 @@ policy success. Stage A now passes: a fixed blue-side Houyi bottom-lane rule tra
 RichPixelArena, writes every causal transition, reaches its target, commits STOP, and exits with zero
 reward and zero device input. Stage B then passed the simulator overfit32 gate with a 686,281-parameter
 task-specific GroupNorm+GRU, while both old-P0 branch variants failed. Full training and real-video
-validity remain unproven. The task-specific model is now the default, all four diagnostic attempts
-are closed, and Stage C must initialize a fresh model. Run `make movement-mvp-stage-b-smoke`;
-stage C simulator BC is next.
+validity remain unproven. The task-specific model is now the default and all four diagnostic
+attempts are closed. Run `make movement-mvp-stage-c-smoke` for the current regression surface.
+
+The first Stage C candidate is now frozen failed. Its 64/24 trajectory source passed and training
+loss converged, but epoch 20 completed only 15/24 dev episodes with 27.1% collision steps. Random
+completed 18/24, exposing an infeasible +8 comparison on a 24-episode set. No model is promoted and
+holdout remains unopened; a feasible dev contract must be frozen before any second training run.
 
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
