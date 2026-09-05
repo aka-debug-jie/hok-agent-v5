@@ -10,9 +10,10 @@ Stages A/B passed, but the first Stage C simulator candidate failed: epoch 20 re
 collision fraction 0.271. Random reached 18/24, so the frozen +8 comparison is infeasible on 24
 episodes. The separately versioned `configs/movement_mvp_stage_c_v2.json` now defines the next
 bounded correction: the same 24 dev scenarios, navigation-only damage settings, three consecutive
-STOPs and failure-inclusive step efficiency. Reevaluate the old checkpoint as reference-only,
-then train one fresh recovery-data candidate. At most one further evidence-directed correction
-is available this round; do not change the model or reopen overfit diagnostics.
+STOPs and failure-inclusive step efficiency. Recovery-only and class-balanced corrections both
+failed at 0/24; this round's two correction attempts are exhausted. Do not start another training
+or overfit diagnostic. The rule-batch entrypoint passed cumulative 1/3/10 episodes and completed-
+episode restart in one Store. Next work is limited R0 recovery/packaging, not learned promotion.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

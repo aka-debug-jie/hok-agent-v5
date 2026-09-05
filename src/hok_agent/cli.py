@@ -63,6 +63,7 @@ def _parser() -> argparse.ArgumentParser:
         "--mode",
         choices=(
             "stage-a",
+            "rule-batch",
             "materialize-overfit32",
             "overfit32",
             "materialize-trajectories",
@@ -75,11 +76,16 @@ def _parser() -> argparse.ArgumentParser:
         "--config", type=Path, default=Path("configs/movement_mvp.json")
     )
     movement_mvp.add_argument("--output-dir", type=Path, required=True)
+    movement_mvp.add_argument("--episodes", type=int, choices=(1, 3, 10), default=10)
+    movement_mvp.add_argument("--resume", action="store_true")
     movement_mvp.add_argument("--dataset", type=Path)
     movement_mvp.add_argument("--dataset-root", type=Path)
     movement_mvp.add_argument("--checkpoint", type=Path, action="append", default=[])
     movement_mvp.add_argument("--reference-only", action="store_true",
                               help="evaluate an old checkpoint as a non-promoting reference")
+    movement_mvp.add_argument(
+        "--sampling", choices=("uniform", "class-balanced"), default="uniform"
+    )
     movement_mvp.add_argument("--representation", type=Path)
     movement_mvp.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     movement_mvp.add_argument("--freeze-batch-norm", action="store_true")
@@ -1373,6 +1379,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 from hok_agent.movement_mvp import run_stage_a
 
                 result = run_stage_a(args.config, args.output_dir)
+            elif args.mode == "rule-batch":
+                from hok_agent.movement_mvp import run_rule_batch
+
+                result = run_rule_batch(args.config, args.output_dir, args.episodes,
+                                        resume=args.resume)
             elif args.mode == "materialize-overfit32":
                 from hok_agent.movement_mvp import materialize_overfit32
 
@@ -1407,6 +1418,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.dataset_root,
                     args.output_dir,
                     device_name=args.device,
+                    sampling=args.sampling,
                 )
             else:
                 if args.dataset_root is None or not args.checkpoint:

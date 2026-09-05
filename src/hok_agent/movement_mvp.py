@@ -688,7 +688,19 @@ def run_stage_a(config_path: Path, output_dir: Path) -> dict[str, object]:
     summary_path = output_dir / "summary.json"
     if database.exists() or summary_path.exists():
         raise ValueError("stage A output already exists")
+    return _run_rule_episode(
+        config, output_dir, database, summary_path, f"movement-stage-a-seed-{config.seed}", 1
+    )
 
+
+def _run_rule_episode(
+    config: NavigationConfig,
+    output_dir: Path,
+    database: Path,
+    summary_path: Path,
+    episode_id: str,
+    stop_confirmation_steps: int,
+) -> dict[str, object]:
     arena = RichPixelArena(
         ArenaConfig(
             max_ticks=max(config.max_steps + 1, 32),
@@ -697,7 +709,6 @@ def run_stage_a(config_path: Path, output_dir: Path) -> dict[str, object]:
         )
     )
     arena.reset(config.seed)
-    episode_id = f"movement-stage-a-seed-{config.seed}"
     bus = LatestFrameBus()
     step_ns = config.step_duration_ms * 1_000_000
     observation = _packet(output_dir, episode_id, 0, 0, arena.observe("blue"), config.seed)
@@ -705,6 +716,7 @@ def run_stage_a(config_path: Path, output_dir: Path) -> dict[str, object]:
     previous_action: StageAMovement = "STOP"
     positions = [config.start]
     actions: list[StageAMovement] = []
+    stop_streak = 0
 
     with UnifiedTransitionStore(database) as store:
         for step_id in range(config.max_steps):
@@ -715,7 +727,11 @@ def run_stage_a(config_path: Path, output_dir: Path) -> dict[str, object]:
             arena.step(to_arena_action(action), wait_action())
             next_position_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
             next_position = (next_position_raw["x"], next_position_raw["y"])
-            success = action == "STOP" and position == config.goal and next_position == position
+            stopped_at_goal = (
+                action == "STOP" and position == config.goal and next_position == position
+            )
+            stop_streak = stop_streak + 1 if stopped_at_goal else 0
+            success = stop_streak >= stop_confirmation_steps
             timeout = step_id + 1 == config.max_steps and not success
             next_observation = _packet(
                 output_dir,
@@ -763,7 +779,8 @@ def run_stage_a(config_path: Path, output_dir: Path) -> dict[str, object]:
         "steps": len(rows),
         "actions": actions,
         "positions": positions,
-        "position_changed": any(a != b for a, b in zip(positions, positions[1:], strict=True)),
+        "position_changed": any(a != b for a, b in zip(positions[:-1], positions[1:], strict=True)),
+        "stop_confirmation_steps": stop_confirmation_steps,
         "terminal_reason": final["terminal_reason"],
         "episode_end_kind": final["episode_end_kind"],
         "terminal_transition_committed": final["done"] and len(rows) == len(actions),
@@ -772,3 +789,76 @@ def run_stage_a(config_path: Path, output_dir: Path) -> dict[str, object]:
     }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return summary
+
+
+def run_rule_batch(
+    config_path: Path,
+    output_dir: Path,
+    episode_count: int,
+    *,
+    resume: bool = False,
+) -> dict[str, object]:
+    """Fixed-scene engineering run, with restart only at completed episode boundaries."""
+    config = load_navigation_config(config_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    database = output_dir / "replay.sqlite3"
+    summary_path = output_dir / "batch-summary.json"
+    summaries: list[dict[str, object]] = []
+    if summary_path.exists():
+        if not resume:
+            raise ValueError("rule batch exists; use --resume at an episode boundary")
+        saved = cast(dict[str, object], json.loads(summary_path.read_text(encoding="utf-8")))
+        if saved["config_sha256"] != config.sha256:
+            raise ValueError("rule batch resume config differs")
+        summaries = cast(list[dict[str, object]], saved["episode_summaries"])
+        with UnifiedTransitionStore(database) as store:
+            for row in summaries:
+                rows = store.load_episode(str(row["episode_id"]))
+                if not rows or len(rows) != row["steps"] or not rows[-1]["done"]:
+                    raise ValueError("rule batch completed-episode recovery differs")
+    elif database.exists():
+        raise ValueError(
+            "partial first episode requires in-episode recovery, not a fresh overwrite"
+        )
+    if len(summaries) > episode_count:
+        raise ValueError("rule batch resume cannot shrink its completed episode count")
+    result: dict[str, object] = {}
+    for ordinal in range(len(summaries), episode_count):
+        episode_id = f"movement-rule-seed-{config.seed}-episode-{ordinal:03d}"
+        # A crash after append but before the batch summary must not overwrite that episode.
+        with UnifiedTransitionStore(database) as store:
+            if store.load_episode(episode_id) or any(output_dir.glob(f"{episode_id}-*.npz")):
+                raise ValueError("partial episode exists; in-episode recovery is not implemented")
+        summary = _run_rule_episode(
+            config,
+            output_dir,
+            database,
+            output_dir / f"{episode_id}-summary.json",
+            episode_id,
+            3,
+        )
+        summaries.append(summary)
+        result = {
+            "status": "PASSED" if all(row["status"] == "PASSED" for row in summaries) else "FAILED",
+            "schema_version": "movement-mvp-rule-batch-v0",
+            "config_sha256": config.sha256,
+            "completed_episodes": len(summaries),
+            "transitions": sum(int(cast(int, row["steps"])) for row in summaries),
+            "milestones": [count for count in (1, 3, 10) if count <= len(summaries)],
+            "episode_summaries": summaries,
+            "policy": "structured-simulator-rule",
+            "fixed_scene_repeated": True,
+            "model_checkpoint_loaded": False,
+            "resume_boundary": "completed-episode-only",
+            "learned_policy_passed": False,
+            "reward_total": 0.0,
+            "input_commands_sent": 0,
+        }
+        summary_path.write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        if summary["status"] != "PASSED":
+            break
+    if not result:
+        result = cast(dict[str, object], json.loads(summary_path.read_text(encoding="utf-8")))
+    return result

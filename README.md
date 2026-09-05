@@ -31,10 +31,26 @@ The first Stage C candidate is now frozen failed. Its 64/24 trajectory source pa
 loss converged, but epoch 20 completed only 15/24 dev episodes with 27.1% collision steps. Random
 completed 18/24, exposing an infeasible +8 comparison on a 24-episode set. No model is promoted and
 holdout remains unopened. The v2 contract now isolates navigation, requires three consecutive STOPs
-and uses failure-inclusive efficiency. Its 64/24 recovery data passed, but the uniform-sampling
-candidate reached 0/24; one bounded class-balanced correction remains. Use
+and uses failure-inclusive efficiency. Its 64/24 recovery data passed, but both the uniform-sampling
+and class-balanced candidates reached 0/24. This round's corrections are exhausted. Use
 `--config configs/movement_mvp_stage_c_v2.json` for this route and `--reference-only` when
 reevaluating an older checkpoint; reference results cannot promote a model.
+
+The rule data path runs independently of learning. With the project Python environment active and
+`HOK_LARGE_ROOT` set, use a new local output directory:
+
+```bash
+MOVEMENT_RUN_DIR="${HOK_LARGE_ROOT:?set HOK_LARGE_ROOT}/runs/hierarchical-movement-mvp/rule-batch-demo"
+python -m hok_agent movement-mvp --mode rule-batch --episodes 1 --output-dir "$MOVEMENT_RUN_DIR"
+python -m hok_agent movement-mvp --mode rule-batch --episodes 3 --resume --output-dir "$MOVEMENT_RUN_DIR"
+python -m hok_agent movement-mvp --mode rule-batch --episodes 10 --resume --output-dir "$MOVEMENT_RUN_DIR"
+```
+
+This repeats the fixed Stage A scene using a structured simulator rule. It writes one SQLite Store,
+derived frame bundles and `batch-summary.json`; every episode ends after three STOPs. Resume starts
+after completed episodes and refuses to overwrite a partial episode. It is not mid-episode recovery
+or learned navigation, and it loads no model or phone interface. Actual results and remaining work
+are recorded only in [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md).
 
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.

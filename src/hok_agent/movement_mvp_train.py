@@ -14,7 +14,7 @@ import torch
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 from torch import nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from hok_agent.hierarchical_p1v2_movement_branch import MovementBranch
 from hok_agent.movement_mvp import (
@@ -392,7 +392,10 @@ def train_stage_c_candidate(
     output_dir: Path,
     *,
     device_name: str,
+    sampling: str = "uniform",
 ) -> dict[str, object]:
+    if sampling not in ("uniform", "class-balanced"):
+        raise ValueError("unknown stage C training sampler")
     raw = cast(dict[str, object], json.loads(config_path.read_text(encoding="utf-8")))
     stage = cast(dict[str, object], raw["stage_c"])
     if cast(dict[str, object], raw["stage_b"])["selected_architecture"] != "task-specific":
@@ -425,6 +428,7 @@ def train_stage_c_candidate(
         "normalization": "uint8-rgb/127.5-1-fp32",
         "action_order": list(MOVEMENT_ACTIONS),
         "fresh_initialization": True,
+        "sampling": sampling,
     }
     contract_path.write_text(
         json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -448,10 +452,25 @@ def train_stage_c_candidate(
         weight_decay=float(cast(float, stage["weight_decay"])),
     )
     dataset = TrajectoryWindowDataset(dataset_root, "train")
+    dataset_labels = torch.tensor(
+        [int(dataset.episodes[episode][1][end]) for episode, end in dataset.references]
+    )
+    label_counts = torch.bincount(dataset_labels, minlength=len(MOVEMENT_ACTIONS))
+    sampler = (
+        WeightedRandomSampler(
+            1.0 / label_counts[dataset_labels].double(),
+            num_samples=len(dataset),
+            replacement=True,
+            generator=torch.Generator().manual_seed(seed),
+        )
+        if sampling == "class-balanced"
+        else None
+    )
     loader = DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=sampler is None,
+        sampler=sampler,
         num_workers=0,
         generator=torch.Generator().manual_seed(seed),
     )
@@ -459,10 +478,12 @@ def train_stage_c_candidate(
     first_update: dict[str, object] | None = None
     epoch_losses: list[float] = []
     checkpoints: list[dict[str, object]] = []
+    sampled_label_counts = torch.zeros(len(MOVEMENT_ACTIONS), dtype=torch.int64)
     started = time.monotonic()
     for epoch in range(1, epochs + 1):
         losses = []
         for clips, labels in loader:
+            sampled_label_counts += torch.bincount(labels, minlength=len(MOVEMENT_ACTIONS))
             loss, gradient_norm = train_step(
                 model, _batch(clips, device), labels.to(device), optimizer
             )
@@ -492,6 +513,7 @@ def train_stage_c_candidate(
                     "manifest_sha256": str(manifest["manifest_sha256"]),
                     "config_sha256": config_hash,
                     "training_contract_sha256": _sha256(contract_path),
+                    "sampling": sampling,
                     "epoch": str(epoch),
                 },
             )
@@ -510,6 +532,11 @@ def train_stage_c_candidate(
         "training_contract_sha256": _sha256(contract_path),
         "train_episodes": len(train_rows),
         "train_windows": len(dataset),
+        "sampling": sampling,
+        "source_label_counts": dict(zip(MOVEMENT_ACTIONS, label_counts.tolist(), strict=True)),
+        "sampled_label_counts": dict(
+            zip(MOVEMENT_ACTIONS, sampled_label_counts.tolist(), strict=True)
+        ),
         "epochs": epochs,
         "batch_size": batch_size,
         "epoch_losses": epoch_losses,

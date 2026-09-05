@@ -7,7 +7,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
-from safetensors.torch import save_file
 from torch import nn
 
 from hok_agent.movement_mvp import (
@@ -222,7 +221,9 @@ def test_mismatched_checkpoint_is_reference_only_never_promoted(
     root = tmp_path / "dataset"
     materialize_stage_c_trajectories(CONFIG_V2, root)
     checkpoint = tmp_path / "old.safetensors"
-    save_file(TaskSpecificMovement().state_dict(), checkpoint, metadata={"config_sha256": "old"})
+    movement_mvp_train.save_file(
+        TaskSpecificMovement().state_dict(), checkpoint, metadata={"config_sha256": "old"}
+    )
 
     def fixed_result(
         scenario: dict[str, object], policy: str, *args: object, **kwargs: object

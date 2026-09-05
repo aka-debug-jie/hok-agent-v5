@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from hok_agent.movement_mvp import (
     MOVEMENT_ACTIONS,
@@ -14,6 +15,7 @@ from hok_agent.movement_mvp import (
     materialize_stage_c_trajectories,
     rgb_geometry_movement,
     rule_movement,
+    run_rule_batch,
     run_stage_a,
     stage_c_scenarios,
     to_arena_action,
@@ -95,6 +97,29 @@ def test_stage_a_config_is_fixed_to_houyi_blue_bottom() -> None:
     )
 
 
+def test_rule_batch_resumes_without_replaying_completed_episodes(tmp_path: Path) -> None:
+    output = tmp_path / "batch"
+    first = run_rule_batch(CONFIG, output, 1)
+    episode_id = first["episode_summaries"][0]["episode_id"]
+    with UnifiedTransitionStore(output / "replay.sqlite3") as store:
+        original = store.load_episode(episode_id)
+    assert len(original) == 9
+    assert [row["done"] for row in original] == [False] * 8 + [True]
+    with pytest.raises(ValueError, match="use --resume"):
+        run_rule_batch(CONFIG, output, 3)
+    third = run_rule_batch(CONFIG, output, 3, resume=True)
+    assert third["milestones"] == [1, 3]
+    assert third["transitions"] == 27
+    with UnifiedTransitionStore(output / "replay.sqlite3") as store:
+        assert store.load_episode(episode_id) == original
+        for episode in third["episode_summaries"]:
+            rows = store.load_episode(episode["episode_id"])
+            assert rows[-1]["done"]
+            assert all((output / row["observation"]["frame_bundle_ref"]).is_file() for row in rows)
+    assert len({row["episode_id"] for row in third["episode_summaries"]}) == 3
+    assert third["input_commands_sent"] == 0
+
+
 def test_stage_b_materializes_causal_balanced_overfit32(tmp_path: Path) -> None:
     output = tmp_path / "overfit32"
     report = materialize_overfit32(CONFIG, output)
@@ -138,9 +163,7 @@ def test_stage_c_scenarios_are_balanced_and_disjoint() -> None:
     assert not train & dev
     for split, count in (("train", 8), ("dev", 3)):
         assert {
-            action: sum(
-                row["split"] == split and row["initial_action"] == action for row in rows
-            )
+            action: sum(row["split"] == split and row["initial_action"] == action for row in rows)
             for action in MOVEMENT_ACTIONS[1:]
         } == {action: count for action in MOVEMENT_ACTIONS[1:]}
 

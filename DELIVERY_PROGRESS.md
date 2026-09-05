@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `STAGE_C_RECOVERY_CANDIDATE_FAILED`: v2 64/24 data passed, but uniform sampling reached 0/24 | One class-balanced correction remains this round; no promotion/holdout |
+| Engineering convergence | `STAGE_C_CORRECTIONS_FAILED_RULE_BATCH_PASSED`: both bounded corrections reached 0/24; rule batch passed cumulative 1/3/10 with 90 valid transitions | End this round's tuning; continue limited R0 recovery/packaging, no learned promotion/holdout |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: complete the last bounded class-balanced correction, then leave Stage C tuning
-CURRENT STATUS: STAGE_C_RECOVERY_CANDIDATE_FAILED; prior failures preserved
-BLOCKING FAILURE: recovery uniform sampling predicts STOP; STOP is 336/535 supervised windows
-NEXT ACCEPTANCE: one fresh class-balanced run on the same data and v2 dev contract
-COMMAND STATUS: materialization/reference/recovery candidate completed; holdout unopened
+CURRENT GOAL: finish limited R0 recovery and packaging using the rule batch
+CURRENT STATUS: STAGE_C_CORRECTIONS_FAILED_RULE_BATCH_PASSED
+BLOCKING FAILURE: both new candidates are 0/24; class balance alone did not repair learning
+NEXT ACCEPTANCE: bounded mid-episode interruption/recovery, then R0 packaging; no further training
+COMMAND STATUS: rule-batch 1 -> 3 -> 10 and completed-episode resume passed; holdout unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -550,6 +550,46 @@ expansion was introduced.
   `stage-c-dev-seed0-v2-recovery`. Old v1 report/checkpoint/config hashes remain unchanged.
 - Focused tests passed (26 plus one new checkpoint/reference binding test); Ruff, strict mypy and
   project check passed. No full historical suite or overfit diagnostic was rerun.
+
+## Engineering convergence bounded correction closure and rule data path
+
+- The class-balanced run reused the exact v2 dataset, config, seed-0 fresh architecture and 20-epoch
+  schedule. Only the sampler changed. Actual sampled class counts range 1,134–1,269 over 10,700
+  samples, so imbalance was mechanically reduced. Epoch-20 loss remained 2.21404 and both epoch-10
+  and epoch-20 reached 0/24. This does not establish the cause of the failed learning; it does rule
+  out describing class balance alone as a successful repair. Both bounded correction attempts are
+  exhausted. No third correction, fifth overfit diagnostic, holdout or real-video run was started.
+- Balanced train/dev report hashes:
+  `8108416518414ed5a31a48b81bb8cb32d404722139f2550c8eaca63d7856b6a3` /
+  `b34f9818c25790dbd19fb2914c78cde4172cb6f76298efb07880d0a0894d9ab8`.
+  Balanced epoch-20 checkpoint: `65c441a528c6470bafc4aa94f6d2925b5e8a93d8cf5665b6b1fec0ce97c33a8b`.
+  Recovery-only dev report: `8afbbee38f2b91b845a7bb9157c991112926599f64562af42e001c523c52e773`.
+  Reference-only report: `b7f995fd544c2dbfe146b8714fa669f6f0be9f3f6795bb499d7b6e257fb085bc`.
+- Added `movement-mvp --mode rule-batch`: fixed blue Houyi navigation, unique episode IDs, one
+  UnifiedTransitionStore, real simulated displacement and three STOPs before terminal append/exit.
+  Three separate CLI invocations completed cumulative 1 -> 3 -> 10 episodes, resuming only after
+  completed episodes. Previously committed episodes were not replayed. This repeats one fixed
+  scene with a structured simulator rule; it is not a learned or RGB-policy generalization result.
+- Reopened the real SQLite artifact: integrity check `ok`, 10 episodes, 90 valid transitions,
+  exactly 10 terminal rows, all observation/next-observation frame references present, every last
+  three actions STOP, reward sum 0 and input 0. Artifact: `stage-d-rule-batch-v1/batch-summary.json`,
+  SHA-256 `18d3f1f7b6007ddecc07dea1781403b0d0c792027b1a52161d93a9ff714a75f7`.
+- Resume is explicitly completed-episode-only. A partial episode is preserved and rejected;
+  mid-episode environment restoration, optimizer/checkpoint resume, real RGB adaptation and the
+  complete D/E delivery remain unfinished. No failed learner is installed as a fallback.
+- The two new training runs report 48.39 seconds total and ~298 MiB peak CUDA allocation each;
+  three named dev/reference evaluations report 93.41 seconds. Named artifacts add 17,040,031 bytes
+  (~16.25 MiB). Earlier ad-hoc forward timing and cumulative engineering time were not instrumented,
+  so exact total budget remaining is not asserted. These runs stay within the original budget.
+- Final verification: 28 focused tests passed; the checkpoint/reference test passed again after
+  replacing its new direct vision-library import with the existing trainer I/O boundary. Ruff,
+  strict mypy (67 source files), project check (239 files, zero findings, four root Markdown files)
+  and diff check passed. The intermediate recovery commit preceded this final test-import repair;
+  it is not a release freeze. The full historical suite was not rerun for this partial D delivery.
+- All dev policies retain the same RichPixelArena legal-action execution boundary. Actor tensors
+  contain only RGB; the random baseline samples uniformly over currently allowed movement/STOP
+  actions, not an unconstrained nine-action space. Rule batch recovery is a storage capability,
+  not evidence of a learned model or of in-episode checkpoint restoration.
 
 ## Frozen Global Agent execution state
 
