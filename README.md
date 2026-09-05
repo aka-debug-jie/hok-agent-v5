@@ -131,6 +131,11 @@ slot-cell accuracy (0.6875) and action accuracy/loss (0.4375/1.055). Formal trai
 The next bounded hypothesis is two-stage training: localize slots first, freeze them, then fit the
 action temporal/head layers under a new contract.
 
+Two-stage v2 passed localization at 1.0 within-one-cell accuracy and 3.97-pixel mean error, but the
+frozen-localizer action stage reached only 0.8125 accuracy and 0.871 loss. Synthetic policy tuning is
+now stopped. The next precondition is a high-resolution real-player-cue audit, not another toy-model
+head or longer training run.
+
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
 See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.

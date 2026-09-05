@@ -22,6 +22,8 @@ from hok_agent.movement_mvp_train import (
     RelationalMovement,
     TaskSpecificMovement,
     TrajectoryWindowDataset,
+    _action_step,
+    _localization_step,
     _rollout,
     _window,
     evaluate_stage_c_dev,
@@ -100,6 +102,38 @@ def test_localized_train_step_updates_attention_from_automatic_targets() -> None
     assert all(math.isfinite(value) for value in losses)
     assert losses[-1] > 0.0
     assert not torch.equal(before, model.attention.weight)
+
+
+def test_two_stage_training_freezes_localizer_before_action_update() -> None:
+    torch.manual_seed(0)
+    model = RelationalMovement()
+    clips = torch.zeros((2, 16, 3, 128, 128))
+    clips[0, :, 0, 16:32, 16:32] = 1.0
+    clips[1, :, 1, 96:112, 96:112] = 1.0
+    coordinates = torch.zeros((2, 16, 2, 2))
+    coordinates[:, :, 0] = torch.tensor([24.0, 24.0])
+    coordinates[:, :, 1] = torch.tensor([104.0, 104.0])
+    localizer = [*model.spatial.parameters(), *model.attention.parameters()]
+    optimizer = torch.optim.AdamW(localizer, lr=0.001, weight_decay=0.0)
+    before = model.attention.weight.detach().clone()
+    loss, gradient = _localization_step(model, clips, coordinates, optimizer, 16)
+    assert math.isfinite(loss) and gradient > 0.0
+    assert not torch.equal(before, model.attention.weight)
+    for parameter in localizer:
+        parameter.requires_grad = False
+    frozen = model.attention.weight.detach().clone()
+    project = model.project[0].weight.detach().clone()
+    action_optimizer = torch.optim.AdamW(
+        [parameter for parameter in model.parameters() if parameter.requires_grad],
+        lr=0.001,
+        weight_decay=0.0,
+    )
+    loss, gradient = _action_step(
+        model, clips, torch.tensor([1, 2]), action_optimizer
+    )
+    assert math.isfinite(loss) and gradient > 0.0
+    assert torch.equal(frozen, model.attention.weight)
+    assert not torch.equal(project, model.project[0].weight)
 
 
 def test_default_contract_closes_fifth_diagnostic(tmp_path: Path) -> None:

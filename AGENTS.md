@@ -33,9 +33,10 @@ first 93,611-parameter two-slot relational model is now frozen failed at overfit
 loss 1.258; N/S/E/W recalls were zero and no formal training ran. Do not rerun or proceed to Stage C.
 The first automatic-localization correction is also frozen failed: mean slot error passed at 3.94
 pixels, but slot-cell accuracy was 0.6875 and action accuracy/loss were 0.4375/1.055. Formal
-training did not run. Do not rerun or change its weights. A future correction may separate slot
-pretraining from action fitting under a new contract; the real player cue remains independently
-required before R2.
+training did not run. Two-stage v1 stopped at its exact-cell gate; v2 used a predeclared one-cell
+tolerance, passed localization at 1.0 within-one-cell / 3.97 pixels, froze the localizer exactly,
+but action accuracy/loss were only 0.8125/0.871. Formal training did not run. Stop further synthetic
+model tuning; the next work must establish a high-resolution real player cue before any new policy.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `LOCALIZED_RELATIONAL_OVERFIT32_FAILED`: slot error 3.94 px passed, but slot-cell/action gates failed | Freeze joint training; next hypothesis is two-stage slot pretrain then action fit |
+| Engineering convergence | `TWO_STAGE_ACTION_OVERFIT_FAILED`: localization passed, frozen action stage reached 0.8125 / 0.871 | Stop synthetic tuning; require high-resolution real player-cue evidence |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: freeze the failed joint-localization diagnostic and bound a two-stage correction
-CURRENT STATUS: LOCALIZED_RELATIONAL_OVERFIT32_FAILED; prior candidates and R0 remain frozen
-BLOCKING FAILURE: slots approach coordinates but cell identity and action mapping do not jointly converge
-NEXT ACCEPTANCE: separately versioned slot-pretrain/frozen-slot action overfit; no formal training yet
-COMMAND STATUS: joint localized overfit failed and stopped; holdout/test/real training/device unopened
+CURRENT GOAL: freeze two-stage failure and return to the unresolved real player cue
+CURRENT STATUS: TWO_STAGE_ACTION_OVERFIT_FAILED; prior candidates and R0 remain frozen
+BLOCKING FAILURE: frozen localized features reach only 0.8125 action accuracy; real player cue unverified
+NEXT ACCEPTANCE: high-resolution real-player-cue preflight before any further policy model
+COMMAND STATUS: two-stage diagnostics exhausted; formal/holdout/test/real training/device unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -846,6 +846,36 @@ expansion was introduced.
 - Verification passed: 15 focused goal-canvas/localization tests, Ruff, strict mypy (70 source
   files), project safety (251 files, 131 Python files, zero findings, four root Markdown files),
   and `git diff --check`. No full historical suite was rerun for this stopped diagnostic.
+
+## Goal-canvas two-stage diagnostics v1-v2
+
+- V1 fresh-initialized the same 93,611-parameter model, trained only spatial/attention parameters
+  for 200 updates and required the previously frozen exact 16x16 cell gate. Mean error was 3.9704
+  pixels, but exact-cell accuracy was 0.6699, so action training was correctly skipped. Report and
+  checkpoint SHA-256:
+  `35bcb0460b17680751800b8bf907ea08339b8366642212871c6a3bbb366de190` /
+  `a690744cfefb8917d08863928facc723db6271f7a13d96d601711db2ce4bd7fb`.
+- A read-only diagnosis showed every predicted slot was at most one 16x16 cell from truth;
+  within-one-cell accuracy was 1.0. V2 therefore froze a different metric before rerunning:
+  Chebyshev cell distance <=1 must cover at least 0.95, while the 5-pixel mean-error gate remained.
+  It did not change data, model, updates, learning rate or action gates. Contract SHA-256:
+  `1d2f872c23bd7c3bbb9cbd7b0099b1f6c42fd943807b0d2e032cde436d15ae0d`.
+- V2 localization passed at 1.0 within-one-cell accuracy, maximum one-cell error and 3.9706-pixel
+  mean error. Spatial and attention parameters were then frozen and remained byte-for-byte
+  unchanged through 200 action updates. The action stage improved over joint training but failed:
+  accuracy 0.8125 and loss 0.87116 versus 0.95/0.05; E and N recalls remained zero.
+- V2 report/checkpoint SHA-256:
+  `90f74fa2e2bd663b2eae95ead7893bbcac487e0f78147e7dd96de7fad6de6a84` /
+  `b9ac5ba704526e54f167d714bb5963762c49379962885b0a34f334f5986d9b43`.
+  Runtime was 5.12 seconds, peak CUDA allocation 572,092,928 bytes; each v1/v2 run uses about
+  372 KiB. Both checkpoints are diagnostic-only and cannot initialize another run.
+- The metric repair does not reclassify V1. V2 demonstrates stable coarse localization and clean
+  stage freezing, but action learnability still fails. Further synthetic head, update or sampler
+  tuning is stopped to avoid optimizing the toy renderer. The next evidence must concern the
+  high-resolution real player cue; no formal training, test, holdout, R2 or device input is open.
+- Verification passed: 16 focused localization/two-stage tests, Ruff, strict mypy (70 source files),
+  project safety (253 files, 131 Python files, zero findings, four root Markdown files), and
+  `git diff --check`. No full historical suite was rerun for these stopped diagnostics.
 
 ## Frozen Global Agent execution state
 

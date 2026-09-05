@@ -1,0 +1,41 @@
+{
+  "schema_version": "movement-goal-canvas-two-stage-contract-v2",
+  "contract_sha256": "1d2f872c23bd7c3bbb9cbd7b0099b1f6c42fd943807b0d2e032cde436d15ae0d",
+  "failed_v1_report_sha256": "35bcb0460b17680751800b8bf907ea08339b8366642212871c6a3bbb366de190",
+  "failed_joint_report_sha256": "178681bd0df868ba8ec7e3db3f4b137bafe1e279b507e6782d94fa2780d80c33",
+  "localized_dataset_sha256": "842832fc9fc958835c31ebc205d155499a50b6867e333681634291a076704360",
+  "seed": 0,
+  "localization_stage": {
+    "maximum_updates": 200,
+    "batch_size": 8,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "attention_grid_size": 16,
+    "minimum_slot_within_one_cell_accuracy": 0.95,
+    "maximum_slot_error_pixels": 5.0
+  },
+  "action_stage": {
+    "maximum_updates": 200,
+    "batch_size": 8,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "minimum_action_accuracy": 0.95,
+    "maximum_action_loss": 0.05
+  },
+  "freeze_after_localization": ["spatial", "attention"],
+  "train_after_localization": ["project", "temporal", "head"],
+  "localization_metric_repair": "chebyshev_distance_at_most_one_on_16x16_grid",
+  "data_changed": false,
+  "model_changed": false,
+  "updates_changed": false,
+  "fresh_initialization": true,
+  "diagnostic_attempt_limit": 1,
+  "diagnostic_attempts_used": 0,
+  "coordinate_labels_in_actor_input": false,
+  "real_rgb_training_frames": 0,
+  "formal_training_allowed": false,
+  "test_allowed": false,
+  "holdout_allowed": false,
+  "r2_allowed": false,
+  "device_input_allowed": false
+}

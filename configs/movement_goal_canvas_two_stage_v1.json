@@ -1,0 +1,36 @@
+{
+  "schema_version": "movement-goal-canvas-two-stage-contract-v1",
+  "contract_sha256": "5d4a46737d67842bca660d1be5f6c122cfaad2d40c639e770fdb2090e0535e27",
+  "failed_joint_report_sha256": "178681bd0df868ba8ec7e3db3f4b137bafe1e279b507e6782d94fa2780d80c33",
+  "localized_dataset_sha256": "842832fc9fc958835c31ebc205d155499a50b6867e333681634291a076704360",
+  "seed": 0,
+  "localization_stage": {
+    "maximum_updates": 200,
+    "batch_size": 8,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "attention_grid_size": 16,
+    "minimum_slot_cell_accuracy": 0.95,
+    "maximum_slot_error_pixels": 5.0
+  },
+  "action_stage": {
+    "maximum_updates": 200,
+    "batch_size": 8,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "minimum_action_accuracy": 0.95,
+    "maximum_action_loss": 0.05
+  },
+  "freeze_after_localization": ["spatial", "attention"],
+  "train_after_localization": ["project", "temporal", "head"],
+  "fresh_initialization": true,
+  "diagnostic_attempt_limit": 1,
+  "diagnostic_attempts_used": 0,
+  "coordinate_labels_in_actor_input": false,
+  "real_rgb_training_frames": 0,
+  "formal_training_allowed": false,
+  "test_allowed": false,
+  "holdout_allowed": false,
+  "r2_allowed": false,
+  "device_input_allowed": false
+}

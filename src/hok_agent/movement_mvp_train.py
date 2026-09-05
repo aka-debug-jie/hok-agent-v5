@@ -460,7 +460,13 @@ def _evaluate_localized(
         selected = labels_device == label
         recalls.append(float((predicted[selected] == label).float().mean()))
     targets = _slot_cell_targets(coordinates_device, grid_size)
-    cell_accuracy = float((attention_logits.argmax(dim=-1) == targets).float().mean())
+    predicted_cells = attention_logits.argmax(dim=-1)
+    cell_accuracy = float((predicted_cells == targets).float().mean())
+    target_x, target_y = targets % grid_size, targets // grid_size
+    predicted_x, predicted_y = predicted_cells % grid_size, predicted_cells // grid_size
+    cell_error = torch.maximum(
+        torch.abs(predicted_x - target_x), torch.abs(predicted_y - target_y)
+    )
     predicted_pixels = (predicted_coordinates + 1.0) * 63.5
     slot_error = torch.linalg.vector_norm(predicted_pixels - coordinates_device, dim=-1)
     return {
@@ -468,6 +474,8 @@ def _evaluate_localized(
         "action_loss": action_loss,
         "action_recall": dict(zip(MOVEMENT_ACTIONS, recalls, strict=True)),
         "slot_cell_accuracy": cell_accuracy,
+        "slot_within_one_cell_accuracy": float((cell_error <= 1).float().mean()),
+        "maximum_slot_cell_error": int(cell_error.max()),
         "mean_slot_error_pixels": float(slot_error.mean()),
         "player_slot_error_pixels": float(slot_error[:, :, 0].mean()),
         "goal_slot_error_pixels": float(slot_error[:, :, 1].mean()),
@@ -630,6 +638,297 @@ def run_localized_overfit32(
         "peak_cuda_memory_bytes": (
             int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else 0
         ),
+    }
+    report["report_sha256"] = _canonical_sha256(report)
+    (output_dir / "report.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return report
+
+
+def _load_localized_dataset(
+    dataset_path: Path,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    with np.load(dataset_path, allow_pickle=False) as data:
+        clips = torch.from_numpy(data["rgb_sequence"].copy())
+        labels = torch.from_numpy(data["label"].astype(np.int64))
+        player = torch.from_numpy(data["player_xy_sequence"].astype(np.float32))
+        goal = torch.from_numpy(data["goal_xy_sequence"].astype(np.float32))
+    coordinates = torch.stack((player, goal), dim=2)
+    if clips.shape != (32, 16, 128, 128, 3) or coordinates.shape != (32, 16, 2, 2):
+        raise ValueError("two-stage localized dataset differs")
+    return clips, labels, coordinates
+
+
+def _localization_step(
+    model: RelationalMovement,
+    clips: torch.Tensor,
+    coordinates: torch.Tensor,
+    optimizer: torch.optim.Optimizer,
+    grid_size: int,
+) -> tuple[float, float]:
+    model.train()
+    _actions, attention_logits, _predicted = model.forward_with_slots(clips)
+    targets = _slot_cell_targets(coordinates, grid_size)
+    loss = nn.functional.cross_entropy(
+        attention_logits.reshape(-1, grid_size * grid_size), targets.flatten()
+    )
+    optimizer.zero_grad()
+    loss.backward()  # type: ignore[no-untyped-call]
+    gradients = [
+        torch.sum(parameter.grad.detach() ** 2)
+        for parameter in model.parameters()
+        if parameter.grad is not None
+    ]
+    gradient_norm = float(torch.sqrt(torch.stack(gradients).sum()))
+    optimizer.step()
+    return float(loss.detach()), gradient_norm
+
+
+def _action_step(
+    model: RelationalMovement,
+    clips: torch.Tensor,
+    labels: torch.Tensor,
+    optimizer: torch.optim.Optimizer,
+) -> tuple[float, float]:
+    model.train()
+    loss = nn.functional.cross_entropy(model(clips), labels)
+    optimizer.zero_grad()
+    loss.backward()  # type: ignore[no-untyped-call]
+    gradients = [
+        torch.sum(parameter.grad.detach() ** 2)
+        for parameter in model.parameters()
+        if parameter.grad is not None
+    ]
+    gradient_norm = float(torch.sqrt(torch.stack(gradients).sum()))
+    optimizer.step()
+    return float(loss.detach()), gradient_norm
+
+
+def run_two_stage_overfit32(
+    config_path: Path,
+    failed_joint_report_path: Path,
+    dataset_path: Path,
+    output_dir: Path,
+    *,
+    device_name: str,
+) -> dict[str, object]:
+    raw = cast(dict[str, object], json.loads(config_path.read_text(encoding="utf-8")))
+    unsigned = {key: value for key, value in raw.items() if key != "contract_sha256"}
+    localization = cast(dict[str, object], raw["localization_stage"])
+    action = cast(dict[str, object], raw["action_stage"])
+    schema = raw.get("schema_version")
+    prior_hash_field = (
+        "failed_v1_report_sha256"
+        if schema == "movement-goal-canvas-two-stage-contract-v2"
+        else "failed_joint_report_sha256"
+    )
+    if (
+        schema
+        not in {
+            "movement-goal-canvas-two-stage-contract-v1",
+            "movement-goal-canvas-two-stage-contract-v2",
+        }
+        or raw.get("contract_sha256") != _canonical_sha256(unsigned)
+        or _sha256(failed_joint_report_path) != raw.get(prior_hash_field)
+        or _sha256(dataset_path) != raw.get("localized_dataset_sha256")
+        or int(cast(int, raw["diagnostic_attempts_used"]))
+        >= int(cast(int, raw["diagnostic_attempt_limit"]))
+        or raw.get("fresh_initialization") is not True
+        or raw.get("formal_training_allowed") is not False
+        or raw.get("test_allowed") is not False
+        or raw.get("r2_allowed") is not False
+        or raw.get("device_input_allowed") is not False
+    ):
+        raise ValueError("two-stage Movement contract binding differs")
+    try:
+        failed = json.loads(failed_joint_report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("two-stage prior report is invalid") from exc
+    if failed.get("status") != "FAILED" or failed.get("next_stage_allowed") is not False:
+        raise ValueError("two-stage prior result differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("two-stage Movement output already exists")
+    clips, labels, coordinates = _load_localized_dataset(dataset_path)
+    output_dir.mkdir(parents=True)
+    seed = int(cast(int, raw["seed"]))
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA is unavailable")
+    torch.manual_seed(seed)
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(seed)
+        torch.cuda.reset_peak_memory_stats(device)
+    model = RelationalMovement().to(device)
+    grid_size = int(cast(int, localization["attention_grid_size"]))
+    localization_parameters = [
+        *model.spatial.parameters(),
+        *model.attention.parameters(),
+    ]
+    localization_optimizer = torch.optim.AdamW(
+        localization_parameters,
+        lr=float(cast(float, localization["learning_rate"])),
+        weight_decay=float(cast(float, localization["weight_decay"])),
+    )
+    generator = torch.Generator().manual_seed(seed)
+    localization_updates = int(cast(int, localization["maximum_updates"]))
+    localization_batch = int(cast(int, localization["batch_size"]))
+    localization_first: tuple[float, float] | None = None
+    localization_final: tuple[float, float] | None = None
+    started = time.monotonic()
+    for update in range(localization_updates):
+        if update % (len(clips) // localization_batch) == 0:
+            order = torch.randperm(len(clips), generator=generator)
+        start = update % (len(clips) // localization_batch) * localization_batch
+        selected = order[start : start + localization_batch]
+        localization_final = _localization_step(
+            model,
+            _batch(clips[selected], device),
+            coordinates[selected].to(device),
+            localization_optimizer,
+            grid_size,
+        )
+        if update == 0:
+            localization_first = localization_final
+    localization_evaluation = _evaluate_localized(
+        model, clips, labels, coordinates, device, grid_size
+    )
+    accuracy_name = (
+        "slot_within_one_cell_accuracy"
+        if schema == "movement-goal-canvas-two-stage-contract-v2"
+        else "slot_cell_accuracy"
+    )
+    minimum_accuracy_name = (
+        "minimum_slot_within_one_cell_accuracy"
+        if schema == "movement-goal-canvas-two-stage-contract-v2"
+        else "minimum_slot_cell_accuracy"
+    )
+    localization_passed = (
+        float(cast(float, localization_evaluation[accuracy_name]))
+        >= float(cast(float, localization[minimum_accuracy_name]))
+        and float(cast(float, localization_evaluation["mean_slot_error_pixels"]))
+        <= float(cast(float, localization["maximum_slot_error_pixels"]))
+    )
+    frozen_before = {
+        name: value.detach().clone()
+        for name, value in model.state_dict().items()
+        if name.startswith(("spatial.", "attention."))
+    }
+    action_first: tuple[float, float] | None = None
+    action_final: tuple[float, float] | None = None
+    if localization_passed:
+        for parameter in localization_parameters:
+            parameter.requires_grad = False
+        action_parameters = [
+            parameter for parameter in model.parameters() if parameter.requires_grad
+        ]
+        action_optimizer = torch.optim.AdamW(
+            action_parameters,
+            lr=float(cast(float, action["learning_rate"])),
+            weight_decay=float(cast(float, action["weight_decay"])),
+        )
+        action_updates = int(cast(int, action["maximum_updates"]))
+        action_batch = int(cast(int, action["batch_size"]))
+        for update in range(action_updates):
+            if update % (len(clips) // action_batch) == 0:
+                order = torch.randperm(len(clips), generator=generator)
+            start = update % (len(clips) // action_batch) * action_batch
+            selected = order[start : start + action_batch]
+            action_final = _action_step(
+                model,
+                _batch(clips[selected], device),
+                labels[selected].to(device),
+                action_optimizer,
+            )
+            if update == 0:
+                action_first = action_final
+    evaluation = _evaluate_localized(model, clips, labels, coordinates, device, grid_size)
+    frozen_unchanged = all(
+        torch.equal(value, model.state_dict()[name].detach())
+        for name, value in frozen_before.items()
+    )
+    action_passed = (
+        localization_passed
+        and action_first is not None
+        and action_final is not None
+        and float(cast(float, evaluation["action_accuracy"]))
+        >= float(cast(float, action["minimum_action_accuracy"]))
+        and float(cast(float, evaluation["action_loss"]))
+        <= float(cast(float, action["maximum_action_loss"]))
+        and min(cast(dict[str, float], evaluation["action_recall"]).values()) > 0.0
+        and frozen_unchanged
+    )
+    passed = localization_passed and action_passed
+    checkpoint_path = output_dir / "diagnostic-last.safetensors"
+    save_file(
+        {key: value.detach().cpu() for key, value in model.state_dict().items()},
+        checkpoint_path,
+        metadata={
+            "purpose": "two_stage_diagnostic_only",
+            "dataset_sha256": _sha256(dataset_path),
+            "config_sha256": _sha256(config_path),
+            "fresh_initialization": "true",
+        },
+    )
+    report: dict[str, object] = {
+        "schema_version": (
+            "movement-goal-canvas-two-stage-overfit32-report-v2"
+            if schema == "movement-goal-canvas-two-stage-contract-v2"
+            else "movement-goal-canvas-two-stage-overfit32-report-v1"
+        ),
+        "status": "PASSED" if passed else "FAILED",
+        "passed": passed,
+        "contract_sha256": raw["contract_sha256"],
+        "config_sha256": _sha256(config_path),
+        "dataset_sha256": _sha256(dataset_path),
+        "checkpoint_sha256": _sha256(checkpoint_path),
+        "architecture": "relational-spatial-slots-gru",
+        "total_parameters": sum(parameter.numel() for parameter in model.parameters()),
+        "localization_stage": {
+            "updates": localization_updates,
+            "first": localization_first,
+            "final": localization_final,
+            "evaluation": {
+                key: localization_evaluation[key]
+                for key in (
+                    "slot_cell_accuracy",
+                    "slot_within_one_cell_accuracy",
+                    "maximum_slot_cell_error",
+                    "mean_slot_error_pixels",
+                    "player_slot_error_pixels",
+                    "goal_slot_error_pixels",
+                )
+            },
+            "passed": localization_passed,
+            "accuracy_metric": accuracy_name,
+        },
+        "action_stage": {
+            "called": localization_passed,
+            "updates": int(cast(int, action["maximum_updates"])) if localization_passed else 0,
+            "first": action_first,
+            "final": action_final,
+            "evaluation": {
+                key: evaluation[key]
+                for key in ("action_accuracy", "action_loss", "action_recall")
+            },
+            "frozen_localizer_unchanged": frozen_unchanged,
+            "passed": action_passed,
+        },
+        "elapsed_seconds": time.monotonic() - started,
+        "device": str(device),
+        "peak_cuda_memory_bytes": (
+            int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else 0
+        ),
+        "coordinate_labels_in_actor_input": False,
+        "diagnostic_checkpoint_only": True,
+        "diagnostic_checkpoint_reusable_for_formal_training": False,
+        "full_training_called": False,
+        "next_stage_allowed": passed,
+        "real_rgb_training_frames": 0,
+        "test_frames_read": 0,
+        "holdout_opened": False,
+        "r2_allowed": False,
+        "device_input_commands_sent": 0,
     }
     report["report_sha256"] = _canonical_sha256(report)
     (output_dir / "report.json").write_text(
