@@ -125,8 +125,14 @@
         "CAPTURE_FAILURE",
         "ACTION_FAILURE",
         "TIMEOUT",
+        "NAVIGATION_GOAL_REACHED",
+        "VIDEO_EOF",
         "UNKNOWN"
       ]
+    },
+    "episode_end_kind": {
+      "enum": ["NOT_DONE", "TERMINATED", "TRUNCATED", "ERROR"],
+      "description": "optional backward-compatible distinction between natural completion, truncation, and runtime failure"
     },
     "causal_order_valid": {
       "type": "boolean",

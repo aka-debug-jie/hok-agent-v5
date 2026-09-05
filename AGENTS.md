@@ -3,7 +3,38 @@
 `DELIVERY_PROGRESS.md` is the only current-state ledger. Read it, `README.md`, and
 `BOUNDARIES.md` before changing this repository.
 
-## Active route
+## Current planning authority (2026-09-05)
+
+`docs/ENGINEERING_CONVERGENCE_PLAN.md` governs future work ordering and resource budgets.
+Stages A and B passed offline for simulator engineering and 32-sample learnability. The next task
+is stage C 64/24 action-driven trajectory BC plus independent 24-episode dev evaluation.
+Movement is the only first-cycle learned component;
+Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
+hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.
+Do not connect a phone, reopen consumed video-test, start RL, or add input gates/transports.
+
+For new development under this plan, bounded train/dev debugging may use new run IDs without
+creating an architecture per failure. Old reports, configurations, checkpoints, test consumption,
+and failure conclusions remain immutable; old frozen commands are not reopened. This supersedes
+the future-work prescriptions below to create a normalization-stable candidate or permanently
+block all new integration. It does not promote a failed model. Stage A supplies STOP/end-kind
+contracts and a state-changing rule trajectory. Stage B supplies goal-marked RGB and selects the
+686,281-parameter task-specific GroupNorm+GRU only for the next simulator pilot. Its target marker
+is not real-video compatible; R2 remains closed. All four overfit diagnostic attempts are consumed;
+do not run a fifth. Stage C must initialize this architecture afresh rather than load the diagnostic
+checkpoint. No hidden-state inputs.
+Keep the existing execution/data boundaries and dependency allowlist. Do not expand scope merely
+because unused budget remains. `DELIVERY_PROGRESS.md` alone records executed progress.
+Use the plan's stage A-E implementation notes and risk-tiered verification policy. Documentation
+updates need diff/link/consistency checks, not model runs or full pytest. Local code changes use
+focused tests; run the full suite once for a deliverable code freeze. Do not default to duplicate
+agent review, per-commit historical smoke suites, or repeated approval for budgeted debug choices.
+
+## Historical route decisions and retained boundaries
+
+The route-specific decisions below describe preserved experiments. For future schedule, parameter
+budgets and debugging policy, the current planning authority above takes precedence; historical
+result and device-authorization restrictions continue to apply.
 
 - Hierarchical Policy v0 is the active development-preparation successor governed by
   `docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md`. It keeps one RGB PolicyBundle with a shared temporal
@@ -361,8 +392,11 @@
 - Project/Python file counts and nonblank Python lines are reported for observability only. They
   have no pass/fail ceiling. Dataset bytes and session counts likewise have no global ceiling.
 - Exactly four root Markdown authority files.
-- Before each commit run Ruff, strict mypy, full pytest, the project size/safety gate,
-  relevant frozen regression gates, the stage CPU smoke, and `git diff --check`.
+- Verification follows section 9 of `docs/ENGINEERING_CONVERGENCE_PLAN.md`: docs-only changes use
+  diff/link/consistency checks; local code uses affected tests and Ruff; cross-module/schema or
+  dependency changes add relevant integration tests, strict mypy and safety checks. At deliverable
+  code freeze run `make check` plus `git diff --check` once. Process commits do not independently
+  require full pytest or all historical smoke targets. Reuse unchanged-code results, never invent them.
 - Never manufacture GPU, hardware, recording, preference, or accuracy evidence. Missing UVC
   hardware is `READY_FOR_HARDWARE`; missing recordings block only real-domain work, while
   missing future preference data blocks only its separately authorized post-training phase.

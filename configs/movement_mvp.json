@@ -1,0 +1,27 @@
+{
+  "contract_version": "movement-mvp-stage-a-v0",
+  "hero": "houyi",
+  "role": "marksman",
+  "side": "blue",
+  "lane": "bottom",
+  "start": [2, 4],
+  "goal": [8, 4],
+  "step_duration_ms": 100,
+  "max_steps": 16,
+  "seed": 0,
+  "stage_b": {
+    "sequence_frames": 16,
+    "direction_samples": 3,
+    "stop_samples": 8,
+    "batch_size": 8,
+    "maximum_updates": 200,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "minimum_eval_accuracy": 0.95,
+    "maximum_eval_loss": 0.05,
+    "selected_architecture": "task-specific",
+    "formal_training_initialization": "fresh-seed-0",
+    "diagnostic_attempt_limit": 4,
+    "diagnostic_attempts_used": 4
+  }
+}

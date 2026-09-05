@@ -1,5 +1,22 @@
 # Boundaries
 
+## Current offline convergence scope (2026-09-05)
+
+`docs/ENGINEERING_CONVERGENCE_PLAN.md` replaces future scheduling and experiment-budget policy,
+not device authorization. Stage A is implemented offline with project-owned simulated action/state
+loops and zero device input. New bounded training/integration work must complete stage B before
+full training; it does not
+reopen frozen commands, consumed video-test, failed E1d integration, RewardHub or device input.
+Macro/Combat rules may support a clearly labeled offline engineering baseline while Movement
+learning is evaluated separately. Rule success cannot count as learned success.
+
+The proposed goal-marked RGB input and STOP/truncation semantics require explicit new contracts;
+no simulator truth may be encoded into Actor inputs. Existing real-video storage restrictions,
+input protections and RGB-only boundaries remain. No new human recordings/labels, transport or
+input gates are added. Source-size and storage targets in the plan are project budget review
+limits, not new runtime safety gates. Historical per-lineage restrictions below remain historical;
+they do not prevent new offline engineering work expressly scoped by the current plan.
+
 ## Allowed execution surfaces
 
 Mobile input additionally requires a local, Git-ignored project-owned build identity, not merely a

@@ -15,7 +15,7 @@ from hok_agent.visual_events import VisualEventRecord
 TRANSITION_SCHEMA = "hok-agent-hierarchical-transition-v0"
 
 MacroAction = Literal["FARM_LANE", "PUSH_STRUCTURE", "ENGAGE", "DISENGAGE", "RECALL", "HOLD"]
-MovementAction = Literal["NONE", "N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+MovementAction = Literal["NONE", "STOP", "N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 CombatAction = Literal["WAIT", "BASIC_ATTACK", "SKILL1", "SKILL2", "SKILL3"]
 AttemptStatus = Literal["not_attempted", "acknowledged", "rejected", "failed"]
 FinalActionStatus = Literal["acknowledged", "rejected", "failed", "noop"]
@@ -27,12 +27,15 @@ TerminalReason = Literal[
     "CAPTURE_FAILURE",
     "ACTION_FAILURE",
     "TIMEOUT",
+    "NAVIGATION_GOAL_REACHED",
+    "VIDEO_EOF",
     "UNKNOWN",
 ]
+EpisodeEndKind = Literal["NOT_DONE", "TERMINATED", "TRUNCATED", "ERROR"]
 ReplaySource = Literal["demo", "sim", "controller", "online", "offline_video"]
 
 _MACRO_ACTIONS = {"FARM_LANE", "PUSH_STRUCTURE", "ENGAGE", "DISENGAGE", "RECALL", "HOLD"}
-_MOVEMENT_ACTIONS = {"NONE", "N", "NE", "E", "SE", "S", "SW", "W", "NW"}
+_MOVEMENT_ACTIONS = {"NONE", "STOP", "N", "NE", "E", "SE", "S", "SW", "W", "NW"}
 _COMBAT_ACTIONS = {"WAIT", "BASIC_ATTACK", "SKILL1", "SKILL2", "SKILL3"}
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -107,6 +110,7 @@ class HierarchicalTransitionRecord(TypedDict):
     reward: RewardRecord
     done: bool
     terminal_reason: TerminalReason
+    episode_end_kind: NotRequired[EpisodeEndKind]
     causal_order_valid: bool
     training_eligible: bool
     ineligibility_reasons: NotRequired[list[str]]
@@ -273,6 +277,23 @@ def validate_transition(row: HierarchicalTransitionRecord) -> TransitionValidati
         errors.append("win_terminal_event_missing")
     if row["terminal_reason"] == "LOSS" and "LOSS" not in event_types:
         errors.append("loss_terminal_event_missing")
+    end_kind = row.get("episode_end_kind")
+    if end_kind is not None:
+        expected_end_kind: EpisodeEndKind
+        if row["terminal_reason"] == "NOT_DONE":
+            expected_end_kind = "NOT_DONE"
+        elif row["terminal_reason"] in {"TIMEOUT", "VIDEO_EOF"}:
+            expected_end_kind = "TRUNCATED"
+        elif row["terminal_reason"] in {
+            "SAFETY_STOP",
+            "CAPTURE_FAILURE",
+            "ACTION_FAILURE",
+        }:
+            expected_end_kind = "ERROR"
+        else:
+            expected_end_kind = "TERMINATED"
+        if end_kind != expected_end_kind:
+            errors.append("episode_end_kind_mismatch")
 
     causal_order_valid = not causal_errors
     if row["causal_order_valid"] != causal_order_valid:

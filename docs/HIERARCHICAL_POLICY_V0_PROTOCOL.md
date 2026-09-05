@@ -1,5 +1,12 @@
 # Hierarchical Policy v0 开发协议
 
+> 2026-09-05：后续推进顺序、参数预算和研发试错方式由
+> [工程收敛推进计划](ENGINEERING_CONVERGENCE_PLAN.md) 替代。下文保留旧设计及实验结论，
+> 不是当前待执行队列。新首轮只学习 Movement，Macro/Combat 暂用规则；先离线动作闭环，
+> 不等待完整视觉 Reward 系统。现有数据/输入边界及失败记录不变，旧 test 不重开。
+> Stage A 已实现 STOP、结束类型和动作驱动规则轨迹；Stage B 的模拟目标 RGB 与小样本可学性
+> 已通过，但明确不适用于真实视频。尚未开始完整训练、视频解码或设备输入。
+
 ## 1. 状态与目的
 
 当前状态：`P1V2_MOVEMENT_BRANCH_FAILED`。二维课程数据门保持通过；首个task-specific分支虽在

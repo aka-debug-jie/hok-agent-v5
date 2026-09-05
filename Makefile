@@ -237,6 +237,12 @@ hierarchical-p1v2-movement-2d-smoke:
 hierarchical-p1v2-movement-branch-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_hierarchical_p1v2_movement_branch.py
 
+movement-mvp-stage-a-smoke:
+	$(RUN_PYTHON) -m pytest -q tests/test_movement_mvp.py tests/test_transition_store.py
+
+movement-mvp-stage-b-smoke:
+	$(RUN_PYTHON) -m pytest -q tests/test_movement_mvp.py tests/test_movement_mvp_train.py
+
 storage-show:
 	@echo "WZRY_DATA_ROOT=$(WZRY_DATA_ROOT)"
 	@echo "HOK_LARGE_ROOT=$(HOK_LARGE_ROOT)"

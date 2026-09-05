@@ -16,9 +16,13 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 ## Route status
 
+Future scheduling is governed by `docs/ENGINEERING_CONVERGENCE_PLAN.md`; the historical route
+restrictions below are not a queue of new work. Frozen experiment outcomes remain unchanged.
+
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Hierarchical Policy v0 | `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; separately version a normalization-stable candidate without reopening old gates |
+| Engineering convergence | `CAUSAL_OVERFIT32_PASSED_TASK_SPECIFIC`: causal overfit32; task-specific 686K model 1.0 accuracy / 0.00745 loss | Stage C 64/24 simulator trajectories and fresh-init BC next; real video/phone/RL remain closed |
+| Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
 | Observable-factor representation | `PERMANENTLY_FROZEN_FAILED`: frozen-latent probe found health/base/distance/ordinary-lane F1 0.22–0.49; the only layer4/project auxiliary update improved some probes but fell to 12/20 terminals, 2/6 canonical and 8/24 parameter holdout | Attempt exhausted; no more encoder unfreezing, auxiliary weighting, or model optimization; v1 Dagger is permanent |
@@ -415,14 +419,86 @@ results remain evidence and reusable components, not reopened parallel routes.
   PolicyBundle, lane strategy, real-video semantics, Reward, online RL, capture, input, and
   promotion remain closed.
 
-## Hierarchical Policy v0 execution state
+## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: freeze the failed branch and design a separate normalization-stable candidate
-BLOCKING FAILURE: small-batch overfit gate failed despite full-data eight-direction learnability
-NEXT ACCEPTANCE COMMAND: make hierarchical-p1v2-movement-branch-smoke; no rerun is authorized
-DO NOT WORK ON: phone model control, online RL, 200M model, MoE, continuous action, PPO, multi-critic
+CURRENT GOAL: implement simulator-only stage C of docs/ENGINEERING_CONVERGENCE_PLAN.md
+CURRENT STATUS: CAUSAL_OVERFIT32_PASSED_TASK_SPECIFIC; no full training, video decoding, device work or model promotion
+BLOCKING UNCERTAINTY: 64/24 trajectory generalization and 24-episode rollout are unproven
+NEXT ACCEPTANCE: initial task-specific BC candidate plus independent 24-episode dev evaluation
+COMMAND STATUS: make movement-mvp-stage-b-smoke passes; stage C entrypoint is not implemented
+BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
+DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+The 2026-09-05 planning update makes Movement the only first-cycle learned component and retains
+Macro/Combat as explicit rule baselines. It replaces repeated architecture/failure freezes with
+bounded new train/dev runs; old reports/configs/test consumption stay immutable. The old branch
+still failed its overfit gate. Its static-position data cannot establish navigation; BatchNorm is
+only an unisolated hypothesis, not a proven cause. No new model or application result is claimed.
+The new plan defines stages A-E, budgets, fallback delivery grades, simulator episode metrics and
+a later separately authorized self-built-App/RL route. Runtime and model configs are unchanged.
+The follow-up planning update adds concrete A-E technical notes: action-driven arena adapter,
+goal-marked RGB, nine-action STOP mapping, shared diagnostic/training path, indexed trajectory BC,
+window inference/cache semantics, transactional persistence/recovery and a single lazy CLI.
+Stage A implementation is complete; training has not started. Review follows risk tiers: documentation-only
+diff/link checks, focused development tests, and one full suite at deliverable code freeze.
+Repeated agent review and per-commit historical full suites are no longer default requirements.
+Budgets and device/test boundaries are unchanged; review/documentation share is capped at 8 hours
+within the existing 80-hour engineering budget, not extra budget.
+The MOBA-source follow-up updates the same plan using official hok_env/Hokoff documentation,
+fixed-upstream wzry_ai train.py, and the OpenAI Five report (references in section 10).
+It adds a no-training RGB geometry baseline, observable teacher-task constraints, fixed temporal
+sampling, bounded standalone checkpoint evaluation, failure-inclusive episode totals and timing
+breakdowns. Source designs are not local performance evidence. No external framework or budget
+expansion was introduced.
+
+## Engineering convergence stage A
+
+- Added the single `movement-mvp --mode stage-a` offline entrypoint and fixed Houyi/marksman/
+  blue/bottom configuration. No mobile module is imported or executed.
+- Reused `RichPixelArena.reset/step/observe`: actions `E×6` changed position from `(2,4)` to `(8,4)`,
+  then `STOP` preserved the goal position. The vocabulary prepends STOP while retaining the existing
+  eight RichPixelArena direction order.
+- Added backward-compatible `episode_end_kind`; natural navigation completion, timeout/video EOF,
+  and runtime failure map to TERMINATED, TRUNCATED, and ERROR. Historical rows remain readable.
+- Seven valid transitions and eight derived RGB frame bundles were stored. The terminal transition
+  was committed before episode exit; reward total and device input were both zero.
+- External artifact basename: `stage-a-seed0-v1` (76 KiB). Summary SHA-256:
+  `52f1227c3ddfa4c91d5d1b76ea1895eb2d94262eb9a86e879c92172627de8555`.
+- Focused tests: 13 passed. Ruff, strict mypy (66 source files), project safety (236 files,
+  123 Python files, 55,890 nonblank Python lines, four root Markdown files), and diff check passed.
+  No full suite was rerun under the risk-tiered policy. Exact engineering time was not instrumented;
+  GPU time is zero.
+
+## Engineering convergence stage B
+
+- Materialized 32 independent causal RGB windows: STOP 8 and each of eight directions 3;
+  all windows contain actual prior movement and execute their label only after frame 16.
+  Dataset SHA-256: `ea75e7ec0b4e85bdff217b326b11bfd0bd8bf3fb7fc0c6b5103041a6dd936328`.
+- The old P0 branch failed at 0.5938 accuracy / 0.7872 loss. Freezing all BatchNorm was worse at
+  0.25 / 2.1224, so that hypothesis is closed. Neither run called full training.
+- A 686,281-parameter task-specific GroupNorm+GRU passed with eval accuracy 1.0, loss 0.00745 and
+  recall 1.0 for all nine actions. Report/checkpoint SHA-256:
+  `c16cca8157e9cc99b3e4c363df35ea914d928d2b37a6cece59a12a865f085981` /
+  `f7e0df57c947426e69f6a894fba5799d46a23710e247412201cfe48a7c27f918`.
+- One task-specific attempt completed training but hit an evaluation interface error; one minimal
+  retry produced the result above. The report normalization label was then corrected to GroupNorm;
+  metrics and checkpoint were unchanged.
+- Completed reported GPU kernels total about 10.3 seconds; the failed reporting attempt was not
+  separately instrumented, so exact total GPU time is unavailable but remained below one minute.
+  Dataset plus three diagnostics use about 93 MiB, dominated by two preserved 45 MiB P0 checkpoints.
+- Focused tests: 20 passed. Ruff, strict mypy (67 source files), project safety (238 files,
+  125 Python files, 56,447 nonblank Python lines) and diff check passed. Full training was not run.
+- The target marker is PixelArena-color-specific. Real-video validity is not tested or claimed;
+  stage C is simulator-only and R2 remains closed. Next work is 64/24 trajectory BC and dev rollout.
+- The task-specific architecture is now the default for future formal training. P0 is explicit-only
+  and remains a failed control; there is no automatic fallback. All four diagnostic attempts are
+  consumed, so the checked-in contract rejects a fifth overfit run.
+- The shared training path now records loss, gradient norm, finiteness and immediate parameter
+  change after the first optimizer update. A focused CPU failure-path test proves a failed gate
+  still writes a diagnostic checkpoint, reports `full_training_called=false`, and forbids reusing
+  that checkpoint for formal training. Stage C must create a fresh seed-0 model.
 
 ## Frozen Global Agent execution state
 

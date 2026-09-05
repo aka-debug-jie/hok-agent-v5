@@ -13,7 +13,26 @@ coordinates, device serial, recording, dataset, checkpoint, or run artifact. Mob
 disabled unless the operator supplies local private evidence for a self-built test app and every
 runtime guard passes.
 
-## Architecture
+## Current development plan
+
+The active roadmap is [Engineering convergence plan](docs/ENGINEERING_CONVERGENCE_PLAN.md).
+The next cycle targets a reproducible **offline** MVP: rule Macro/Combat, one goal-conditioned
+Movement learner, and the existing observation/execution/transition interfaces. Budget ceilings
+are 80 engineering hours, 24 GPU-hours and 50 GiB of new artifacts. Navigation is evaluated through
+action-driven episodes, not static direction F1. Rules-only delivery is explicitly not a learned
+policy success. Stage A now passes: a fixed blue-side Houyi bottom-lane rule trajectory moves through
+RichPixelArena, writes every causal transition, reaches its target, commits STOP, and exits with zero
+reward and zero device input. Stage B then passed the simulator overfit32 gate with a 686,281-parameter
+task-specific GroupNorm+GRU, while both old-P0 branch variants failed. Full training and real-video
+validity remain unproven. The task-specific model is now the default, all four diagnostic attempts
+are closed, and Stage C must initialize a fresh model. Run `make movement-mvp-stage-b-smoke`;
+stage C simulator BC is next.
+
+The plan supersedes the future schedule and growth proposals in the historical sections below.
+It does not change frozen results, reopen video-test, authorize phone control or start RL.
+See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.
+
+## Historical architecture and reusable components
 
 ```text
 V1–V3  frozen deterministic and behavior-cloning regressions
@@ -35,7 +54,7 @@ The visual-policy organization was informed by
 [wzry_ai](https://github.com/myBoris/wzry_ai). This repository does not copy their device-control
 code, data, weights, coordinates, assets, or recordings.
 
-## Hierarchical Policy v0 development route
+## Hierarchical Policy v0 historical development route
 
 The next development route keeps one RGB PolicyBundle with a shared temporal representation and
 three logical heads: Macro, Movement, and Combat. An independent, versioned VisualEventEngine

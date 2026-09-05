@@ -56,6 +56,23 @@ def _parser() -> argparse.ArgumentParser:
     accept_v3.add_argument("--device", choices=("cpu", "cuda"), required=True)
     accept_v3.add_argument("--output-dir", type=Path)
     accept_v3.add_argument("--smoke", action="store_true")
+    movement_mvp = commands.add_parser(
+        "movement-mvp", help="run one offline action-driven Movement MVP stage"
+    )
+    movement_mvp.add_argument(
+        "--mode", choices=("stage-a", "materialize-overfit32", "overfit32"), required=True
+    )
+    movement_mvp.add_argument(
+        "--config", type=Path, default=Path("configs/movement_mvp.json")
+    )
+    movement_mvp.add_argument("--output-dir", type=Path, required=True)
+    movement_mvp.add_argument("--dataset", type=Path)
+    movement_mvp.add_argument("--representation", type=Path)
+    movement_mvp.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    movement_mvp.add_argument("--freeze-batch-norm", action="store_true")
+    movement_mvp.add_argument(
+        "--architecture", choices=("task-specific", "p0-branch"), default="task-specific"
+    )
     shadow = commands.add_parser(
         "shadow-video", help="analyze one local recording without client control"
     )
@@ -1338,6 +1355,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             from hok_agent.pixel import accept_pixel_v3
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
+        elif args.command == "movement-mvp":
+            if args.mode == "stage-a":
+                from hok_agent.movement_mvp import run_stage_a
+
+                result = run_stage_a(args.config, args.output_dir)
+            elif args.mode == "materialize-overfit32":
+                from hok_agent.movement_mvp import materialize_overfit32
+
+                result = materialize_overfit32(args.config, args.output_dir)
+            else:
+                if args.dataset is None:
+                    raise ValueError("overfit32 requires --dataset")
+                if args.architecture == "p0-branch" and args.representation is None:
+                    raise ValueError("p0-branch requires --representation")
+                from hok_agent.movement_mvp_train import run_overfit32
+
+                result = run_overfit32(
+                    args.config,
+                    args.dataset,
+                    args.representation,
+                    args.output_dir,
+                    device_name=args.device,
+                    freeze_batch_norm=args.freeze_batch_norm,
+                    architecture=args.architecture,
+                )
         elif args.command == "shadow-video":
             from hok_agent.shadow import analyze_video
 

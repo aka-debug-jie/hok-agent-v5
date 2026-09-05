@@ -113,7 +113,9 @@ def load_contract(path: Path) -> tuple[BranchConfig, dict[str, object], str]:
 
 
 class MovementBranch(nn.Module):
-    def __init__(self, representation_state: dict[str, torch.Tensor]) -> None:
+    def __init__(
+        self, representation_state: dict[str, torch.Tensor], output_actions: int = len(DIRECTIONS)
+    ) -> None:
         super().__init__()
         base = TemporalSSL()
         missing, unexpected = base.load_state_dict(representation_state, strict=False)
@@ -127,7 +129,7 @@ class MovementBranch(nn.Module):
             nn.GELU(),
             nn.Linear(256, 256),
             nn.GELU(),
-            nn.Linear(256, len(DIRECTIONS)),
+            nn.Linear(256, output_actions),
         )
         for parameter in self.parameters():
             parameter.requires_grad = True
