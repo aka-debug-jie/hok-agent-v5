@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `REAL_RGB_OBSERVABILITY_V1_FAILED` after the completed R0 package: pair coverage 0.4792 and marker-jump fraction 0.4128 | Freeze result; design a new real-minimap detector/tracker contract before R2 or training |
+| Engineering convergence | `REAL_RGB_GOAL_CANVAS_V2_PASSED_SELF_LOCALIZATION_UNRESOLVED`: 288/288 counterfactual target inputs passed after v1 detector failure | New simulator goal-canvas learnability contract; no R2/promotion |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: freeze the real-RGB observability failure and define the next detector/tracker contract
-CURRENT STATUS: REAL_RGB_OBSERVABILITY_V1_FAILED; R0 package remains valid
-BLOCKING FAILURE: current minimap cue pairs cover 0.4792 overall, 0.0938 in one train session, and jump 0.4128
-NEXT ACCEPTANCE: separately versioned real-minimap detector/tracker preflight; no R2 or training yet
-COMMAND STATUS: 3 sessions / 9 clips / 288 train-dev frames audited; test and device unopened
+CURRENT GOAL: define a simulator learnability contract for the v2 minimap goal canvas
+CURRENT STATUS: REAL_RGB_GOAL_CANVAS_V2_PASSED_SELF_LOCALIZATION_UNRESOLVED; R0 remains valid
+BLOCKING FAILURE: player localization, lane-coordinate semantics and policy value are not verified
+NEXT ACCEPTANCE: new 32-sample causal overfit using minimap RGB plus Macro-provided goal; no R2 yet
+COMMAND STATUS: v1 detector failed; v2 crop/goal/counterfactual passed on the same 288 frames
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -688,6 +688,38 @@ expansion was introduced.
   (244 files, 129 Python files, zero findings, four root Markdown files), and `git diff --check`.
   The previous E delivery full-suite result remains bound to its earlier code; this diagnostic used
   the plan's focused-check policy and did not rerun all historical tests.
+
+## Real RGB minimap goal canvas v2
+
+- v1 showed that low-resolution player/red-target detection is not stable. V2 changes the task
+  boundary: Macro supplies the semantic goal for the fixed blue-marksman-bottom context, while the
+  canvas normalizes the complete minimap crop and draws one hollow goal ring. It no longer uses a
+  nearest-red-pixel target or requires player localization to generate the canvas.
+- Contract SHA-256:
+  `243aa47aa164af2e9783a9ad08aa7cd372c602537704a75685374c72c9704e28`.
+  It binds the failed v1 report, the same two train/one dev sessions, the same nine 32-frame clips,
+  crop `[0,0,40,48]`, fixed goal/counterfactual coordinates and marker geometry. Test, training,
+  RGB persistence, R2, promotion and device input remain disabled.
+- Formal result: `GOAL_CANVAS_GENERATION_PASSED_SELF_LOCALIZATION_UNRESOLVED`. Content-box,
+  nonblack crop, counterfactual goal change, deterministic repeat and test-isolation checks all
+  pass. All 288/288 frames changed input when the goal changed and reproduced the same input for
+  the same goal. Per-session minimum nonblack crop fractions were 0.9980, 0.9942 and 1.0.
+- This result verifies only reliable target-conditioning construction on existing normalized RGB.
+  It does not verify that the blue-bottom coordinate is semantically correct, that the policy can
+  localize itself, or that the canvas improves navigation. `promotion_allowed=false` and
+  `r2_allowed=false` remain fixed.
+- Formal report:
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-rgb-goal-canvas-v2/report.json`,
+  173,427 bytes. File SHA-256:
+  `36e9ebbc30129d97df5ff66158b4e418c6e9f7052ef97b204f411858dbd1b659`;
+  report self-hash:
+  `8321314577d3405b9f78628aa44700ae864f063a768baf151db7a3905ea8ad0c`.
+- The next admissible step is a separately frozen 32-sample simulator overfit that uses the same
+  minimap-crop-plus-goal-ring input. Passing that gate would show task learnability only; it would
+  still require semantic coordinate and real-domain checks before R2.
+- Verification passed: 18 focused tests, Ruff, strict mypy (69 source files), project safety
+  (245 files, 129 Python files, zero findings, four root Markdown files), and `git diff --check`.
+  No model, GPU run or full historical test suite was needed for this bounded canvas change.
 
 ## Frozen Global Agent execution state
 

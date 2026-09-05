@@ -407,3 +407,235 @@ def run_real_rgb_preflight(
             staging.rmdir()
         raise
     return report
+
+
+def _resize_minimap(frame: np.ndarray, crop: list[int]) -> np.ndarray:
+    x0, y0, x1, y1 = map(int, crop)
+    if not (0 <= x0 < x1 <= 128 and 0 <= y0 < y1 <= 128):
+        raise ValueError("goal canvas minimap crop differs")
+    selected = frame[y0:y1, x0:x1]
+    rows = np.linspace(0, len(selected) - 1, 128).astype(np.int64)
+    columns = np.linspace(0, selected.shape[1] - 1, 128).astype(np.int64)
+    return np.ascontiguousarray(selected[rows[:, None], columns[None, :], :])
+
+
+def _mark_goal(
+    minimap: np.ndarray, goal_xy: list[float], marker: dict[str, object]
+) -> np.ndarray:
+    center_x = round(float(goal_xy[0]) * 127)
+    center_y = round(float(goal_xy[1]) * 127)
+    radius = int(cast(int, marker["radius"]))
+    thickness = int(cast(int, marker["thickness"]))
+    if (
+        radius <= 0
+        or thickness <= 0
+        or thickness > radius
+        or not radius <= center_x < 128 - radius
+        or not radius <= center_y < 128 - radius
+    ):
+        raise ValueError("goal canvas marker geometry differs")
+    color = np.asarray(cast(list[int], marker["rgb"]), dtype=np.uint8)
+    marked = minimap.copy()
+    for y in range(center_y - radius, center_y + radius + 1):
+        for x in range(center_x - radius, center_x + radius + 1):
+            squared = (x - center_x) ** 2 + (y - center_y) ** 2
+            if (radius - thickness) ** 2 <= squared <= radius**2:
+                marked[y, x] = color
+    return marked
+
+
+def run_real_rgb_goal_canvas(
+    contract_path: Path,
+    prior_report_path: Path,
+    target_root: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    prior = _load_bound_json(prior_report_path, "report_sha256")
+    if target_root.is_symlink() or not target_root.is_dir():
+        raise ValueError("target root is not a regular directory")
+    manifest = _load_bound_json(target_root / "manifest.json", "manifest_sha256")
+    if (
+        contract.get("schema_version") != "movement-real-rgb-goal-canvas-contract-v2"
+        or prior.get("status") != "TARGET_CONDITION_NOT_OBSERVABLE"
+        or contract.get("prior_contract_sha256") != prior.get("contract_sha256")
+        or contract.get("prior_report_sha256") != prior.get("report_sha256")
+        or contract.get("target_manifest_sha256") != manifest.get("manifest_sha256")
+        or contract.get("test_allowed") is not False
+        or contract.get("training_allowed") is not False
+        or contract.get("r2_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+    ):
+        raise ValueError("real RGB goal canvas contract binding differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("real RGB goal canvas output already exists")
+
+    manifest_sessions = {
+        str(row["session_hash"]): str(row["split"])
+        for row in cast(list[dict[str, object]], manifest["sessions"])
+    }
+    by_session: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for row in cast(list[dict[str, object]], manifest["shards"]):
+        for identity in cast(list[str], row["session_hashes"]):
+            by_session[str(identity)].append(row)
+    declarations = cast(list[dict[str, object]], contract["sessions"])
+    fractions = cast(list[float], contract["segment_start_fractions"])
+    segment_frames = int(cast(int, contract["frames_per_segment"]))
+    crop = cast(list[int], contract["minimap_crop_xyxy"])
+    goals = cast(dict[str, list[float]], contract["goals"])
+    marker = cast(dict[str, object], contract["marker"])
+    frame_rows: list[dict[str, object]] = []
+    session_rows: list[dict[str, object]] = []
+    opened_shards: dict[str, dict[str, object]] = {}
+    observed_splits: set[str] = set()
+    observed_rotations: set[int] = set()
+    for declaration in declarations:
+        identity, split = str(declaration["session_hash"]), str(declaration["split"])
+        if split not in {"train", "dev"} or manifest_sessions.get(identity) != split:
+            raise ValueError("goal canvas selected session split differs")
+        shards = by_session[identity]
+        total = sum(int(cast(int, row["row_count"])) for row in shards)
+        starts = [round((total - segment_frames) * float(value)) for value in fractions]
+        indices = [index for start in starts for index in range(start, start + segment_frames)]
+        frames, timestamps, opened, rotations = _selected_frames(
+            target_root, shards, identity, split, indices
+        )
+        for row in opened:
+            opened_shards[str(row["basename"])] = row
+            observed_splits.add(str(row["declared_split"]))
+        observed_rotations.update(rotations)
+        canonical, orientation, bounds = _canonical_content(
+            frames, cast(dict[str, object], contract["content_box"])
+        )
+        nonblack_values: list[float] = []
+        changed_values: list[bool] = []
+        repeated_values: list[bool] = []
+        for index, (frame, timestamp) in enumerate(
+            zip(canonical, timestamps.tolist(), strict=True)
+        ):
+            if index % segment_frames and timestamp - timestamps[index - 1] != int(
+                cast(int, contract["frame_period_ms"])
+            ):
+                raise ValueError("goal canvas segment sampling period differs")
+            normalized = _normalize_content(frame, bounds)
+            minimap = _resize_minimap(normalized, crop)
+            primary = _mark_goal(minimap, goals["blue_marksman_bottom"], marker)
+            counterfactual = _mark_goal(minimap, goals["counterfactual_top_left"], marker)
+            repeated = _mark_goal(minimap, goals["blue_marksman_bottom"], marker)
+            nonblack = float(np.mean(minimap.astype(np.float32).mean(axis=2) > 5.0))
+            changed = bool(
+                hashlib.sha256(primary.tobytes()).digest()
+                != hashlib.sha256(counterfactual.tobytes()).digest()
+            )
+            deterministic = bool(np.array_equal(primary, repeated))
+            nonblack_values.append(nonblack)
+            changed_values.append(changed)
+            repeated_values.append(deterministic)
+            frame_rows.append(
+                {
+                    "session_hash": identity,
+                    "split": split,
+                    "segment_index": index // segment_frames,
+                    "timestamp_ms": timestamp,
+                    "minimap_sha256": hashlib.sha256(minimap.tobytes()).hexdigest(),
+                    "primary_goal_sha256": hashlib.sha256(primary.tobytes()).hexdigest(),
+                    "counterfactual_goal_sha256": hashlib.sha256(
+                        counterfactual.tobytes()
+                    ).hexdigest(),
+                    "nonblack_crop_fraction": nonblack,
+                    "counterfactual_changed": changed,
+                    "deterministic_repeat": deterministic,
+                }
+            )
+        session_rows.append(
+            {
+                "session_hash": identity,
+                "split": split,
+                "sampled_frames": len(frames),
+                "detected_orientation": orientation,
+                "content_box_xyxy": list(bounds),
+                "stored_rotation_degrees": sorted(rotations),
+                "minimum_nonblack_crop_fraction": min(nonblack_values),
+                "counterfactual_change_fraction": sum(changed_values) / len(changed_values),
+                "deterministic_repeat_fraction": sum(repeated_values) / len(repeated_values),
+            }
+        )
+    gates = cast(dict[str, object], contract["gates"])
+    checks = {
+        "content_boxes": len(session_rows)
+        >= int(cast(int, gates["required_content_boxes"])),
+        "nonblack_minimap_crop": all(
+            float(cast(float, row["minimum_nonblack_crop_fraction"]))
+            >= float(cast(float, gates["minimum_nonblack_crop_fraction"]))
+            for row in session_rows
+        ),
+        "counterfactual_goal_changes_input": all(
+            float(cast(float, row["counterfactual_change_fraction"]))
+            >= float(cast(float, gates["required_counterfactual_change_fraction"]))
+            for row in session_rows
+        ),
+        "deterministic_repeat": all(
+            float(cast(float, row["deterministic_repeat_fraction"]))
+            >= float(cast(float, gates["required_deterministic_repeat_fraction"]))
+            for row in session_rows
+        ),
+        "test_isolation": observed_splits <= {"train", "dev"},
+    }
+    passed = all(checks.values())
+    report: dict[str, object] = {
+        "schema_version": "movement-real-rgb-goal-canvas-report-v2",
+        "status": (
+            "GOAL_CANVAS_GENERATION_PASSED_SELF_LOCALIZATION_UNRESOLVED"
+            if passed
+            else "GOAL_CANVAS_GENERATION_FAILED"
+        ),
+        "contract_sha256": contract["contract_sha256"],
+        "prior_report_sha256": prior["report_sha256"],
+        "target_manifest_sha256": manifest["manifest_sha256"],
+        "actor_input": contract["actor_input"],
+        "macro_goal_source": "fixed_role_side_lane_contract",
+        "selected_sessions": len(session_rows),
+        "selected_segments": len(session_rows) * len(fractions),
+        "sampled_frames": len(frame_rows),
+        "session_results": session_rows,
+        "frame_results": frame_rows,
+        "checks": checks,
+        "opened_shards": sorted(opened_shards.values(), key=lambda row: str(row["basename"])),
+        "opened_splits": sorted(observed_splits),
+        "stored_rotation_values": sorted(observed_rotations),
+        "test_frames_read": 0,
+        "raw_rgb_persisted": False,
+        "human_labels_consumed": False,
+        "target_detection_required": False,
+        "player_localization_required_for_canvas": False,
+        "player_localization_verified": False,
+        "movement_policy_value_verified": False,
+        "semantic_lane_coordinate_verified": False,
+        "training_called": False,
+        "promotion_allowed": False,
+        "r2_allowed": False,
+        "device_input_commands_sent": 0,
+        "next_action": (
+            "train_simulator_goal_canvas_only_after_separate_learnability_contract"
+            if passed
+            else "repair_goal_canvas_geometry_in_new_contract"
+        ),
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        path = staging / "report.json"
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(report, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return report

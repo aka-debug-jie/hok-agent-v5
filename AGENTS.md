@@ -18,9 +18,11 @@ verified that evidence without weights. Any real-RGB or learned-Movement continu
 new cycle. The first new-cycle step is now frozen failed as
 `REAL_RGB_OBSERVABILITY_V1_FAILED`: 3 sessions / 9 clips / 288 train-dev frames reached 0.4792
 pair coverage and 0.4128 marker-jump fraction; one train session reached only 0.0938 coverage.
-Do not run R2, train from these candidates, lower the gates, or open video-test. The next work must
-be a separately frozen real-minimap detector/tracker contract. Do not treat packaging or detection
-coverage as learned promotion or semantic accuracy.
+Do not run R2, train from these candidates, lower the gates, or open video-test. A separately
+versioned v2 goal canvas now passes deterministic crop/marker/counterfactual checks on the same 288
+frames by taking its semantic goal from Macro instead of detecting red targets. Player localization,
+lane-coordinate semantics and policy value remain unresolved. The next work requires a new
+simulator goal-canvas learnability contract; do not treat canvas generation as learned promotion.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

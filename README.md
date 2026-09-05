@@ -84,6 +84,21 @@ only 0.0938, and marker jumps reached 0.4128. It read no test frames, stored no 
 and sent no input. A new minimap detector/tracker contract is required before R2 or Movement
 training; rerunning v1 with lower gates is not an accepted repair.
 
+V2 removes unstable red-target selection from the canvas and accepts a semantic goal from the
+deterministic Macro context:
+
+```bash
+python -m hok_agent movement-mvp --mode real-rgb-goal-canvas \
+  --config configs/movement_real_rgb_goal_canvas_v2.json \
+  --prior-report "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-rgb-observability-v1/report.json" \
+  --target-root "$HOK_LARGE_ROOT/datasets/v5-target-file-atomic-v2" \
+  --output-dir "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-rgb-goal-canvas-v2"
+```
+
+The frozen v2 run passed crop, repeatability and two-goal counterfactual checks on all 288 frames.
+It does not verify player localization, the gameplay meaning of the fixed lane coordinate, or policy
+performance, so training, promotion and R2 remain closed.
+
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
 See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.
