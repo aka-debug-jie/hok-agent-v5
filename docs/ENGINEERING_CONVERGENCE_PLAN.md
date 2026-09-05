@@ -363,9 +363,10 @@ RichPixelArena，把tower_damage和minion_damage设为0，落实连续STOP三步
 ### D：低延迟推理、连续执行与恢复（16 小时）
 
 先用现有 `movement-mvp --mode rule-batch` 接口，依次设置 `--episodes 1`、`3`、`10`完成最小数据面。
-它复用固定Stage A规则和同一个Store，`--resume`从已完成episode边界继续；具体命令在README。
-固定场景重复运行不能算模型泛化，已完成局的重开不能冒充局中状态恢复。局中恢复仍须下面的
-中断验证；学习失败时不为交付再加训练或替换模型。当前实验结论只以进度账本为准。
+它复用固定Stage A规则和同一个Store；`--step-budget`在已提交transition处暂停，`--resume`
+通过确定性重放从当前episode的下一step继续，具体命令在README。D0已用step 4中断版和连续版
+各跑10局，两者transition及frame-view摘要相同。固定场景重复运行仍不能算模型泛化；学习失败时
+不为交付再加训练或替换模型。当前实验结论只以进度账本为准。
 
 1. 一个进程、一个 latest-frame FrameBus、一个同步 Store writer 即可。
    策略只返回 proposal；执行层维护 DOWN/MOVE/UP，连续同向不重复 DOWN。
@@ -386,9 +387,11 @@ RichPixelArena，把tower_damage和minion_damage设为0，落实连续STOP三步
    只加载本项目生成的可信状态。临时文件写完后原子替换，manifest 最后写作提交标记。
    hash 在加载/保存边界检查一次，不在每个 step 重新计算权重 hash。
 5. 区分两类恢复：离线训练恢复（optimizer/RNG/采样游标）与模拟 rollout 恢复
-   （环境快照、episode/step、窗口及 Store 游标）。首版仅在 step 事务提交后保存快照，
-   故障后取最近一致边界；未提交尾部保留为异常证据，不凭猜测续接。
-   先测试一次中断后的下一批更新/下一段轨迹与连续运行一致；不承诺未来手机物理状态可无缝恢复。
+   （环境快照或确定性重放、episode/step、窗口及 Store 游标）。恢复边界只能是已经提交的
+   step事务；未提交尾部不能凭猜测续接。
+   D0只实现模拟rollout恢复：SQLite transition为真值，从seed重放并校验RGB/动作/终止链；
+   step 4恢复后的90条记录已与连续运行一致。训练恢复随本轮训练关闭，不再实现；不承诺未来
+   手机物理状态可无缝恢复。
 
 最少验证：同向持续与转向、终局先存、一次跨进程恢复、1→3→10 模拟回合。
 10 局可在同一 runner 分段检查，第 1/4/14 局形成三个阶段报告，不为三档再建三条命令。

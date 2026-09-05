@@ -41,16 +41,17 @@ The rule data path runs independently of learning. With the project Python envir
 
 ```bash
 MOVEMENT_RUN_DIR="${HOK_LARGE_ROOT:?set HOK_LARGE_ROOT}/runs/hierarchical-movement-mvp/rule-batch-demo"
-python -m hok_agent movement-mvp --mode rule-batch --episodes 1 --output-dir "$MOVEMENT_RUN_DIR"
-python -m hok_agent movement-mvp --mode rule-batch --episodes 3 --resume --output-dir "$MOVEMENT_RUN_DIR"
+python -m hok_agent movement-mvp --mode rule-batch --episodes 10 --step-budget 4 --output-dir "$MOVEMENT_RUN_DIR"
 python -m hok_agent movement-mvp --mode rule-batch --episodes 10 --resume --output-dir "$MOVEMENT_RUN_DIR"
 ```
 
 This repeats the fixed Stage A scene using a structured simulator rule. It writes one SQLite Store,
-derived frame bundles and `batch-summary.json`; every episode ends after three STOPs. Resume starts
-after completed episodes and refuses to overwrite a partial episode. It is not mid-episode recovery
-or learned navigation, and it loads no model or phone interface. Actual results and remaining work
-are recorded only in [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md).
+an immutable `run-contract.json`, derived frame bundles and `batch-summary.json`; every episode ends
+after three STOPs. Resume deterministically replays committed transitions and continues at the next
+step. Missing/corrupt committed evidence or changed bindings stop recovery. This is PixelArena
+mid-episode recovery, not learned navigation or phone-state recovery, and it loads no model or phone
+interface. Actual results and remaining work are recorded only in
+[DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md).
 
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.

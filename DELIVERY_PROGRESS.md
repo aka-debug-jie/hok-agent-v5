@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `STAGE_C_CORRECTIONS_FAILED_RULE_BATCH_PASSED`: both bounded corrections reached 0/24; rule batch passed cumulative 1/3/10 with 90 valid transitions | End this round's tuning; continue limited R0 recovery/packaging, no learned promotion/holdout |
+| Engineering convergence | `D0_R0_RULE_OFFLINE_PASSED`: interrupted and continuous 10-episode runs matched at 90 transitions and 100 frame bundles | E packaging/conclusion only; no learned promotion/holdout |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: finish limited R0 recovery and packaging using the rule batch
-CURRENT STATUS: STAGE_C_CORRECTIONS_FAILED_RULE_BATCH_PASSED
-BLOCKING FAILURE: both new candidates are 0/24; class balance alone did not repair learning
-NEXT ACCEPTANCE: bounded mid-episode interruption/recovery, then R0 packaging; no further training
-COMMAND STATUS: rule-batch 1 -> 3 -> 10 and completed-episode resume passed; holdout unopened
+CURRENT GOAL: complete E packaging and close this engineering cycle at R0
+CURRENT STATUS: D0_R0_RULE_OFFLINE_PASSED; learned Movement remains not promoted
+BLOCKING FAILURE: both new Movement candidates are 0/24; no training attempts remain this cycle
+NEXT ACCEPTANCE: one final package/claim audit and deliverable code freeze; no further training
+COMMAND STATUS: step-4 interruption -> resume -> 10 and uninterrupted 10 matched; holdout unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -574,9 +574,8 @@ expansion was introduced.
   exactly 10 terminal rows, all observation/next-observation frame references present, every last
   three actions STOP, reward sum 0 and input 0. Artifact: `stage-d-rule-batch-v1/batch-summary.json`,
   SHA-256 `18d3f1f7b6007ddecc07dea1781403b0d0c792027b1a52161d93a9ff714a75f7`.
-- Resume is explicitly completed-episode-only. A partial episode is preserved and rejected;
-  mid-episode environment restoration, optimizer/checkpoint resume, real RGB adaptation and the
-  complete D/E delivery remain unfinished. No failed learner is installed as a fallback.
+- This historical v1 run resumed only at completed-episode boundaries. D0 v2 below adds the
+  separately versioned mid-episode recovery evidence. No failed learner is installed as a fallback.
 - The two new training runs report 48.39 seconds total and ~298 MiB peak CUDA allocation each;
   three named dev/reference evaluations report 93.41 seconds. Named artifacts add 17,040,031 bytes
   (~16.25 MiB). Earlier ad-hoc forward timing and cumulative engineering time were not instrumented,
@@ -590,6 +589,40 @@ expansion was introduced.
   contain only RGB; the random baseline samples uniformly over currently allowed movement/STOP
   actions, not an unconstrained nine-action space. Rule batch recovery is a storage capability,
   not evidence of a learned model or of in-episode checkpoint restoration.
+
+## Engineering convergence D0 R0 offline delivery
+
+- `movement-mvp --mode rule-batch` now accepts `--step-budget N`. A bounded invocation returns
+  `PAUSED` after its Nth newly committed transition; `--resume` reconstructs the current arena by
+  replaying only committed SQLite actions from the fixed seed. It verifies every step, observation
+  chain, deterministic RGB view hash, policy action, terminal flag and frame bundle before appending.
+- `run-contract.json` binds the resolved config, action order, 100 ms step, fixed rule and source
+  hashes. Contract, summary and frame bundles use same-directory temporary files, `fsync` and atomic
+  replacement. A committed missing/corrupt frame, changed config/source binding or changed stored
+  action is rejected without continuing. A valid orphan frame is verified and reused.
+- The real interrupted run paused at episode 0 step 4, then a new process recovered 4 committed
+  transitions and completed 10/10 episodes. It contains 90 valid transitions, exactly 10 terminal
+  rows, 100 frame bundles, three final STOP actions per episode, zero reward and zero device input.
+  SQLite integrity is `ok`; delivery grade is `R0_RULE_OFFLINE`.
+- The uninterrupted control independently completed the same 10/10 episodes. Both runs have
+  transition-content SHA-256
+  `b58bb1cee16fd906e3d6321095ff230e8423cebf2567c0c652d24be93d80b52c`
+  and frame-view-manifest SHA-256
+  `9977bd0f25ab90531444bb28cd39e72794514f3569e8cd09193a899e34f2072d`.
+- Interrupted summary file SHA-256:
+  `d0526cde0cf003891883c176357a6807310759fb31b2a97512b56fe887f94a37`;
+  continuous summary file SHA-256:
+  `5e81bf18d3e985dba32f151fc396a782cc3db9c888a1fd448ba6962226538d9a`;
+  run-contract file SHA-256:
+  `01fea6d9c17ddd57645a2eca31c8baad3f2b834948baf01a175508b06312aa4b`.
+  The two directories total 1,089,030 bytes, below the 5 MiB D0 allowance.
+- Artifacts: `stage-d-rule-batch-v2-recovery` and `stage-d-rule-batch-v2-continuous` below
+  `HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/`. This proves deterministic PixelArena recovery
+  and the offline transition data path only. Learned navigation, real RGB transfer, phone state
+  recovery, Reward and RL remain false/unopened.
+- Delivery-freeze verification passed: 32 focused tests, Ruff, strict mypy, `git diff --check`,
+  and the complete `make check` with 390 tests in 63.31 seconds. Project safety found zero issues
+  across 239 files and retained exactly four root Markdown authority files.
 
 ## Frozen Global Agent execution state
 

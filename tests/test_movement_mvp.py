@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sqlite3
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,7 @@ import pytest
 
 from hok_agent.movement_mvp import (
     MOVEMENT_ACTIONS,
+    _canonical_sha256,
     load_navigation_config,
     mark_visible_target,
     materialize_overfit32,
@@ -118,6 +120,113 @@ def test_rule_batch_resumes_without_replaying_completed_episodes(tmp_path: Path)
             assert all((output / row["observation"]["frame_bundle_ref"]).is_file() for row in rows)
     assert len({row["episode_id"] for row in third["episode_summaries"]}) == 3
     assert third["input_commands_sent"] == 0
+
+
+def _batch_rows(output: Path) -> tuple[dict[str, object], ...]:
+    rows: list[dict[str, object]] = []
+    with UnifiedTransitionStore(output / "replay.sqlite3") as store:
+        for ordinal in range(10):
+            rows.extend(store.load_episode(f"movement-rule-seed-0-episode-{ordinal:03d}"))
+    return tuple(rows)
+
+
+def test_rule_batch_mid_episode_resume_matches_uninterrupted(tmp_path: Path) -> None:
+    interrupted, continuous = tmp_path / "interrupted", tmp_path / "continuous"
+    paused = run_rule_batch(CONFIG, interrupted, 10, step_budget=4)
+    assert paused["status"] == "PAUSED"
+    assert paused["completed_episodes"] == 0
+    assert paused["current_episode_id"] == "movement-rule-seed-0-episode-000"
+    assert paused["next_step"] == 4
+    resumed = run_rule_batch(CONFIG, interrupted, 10, resume=True)
+    direct = run_rule_batch(CONFIG, continuous, 10)
+    assert resumed["status"] == direct["status"] == "PASSED"
+    assert resumed["delivery_grade"] == "R0_RULE_OFFLINE"
+    assert resumed["transitions"] == direct["transitions"] == 90
+    assert resumed["terminal_transitions"] == 10
+    assert resumed["recovered_transition_count"] == 4
+    assert resumed["resume_count"] == 1
+    assert resumed["sqlite_integrity"] == "ok"
+    assert resumed["transition_content_sha256"] == direct["transition_content_sha256"]
+    assert resumed["frame_view_manifest_sha256"] == direct["frame_view_manifest_sha256"]
+    assert _batch_rows(interrupted) == _batch_rows(continuous)
+
+
+def test_rule_batch_recovers_committed_row_and_atomic_orphan_frame(tmp_path: Path) -> None:
+    committed = tmp_path / "committed"
+    with pytest.raises(RuntimeError, match="committed transition"):
+        run_rule_batch(CONFIG, committed, 1, interrupt_after_commits=4)
+    assert not (committed / "batch-summary.json").exists()
+    resumed = run_rule_batch(CONFIG, committed, 1, resume=True)
+    assert resumed["transitions"] == 9
+    assert [row["step_id"] for row in _batch_rows(committed)] == list(range(9))
+
+    orphan = tmp_path / "orphan"
+    with pytest.raises(RuntimeError, match="atomic frame"):
+        run_rule_batch(CONFIG, orphan, 1, interrupt_after_frames=5)
+    assert len(_batch_rows(orphan)) == 4
+    assert (orphan / "movement-rule-seed-0-episode-000-005.npz").is_file()
+    resumed = run_rule_batch(CONFIG, orphan, 1, resume=True)
+    assert resumed["transitions"] == 9
+
+    incomplete = tmp_path / "incomplete"
+    run_rule_batch(CONFIG, incomplete, 1, step_budget=4)
+    temporary = incomplete / ".movement-rule-seed-0-episode-000-005.npz.tmp"
+    temporary.write_bytes(b"incomplete")
+    resumed = run_rule_batch(CONFIG, incomplete, 1, resume=True)
+    assert resumed["transitions"] == 9
+
+
+def test_rule_batch_rejects_changed_bindings_and_committed_evidence(tmp_path: Path) -> None:
+    output = tmp_path / "bound"
+    run_rule_batch(CONFIG, output, 10, step_budget=4)
+    changed = json.loads(CONFIG.read_text(encoding="utf-8"))
+    changed["seed"] = 1
+    changed_config = tmp_path / "changed.json"
+    changed_config.write_text(json.dumps(changed), encoding="utf-8")
+    with pytest.raises(ValueError, match="resume contract differs"):
+        run_rule_batch(changed_config, output, 10, resume=True)
+
+    contract_path = output / "run-contract.json"
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    contract["source_sha256"]["rich_arena"] = "0" * 64
+    contract.pop("run_contract_sha256")
+    contract["run_contract_sha256"] = _canonical_sha256(contract)
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    with pytest.raises(ValueError, match="resume contract differs"):
+        run_rule_batch(CONFIG, output, 10, resume=True)
+
+    frame_output = tmp_path / "frame"
+    run_rule_batch(CONFIG, frame_output, 10, step_budget=4)
+    frame = frame_output / "movement-rule-seed-0-episode-000-002.npz"
+    frame.write_bytes(b"corrupt")
+    with pytest.raises(ValueError, match="invalid existing frame bundle"):
+        run_rule_batch(CONFIG, frame_output, 10, resume=True)
+
+    row_output = tmp_path / "row"
+    run_rule_batch(CONFIG, row_output, 10, step_budget=4)
+    with sqlite3.connect(row_output / "replay.sqlite3") as connection:
+        encoded = connection.execute(
+            "SELECT payload_json FROM transitions WHERE episode_id = ? AND step_id = 1",
+            ("movement-rule-seed-0-episode-000",),
+        ).fetchone()[0]
+        payload = json.loads(encoded)
+        payload["executed_action"]["applied_movement"] = "W"
+        connection.execute(
+            "UPDATE transitions SET payload_json = ? WHERE episode_id = ? AND step_id = 1",
+            (json.dumps(payload), "movement-rule-seed-0-episode-000"),
+        )
+    with pytest.raises(ValueError, match="fixed rule"):
+        run_rule_batch(CONFIG, row_output, 10, resume=True)
+
+
+def test_rule_batch_requires_resume_and_cannot_shrink(tmp_path: Path) -> None:
+    output = tmp_path / "partial"
+    run_rule_batch(CONFIG, output, 10, step_budget=4)
+    with pytest.raises(ValueError, match="use --resume"):
+        run_rule_batch(CONFIG, output, 10)
+    run_rule_batch(CONFIG, output, 3, resume=True)
+    with pytest.raises(ValueError, match="cannot shrink"):
+        run_rule_batch(CONFIG, output, 1, resume=True)
 
 
 def test_stage_b_materializes_causal_balanced_overfit32(tmp_path: Path) -> None:

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import sqlite3
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final, Literal, cast
 
@@ -29,6 +31,7 @@ from hok_agent.transition_store import (
     RewardComponentsRecord,
     RewardRecord,
     UnifiedTransitionStore,
+    validate_transition,
 )
 
 StageAMovement = Literal["STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE"]
@@ -312,6 +315,16 @@ def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _atomic_json(path: Path, payload: object) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
 def stage_c_scenarios() -> tuple[dict[str, object], ...]:
     positions = tuple((x, y) for x in range(2, 13) for y in (2, 3, 4))
     buckets: dict[StageAMovement, list[tuple[tuple[int, int], tuple[int, int]]]] = defaultdict(list)
@@ -561,12 +574,33 @@ def _packet(
     timestamp_ns: int,
     observation: dict[str, object],
     render_seed: int,
+    *,
+    require_existing: bool = False,
 ) -> FramePacket:
     main = render(observation, render_seed)
     minimap = np.ascontiguousarray(main[::2, ::2])
     hud = np.ascontiguousarray(main[-16:])
     basename = f"{episode_id}-{step_id:03d}.npz"
-    np.savez_compressed(output_dir / basename, main=main, minimap=minimap, hud=hud)
+    bundle = output_dir / basename
+    arrays = {"main": main, "minimap": minimap, "hud": hud}
+    if bundle.exists():
+        try:
+            with np.load(bundle, allow_pickle=False) as saved:
+                if set(saved.files) != set(arrays) or any(
+                    not np.array_equal(saved[name], value) for name, value in arrays.items()
+                ):
+                    raise ValueError("existing frame bundle content differs")
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"invalid existing frame bundle: {basename}") from exc
+    elif require_existing:
+        raise ValueError(f"committed frame bundle is missing: {basename}")
+    else:
+        temporary = bundle.with_name(f".{bundle.name}.tmp")
+        with temporary.open("wb") as handle:
+            np.savez_compressed(handle, main=main, minimap=minimap, hud=hud)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, bundle)
     views = tuple(
         RgbView(cast(ViewName, name), value.tobytes(), cast(tuple[int, int, int], value.shape))
         for name, value in (("main", main), ("minimap", minimap), ("hud", hud))
@@ -787,8 +821,246 @@ def _run_rule_episode(
         "reward_total": sum(float(row["reward"]["total"]) for row in rows),
         "input_commands_sent": 0,
     }
-    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _atomic_json(summary_path, summary)
     return summary
+
+
+_RULE_BATCH_SCHEMA = "movement-mvp-rule-batch-v1"
+_RULE_RUN_CONTRACT_SCHEMA = "movement-mvp-rule-run-contract-v1"
+
+
+def _rule_arena(config: NavigationConfig) -> RichPixelArena:
+    arena = RichPixelArena(
+        ArenaConfig(
+            max_ticks=max(config.max_steps + 1, 32),
+            blue_start=config.start,
+            red_start=(12, 2),
+        )
+    )
+    arena.reset(config.seed)
+    return arena
+
+
+def _rule_run_contract(config: NavigationConfig) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema_version": _RULE_RUN_CONTRACT_SCHEMA,
+        "resolved_config": json.loads(json.dumps(asdict(config))),
+        "config_sha256": config.sha256,
+        "movement_actions": list(MOVEMENT_ACTIONS),
+        "step_duration_ms": config.step_duration_ms,
+        "policy": "structured-simulator-rule",
+        "stop_confirmation_steps": 3,
+        "source_sha256": {
+            "movement_mvp": _file_sha256(Path(__file__)),
+            "rich_arena": _file_sha256(Path(__file__).with_name("rich_arena.py")),
+            "transition_store": _file_sha256(Path(__file__).with_name("transition_store.py")),
+        },
+    }
+    payload["run_contract_sha256"] = _canonical_sha256(payload)
+    return payload
+
+
+def _read_bound_json(path: Path, hash_field: str) -> dict[str, object]:
+    try:
+        payload = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid bound JSON: {path.name}") from exc
+    supplied = str(payload.pop(hash_field, ""))
+    calculated = _canonical_sha256(payload)
+    payload[hash_field] = supplied
+    if supplied != calculated:
+        raise ValueError(f"{path.name} hash differs")
+    return payload
+
+
+def _restore_rule_episode(
+    config: NavigationConfig,
+    output_dir: Path,
+    episode_id: str,
+    rows: tuple[HierarchicalTransitionRecord, ...],
+) -> tuple[
+    RichPixelArena,
+    FramePacket,
+    StageAMovement,
+    int,
+    list[tuple[int, int]],
+    list[StageAMovement],
+]:
+    arena = _rule_arena(config)
+    step_ns = config.step_duration_ms * 1_000_000
+    observation = _packet(
+        output_dir,
+        episode_id,
+        0,
+        0,
+        arena.observe("blue"),
+        config.seed,
+        require_existing=bool(rows),
+    )
+    previous_action: StageAMovement = "STOP"
+    stop_streak = 0
+    positions = [config.start]
+    actions: list[StageAMovement] = []
+    for step_id, row in enumerate(rows):
+        if row["step_id"] != step_id or not validate_transition(row).valid:
+            raise ValueError("committed transition validation differs")
+        if row["done"] and step_id != len(rows) - 1:
+            raise ValueError("committed episode continues after terminal")
+        current = arena.observe("blue")
+        position_raw = cast(dict[str, int], current["self_position"])
+        position = (position_raw["x"], position_raw["y"])
+        action_raw = str(row["executed_action"]["applied_movement"])
+        if action_raw not in MOVEMENT_ACTIONS:
+            raise ValueError("committed movement is outside the rule vocabulary")
+        action = action_raw
+        if action != rule_movement(position, config.goal):
+            raise ValueError("committed movement differs from the fixed rule")
+        arena.step(to_arena_action(action), wait_action())
+        next_position_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+        next_position = (next_position_raw["x"], next_position_raw["y"])
+        stopped_at_goal = action == "STOP" and position == config.goal and next_position == position
+        stop_streak = stop_streak + 1 if stopped_at_goal else 0
+        success = stop_streak >= 3
+        timeout = step_id + 1 == config.max_steps and not success
+        expected_observation = _packet(
+            output_dir,
+            episode_id,
+            step_id,
+            step_id * step_ns,
+            current,
+            config.seed + step_id,
+            require_existing=True,
+        )
+        next_observation = _packet(
+            output_dir,
+            episode_id,
+            step_id + 1,
+            (step_id + 1) * step_ns,
+            arena.observe("blue"),
+            config.seed + step_id + 1,
+            require_existing=True,
+        )
+        expected = _transition(
+            config,
+            episode_id,
+            step_id,
+            expected_observation,
+            next_observation,
+            action,
+            previous_action,
+            success=success,
+            timeout=timeout,
+        )
+        if row != expected:
+            raise ValueError("committed transition content differs from deterministic replay")
+        observation = next_observation
+        previous_action = action
+        actions.append(action)
+        positions.append(next_position)
+    return arena, observation, previous_action, stop_streak, positions, actions
+
+
+def _episode_summary(
+    config: NavigationConfig,
+    episode_id: str,
+    rows: tuple[HierarchicalTransitionRecord, ...],
+    positions: list[tuple[int, int]],
+    actions: list[StageAMovement],
+) -> dict[str, object]:
+    complete = bool(rows and rows[-1]["done"])
+    return {
+        "status": (
+            "PASSED"
+            if complete and rows[-1]["terminal_reason"] == "NAVIGATION_GOAL_REACHED"
+            else "RUNNING"
+        ),
+        "episode_id": episode_id,
+        "steps": len(rows),
+        "actions": actions,
+        "positions": positions,
+        "done": complete,
+        "terminal_reason": rows[-1]["terminal_reason"] if complete else "NOT_DONE",
+        "terminal_transition_committed": complete,
+        "stop_confirmation_steps": 3,
+        "reward_total": sum(float(row["reward"]["total"]) for row in rows),
+    }
+
+
+def _batch_summary(
+    config: NavigationConfig,
+    output_dir: Path,
+    episode_count: int,
+    resume_count: int,
+    recovered_transitions: int,
+    paused: bool,
+) -> dict[str, object]:
+    database = output_dir / "replay.sqlite3"
+    episode_summaries: list[dict[str, object]] = []
+    all_rows: list[HierarchicalTransitionRecord] = []
+    current_episode: str | None = None
+    next_step: int | None = None
+    with UnifiedTransitionStore(database) as store:
+        for ordinal in range(10):
+            episode_id = f"movement-rule-seed-{config.seed}-episode-{ordinal:03d}"
+            rows = store.load_episode(episode_id)
+            if not rows:
+                continue
+            _arena, _observation, _previous, _streak, positions, actions = _restore_rule_episode(
+                config, output_dir, episode_id, rows
+            )
+            episode_summaries.append(_episode_summary(config, episode_id, rows, positions, actions))
+            all_rows.extend(rows)
+            if not rows[-1]["done"]:
+                current_episode, next_step = episode_id, len(rows)
+    completed = sum(bool(row["done"]) for row in episode_summaries)
+    frame_manifest: dict[str, object] = {}
+    for row in all_rows:
+        for key in ("observation", "next_observation"):
+            frame = row[key]
+            frame_manifest[frame["observation_id"]] = frame["view_sha256"]
+    with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as connection:
+        integrity = str(connection.execute("PRAGMA integrity_check").fetchone()[0])
+    status = "PASSED" if completed == episode_count else "PAUSED" if paused else "FAILED"
+    payload: dict[str, object] = {
+        "schema_version": _RULE_BATCH_SCHEMA,
+        "status": status,
+        "delivery_grade": "R0_RULE_OFFLINE" if completed == 10 else "IN_PROGRESS",
+        "config_sha256": config.sha256,
+        "run_contract_sha256": _read_bound_json(
+            output_dir / "run-contract.json", "run_contract_sha256"
+        )["run_contract_sha256"],
+        "requested_episodes": episode_count,
+        "completed_episodes": completed,
+        "transitions": len(all_rows),
+        "terminal_transitions": sum(bool(row["done"]) for row in all_rows),
+        "milestones": [count for count in (1, 3, 10) if count <= completed],
+        "current_episode_id": current_episode,
+        "next_step": next_step,
+        "resume_count": resume_count,
+        "recovered_transition_count": recovered_transitions,
+        "episode_summaries": episode_summaries,
+        "transition_content_sha256": _canonical_sha256(all_rows),
+        "frame_view_manifest_sha256": _canonical_sha256(frame_manifest),
+        "sqlite_integrity": integrity,
+        "terminal_transition_committed_first": all(
+            not row["done"] or index == len(rows) - 1
+            for rows in (
+                [item for item in all_rows if item["episode_id"] == summary["episode_id"]]
+                for summary in episode_summaries
+            )
+            for index, row in enumerate(rows)
+        ),
+        "policy": "structured-simulator-rule",
+        "fixed_scene_repeated": True,
+        "mid_episode_resume": True,
+        "resume_source": "committed_sqlite_transitions",
+        "learned_navigation": False,
+        "model_checkpoint_loaded": False,
+        "reward_total": sum(float(row["reward"]["total"]) for row in all_rows),
+        "input_commands_sent": 0,
+    }
+    payload["summary_sha256"] = _canonical_sha256(payload)
+    return payload
 
 
 def run_rule_batch(
@@ -797,68 +1069,132 @@ def run_rule_batch(
     episode_count: int,
     *,
     resume: bool = False,
+    step_budget: int | None = None,
+    interrupt_after_commits: int | None = None,
+    interrupt_after_frames: int | None = None,
 ) -> dict[str, object]:
-    """Fixed-scene engineering run, with restart only at completed episode boundaries."""
+    """Run or recover the fixed rule at committed transition boundaries."""
+    if step_budget is not None and step_budget <= 0:
+        raise ValueError("step budget must be positive")
     config = load_navigation_config(config_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     database = output_dir / "replay.sqlite3"
+    contract_path = output_dir / "run-contract.json"
     summary_path = output_dir / "batch-summary.json"
-    summaries: list[dict[str, object]] = []
-    if summary_path.exists():
-        if not resume:
-            raise ValueError("rule batch exists; use --resume at an episode boundary")
-        saved = cast(dict[str, object], json.loads(summary_path.read_text(encoding="utf-8")))
-        if saved["config_sha256"] != config.sha256:
-            raise ValueError("rule batch resume config differs")
-        summaries = cast(list[dict[str, object]], saved["episode_summaries"])
-        with UnifiedTransitionStore(database) as store:
-            for row in summaries:
-                rows = store.load_episode(str(row["episode_id"]))
-                if not rows or len(rows) != row["steps"] or not rows[-1]["done"]:
-                    raise ValueError("rule batch completed-episode recovery differs")
-    elif database.exists():
-        raise ValueError(
-            "partial first episode requires in-episode recovery, not a fresh overwrite"
-        )
-    if len(summaries) > episode_count:
-        raise ValueError("rule batch resume cannot shrink its completed episode count")
-    result: dict[str, object] = {}
-    for ordinal in range(len(summaries), episode_count):
-        episode_id = f"movement-rule-seed-{config.seed}-episode-{ordinal:03d}"
-        # A crash after append but before the batch summary must not overwrite that episode.
-        with UnifiedTransitionStore(database) as store:
-            if store.load_episode(episode_id) or any(output_dir.glob(f"{episode_id}-*.npz")):
-                raise ValueError("partial episode exists; in-episode recovery is not implemented")
-        summary = _run_rule_episode(
-            config,
-            output_dir,
-            database,
-            output_dir / f"{episode_id}-summary.json",
-            episode_id,
-            3,
-        )
-        summaries.append(summary)
-        result = {
-            "status": "PASSED" if all(row["status"] == "PASSED" for row in summaries) else "FAILED",
-            "schema_version": "movement-mvp-rule-batch-v0",
-            "config_sha256": config.sha256,
-            "completed_episodes": len(summaries),
-            "transitions": sum(int(cast(int, row["steps"])) for row in summaries),
-            "milestones": [count for count in (1, 3, 10) if count <= len(summaries)],
-            "episode_summaries": summaries,
-            "policy": "structured-simulator-rule",
-            "fixed_scene_repeated": True,
-            "model_checkpoint_loaded": False,
-            "resume_boundary": "completed-episode-only",
-            "learned_policy_passed": False,
-            "reward_total": 0.0,
-            "input_commands_sent": 0,
-        }
-        summary_path.write_text(
-            json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        if summary["status"] != "PASSED":
-            break
-    if not result:
-        result = cast(dict[str, object], json.loads(summary_path.read_text(encoding="utf-8")))
+    expected_contract = _rule_run_contract(config)
+    if resume:
+        if not contract_path.exists():
+            raise ValueError("rule batch resume contract is missing")
+        if _read_bound_json(contract_path, "run_contract_sha256") != expected_contract:
+            raise ValueError("rule batch resume contract differs")
+    else:
+        if any(output_dir.iterdir()):
+            raise ValueError("rule batch output exists; use --resume")
+        _atomic_json(contract_path, expected_contract)
+
+    resume_count = 0
+    if resume:
+        resume_count = 1
+        if summary_path.exists():
+            previous_summary = _read_bound_json(summary_path, "summary_sha256")
+            resume_count += int(cast(int, previous_summary["resume_count"]))
+
+    existing_rows = 0
+    completed_before = 0
+    partial_before = 0
+    seen_empty = False
+    with UnifiedTransitionStore(database) as store:
+        for ordinal in range(10):
+            episode_id = f"movement-rule-seed-{config.seed}-episode-{ordinal:03d}"
+            rows = store.load_episode(episode_id)
+            if not rows:
+                seen_empty = True
+                continue
+            if seen_empty:
+                raise ValueError("rule batch episode order contains a gap")
+            existing_rows += len(rows)
+            if rows[-1]["done"]:
+                completed_before += 1
+            else:
+                partial_before += 1
+        if completed_before > episode_count:
+            raise ValueError("rule batch resume cannot shrink its completed episode count")
+        if partial_before > 1:
+            raise ValueError("rule batch contains more than one partial episode")
+
+        new_commits = 0
+        paused = False
+        for ordinal in range(completed_before, episode_count):
+            episode_id = f"movement-rule-seed-{config.seed}-episode-{ordinal:03d}"
+            rows = store.load_episode(episode_id)
+            arena, observation, previous_action, stop_streak, _positions, _actions = (
+                _restore_rule_episode(config, output_dir, episode_id, rows)
+            )
+            if rows and rows[-1]["done"]:
+                continue
+            bus = LatestFrameBus()
+            bus.publish(observation)
+            step_ns = config.step_duration_ms * 1_000_000
+            for step_id in range(len(rows), config.max_steps):
+                current = arena.observe("blue")
+                position_raw = cast(dict[str, int], current["self_position"])
+                position = (position_raw["x"], position_raw["y"])
+                action = rule_movement(position, config.goal)
+                arena.step(to_arena_action(action), wait_action())
+                next_position_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+                next_position = (next_position_raw["x"], next_position_raw["y"])
+                stopped_at_goal = (
+                    action == "STOP" and position == config.goal and next_position == position
+                )
+                stop_streak = stop_streak + 1 if stopped_at_goal else 0
+                success = stop_streak >= 3
+                timeout = step_id + 1 == config.max_steps and not success
+                next_observation = _packet(
+                    output_dir,
+                    episode_id,
+                    step_id + 1,
+                    (step_id + 1) * step_ns,
+                    arena.observe("blue"),
+                    config.seed + step_id + 1,
+                )
+                bus.publish(next_observation)
+                if interrupt_after_frames == new_commits + 1:
+                    raise RuntimeError("injected interruption after atomic frame")
+                stored = store.append(
+                    _transition(
+                        config,
+                        episode_id,
+                        step_id,
+                        observation,
+                        next_observation,
+                        action,
+                        previous_action,
+                        success=success,
+                        timeout=timeout,
+                    )
+                )
+                if not stored.validation.valid:
+                    raise ValueError(f"rule batch transition invalid: {stored.validation.errors}")
+                new_commits += 1
+                if interrupt_after_commits == new_commits:
+                    raise RuntimeError("injected interruption after committed transition")
+                observation, previous_action = next_observation, action
+                if success or timeout:
+                    break
+                if step_budget is not None and new_commits >= step_budget:
+                    paused = True
+                    break
+            if step_budget is not None and new_commits >= step_budget:
+                paused = True
+                break
+
+    result = _batch_summary(
+        config,
+        output_dir,
+        episode_count,
+        resume_count,
+        existing_rows if resume else 0,
+        paused,
+    )
+    _atomic_json(summary_path, result)
     return result

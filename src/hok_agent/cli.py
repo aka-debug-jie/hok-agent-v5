@@ -72,17 +72,19 @@ def _parser() -> argparse.ArgumentParser:
         ),
         required=True,
     )
-    movement_mvp.add_argument(
-        "--config", type=Path, default=Path("configs/movement_mvp.json")
-    )
+    movement_mvp.add_argument("--config", type=Path, default=Path("configs/movement_mvp.json"))
     movement_mvp.add_argument("--output-dir", type=Path, required=True)
     movement_mvp.add_argument("--episodes", type=int, choices=(1, 3, 10), default=10)
     movement_mvp.add_argument("--resume", action="store_true")
+    movement_mvp.add_argument("--step-budget", type=int)
     movement_mvp.add_argument("--dataset", type=Path)
     movement_mvp.add_argument("--dataset-root", type=Path)
     movement_mvp.add_argument("--checkpoint", type=Path, action="append", default=[])
-    movement_mvp.add_argument("--reference-only", action="store_true",
-                              help="evaluate an old checkpoint as a non-promoting reference")
+    movement_mvp.add_argument(
+        "--reference-only",
+        action="store_true",
+        help="evaluate an old checkpoint as a non-promoting reference",
+    )
     movement_mvp.add_argument(
         "--sampling", choices=("uniform", "class-balanced"), default="uniform"
     )
@@ -1382,8 +1384,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             elif args.mode == "rule-batch":
                 from hok_agent.movement_mvp import run_rule_batch
 
-                result = run_rule_batch(args.config, args.output_dir, args.episodes,
-                                        resume=args.resume)
+                result = run_rule_batch(
+                    args.config,
+                    args.output_dir,
+                    args.episodes,
+                    resume=args.resume,
+                    step_budget=args.step_budget,
+                )
             elif args.mode == "materialize-overfit32":
                 from hok_agent.movement_mvp import materialize_overfit32
 
