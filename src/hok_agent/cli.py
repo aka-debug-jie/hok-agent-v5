@@ -73,6 +73,7 @@ def _parser() -> argparse.ArgumentParser:
             "goal-canvas-localized-overfit32",
             "goal-canvas-two-stage-overfit32",
             "real-player-cue",
+            "real-player-goal-continuity",
             "materialize-overfit32",
             "overfit32",
             "materialize-trajectories",
@@ -1396,7 +1397,26 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         elif args.command == "movement-mvp":
-            if args.mode == "real-player-cue":
+            if args.mode == "real-player-goal-continuity":
+                if (
+                    args.session_root is None
+                    or args.prior_report is None
+                    or args.goal_canvas_report is None
+                ):
+                    raise ValueError(
+                        "real-player-goal-continuity requires --session-root, "
+                        "--prior-report and --goal-canvas-report"
+                    )
+                from hok_agent.movement_real_rgb import run_real_player_goal_continuity
+
+                result = run_real_player_goal_continuity(
+                    args.config,
+                    args.prior_report,
+                    args.goal_canvas_report,
+                    args.session_root,
+                    args.output_dir,
+                )
+            elif args.mode == "real-player-cue":
                 if args.session_root is None:
                     raise ValueError("real-player-cue requires --session-root")
                 from hok_agent.movement_real_rgb import run_real_player_cue_preflight

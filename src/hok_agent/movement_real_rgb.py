@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import tempfile
 from collections import defaultdict
@@ -873,6 +874,285 @@ def run_real_player_cue_preflight(
             if passed
             else "stop_real_player_cue_lineage_without_threshold_tuning"
         ),
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        (staging / "report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return report
+
+
+def _goal_direction(
+    player_yx: tuple[float, float], goal_yx: tuple[float, float], stop_radius: float
+) -> str:
+    delta_y = goal_yx[0] - player_yx[0]
+    delta_x = goal_yx[1] - player_yx[1]
+    if math.hypot(delta_y, delta_x) <= stop_radius:
+        return "STOP"
+    directions = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    sector = int(round(math.atan2(delta_x, -delta_y) / (math.pi / 4.0))) % 8
+    return directions[sector]
+
+
+def run_real_player_goal_continuity(
+    contract_path: Path,
+    player_report_path: Path,
+    goal_report_path: Path,
+    session_root: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    if (
+        contract.get("schema_version") != "movement-real-player-goal-continuity-contract-v1"
+        or contract.get("training_allowed") is not False
+        or contract.get("test_allowed") is not False
+        or contract.get("r2_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+    ):
+        raise ValueError("player goal continuity contract differs")
+    player_report = _load_bound_json(player_report_path, "report_sha256")
+    goal_report = _load_bound_json(goal_report_path, "report_sha256")
+    lineage = cast(dict[str, object], contract["lineage"])
+    if (
+        _file_sha256(player_report_path) != lineage["player_report_file_sha256"]
+        or player_report.get("report_sha256") != lineage["player_report_sha256"]
+        or player_report.get("status") != "REAL_PLAYER_CUE_PASSED"
+        or _file_sha256(goal_report_path) != lineage["goal_report_file_sha256"]
+        or goal_report.get("report_sha256") != lineage["goal_report_sha256"]
+        or goal_report.get("status") != "GOAL_CANVAS_GENERATION_PASSED_SELF_LOCALIZATION_UNRESOLVED"
+    ):
+        raise ValueError("player goal continuity lineage differs")
+    if session_root.is_symlink() or not session_root.is_dir():
+        raise ValueError("player goal continuity session root differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("player goal continuity output already exists")
+
+    player_config = cast(dict[str, object], contract["player_cue"])
+    goal_config = cast(dict[str, object], contract["goal_canvas"])
+    gates = cast(dict[str, object], contract["gates"])
+    goal_xy = cast(list[float], goal_config["goal_xy_relative"])
+    goal_yx = (round(goal_xy[1] * 127), round(goal_xy[0] * 127))
+    marker = cast(dict[str, object], goal_config["marker"])
+    cue_contract: dict[str, object] = {
+        "color": contract["color"],
+        "components": player_config,
+    }
+    confirmation_frames = int(cast(int, contract["confirmation_frames"]))
+    stop_radius = float(cast(float, contract["stop_radius_pixels"]))
+    session_results: list[dict[str, object]] = []
+    opened_shards: list[dict[str, object]] = []
+
+    for declaration in cast(list[dict[str, object]], contract["sessions"]):
+        basename = str(declaration["basename"])
+        if Path(basename).name != basename:
+            raise ValueError("player goal continuity session basename differs")
+        directory = session_root / basename
+        summary_path = directory / "summary.json"
+        if _file_sha256(summary_path) != declaration["summary_sha256"]:
+            raise ValueError("player goal continuity summary file differs")
+        summary = _load_bound_json(summary_path, "summary_sha256")
+        if (
+            summary.get("status") != "PASSED"
+            or summary.get("derived_roi_rgb_persisted") is not True
+            or summary.get("raw_frames_persisted") is not False
+        ):
+            raise ValueError("player goal continuity source summary differs")
+
+        frames_seen = detections = stable_frames = 0
+        raw_changes = raw_adjacencies = stable_switches = 0
+        canvas_changed = canvas_deterministic = 0
+        missing_streak = 0
+        previous_player: tuple[float, float] | None = None
+        previous_raw: str | None = None
+        stable_direction: str | None = None
+        pending_direction: str | None = None
+        pending_count = 0
+        direction_counts: dict[str, int] = defaultdict(int)
+        stable_direction_counts: dict[str, int] = defaultdict(int)
+        first_timestamp: int | None = None
+        last_timestamp: int | None = None
+
+        for raw_row in cast(list[dict[str, object]], summary["observation_shards"]):
+            shard_basename = str(raw_row["path"])
+            path = directory / "shards" / shard_basename
+            if (
+                Path(shard_basename).name != shard_basename
+                or path.is_symlink()
+                or not path.is_file()
+                or _file_sha256(path) != raw_row["sha256"]
+            ):
+                raise ValueError("player goal continuity shard differs")
+            with np.load(path, allow_pickle=False) as shard:
+                frames = shard["minimap_rgb"]
+                timestamps = shard["scheduled_elapsed_ms"]
+                if (
+                    frames.dtype != np.uint8
+                    or frames.shape[1:] != (128, 128, 3)
+                    or len(frames) != raw_row["rows"]
+                    or timestamps.shape != (len(frames),)
+                ):
+                    raise ValueError("player goal continuity shard arrays differ")
+                for frame, timestamp_value in zip(frames, timestamps, strict=True):
+                    frames_seen += 1
+                    timestamp = int(timestamp_value)
+                    first_timestamp = timestamp if first_timestamp is None else first_timestamp
+                    last_timestamp = timestamp
+                    marked = _mark_goal(frame, goal_xy, marker)
+                    repeated = _mark_goal(frame, goal_xy, marker)
+                    canvas_changed += int(not np.array_equal(marked, frame))
+                    canvas_deterministic += int(np.array_equal(marked, repeated))
+                    candidates = _player_candidates(frame, cue_contract)
+                    if not candidates:
+                        missing_streak += 1
+                        previous_raw = None
+                        pending_direction = None
+                        pending_count = 0
+                        if missing_streak > int(
+                            cast(int, player_config["reset_after_missing_frames"])
+                        ):
+                            previous_player = None
+                            stable_direction = None
+                        continue
+                    detections += 1
+                    if previous_player is None:
+                        selected = min(candidates, key=lambda item: item[2])
+                    else:
+                        selected = min(
+                            candidates,
+                            key=lambda item: float(
+                                np.linalg.norm(np.asarray(item[:2]) - np.asarray(previous_player))
+                            ),
+                        )
+                    previous_player = (selected[0], selected[1])
+                    missing_streak = 0
+                    direction = _goal_direction(previous_player, goal_yx, stop_radius)
+                    direction_counts[direction] += 1
+                    if previous_raw is not None:
+                        raw_adjacencies += 1
+                        raw_changes += int(direction != previous_raw)
+                    previous_raw = direction
+                    if pending_direction == direction:
+                        pending_count += 1
+                    else:
+                        pending_direction = direction
+                        pending_count = 1
+                    if pending_count >= confirmation_frames:
+                        if stable_direction is not None and stable_direction != direction:
+                            stable_switches += 1
+                        stable_direction = direction
+                    if stable_direction is not None:
+                        stable_frames += 1
+                        stable_direction_counts[stable_direction] += 1
+            opened_shards.append(
+                {"session": basename, "basename": shard_basename, "sha256": raw_row["sha256"]}
+            )
+
+        duration_minutes = (
+            (last_timestamp - first_timestamp) / 60_000.0
+            if first_timestamp is not None
+            and last_timestamp is not None
+            and last_timestamp > first_timestamp
+            else 0.0
+        )
+        session_results.append(
+            {
+                "session": basename,
+                "frames": frames_seen,
+                "detections": detections,
+                "raw_direction_coverage": detections / frames_seen,
+                "stable_direction_coverage": stable_frames / frames_seen,
+                "raw_direction_change_fraction": raw_changes / raw_adjacencies
+                if raw_adjacencies
+                else 0.0,
+                "stable_switches": stable_switches,
+                "stable_switches_per_minute": stable_switches / duration_minutes
+                if duration_minutes
+                else 0.0,
+                "raw_direction_counts": dict(sorted(direction_counts.items())),
+                "stable_direction_counts": dict(sorted(stable_direction_counts.items())),
+                "canvas_changed_fraction": canvas_changed / frames_seen,
+                "canvas_deterministic_fraction": canvas_deterministic / frames_seen,
+            }
+        )
+
+    checks = {
+        "raw_direction_coverage": all(
+            float(cast(float, row["raw_direction_coverage"]))
+            >= float(cast(float, gates["minimum_raw_direction_coverage_per_session"]))
+            for row in session_results
+        ),
+        "stable_direction_coverage": all(
+            float(cast(float, row["stable_direction_coverage"]))
+            >= float(cast(float, gates["minimum_stable_direction_coverage_per_session"]))
+            for row in session_results
+        ),
+        "raw_direction_continuity": all(
+            float(cast(float, row["raw_direction_change_fraction"]))
+            <= float(cast(float, gates["maximum_raw_direction_change_fraction"]))
+            for row in session_results
+        ),
+        "stable_direction_continuity": all(
+            float(cast(float, row["stable_switches_per_minute"]))
+            <= float(cast(float, gates["maximum_stable_switches_per_minute"]))
+            for row in session_results
+        ),
+        "goal_canvas_changed": all(
+            float(cast(float, row["canvas_changed_fraction"])) == 1.0 for row in session_results
+        ),
+        "goal_canvas_deterministic": all(
+            float(cast(float, row["canvas_deterministic_fraction"])) == 1.0
+            for row in session_results
+        ),
+    }
+    passed = all(checks.values())
+    observed_directions = sorted(
+        {
+            direction
+            for row in session_results
+            for direction in cast(dict[str, int], row["raw_direction_counts"])
+        }
+    )
+    report: dict[str, object] = {
+        "schema_version": "movement-real-player-goal-continuity-report-v1",
+        "status": "REAL_PLAYER_GOAL_CONTINUITY_PASSED"
+        if passed
+        else "REAL_PLAYER_GOAL_CONTINUITY_FAILED",
+        "contract_sha256": contract["contract_sha256"],
+        "player_report_sha256": player_report["report_sha256"],
+        "goal_report_sha256": goal_report["report_sha256"],
+        "goal_xy_relative": goal_xy,
+        "goal_yx_pixels": list(goal_yx),
+        "direction_order": contract["direction_order"],
+        "confirmation_frames": confirmation_frames,
+        "sessions": session_results,
+        "checks": checks,
+        "observed_direction_union": observed_directions,
+        "all_nine_directions_observed": len(observed_directions) == 9,
+        "opened_shards": opened_shards,
+        "semantic_player_identity_verified": False,
+        "semantic_lane_coordinate_verified": False,
+        "direction_accuracy_verified": False,
+        "continuity_only": True,
+        "policy_training_allowed": False,
+        "human_labels_consumed": False,
+        "raw_rgb_persisted": False,
+        "training_called": False,
+        "test_frames_read": 0,
+        "r2_allowed": False,
+        "device_input_commands_sent": 0,
+        "next_action": "freeze_read_only_composition_evidence"
+        if passed
+        else "stop_without_threshold_tuning",
     }
     report["report_sha256"] = _object_sha256(report)
     output_dir.parent.mkdir(parents=True, exist_ok=True)

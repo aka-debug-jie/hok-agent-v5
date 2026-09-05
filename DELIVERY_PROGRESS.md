@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `REAL_PLAYER_CUE_ENGINEERING_PASSED_SEMANTICS_UNVERIFIED`: three existing sessions pass coverage/single/jump gates | Bind cue to goal canvas in read-only replay; no policy/R2 |
+| Engineering convergence | `REAL_PLAYER_GOAL_CONTINUITY_PASSED_DIVERSITY_INSUFFICIENT`: cue plus Macro goal is available and stable over 4,455 existing frames | Freeze evidence; do not train or enter R2 from E/S/SE-only directions |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: bind the passed real player cue to the Macro-provided goal canvas in read-only replay
-CURRENT STATUS: REAL_PLAYER_CUE_ENGINEERING_PASSED_SEMANTICS_UNVERIFIED; R0 remains frozen
-BLOCKING FAILURE: cue semantic identity, lane-coordinate meaning and direction accuracy are unverified
-NEXT ACCEPTANCE: combined player-cue plus goal-canvas continuity report; no learned policy yet
-COMMAND STATUS: 4,455 existing minimap frames audited; no recording/test/training/device work
+CURRENT GOAL: freeze the completed real player-cue plus Macro goal continuity evidence
+CURRENT STATUS: REAL_PLAYER_GOAL_CONTINUITY_PASSED_DIVERSITY_INSUFFICIENT; R0 remains frozen
+BLOCKING FAILURE: only E/S/SE occurred; semantic identity, lane-coordinate meaning and direction accuracy are unverified
+NEXT ACCEPTANCE: none in this cycle; a future cycle needs independent direction evidence before training
+COMMAND STATUS: 4,455 existing minimap frames composed; no recording/test/training/device work
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -906,6 +906,33 @@ expansion was introduced.
 - Verification passed: 5 focused real-RGB/player-cue tests, Ruff, strict mypy (70 source files),
   project safety (254 files, 131 Python files, zero findings, four root Markdown files), and
   `git diff --check`. No full historical suite was rerun for this read-only preflight.
+
+## Real player cue plus Macro goal continuity v1
+
+- The frozen player-cue and goal-canvas reports are both file-hash and self-hash bound. The new
+  read-only command composes the same 4,455 derived 128x128 minimap frames with the fixed Macro goal
+  at `(0.78, 0.78)`, derives one of `STOP/N/NE/E/SE/S/SW/W/NW`, and applies a three-frame
+  confirmation filter. It persists only one aggregate JSON report. Contract SHA-256:
+  `fbf343b03beb1fe8e053c54798fcc597445cbe741df5653452b47ea3be3a86d3`.
+- All engineering gates pass. Raw direction coverage is 0.9771/0.9960/0.9785 and confirmed
+  coverage is 0.9758/0.9946/0.9771. Raw adjacent-frame direction-change fractions are
+  0.0091/0/0; confirmed switches per minute are 2.2237/0/0. Every goal canvas changes the input
+  and deterministic regeneration matches.
+- This evidence is insufficient for policy training: the direction union is only `E/S/SE`, with
+  sessions 003 and 005 entirely `S`. The contract therefore records
+  `all_nine_directions_observed=false`, `direction_accuracy_verified=false` and
+  `policy_training_allowed=false`. Continuity is not semantic correctness or navigation quality.
+- Formal report:
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-player-goal-continuity-v1/report.json`,
+  6,434 bytes. File SHA-256:
+  `94a85bab8b54a0992e92b52ca57ab51c3cb9b601b6549dea34f97f612a9a9800`; report self-hash:
+  `83d6c6fff00a607db6ab8155d54adeaa2e12abd7c1105b236703b7fa18a513c5`.
+- Human labels, raw RGB persistence, test frames, training calls and device input remain zero. The
+  current cycle stops here rather than tuning thresholds or training on a nearly single-direction
+  target.
+- Verification passed: 5 focused real-RGB composition tests, Ruff, strict mypy (70 source files),
+  project safety (255 files, 131 Python files, zero findings, four root Markdown files), and
+  `git diff --check`. No full historical suite was rerun for this bounded read-only audit.
 
 ## Frozen Global Agent execution state
 

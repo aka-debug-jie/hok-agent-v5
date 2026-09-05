@@ -11,6 +11,7 @@ from hok_agent.movement_real_rgb import (
     _canonical_content,
     _object_sha256,
     run_real_player_cue_preflight,
+    run_real_player_goal_continuity,
     run_real_rgb_goal_canvas,
     run_real_rgb_preflight,
 )
@@ -19,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "configs" / "movement_real_rgb_preflight_v1.json"
 GOAL_CONTRACT = ROOT / "configs" / "movement_real_rgb_goal_canvas_v2.json"
 PLAYER_CONTRACT = ROOT / "configs" / "movement_real_player_cue_v1.json"
+CONTINUITY_CONTRACT = ROOT / "configs" / "movement_real_player_goal_continuity_v1.json"
 
 
 def _dataset(tmp_path: Path, *, visible: bool) -> tuple[Path, Path]:
@@ -233,3 +235,52 @@ def test_real_player_cue_uses_existing_minimap_shards_without_labels(tmp_path: P
     assert report["human_labels_consumed"] is False
     assert report["training_called"] is False
     assert report["device_input_commands_sent"] == 0
+
+    player_report_path = tmp_path / "player-output" / "report.json"
+    goal_report = {
+        "schema_version": "movement-real-rgb-goal-canvas-report-v2",
+        "status": "GOAL_CANVAS_GENERATION_PASSED_SELF_LOCALIZATION_UNRESOLVED",
+    }
+    goal_report["report_sha256"] = _object_sha256(goal_report)
+    goal_report_path = tmp_path / "goal-report.json"
+    goal_report_path.write_text(json.dumps(goal_report), encoding="utf-8")
+    continuity = json.loads(CONTINUITY_CONTRACT.read_text(encoding="utf-8"))
+    continuity["sessions"] = declarations
+    continuity["lineage"] = {
+        "player_report_file_sha256": hashlib.sha256(player_report_path.read_bytes()).hexdigest(),
+        "player_report_sha256": report["report_sha256"],
+        "goal_report_file_sha256": hashlib.sha256(goal_report_path.read_bytes()).hexdigest(),
+        "goal_report_sha256": goal_report["report_sha256"],
+    }
+    continuity.pop("contract_sha256")
+    continuity["contract_sha256"] = _object_sha256(continuity)
+    continuity_path = tmp_path / "continuity-contract.json"
+    continuity_path.write_text(json.dumps(continuity), encoding="utf-8")
+    combined = run_real_player_goal_continuity(
+        continuity_path,
+        player_report_path,
+        goal_report_path,
+        session_root,
+        tmp_path / "continuity-output",
+    )
+    assert combined["status"] == "REAL_PLAYER_GOAL_CONTINUITY_PASSED"
+    assert all(combined["checks"].values())
+    assert all(row["raw_direction_coverage"] == 1.0 for row in combined["sessions"])
+    assert all(row["stable_direction_coverage"] >= 0.9 for row in combined["sessions"])
+    assert combined["direction_accuracy_verified"] is False
+    assert combined["continuity_only"] is True
+    assert combined["policy_training_allowed"] is False
+    assert combined["training_called"] is False
+    assert combined["test_frames_read"] == 0
+    assert combined["device_input_commands_sent"] == 0
+
+    goal_report["status"] = "tampered"
+    goal_report_path.write_text(json.dumps(goal_report), encoding="utf-8")
+    with pytest.raises(ValueError, match="self hash differs"):
+        run_real_player_goal_continuity(
+            continuity_path,
+            player_report_path,
+            goal_report_path,
+            session_root,
+            tmp_path / "tampered-continuity-output",
+        )
