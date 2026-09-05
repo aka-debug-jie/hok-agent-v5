@@ -121,6 +121,11 @@ The fresh 64/24 goal-canvas candidate has also completed. Teacher and exact-RGB 
 frozen failed; no holdout or R2 stage opened. The next learned correction must change only the
 model's spatial-relation bias under a new contract, rather than add more epochs or data to this run.
 
+The first two-slot relational correction then failed the earlier overfit32 gate at accuracy 0.625
+and loss 1.258; its formal training was not started. Pure action supervision did not reliably assign
+player/goal identity to the slots. Any next correction must use automatic simulator localization
+targets under a new contract and must not reuse the diagnostic checkpoint.
+
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
 See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.

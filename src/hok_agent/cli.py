@@ -104,7 +104,9 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     movement_mvp.add_argument("--freeze-batch-norm", action="store_true")
     movement_mvp.add_argument(
-        "--architecture", choices=("task-specific", "p0-branch"), default="task-specific"
+        "--architecture",
+        choices=("task-specific", "relational", "p0-branch"),
+        default="task-specific",
     )
     shadow = commands.add_parser(
         "shadow-video", help="analyze one local recording without client control"

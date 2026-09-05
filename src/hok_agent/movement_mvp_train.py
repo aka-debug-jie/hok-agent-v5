@@ -59,6 +59,58 @@ class TaskSpecificMovement(nn.Module):
         return cast(torch.Tensor, self.head(hidden[-1]))
 
 
+class RelationalMovement(nn.Module):
+    """Learn two spatial slots and classify their relative motion with no coordinate labels."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.spatial = nn.Sequential(
+            nn.Conv2d(3, 16, 5, stride=2, padding=2),
+            nn.GroupNorm(4, 16),
+            nn.GELU(),
+            nn.Conv2d(16, 32, 3, stride=2, padding=1),
+            nn.GroupNorm(8, 32),
+            nn.GELU(),
+            nn.Conv2d(32, 32, 3, stride=2, padding=1),
+            nn.GroupNorm(8, 32),
+            nn.GELU(),
+        )
+        self.attention = nn.Conv2d(32, 2, 1)
+        self.project = nn.Sequential(nn.Linear(40, 64), nn.GELU())
+        self.temporal = nn.GRU(64, 128, batch_first=True)
+        self.head = nn.Linear(128, len(MOVEMENT_ACTIONS))
+
+    def forward(self, clips: torch.Tensor) -> torch.Tensor:
+        batch, sequence, channels, height, width = clips.shape
+        features = self.spatial(clips.reshape(batch * sequence, channels, height, width))
+        attention = torch.softmax(self.attention(features).flatten(2), dim=-1)
+        axis_y = torch.linspace(-1.0, 1.0, features.shape[-2], device=features.device)
+        axis_x = torch.linspace(-1.0, 1.0, features.shape[-1], device=features.device)
+        grid_y, grid_x = torch.meshgrid(axis_y, axis_x, indexing="ij")
+        grid = torch.stack((grid_x.flatten(), grid_y.flatten()), dim=-1)
+        coordinates = attention @ grid
+        relation = coordinates[:, 0] - coordinates[:, 1]
+        confidence = attention.max(dim=-1).values
+        pooled = features.mean(dim=(2, 3))
+        frame_features = torch.cat(
+            (pooled, coordinates.flatten(1), relation, confidence), dim=-1
+        )
+        encoded = self.project(frame_features).reshape(batch, sequence, 64)
+        _output, hidden = self.temporal(encoded)
+        return cast(torch.Tensor, self.head(hidden[-1]))
+
+
+MovementModel = MovementBranch | TaskSpecificMovement | RelationalMovement
+
+
+def _movement_model(architecture: str, device: torch.device) -> MovementModel:
+    if architecture == "task-specific":
+        return TaskSpecificMovement().to(device)
+    if architecture == "relational":
+        return RelationalMovement().to(device)
+    raise ValueError("unknown task-specific Movement architecture")
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -97,7 +149,7 @@ def train_step(
 
 
 def _evaluate(
-    model: MovementBranch | TaskSpecificMovement,
+    model: MovementModel,
     clips: torch.Tensor,
     labels: torch.Tensor,
     device: torch.device,
@@ -153,6 +205,17 @@ def run_overfit32(
     attempts_used = int(cast(int, stage["diagnostic_attempts_used"]))
     if attempts_used >= attempt_limit:
         raise ValueError("stage B diagnostic attempt limit is exhausted")
+    if architecture == "relational":
+        unsigned = {key: value for key, value in raw.items() if key != "contract_sha256"}
+        if (
+            raw.get("schema_version") != "movement-goal-canvas-relational-contract-v1"
+            or raw.get("contract_sha256") != _canonical_sha256(unsigned)
+            or raw.get("overfit_dataset_sha256") != _sha256(dataset_path)
+            or raw.get("data_changed") is not False
+            or raw.get("epochs_changed") is not False
+            or raw.get("sampling_changed") is not False
+        ):
+            raise ValueError("relational Movement contract binding differs")
     seed = int(cast(int, raw["seed"]))
     device = torch.device(device_name)
     if device.type == "cuda" and not torch.cuda.is_available():
@@ -187,12 +250,15 @@ def run_overfit32(
         if representation_path is None:
             raise ValueError("p0-branch explicitly requires a representation checkpoint")
         representation_sha256 = _sha256(representation_path)
-        model: MovementBranch | TaskSpecificMovement = MovementBranch(
+        model: MovementModel = MovementBranch(
             load_file(representation_path, device="cpu"), output_actions=len(MOVEMENT_ACTIONS)
         ).to(device)
     elif architecture == "task-specific":
         representation_sha256 = "not_used"
         model = TaskSpecificMovement().to(device)
+    elif architecture == "relational":
+        representation_sha256 = "not_used"
+        model = RelationalMovement().to(device)
     else:
         raise ValueError("unknown Movement MVP diagnostic architecture")
     parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
@@ -265,6 +331,7 @@ def run_overfit32(
             "purpose": "diagnostic_only",
             "dataset_sha256": _sha256(dataset_path),
             "representation_sha256": representation_sha256,
+            "architecture": architecture,
         },
     )
     report: dict[str, object] = {
@@ -273,12 +340,13 @@ def run_overfit32(
         "full_training_called": False,
         "diagnostic_checkpoint_only": True,
         "dataset_sha256": _sha256(dataset_path),
+        "config_sha256": _sha256(config_path),
         "representation_sha256": representation_sha256,
         "checkpoint_sha256": _sha256(checkpoint_path),
         "device": str(device),
         "normalization_mode": (
             "group_norm"
-            if architecture == "task-specific"
+            if architecture in {"task-specific", "relational"}
             else "frozen_batch_norm"
             if freeze_batch_norm
             else "train_batch_norm"
@@ -398,13 +466,22 @@ def train_stage_c_candidate(
         raise ValueError("unknown stage C training sampler")
     raw = cast(dict[str, object], json.loads(config_path.read_text(encoding="utf-8")))
     stage = cast(dict[str, object], raw["stage_c"])
-    if cast(dict[str, object], raw["stage_b"])["selected_architecture"] != "task-specific":
-        raise ValueError("stage C requires the selected task-specific architecture")
+    architecture = str(stage.get("architecture", "task-specific"))
+    if cast(dict[str, object], raw["stage_b"])["selected_architecture"] != architecture:
+        raise ValueError("stage C architecture selection differs")
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "train-report.json"
     if report_path.exists() or any(output_dir.glob("*.safetensors")):
         raise ValueError("stage C training output already exists")
     manifest = load_stage_c_manifest(dataset_root)
+    if architecture == "relational" and (
+        raw.get("schema_version") != "movement-goal-canvas-relational-contract-v1"
+        or raw.get("trajectory_manifest_sha256") != manifest["manifest_sha256"]
+        or raw.get("data_changed") is not False
+        or raw.get("epochs_changed") is not False
+        or raw.get("sampling_changed") is not False
+    ):
+        raise ValueError("relational Stage C contract binding differs")
     if bool(stage.get("navigation_only", False)) != bool(manifest.get("navigation_only", False)):
         raise ValueError("stage C training and dataset environments differ")
     train_rows = [
@@ -445,7 +522,7 @@ def train_stage_c_candidate(
     if device.type == "cuda":
         torch.cuda.manual_seed_all(seed)
         torch.cuda.reset_peak_memory_stats(device)
-    model = TaskSpecificMovement().to(device)
+    model = _movement_model(architecture, device)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=float(cast(float, stage["learning_rate"])),
@@ -514,6 +591,7 @@ def train_stage_c_candidate(
                     "config_sha256": config_hash,
                     "training_contract_sha256": _sha256(contract_path),
                     "sampling": sampling,
+                    "architecture": architecture,
                     "epoch": str(epoch),
                 },
             )
@@ -524,7 +602,7 @@ def train_stage_c_candidate(
     report: dict[str, object] = {
         "status": "TRAINED_NOT_EVALUATED",
         "schema_version": "movement-mvp-stage-c-train-report-v0",
-        "architecture": "task-specific-groupnorm-gru",
+        "architecture": architecture,
         "fresh_initialization": True,
         "diagnostic_checkpoint_loaded": False,
         "manifest_sha256": manifest["manifest_sha256"],
@@ -612,7 +690,7 @@ def _rollout(
     maximum_steps: int,
     sequence_frames: int,
     random_seed: int,
-    model: TaskSpecificMovement | None = None,
+    model: MovementModel | None = None,
     device: torch.device | None = None,
     *,
     stop_confirmation_steps: int = 1,
@@ -780,6 +858,11 @@ def evaluate_stage_c_dev(
     raw = cast(dict[str, object], json.loads(config_path.read_text(encoding="utf-8")))
     stage = cast(dict[str, object], raw["stage_c"])
     manifest = load_stage_c_manifest(dataset_root)
+    architecture = str(stage.get("architecture", "task-specific"))
+    if architecture == "relational" and raw.get("trajectory_manifest_sha256") != manifest[
+        "manifest_sha256"
+    ]:
+        raise ValueError("relational dev manifest binding differs")
     scenarios = tuple(
         row for row in cast(list[dict[str, object]], manifest["episodes"]) if row["split"] == "dev"
     )
@@ -829,7 +912,7 @@ def evaluate_stage_c_dev(
                 or metadata.get("config_sha256") != config_hash
             ):
                 raise ValueError("stage C checkpoint contract binding differs")
-        model = TaskSpecificMovement().to(device)
+        model = _movement_model(architecture, device)
         model.load_state_dict(load_file(checkpoint, device="cpu"), strict=True)
         model.eval()
         metrics = _aggregate_rollouts(

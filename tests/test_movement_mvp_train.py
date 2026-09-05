@@ -19,6 +19,7 @@ from hok_agent.movement_mvp import (
     to_arena_action,
 )
 from hok_agent.movement_mvp_train import (
+    RelationalMovement,
     TaskSpecificMovement,
     TrajectoryWindowDataset,
     _rollout,
@@ -54,6 +55,22 @@ def test_task_specific_model_consumes_sixteen_rgb_frames() -> None:
     model = TaskSpecificMovement()
     assert model(torch.zeros((2, 16, 3, 128, 128))).shape == (2, 9)
     assert sum(parameter.numel() for parameter in model.parameters()) < 1_000_000
+
+
+def test_relational_model_consumes_rgb_without_coordinate_labels() -> None:
+    model = RelationalMovement()
+    clips = torch.zeros((2, 16, 3, 128, 128))
+    clips[0, :, 0, 16:32, 16:32] = 1.0
+    clips[1, :, 1, 96:112, 96:112] = 1.0
+    assert model(clips).shape == (2, 9)
+    assert sum(parameter.numel() for parameter in model.parameters()) < 1_000_000
+    assert not any(isinstance(module, nn.BatchNorm2d) for module in model.modules())
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.0)
+    before = model.attention.weight.detach().clone()
+    loss, gradient = train_step(model, clips, torch.tensor([1, 2]), optimizer)
+    assert math.isfinite(loss) and math.isfinite(gradient)
+    assert gradient > 0.0
+    assert not torch.equal(before, model.attention.weight)
 
 
 def test_default_contract_closes_fifth_diagnostic(tmp_path: Path) -> None:

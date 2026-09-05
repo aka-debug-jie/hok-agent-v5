@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `GOAL_CANVAS_STAGE_C_CANDIDATE_FAILED`: train loss 0.01414, dev 9/24; geometry 24/24 | Freeze architecture; require a new spatial-relation contract and real player-cue evidence |
+| Engineering convergence | `RELATIONAL_OVERFIT32_FAILED`: 93,611-param spatial-slot model reached 0.625 / 1.258 and stopped before formal training | Require explicit synthetic localization supervision plus real player-cue evidence |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: freeze the failed goal-canvas candidate and bound a spatial-relation correction
-CURRENT STATUS: GOAL_CANVAS_STAGE_C_CANDIDATE_FAILED; R0 remains valid
-BLOCKING FAILURE: fresh candidate generalizes to only 9/24 and real player localization remains unresolved
-NEXT ACCEPTANCE: separately versioned relational-model contract; no more data/epoch/sampling repair
-COMMAND STATUS: 64/24 teacher data passed; candidate failed dev; holdout/test/device remain unopened
+CURRENT GOAL: freeze the failed relational diagnostic and define automatic localization supervision
+CURRENT STATUS: RELATIONAL_OVERFIT32_FAILED; prior 9/24 candidate and R0 remain frozen
+BLOCKING FAILURE: unsupervised attention slots did not learn player/goal identities; real player cue unresolved
+NEXT ACCEPTANCE: new synthetic heatmap/coordinate auxiliary contract before any further formal training
+COMMAND STATUS: relational overfit failed and stopped; holdout/test/real training/device remain unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -788,6 +788,35 @@ expansion was introduced.
 - Verification passed: 30 focused movement/goal-canvas/real-RGB tests, Ruff, strict mypy (70 source
   files), project safety (249 files, 131 Python files, zero findings, four root Markdown files),
   and `git diff --check`. No full historical suite was rerun for this failed experimental candidate.
+
+## Goal-canvas relational model diagnostic v1
+
+- The controlled correction kept the overfit32 dataset, 64/24 trajectory manifest, 200-update
+  diagnostic limit, 20-epoch formal limit, class-balanced sampler and all dev gates fixed. Only the
+  model changed from flattened spatial features to a 93,611-parameter GroupNorm CNN with two
+  learned spatial attention slots, their coordinate difference and a GRU. No coordinate labels or
+  attention supervision were used. Contract SHA-256:
+  `131535e7dd950d217a7d2fc5a772de1189a203662b290c287c18c69d205cb1b5`.
+- The sole overfit32 run failed: eval accuracy 0.625 and loss 1.25823. STOP, NE, NW, SE and SW
+  recalls were 1.0, while N, S, E and W recalls were zero. First update loss 2.16892 and gradient
+  norm 1.07203 were finite and parameters changed, so the stop is learnability rather than an
+  optimizer execution failure. Formal 64/24 training was not called.
+- Report/checkpoint SHA-256:
+  `0ce9184f6c417021ca25d3b9e62e32dcc5d2b4ce51bccaf25685686a48739455` /
+  `7974b841272edc46710420cbb7606fdda01343d78bb7ff89a1b4b48d42a7b874`.
+  The checkpoint is diagnostic-only and cannot be reused. Runtime was 4.13 seconds and the run uses
+  about 372 KiB. Real RGB training, test, holdout, R2, promotion and device input remain zero/closed.
+- The preserved report says `normalization_mode=train_batch_norm`, which is a reporting bug: the
+  relational implementation contains GroupNorm and no BatchNorm. The code now reports GroupNorm
+  for future relational runs; metrics and checkpoint were not changed and the consumed run was not
+  repeated. This correction does not improve or reclassify the failed result.
+- Action loss alone did not assign stable player/goal meaning to the two slots. The next admissible
+  experiment must separately freeze automatic synthetic localization supervision and pass both
+  slot-localization and action-overfit gates before any formal trajectory training. Real player-cue
+  viability remains a separate requirement.
+- Verification passed: 27 focused movement/goal-canvas tests, Ruff, strict mypy (70 source files),
+  project safety (250 files, 131 Python files, zero findings, four root Markdown files), and
+  `git diff --check`. No full historical suite was rerun for this stopped diagnostic.
 
 ## Frozen Global Agent execution state
 
