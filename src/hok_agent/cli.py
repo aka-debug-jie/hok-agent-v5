@@ -65,6 +65,7 @@ def _parser() -> argparse.ArgumentParser:
             "stage-a",
             "rule-batch",
             "package",
+            "real-rgb-preflight",
             "materialize-overfit32",
             "overfit32",
             "materialize-trajectories",
@@ -81,6 +82,7 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--source-run", type=Path)
     movement_mvp.add_argument("--control-run", type=Path)
     movement_mvp.add_argument("--verify-only", action="store_true")
+    movement_mvp.add_argument("--target-root", type=Path)
     movement_mvp.add_argument("--dataset", type=Path)
     movement_mvp.add_argument("--dataset-root", type=Path)
     movement_mvp.add_argument("--checkpoint", type=Path, action="append", default=[])
@@ -1381,7 +1383,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         elif args.command == "movement-mvp":
-            if args.mode == "package":
+            if args.mode == "real-rgb-preflight":
+                if args.target_root is None:
+                    raise ValueError("real-rgb-preflight requires --target-root")
+                from hok_agent.movement_real_rgb import run_real_rgb_preflight
+
+                result = run_real_rgb_preflight(
+                    args.config, args.target_root, args.output_dir
+                )
+            elif args.mode == "package":
                 from hok_agent.movement_delivery import create_r0_package, verify_r0_package
 
                 if args.verify_only:

@@ -1,0 +1,62 @@
+{
+  "schema_version": "movement-real-rgb-observability-contract-v1",
+  "contract_sha256": "d3755cb682c425dff4e55fc6f7c571b13a7f1ffc63e834899ed8630d14c946ce",
+  "target_manifest_sha256": "692a39675285b9c52e8c787f062641692d6c1e1de0cb908cc60493c485235dc0",
+  "sessions": [
+    {
+      "session_hash": "03f3722455c19ecb418f28daf68f7ff1c9faee2a3a5bf9f1d85d150097e4710a",
+      "split": "train",
+      "content_geometry": "portrait_letterbox_candidate"
+    },
+    {
+      "session_hash": "0667d97cdb3024f7c5d39d6e797bfe1d527cbd99c07e8e2d2e31cd6eb0ed0993",
+      "split": "train",
+      "content_geometry": "landscape_candidate"
+    },
+    {
+      "session_hash": "c1121610049b451fb1e3f8d3c3695da15ff04f5391898d7b9a0de867b685c009",
+      "split": "dev",
+      "content_geometry": "landscape_cross_session_candidate"
+    }
+  ],
+  "segment_start_fractions": [0.2, 0.5, 0.8],
+  "frames_per_segment": 32,
+  "frame_period_ms": 100,
+  "content_box": {
+    "pixel_mean_minimum": 5.0,
+    "row_column_support_minimum": 0.05,
+    "landscape_aspect_minimum": 1.5,
+    "minimum_width": 32,
+    "minimum_height": 20
+  },
+  "minimap_roi_xyxy": [6, 0, 26, 34],
+  "player_color": {
+    "green_minimum": 85,
+    "green_red_margin": 18,
+    "green_blue_margin": 10,
+    "support_minimum": 3,
+    "support_maximum": 50
+  },
+  "target_color": {
+    "red_minimum": 105,
+    "red_green_margin": 28,
+    "red_blue_margin": 18,
+    "minimum_distance_pixels": 2.0
+  },
+  "temporal": {
+    "player_jump_pixels": 6.0,
+    "target_jump_pixels": 8.0
+  },
+  "gates": {
+    "minimum_overall_pair_coverage": 0.5,
+    "minimum_per_session_pair_coverage": 0.2,
+    "maximum_marker_jump_fraction": 0.2,
+    "required_content_boxes": 3
+  },
+  "allowed_splits": ["train", "dev"],
+  "test_allowed": false,
+  "human_labels_consumed": false,
+  "raw_rgb_persisted": false,
+  "training_allowed": false,
+  "device_input_allowed": false
+}

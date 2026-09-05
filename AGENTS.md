@@ -15,7 +15,12 @@ failed at 0/24; this round's two correction attempts are exhausted. Do not start
 or overfit diagnostic. The cycle is closed at `E_R0_DELIVERY_COMPLETE`: D0 passed 10 episodes after
 a step-4 pause/resume and exactly matched an uninterrupted control; E packaged and independently
 verified that evidence without weights. Any real-RGB or learned-Movement continuation requires a
-new cycle. Do not treat packaging as learned promotion or start a new integration implicitly.
+new cycle. The first new-cycle step is now frozen failed as
+`REAL_RGB_OBSERVABILITY_V1_FAILED`: 3 sessions / 9 clips / 288 train-dev frames reached 0.4792
+pair coverage and 0.4128 marker-jump fraction; one train session reached only 0.0938 coverage.
+Do not run R2, train from these candidates, lower the gates, or open video-test. The next work must
+be a separately frozen real-minimap detector/tracker contract. Do not treat packaging or detection
+coverage as learned promotion or semantic accuracy.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

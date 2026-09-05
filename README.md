@@ -70,6 +70,20 @@ SQLite backup, 100 derived frame bundles and a final manifest. It contains no tr
 Its delivery grade is rule-only `R0_RULE_OFFLINE`; it does not establish learned navigation or
 real-video/mobile performance.
 
+The next-cycle real-RGB observability preflight is also available through `movement-mvp`:
+
+```bash
+python -m hok_agent movement-mvp --mode real-rgb-preflight \
+  --config configs/movement_real_rgb_preflight_v1.json \
+  --target-root "$HOK_LARGE_ROOT/datasets/v5-target-file-atomic-v2" \
+  --output-dir "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-rgb-observability-v1"
+```
+
+The frozen v1 run failed: overall self/target pair coverage was 0.4792, one train session reached
+only 0.0938, and marker jumps reached 0.4128. It read no test frames, stored no RGB, trained no model
+and sent no input. A new minimap detector/tracker contract is required before R2 or Movement
+training; rerunning v1 with lower gates is not an accepted repair.
+
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
 See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.

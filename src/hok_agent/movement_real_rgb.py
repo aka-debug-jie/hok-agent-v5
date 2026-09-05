@@ -1,0 +1,409 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import tempfile
+from collections import defaultdict
+from pathlib import Path
+from typing import cast
+
+import numpy as np
+
+REPORT_SCHEMA = "movement-real-rgb-observability-report-v1"
+
+
+def _canonical(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
+def _object_sha256(value: object) -> str:
+    return hashlib.sha256(_canonical(value)).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _load_bound_json(path: Path, field: str) -> dict[str, object]:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"required JSON is not a regular file: {path.name}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid JSON: {path.name}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"JSON root is not an object: {path.name}")
+    result = cast(dict[str, object], payload)
+    supplied = str(result.pop(field, ""))
+    calculated = _object_sha256(result)
+    result[field] = supplied
+    if supplied != calculated:
+        raise ValueError(f"{path.name} self hash differs")
+    return result
+
+
+def _content_bounds(frames: np.ndarray, config: dict[str, object]) -> tuple[int, int, int, int]:
+    pixel_minimum = float(cast(float, config["pixel_mean_minimum"]))
+    support = float(cast(float, config["row_column_support_minimum"]))
+    bounds: list[tuple[int, int, int, int]] = []
+    for frame in frames:
+        mask = frame.astype(np.float32).mean(axis=2) > pixel_minimum
+        rows = np.flatnonzero(mask.mean(axis=1) >= support)
+        columns = np.flatnonzero(mask.mean(axis=0) >= support)
+        if len(rows) and len(columns):
+            bounds.append(
+                (int(columns[0]), int(rows[0]), int(columns[-1] + 1), int(rows[-1] + 1))
+            )
+    if not bounds:
+        raise ValueError("selected session has no visible content")
+    return cast(
+        tuple[int, int, int, int],
+        tuple(int(round(float(np.median([row[index] for row in bounds])))) for index in range(4)),
+    )
+
+
+def _canonical_content(
+    frames: np.ndarray, config: dict[str, object]
+) -> tuple[np.ndarray, str, tuple[int, int, int, int]]:
+    bounds = _content_bounds(frames, config)
+    width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+    orientation = "stored"
+    canonical = frames
+    aspect = float(cast(float, config["landscape_aspect_minimum"]))
+    if height > width * aspect:
+        canonical = np.rot90(frames, 1, axes=(1, 2)).copy()
+        orientation = "counter_clockwise_90"
+        bounds = _content_bounds(canonical, config)
+        width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+    if (
+        width < height * aspect
+        or width < int(cast(int, config["minimum_width"]))
+        or height < int(cast(int, config["minimum_height"]))
+    ):
+        raise ValueError("selected session content orientation is ambiguous")
+    return canonical, orientation, bounds
+
+
+def _normalize_content(frame: np.ndarray, bounds: tuple[int, int, int, int]) -> np.ndarray:
+    x0, y0, x1, y1 = bounds
+    rows = np.linspace(y0, y1 - 1, 128).astype(np.int64)
+    columns = np.linspace(x0, x1 - 1, 128).astype(np.int64)
+    return np.ascontiguousarray(frame[rows[:, None], columns[None, :], :])
+
+
+def _detect(frame: np.ndarray, contract: dict[str, object]) -> dict[str, object]:
+    roi_raw = cast(list[int], contract["minimap_roi_xyxy"])
+    x0, y0, x1, y1 = map(int, roi_raw)
+    roi = frame[y0:y1, x0:x1].astype(np.int16)
+    red, green, blue = (roi[..., index] for index in range(3))
+    player = cast(dict[str, object], contract["player_color"])
+    target = cast(dict[str, object], contract["target_color"])
+    player_mask = (
+        (green > int(cast(int, player["green_minimum"])))
+        & (green - red > int(cast(int, player["green_red_margin"])))
+        & (green - blue > int(cast(int, player["green_blue_margin"])))
+    )
+    target_mask = (
+        (red > int(cast(int, target["red_minimum"])))
+        & (red - green > int(cast(int, target["red_green_margin"])))
+        & (red - blue > int(cast(int, target["red_blue_margin"])))
+    )
+    player_y, player_x = np.where(player_mask)
+    target_y, target_x = np.where(target_mask)
+    player_visible = int(cast(int, player["support_minimum"])) <= len(player_y) <= int(
+        cast(int, player["support_maximum"])
+    )
+    target_visible = bool(len(target_y))
+    player_yx: tuple[float, float] | None = None
+    target_yx: tuple[int, int] | None = None
+    pair_visible = False
+    if player_visible:
+        player_yx = (round(float(player_y.mean()), 4), round(float(player_x.mean()), 4))
+    if player_yx is not None and target_visible:
+        candidates = np.stack((target_y, target_x), axis=1)
+        center = np.asarray(player_yx)
+        squared = np.square(candidates - center).sum(axis=1)
+        selected = candidates[int(np.argmin(squared))]
+        distance = float(np.sqrt(float(np.min(squared))))
+        if distance >= float(cast(float, target["minimum_distance_pixels"])):
+            target_yx = (int(selected[0]), int(selected[1]))
+            pair_visible = True
+    return {
+        "player_visible": player_visible,
+        "target_visible": target_visible,
+        "pair_visible": pair_visible,
+        "player_yx": list(player_yx) if player_yx is not None else None,
+        "target_yx": list(target_yx) if target_yx is not None else None,
+    }
+
+
+def _selected_frames(
+    target_root: Path,
+    shard_rows: list[dict[str, object]],
+    session_hash: str,
+    split: str,
+    indices: list[int],
+) -> tuple[np.ndarray, np.ndarray, list[dict[str, object]], set[int]]:
+    frames: dict[int, np.ndarray] = {}
+    timestamps: dict[int, int] = {}
+    opened: list[dict[str, object]] = []
+    rotations: set[int] = set()
+    offset = 0
+    selected_set = set(indices)
+    for row in shard_rows:
+        count = int(cast(int, row["row_count"]))
+        local = sorted(index - offset for index in selected_set if offset <= index < offset + count)
+        if not local:
+            offset += count
+            continue
+        if row.get("split") != split or row.get("source") != "target":
+            raise ValueError("selected target shard role differs")
+        path = target_root / "shards" / str(row["path"])
+        if path.is_symlink() or not path.is_file() or _file_sha256(path) != row["sha256"]:
+            raise ValueError("selected target shard binding differs")
+        with np.load(path, allow_pickle=False) as shard:
+            required = {
+                "frames",
+                "session_hash",
+                "timestamp_ms",
+                "rotation_degrees",
+                "frame_hash",
+                "split",
+            }
+            if not required.issubset(shard.files) or len(shard["frames"]) != count:
+                raise ValueError("selected target shard fields differ")
+            for local_index in local:
+                frame = shard["frames"][local_index]
+                if (
+                    frame.shape != (128, 128, 3)
+                    or frame.dtype != np.uint8
+                    or str(shard["session_hash"][local_index]) != session_hash
+                    or str(shard["split"][local_index]) != split
+                    or hashlib.sha256(frame.tobytes()).hexdigest()
+                    != str(shard["frame_hash"][local_index])
+                ):
+                    raise ValueError("selected target frame binding differs")
+                frames[offset + local_index] = frame.copy()
+                timestamps[offset + local_index] = int(shard["timestamp_ms"][local_index])
+                rotations.add(int(shard["rotation_degrees"][local_index]))
+            opened.append(
+                {
+                    "basename": path.name,
+                    "sha256": row["sha256"],
+                    "declared_split": row["split"],
+                }
+            )
+        offset += count
+    if set(frames) != selected_set:
+        raise ValueError("selected frame indices were not fully resolved")
+    return (
+        np.stack([frames[index] for index in indices]),
+        np.asarray([timestamps[index] for index in indices], dtype=np.int64),
+        opened,
+        rotations,
+    )
+
+
+def run_real_rgb_preflight(
+    contract_path: Path, target_root: Path, output_dir: Path
+) -> dict[str, object]:
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    if target_root.is_symlink() or not target_root.is_dir():
+        raise ValueError("target root is not a regular directory")
+    manifest = _load_bound_json(target_root / "manifest.json", "manifest_sha256")
+    if (
+        contract.get("schema_version") != "movement-real-rgb-observability-contract-v1"
+        or contract.get("target_manifest_sha256") != manifest.get("manifest_sha256")
+        or contract.get("test_allowed") is not False
+        or contract.get("training_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+    ):
+        raise ValueError("real RGB observability contract binding differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("real RGB preflight output already exists")
+    session_declarations = cast(list[dict[str, object]], contract["sessions"])
+    manifest_sessions = {
+        str(row["session_hash"]): str(row["split"])
+        for row in cast(list[dict[str, object]], manifest["sessions"])
+    }
+    manifest_shards = cast(list[dict[str, object]], manifest["shards"])
+    by_session: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for row in manifest_shards:
+        for identity in cast(list[str], row["session_hashes"]):
+            by_session[str(identity)].append(row)
+    allowed_splits = set(cast(list[str], contract["allowed_splits"]))
+    segment_fractions = cast(list[float], contract["segment_start_fractions"])
+    segment_frames = int(cast(int, contract["frames_per_segment"]))
+    all_frame_results: list[dict[str, object]] = []
+    session_results: list[dict[str, object]] = []
+    opened_shards: dict[str, dict[str, object]] = {}
+    observed_splits: set[str] = set()
+    observed_rotations: set[int] = set()
+    jump_count = jump_denominator = 0
+    for declaration in session_declarations:
+        identity = str(declaration["session_hash"])
+        split = str(declaration["split"])
+        if split not in allowed_splits or manifest_sessions.get(identity) != split:
+            raise ValueError("selected session split differs")
+        rows = by_session[identity]
+        total = sum(int(cast(int, row["row_count"])) for row in rows)
+        starts = [round((total - segment_frames) * float(value)) for value in segment_fractions]
+        indices = [index for start in starts for index in range(start, start + segment_frames)]
+        frames, timestamps, opened, rotations = _selected_frames(
+            target_root, rows, identity, split, indices
+        )
+        if not rotations <= {0, 90, 180, 270}:
+            raise ValueError("selected target rotation differs")
+        observed_rotations.update(rotations)
+        for row in opened:
+            opened_shards[str(row["basename"])] = row
+            observed_splits.add(str(row["declared_split"]))
+        content = cast(dict[str, object], contract["content_box"])
+        canonical, orientation, bounds = _canonical_content(frames, content)
+        normalized = np.stack([_normalize_content(frame, bounds) for frame in canonical])
+        detections = [_detect(frame, contract) for frame in normalized]
+        for segment_index, _start in enumerate(starts):
+            segment_detections = detections[
+                segment_index * segment_frames : (segment_index + 1) * segment_frames
+            ]
+            segment_times = timestamps[
+                segment_index * segment_frames : (segment_index + 1) * segment_frames
+            ]
+            if not np.all(
+                np.diff(segment_times) == int(cast(int, contract["frame_period_ms"]))
+            ):
+                raise ValueError("selected segment sampling period differs")
+            previous: dict[str, object] | None = None
+            for timestamp, detection in zip(
+                segment_times.tolist(), segment_detections, strict=True
+            ):
+                jumped = False
+                if previous is not None and previous["pair_visible"] and detection["pair_visible"]:
+                    jump_denominator += 1
+                    temporal = cast(dict[str, object], contract["temporal"])
+                    current_player = np.asarray(detection["player_yx"], dtype=np.float32)
+                    previous_player = np.asarray(previous["player_yx"], dtype=np.float32)
+                    current_target = np.asarray(detection["target_yx"], dtype=np.float32)
+                    previous_target = np.asarray(previous["target_yx"], dtype=np.float32)
+                    jumped = bool(
+                        np.linalg.norm(current_player - previous_player)
+                        > float(cast(float, temporal["player_jump_pixels"]))
+                        or np.linalg.norm(current_target - previous_target)
+                        > float(cast(float, temporal["target_jump_pixels"]))
+                    )
+                    jump_count += int(jumped)
+                frame_result = {
+                    "session_hash": identity,
+                    "split": split,
+                    "segment_index": segment_index,
+                    "timestamp_ms": timestamp,
+                    **detection,
+                    "marker_jump": jumped,
+                }
+                all_frame_results.append(frame_result)
+                previous = detection
+        session_frames = [row for row in all_frame_results if row["session_hash"] == identity]
+        pair_count = sum(bool(row["pair_visible"]) for row in session_frames)
+        session_results.append(
+            {
+                "session_hash": identity,
+                "split": split,
+                "declared_content_geometry": declaration["content_geometry"],
+                "source_rows": total,
+                "segments": len(starts),
+                "sampled_frames": len(session_frames),
+                "stored_rotation_degrees": sorted(rotations),
+                "detected_orientation": orientation,
+                "content_box_xyxy": list(bounds),
+                "player_visible_fraction": sum(
+                    bool(row["player_visible"]) for row in session_frames
+                )
+                / len(session_frames),
+                "target_visible_fraction": sum(
+                    bool(row["target_visible"]) for row in session_frames
+                )
+                / len(session_frames),
+                "pair_coverage": pair_count / len(session_frames),
+                "unknown_fraction": 1.0 - pair_count / len(session_frames),
+            }
+        )
+    pair_count = sum(bool(row["pair_visible"]) for row in all_frame_results)
+    overall_coverage = pair_count / len(all_frame_results)
+    marker_jump_fraction = jump_count / jump_denominator if jump_denominator else 0.0
+    gates = cast(dict[str, object], contract["gates"])
+    checks = {
+        "content_boxes": len(session_results)
+        >= int(cast(int, gates["required_content_boxes"])),
+        "overall_pair_coverage": overall_coverage
+        >= float(cast(float, gates["minimum_overall_pair_coverage"])),
+        "per_session_pair_coverage": all(
+            float(cast(float, row["pair_coverage"]))
+            >= float(cast(float, gates["minimum_per_session_pair_coverage"]))
+            for row in session_results
+        ),
+        "marker_jump_fraction": marker_jump_fraction
+        <= float(cast(float, gates["maximum_marker_jump_fraction"])),
+        "test_isolation": observed_splits <= {"train", "dev"},
+    }
+    passed = all(checks.values())
+    report: dict[str, object] = {
+        "schema_version": REPORT_SCHEMA,
+        "status": (
+            "TARGET_CONDITION_CANDIDATE_SUPPORTED"
+            if passed
+            else "TARGET_CONDITION_NOT_OBSERVABLE"
+        ),
+        "contract_sha256": contract["contract_sha256"],
+        "target_manifest_sha256": manifest["manifest_sha256"],
+        "selected_sessions": len(session_results),
+        "selected_segments": len(session_results) * len(segment_fractions),
+        "sampled_frames": len(all_frame_results),
+        "session_results": session_results,
+        "frame_results": all_frame_results,
+        "overall_pair_coverage": overall_coverage,
+        "overall_unknown_fraction": 1.0 - overall_coverage,
+        "marker_jump_count": jump_count,
+        "marker_jump_denominator": jump_denominator,
+        "marker_jump_fraction": marker_jump_fraction,
+        "checks": checks,
+        "opened_shards": sorted(opened_shards.values(), key=lambda row: str(row["basename"])),
+        "opened_splits": sorted(observed_splits),
+        "test_frames_read": 0,
+        "stored_rotation_values": sorted(observed_rotations),
+        "rotation_diversity_verified": len(observed_rotations) > 1,
+        "semantic_accuracy_verified": False,
+        "promotion_allowed": False,
+        "r2_allowed": False,
+        "human_labels_consumed": False,
+        "raw_rgb_persisted": False,
+        "training_called": False,
+        "device_input_commands_sent": 0,
+        "next_action": (
+            "manual_visual_confirmation_before_new_r2_contract"
+            if passed
+            else "repair_content_geometry_or_minimap_detector_in_new_contract"
+        ),
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        path = staging / "report.json"
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(report, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return report

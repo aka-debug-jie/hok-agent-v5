@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `E_R0_DELIVERY_COMPLETE`: immutable local package verified at 10 episodes, 90 transitions and 100 frame bundles | Cycle closed at rule-only R0; any learned/real-RGB work requires a new cycle |
+| Engineering convergence | `REAL_RGB_OBSERVABILITY_V1_FAILED` after the completed R0 package: pair coverage 0.4792 and marker-jump fraction 0.4128 | Freeze result; design a new real-minimap detector/tracker contract before R2 or training |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: none; engineering convergence cycle closed at R0
-CURRENT STATUS: E_R0_DELIVERY_COMPLETE; learned Movement remains not promoted
-BLOCKING FAILURE: both new Movement candidates are 0/24; no training attempts remain this cycle
-NEXT ACCEPTANCE: none in this cycle; a new contract is required for real RGB or learned Movement
-COMMAND STATUS: package creation and independent verify-only process passed; holdout unopened
+CURRENT GOAL: freeze the real-RGB observability failure and define the next detector/tracker contract
+CURRENT STATUS: REAL_RGB_OBSERVABILITY_V1_FAILED; R0 package remains valid
+BLOCKING FAILURE: current minimap cue pairs cover 0.4792 overall, 0.0938 in one train session, and jump 0.4128
+NEXT ACCEPTANCE: separately versioned real-minimap detector/tracker preflight; no R2 or training yet
+COMMAND STATUS: 3 sessions / 9 clips / 288 train-dev frames audited; test and device unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -653,6 +653,41 @@ expansion was introduced.
 - Final verification passed: 41 focused tests, Ruff, strict mypy, `git diff --check`, and the full
   `make check` with 399 tests in 66.22 seconds. Project safety reported zero findings across 241
   files and exactly four root Markdown authority files.
+
+## Real RGB Movement observability preflight v1
+
+- Opened a new diagnostic cycle with contract SHA-256
+  `d3755cb682c425dff4e55fc6f7c571b13a7f1ffc63e834899ed8630d14c946ce`.
+  It fixes two train sessions and one dev session, three 32-frame segments per session at 100 ms,
+  the content-box/minimap color rules and pre-run gates. It permits no training, test, raw-RGB
+  persistence, device input or R2 promotion.
+- The existing target manifest has 103 train, 23 dev and 23 test sessions. This run opened only
+  nine bound train/dev shards and sampled 288 frames. Test frames read, human labels, saved RGB,
+  training calls and device inputs are all zero.
+- Content boxes were found for all three sessions, including one stored portrait-letterbox session
+  canonicalized counter-clockwise. All selected rows report stored rotation 0, so rotation diversity
+  is not verified. Successful decode and content-box detection are not direction or semantic proof.
+- The formal result is `TARGET_CONDITION_NOT_OBSERVABLE`. Overall self/target pair coverage is
+  `0.4792 < 0.50`; per-session coverage is `0.6979`, `0.0938`, and `0.6458`, so the 0.20 minimum
+  fails in one train session. Unknown fraction is 0.5208. Marker jump fraction is
+  `0.4128 > 0.20`. Test isolation and content-box checks pass; all three observability checks fail.
+- Manual temporary visualization confirmed that the fixed narrow minimap ROI misses the player cue
+  in the low-coverage session and the nearest-red-pixel target switches among unrelated red cues.
+  A non-formal in-memory check using a wider crop plus the older high-resolution component rule had
+  lower coverage, so no repair result was saved or promoted. This is a diagnosis, not a second test.
+- Formal report:
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-rgb-observability-v1/report.json`,
+  114,901 bytes. File SHA-256:
+  `7d81fec8aa3e5497d46d329dc23a24022ca4cd8fc13798e098e3b874f24256b9`;
+  report self-hash:
+  `d08cf20e17967343a43aed8bbe7476f59b2e829155a210e9930de349aa644591`.
+- Semantic accuracy, learned navigation, promotion and R2 remain false. The next admissible step is
+  a separately frozen detector/tracker contract that defines a full minimap crop, component or
+  template evidence and temporal identity tracking before reading additional sessions.
+- Verification passed: 17 focused tests, Ruff, strict mypy (69 source files), project safety
+  (244 files, 129 Python files, zero findings, four root Markdown files), and `git diff --check`.
+  The previous E delivery full-suite result remains bound to its earlier code; this diagnostic used
+  the plan's focused-check policy and did not rerun all historical tests.
 
 ## Frozen Global Agent execution state
 
