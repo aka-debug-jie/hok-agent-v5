@@ -10,6 +10,7 @@ import pytest
 from hok_agent.movement_real_rgb import (
     _canonical_content,
     _object_sha256,
+    materialize_real_counterfactual_overfit32,
     run_real_player_cue_preflight,
     run_real_player_goal_continuity,
     run_real_rgb_goal_canvas,
@@ -21,6 +22,9 @@ CONTRACT = ROOT / "configs" / "movement_real_rgb_preflight_v1.json"
 GOAL_CONTRACT = ROOT / "configs" / "movement_real_rgb_goal_canvas_v2.json"
 PLAYER_CONTRACT = ROOT / "configs" / "movement_real_player_cue_v1.json"
 CONTINUITY_CONTRACT = ROOT / "configs" / "movement_real_player_goal_continuity_v1.json"
+COUNTERFACTUAL_DATA_CONTRACT = (
+    ROOT / "configs" / "movement_real_counterfactual_overfit32_data_v1.json"
+)
 
 
 def _dataset(tmp_path: Path, *, visible: bool) -> tuple[Path, Path]:
@@ -188,16 +192,16 @@ def test_real_player_cue_uses_existing_minimap_shards_without_labels(tmp_path: P
         basename = f"teacher-session-{ordinal:03d}"
         directory = session_root / basename
         (directory / "shards").mkdir(parents=True)
-        frames = np.zeros((32, 128, 128, 3), dtype=np.uint8)
+        frames = np.zeros((192, 128, 128, 3), dtype=np.uint8)
         for index, frame in enumerate(frames):
             offset = index % 5
-            frame[20:28, 20 + offset : 28 + offset] = (20, 180, 40)
-            frame[21:27, 28 + offset : 34 + offset] = (200, 40, 30)
+            frame[60:68, 60 + offset : 68 + offset] = (20, 180, 40)
+            frame[61:67, 68 + offset : 74 + offset] = (200, 40, 30)
         shard = directory / "shards" / "observations-0000.npz"
         np.savez_compressed(
             shard,
             minimap_rgb=frames,
-            scheduled_elapsed_ms=np.arange(len(frames), dtype=np.int64) * 100,
+            scheduled_elapsed_ms=np.arange(len(frames), dtype=np.int64) * 200,
         )
         summary = {
             "status": "PASSED",
@@ -273,6 +277,40 @@ def test_real_player_cue_uses_existing_minimap_shards_without_labels(tmp_path: P
     assert combined["training_called"] is False
     assert combined["test_frames_read"] == 0
     assert combined["device_input_commands_sent"] == 0
+
+    continuity_report_path = tmp_path / "continuity-output" / "report.json"
+    data_contract = json.loads(COUNTERFACTUAL_DATA_CONTRACT.read_text(encoding="utf-8"))
+    data_contract["sessions"] = declarations
+    data_contract["continuity_report_file_sha256"] = hashlib.sha256(
+        continuity_report_path.read_bytes()
+    ).hexdigest()
+    data_contract["continuity_report_sha256"] = combined["report_sha256"]
+    data_contract.pop("contract_sha256")
+    data_contract["contract_sha256"] = _object_sha256(data_contract)
+    data_contract_path = tmp_path / "counterfactual-data-contract.json"
+    data_contract_path.write_text(json.dumps(data_contract), encoding="utf-8")
+    data_report = materialize_real_counterfactual_overfit32(
+        data_contract_path,
+        continuity_report_path,
+        session_root,
+        tmp_path / "counterfactual-data",
+    )
+    assert data_report["status"] == "PASSED"
+    assert data_report["samples"] == 32
+    assert data_report["derived_rgb_frames"] == 512
+    assert data_report["counterfactual_classes_verified"] == 9
+    assert data_report["unique_source_windows"] == 5
+    assert data_report["source_windows_nonoverlapping"] is True
+    assert data_report["samples_reuse_source_windows_with_different_goals"] is True
+    assert data_report["cross_session_windows"] == 0
+    assert data_report["labels_are_executed_actions"] is False
+    assert data_report["labels_are_geometric_counterfactuals"] is True
+    assert data_report["training_called"] is False
+    with np.load(tmp_path / "counterfactual-data" / "overfit32.npz") as dataset:
+        assert dataset["rgb_sequence"].shape == (32, 16, 128, 128, 3)
+        assert sorted(dataset["label"].tolist()) == [0] * 8 + [
+            label for label in range(1, 9) for _ in range(3)
+        ]
 
     goal_report["status"] = "tampered"
     goal_report_path.write_text(json.dumps(goal_report), encoding="utf-8")

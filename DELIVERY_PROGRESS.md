@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `REAL_PLAYER_GOAL_CONTINUITY_PASSED_DIVERSITY_INSUFFICIENT`: cue plus Macro goal is available and stable over 4,455 existing frames | Freeze evidence; do not train or enter R2 from E/S/SE-only directions |
+| Engineering convergence | `REAL_COUNTERFACTUAL_OVERFIT32_PASSED_SOURCE_GENERALIZATION_UNVERIFIED`: nine geometric goal classes fit on five real source windows | Diagnostic checkpoint only; no formal training or R2 |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: freeze the completed real player-cue plus Macro goal continuity evidence
-CURRENT STATUS: REAL_PLAYER_GOAL_CONTINUITY_PASSED_DIVERSITY_INSUFFICIENT; R0 remains frozen
-BLOCKING FAILURE: only E/S/SE occurred; semantic identity, lane-coordinate meaning and direction accuracy are unverified
-NEXT ACCEPTANCE: none in this cycle; a future cycle needs independent direction evidence before training
-COMMAND STATUS: 4,455 existing minimap frames composed; no recording/test/training/device work
+CURRENT GOAL: freeze the real-counterfactual 32-sample learnability result
+CURRENT STATUS: REAL_COUNTERFACTUAL_OVERFIT32_PASSED_SOURCE_GENERALIZATION_UNVERIFIED; R0 remains frozen
+BLOCKING FAILURE: only five source windows; semantic identity and source-window generalization are unverified
+NEXT ACCEPTANCE: separately frozen source-window holdout design; no formal training yet
+COMMAND STATUS: 512 derived RGB frames, one diagnostic CUDA run; no recording/test/formal-training/device work
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -933,6 +933,36 @@ expansion was introduced.
 - Verification passed: 5 focused real-RGB composition tests, Ruff, strict mypy (70 source files),
   project safety (255 files, 131 Python files, zero findings, four root Markdown files), and
   `git diff --check`. No full historical suite was rerun for this bounded read-only audit.
+
+## Real counterfactual goal overfit32 v1
+
+- The data contract reuses the three bound minimap sessions but finds full nine-way geometric room
+  only in session 002. Five mutually non-overlapping 16-frame source windows are each reused with
+  different hollow Macro goal rings to form 32 samples: STOP 8 and every direction 3. No arrow or
+  structured coordinate enters the model tensor; labels are geometric counterfactuals rather than
+  observed or executed actions.
+- Data materialization passed with 512 derived RGB frames, nine verified goal classes, zero
+  cross-session windows and no raw fullscreen persistence. Dataset SHA-256:
+  `0d17137539b12654d007e995eff8a697c78920b9de4a8d0eb91b5530690dd5bc`;
+  data-report file/self SHA-256:
+  `c77e49bddedf043c598fadd5dc94723dfd2d97508e1b3b5a4a1c6749ecaaa721` /
+  `81b4aafdf01e24f4d600c20149b3f72be73c3712b609ab52f26dd8d4b43e2588`.
+- The sole seed-0 CUDA diagnostic used the existing 686,281-parameter GroupNorm+GRU for 200 updates.
+  First-update loss/gradient norm were 2.19159/4.81586. Final eval accuracy was 1.0, loss 0.007323,
+  and all nine recalls were 1.0. The RTX 4090 run took 2.31 seconds; checkpoint SHA-256:
+  `7833bc64a599c9914f06d70a91bc576263a6de731cc1453a38d4cdda10cdd5f4`.
+- This proves only that the current tensor/label/model path can memorize goal-conditioned relations
+  on five source windows. It does not prove held-out-window, session or action accuracy. The report
+  therefore fixes `next_stage_allowed=false`, `formal_training_allowed=false`,
+  `source_window_generalization_verified=false`; the diagnostic checkpoint cannot initialize a
+  formal model.
+- Dataset:
+  `$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/real-counterfactual-overfit32-v1/`;
+  run: `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/real-counterfactual-overfit32-seed0-v1/`.
+  Human labels, test frames, formal training and device input remain zero.
+- Verification passed: 18 focused real-RGB/training tests, Ruff, strict mypy (70 source files),
+  project safety (257 files, 131 Python files, zero findings, four root Markdown files), and
+  `git diff --check`. No full historical suite was rerun for this bounded diagnostic.
 
 ## Frozen Global Agent execution state
 

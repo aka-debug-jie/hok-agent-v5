@@ -74,6 +74,7 @@ def _parser() -> argparse.ArgumentParser:
             "goal-canvas-two-stage-overfit32",
             "real-player-cue",
             "real-player-goal-continuity",
+            "real-counterfactual-overfit32-materialize",
             "materialize-overfit32",
             "overfit32",
             "materialize-trajectories",
@@ -1397,7 +1398,23 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         elif args.command == "movement-mvp":
-            if args.mode == "real-player-goal-continuity":
+            if args.mode == "real-counterfactual-overfit32-materialize":
+                if args.session_root is None or args.prior_report is None:
+                    raise ValueError(
+                        "real-counterfactual-overfit32-materialize requires "
+                        "--session-root and --prior-report"
+                    )
+                from hok_agent.movement_real_rgb import (
+                    materialize_real_counterfactual_overfit32,
+                )
+
+                result = materialize_real_counterfactual_overfit32(
+                    args.config,
+                    args.prior_report,
+                    args.session_root,
+                    args.output_dir,
+                )
+            elif args.mode == "real-player-goal-continuity":
                 if (
                     args.session_root is None
                     or args.prior_report is None

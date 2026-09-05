@@ -41,6 +41,10 @@ coverage/single-candidate/jump gates. Its read-only composition with the Macro g
 passes availability and continuity gates over 4,455 frames, but observes only E/S/SE and is heavily
 S-dominated. Semantic identity, lane-coordinate meaning and direction accuracy remain unverified;
 policy training and R2 remain closed.
+One separately frozen real-counterfactual overfit32 diagnostic now passes at accuracy 1.0 / loss
+0.00732 with all nine recalls at 1.0. Its 32 samples reuse five non-overlapping source windows with
+different goal rings; they are geometric targets, not executed actions. The checkpoint is
+diagnostic-only, source-window generalization is unverified, and formal training remains closed.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

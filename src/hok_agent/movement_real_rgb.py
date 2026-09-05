@@ -5,7 +5,7 @@ import json
 import math
 import os
 import tempfile
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import cast
 
@@ -1169,3 +1169,300 @@ def run_real_player_goal_continuity(
             staging.rmdir()
         raise
     return report
+
+
+def _counterfactual_goal(
+    player_yx: tuple[float, float], action: str, distance: int, marker_radius: int
+) -> tuple[int, int] | None:
+    offsets = {
+        "STOP": (0, 0),
+        "N": (-distance, 0),
+        "S": (distance, 0),
+        "W": (0, -distance),
+        "E": (0, distance),
+        "NW": (-distance, -distance),
+        "NE": (-distance, distance),
+        "SW": (distance, -distance),
+        "SE": (distance, distance),
+    }
+    delta_y, delta_x = offsets[action]
+    goal_y = round(player_yx[0]) + delta_y
+    goal_x = round(player_yx[1]) + delta_x
+    if not (
+        marker_radius <= goal_y < 128 - marker_radius
+        and marker_radius <= goal_x < 128 - marker_radius
+    ):
+        return None
+    return goal_y, goal_x
+
+
+def materialize_real_counterfactual_overfit32(
+    contract_path: Path,
+    continuity_report_path: Path,
+    session_root: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    report = _load_bound_json(continuity_report_path, "report_sha256")
+    if (
+        contract.get("schema_version")
+        != "movement-real-counterfactual-overfit32-data-contract-v1"
+        or contract.get("test_allowed") is not False
+        or contract.get("training_allowed") is not False
+        or contract.get("r2_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+        or report.get("status") != "REAL_PLAYER_GOAL_CONTINUITY_PASSED"
+        or report.get("policy_training_allowed") is not False
+        or _file_sha256(continuity_report_path)
+        != contract.get("continuity_report_file_sha256")
+        or report.get("report_sha256") != contract.get("continuity_report_sha256")
+    ):
+        raise ValueError("real counterfactual data contract differs")
+    if session_root.is_symlink() or not session_root.is_dir():
+        raise ValueError("real counterfactual session root differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("real counterfactual output already exists")
+
+    actions = ("STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE")
+    expected_counts = {"STOP": 8, **{action: 3 for action in actions[1:]}}
+    if (
+        contract.get("action_order") != list(actions)
+        or contract.get("class_counts") != expected_counts
+    ):
+        raise ValueError("real counterfactual action contract differs")
+    sequence_frames = int(cast(int, contract["sequence_frames"]))
+    frame_period_ms = int(cast(int, contract["frame_period_ms"]))
+    goal_distance = int(cast(int, contract["goal_distance_pixels"]))
+    stop_radius = float(cast(float, contract["stop_radius_pixels"]))
+    marker = cast(dict[str, object], contract["marker"])
+    marker_radius = int(cast(int, marker["radius"]))
+    player_config = cast(dict[str, object], contract["player_cue"])
+    cue_contract: dict[str, object] = {
+        "color": contract["color"],
+        "components": player_config,
+    }
+    sessions: list[tuple[str, np.ndarray, np.ndarray, list[tuple[float, float] | None]]] = []
+    opened_shards: list[dict[str, object]] = []
+    for declaration in cast(list[dict[str, object]], contract["sessions"]):
+        basename = str(declaration["basename"])
+        directory = session_root / basename
+        summary_path = directory / "summary.json"
+        if (
+            Path(basename).name != basename
+            or _file_sha256(summary_path) != declaration["summary_sha256"]
+        ):
+            raise ValueError("real counterfactual summary differs")
+        summary = _load_bound_json(summary_path, "summary_sha256")
+        if (
+            summary.get("status") != "PASSED"
+            or summary.get("derived_roi_rgb_persisted") is not True
+            or summary.get("raw_frames_persisted") is not False
+        ):
+            raise ValueError("real counterfactual source summary differs")
+        frame_parts: list[np.ndarray] = []
+        timestamp_parts: list[np.ndarray] = []
+        for raw_row in cast(list[dict[str, object]], summary["observation_shards"]):
+            shard_basename = str(raw_row["path"])
+            path = directory / "shards" / shard_basename
+            if (
+                Path(shard_basename).name != shard_basename
+                or path.is_symlink()
+                or not path.is_file()
+                or _file_sha256(path) != raw_row["sha256"]
+            ):
+                raise ValueError("real counterfactual shard differs")
+            with np.load(path, allow_pickle=False) as shard:
+                frames = shard["minimap_rgb"]
+                timestamps = shard["scheduled_elapsed_ms"]
+                if (
+                    frames.dtype != np.uint8
+                    or frames.shape[1:] != (128, 128, 3)
+                    or len(frames) != raw_row["rows"]
+                    or timestamps.shape != (len(frames),)
+                ):
+                    raise ValueError("real counterfactual shard arrays differ")
+                frame_parts.append(frames.copy())
+                timestamp_parts.append(timestamps.copy())
+            opened_shards.append(
+                {"session": basename, "basename": shard_basename, "sha256": raw_row["sha256"]}
+            )
+        all_frames = np.concatenate(frame_parts)
+        all_timestamps = np.concatenate(timestamp_parts)
+        positions: list[tuple[float, float] | None] = []
+        previous: tuple[float, float] | None = None
+        missing_streak = 0
+        for frame in all_frames:
+            candidates = _player_candidates(frame, cue_contract)
+            if not candidates:
+                positions.append(None)
+                missing_streak += 1
+                if missing_streak > int(cast(int, player_config["reset_after_missing_frames"])):
+                    previous = None
+                continue
+            selected = (
+                min(candidates, key=lambda item: item[2])
+                if previous is None
+                else min(
+                    candidates,
+                    key=lambda item: float(
+                        np.linalg.norm(np.asarray(item[:2]) - np.asarray(previous))
+                    ),
+                )
+            )
+            previous = (selected[0], selected[1])
+            positions.append(previous)
+            missing_streak = 0
+        sessions.append((basename, all_frames, all_timestamps, positions))
+
+    sample_actions = [action for action in actions for _ in range(expected_counts[action])]
+    required_source_windows = int(cast(int, contract["unique_source_windows"]))
+    used_indices: dict[str, set[int]] = {
+        basename: set() for basename, _frames, _times, _positions in sessions
+    }
+    source_windows: list[
+        tuple[str, int, int, np.ndarray, np.ndarray, tuple[float, float]]
+    ] = []
+    for basename, frames, timestamps, positions in sessions:
+        for end in range(sequence_frames - 1, len(frames)):
+            start = end - sequence_frames + 1
+            if any(index in used_indices[basename] for index in range(start, end + 1)):
+                continue
+            window_positions = positions[start : end + 1]
+            if any(position is None for position in window_positions):
+                continue
+            window_times = timestamps[start : end + 1]
+            if not np.all(np.diff(window_times) == frame_period_ms):
+                continue
+            player = cast(tuple[float, float], window_positions[-1])
+            goals = [
+                _counterfactual_goal(player, action, goal_distance, marker_radius)
+                for action in actions
+            ]
+            if any(goal is None for goal in goals) or any(
+                _goal_direction(player, cast(tuple[int, int], goal), stop_radius) != action
+                for action, goal in zip(actions, goals, strict=True)
+            ):
+                continue
+            source_windows.append(
+                (basename, start, end, frames[start : end + 1], window_times, player)
+            )
+            used_indices[basename].update(range(start, end + 1))
+            if len(source_windows) == required_source_windows:
+                break
+        if len(source_windows) == required_source_windows:
+            break
+    if len(source_windows) != required_source_windows:
+        raise ValueError("real counterfactual source-window support differs")
+
+    clips: list[np.ndarray] = []
+    labels: list[int] = []
+    session_ids: list[str] = []
+    end_timestamps: list[int] = []
+    goals_xy: list[tuple[int, int]] = []
+    players_yx: list[tuple[float, float]] = []
+    selected_windows: list[dict[str, object]] = []
+    for sample_index, action in enumerate(sample_actions):
+        source_window_id = sample_index % len(source_windows)
+        basename, start, end, source_clip, window_times, player = source_windows[
+            source_window_id
+        ]
+        goal_yx = _counterfactual_goal(player, action, goal_distance, marker_radius)
+        if goal_yx is None:
+            raise ValueError("real counterfactual selected geometry differs")
+        goal_y, goal_x = goal_yx
+        selected_windows.append(
+            {
+                "sample": sample_index,
+                "source_window": source_window_id,
+                "session": basename,
+                "start_index": start,
+                "end_index": end,
+                "end_timestamp_ms": int(window_times[-1]),
+                "action": action,
+            }
+        )
+        goal_xy_relative = [goal_x / 127.0, goal_y / 127.0]
+        clips.append(
+            np.stack([_mark_goal(frame, goal_xy_relative, marker) for frame in source_clip])
+        )
+        labels.append(actions.index(action))
+        session_ids.append(basename)
+        end_timestamps.append(int(window_times[-1]))
+        goals_xy.append((goal_x, goal_y))
+        players_yx.append(player)
+
+    base_player = source_windows[0][-1]
+    counterfactual_actions = {
+        action
+        for action in actions
+        if (goal := _counterfactual_goal(base_player, action, goal_distance, marker_radius))
+        is not None
+        and _goal_direction(base_player, goal, stop_radius) == action
+    }
+    if len(counterfactual_actions) != len(actions):
+        raise ValueError("real counterfactual nine-way geometry differs")
+
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        dataset_path = staging / "overfit32.npz"
+        with dataset_path.open("wb") as handle:
+            np.savez_compressed(
+                handle,
+                rgb_sequence=np.stack(clips).astype(np.uint8),
+                label=np.asarray(labels, dtype=np.int64),
+                action=np.asarray(sample_actions),
+                session_id=np.asarray(session_ids),
+                end_timestamp_ms=np.asarray(end_timestamps, dtype=np.int64),
+                goal_xy=np.asarray(goals_xy, dtype=np.float32),
+                player_yx=np.asarray(players_yx, dtype=np.float32),
+                contract_sha256=np.asarray([contract["contract_sha256"]]),
+                continuity_report_sha256=np.asarray([report["report_sha256"]]),
+            )
+            handle.flush()
+            os.fsync(handle.fileno())
+        actual_counts = {action: sample_actions.count(action) for action in actions}
+        data_report: dict[str, object] = {
+            "schema_version": "movement-real-counterfactual-overfit32-data-report-v1",
+            "status": "PASSED",
+            "contract_sha256": contract["contract_sha256"],
+            "continuity_report_sha256": report["report_sha256"],
+            "dataset_sha256": _file_sha256(dataset_path),
+            "samples": len(clips),
+            "frames_per_sample": sequence_frames,
+            "derived_rgb_frames": len(clips) * sequence_frames,
+            "class_counts": actual_counts,
+            "source_session_counts": dict(sorted(Counter(session_ids).items())),
+            "unique_source_windows": len(source_windows),
+            "source_windows_nonoverlapping": True,
+            "samples_reuse_source_windows_with_different_goals": True,
+            "cross_session_windows": 0,
+            "counterfactual_classes_verified": len(counterfactual_actions),
+            "selected_windows": selected_windows,
+            "structured_coordinates_in_model_input": False,
+            "direction_arrow_in_model_input": False,
+            "labels_are_executed_actions": False,
+            "labels_are_geometric_counterfactuals": True,
+            "semantic_player_identity_verified": False,
+            "direction_accuracy_verified": False,
+            "human_labels_consumed": False,
+            "raw_fullscreen_rgb_persisted": False,
+            "test_frames_read": 0,
+            "training_called": False,
+            "formal_training_allowed": False,
+            "r2_allowed": False,
+            "device_input_commands_sent": 0,
+            "opened_shards": opened_shards,
+        }
+        data_report["report_sha256"] = _object_sha256(data_report)
+        (staging / "report.json").write_text(
+            json.dumps(data_report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return data_report

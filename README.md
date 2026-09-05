@@ -142,6 +142,12 @@ goal also passes availability and continuity gates, but the 4,455 frames contain
 directions and are overwhelmingly S. The automatic cue still lacks independent semantic truth;
 `policy_training_allowed=false`, so this result does not open policy training or R2.
 
+A bounded real-counterfactual learnability check now reuses five non-overlapping source windows
+from session 002, changes only the hollow Macro goal ring, and forms the balanced 32-sample
+nine-action diagnostic. The task-specific GroupNorm+GRU fits it at accuracy 1.0 and loss 0.00732.
+This is a memorization result, not held-out-window or executed-action evidence; the checkpoint is
+diagnostic-only and formal training remains disabled.
+
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
 See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.

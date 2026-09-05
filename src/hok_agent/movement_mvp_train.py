@@ -216,6 +216,25 @@ def run_overfit32(
     attempts_used = int(cast(int, stage["diagnostic_attempts_used"]))
     if attempts_used >= attempt_limit:
         raise ValueError("stage B diagnostic attempt limit is exhausted")
+    real_counterfactual = (
+        raw.get("schema_version")
+        == "movement-real-counterfactual-overfit32-train-contract-v1"
+    )
+    if real_counterfactual:
+        unsigned = {key: value for key, value in raw.items() if key != "contract_sha256"}
+        if (
+            raw.get("contract_sha256") != _canonical_sha256(unsigned)
+            or raw.get("overfit_dataset_sha256") != _sha256(dataset_path)
+            or raw.get("test_allowed") is not False
+            or raw.get("formal_training_allowed") is not False
+            or raw.get("r2_allowed") is not False
+            or raw.get("device_input_allowed") is not False
+            or raw.get("action_order") != list(MOVEMENT_ACTIONS)
+            or stage.get("selected_architecture") != architecture
+            or raw.get("labels_are_geometric_counterfactuals") is not True
+            or raw.get("labels_are_executed_actions") is not False
+        ):
+            raise ValueError("real counterfactual training contract differs")
     if architecture == "relational":
         unsigned = {key: value for key, value in raw.items() if key != "contract_sha256"}
         if (
@@ -385,7 +404,12 @@ def run_overfit32(
         "minimum_eval_accuracy": minimum_accuracy,
         "maximum_eval_loss": maximum_loss,
         "passed": passed,
-        "next_stage_allowed": passed,
+        "next_stage_allowed": passed and not real_counterfactual,
+        "real_counterfactual_diagnostic": real_counterfactual,
+        "source_window_generalization_verified": False
+        if real_counterfactual
+        else None,
+        "formal_training_allowed": False if real_counterfactual else None,
         "diagnostic_attempt_limit": attempt_limit,
         "diagnostic_attempts_used_before_run": attempts_used,
         "diagnostic_checkpoint_reusable_for_formal_training": False,

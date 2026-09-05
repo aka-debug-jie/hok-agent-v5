@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -38,6 +39,9 @@ from hok_agent.rich_renderer import render
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "movement_mvp.json"
 CONFIG_V2 = ROOT / "configs" / "movement_mvp_stage_c_v2.json"
+REAL_COUNTERFACTUAL_TRAIN = (
+    ROOT / "configs" / "movement_real_counterfactual_overfit32_train_v1.json"
+)
 
 
 def test_shared_train_step_updates_parameters() -> None:
@@ -145,6 +149,23 @@ def test_default_contract_closes_fifth_diagnostic(tmp_path: Path) -> None:
             tmp_path / "blocked",
             device_name="cpu",
         )
+
+
+def test_real_counterfactual_training_contract_rejects_dataset_drift(
+    tmp_path: Path,
+) -> None:
+    raw = json.loads(REAL_COUNTERFACTUAL_TRAIN.read_text(encoding="utf-8"))
+    raw["overfit_dataset_sha256"] = "0" * 64
+    raw.pop("contract_sha256")
+    raw["contract_sha256"] = hashlib.sha256(
+        json.dumps(raw, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    config = tmp_path / "contract.json"
+    config.write_text(json.dumps(raw), encoding="utf-8")
+    dataset = tmp_path / "dataset.npz"
+    dataset.write_bytes(b"drift")
+    with pytest.raises(ValueError, match="training contract differs"):
+        run_overfit32(config, dataset, None, tmp_path / "output", device_name="cpu")
 
 
 def test_failed_overfit_records_first_update_and_checkpoint(tmp_path: Path) -> None:

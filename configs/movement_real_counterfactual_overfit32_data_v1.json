@@ -1,0 +1,42 @@
+{
+  "schema_version": "movement-real-counterfactual-overfit32-data-contract-v1",
+  "contract_sha256": "f1a9540850b78756ead30385d8a315e2c47af9dd0d324c93498ff110ac7d6fdc",
+  "continuity_report_file_sha256": "94a85bab8b54a0992e92b52ca57ab51c3cb9b601b6549dea34f97f612a9a9800",
+  "continuity_report_sha256": "83d6c6fff00a607db6ab8155d54adeaa2e12abd7c1105b236703b7fa18a513c5",
+  "sessions": [
+    {"basename": "teacher-session-002", "summary_sha256": "ca8f6d315b736f96c040bbf3cd727dd9c295d75511834eaceb446fb06ab07216"},
+    {"basename": "teacher-session-003", "summary_sha256": "150eeca5e2cdb61535289145d12b87a956660c169d0e5fbddbdf5370e1fcba63"},
+    {"basename": "teacher-session-005", "summary_sha256": "74a436ed6482a0f0ae60bb6cc5f6e8459e35ae782b496173f1ff463b0663fb69"}
+  ],
+  "color": {
+    "green_minimum": 85,
+    "green_red_margin": 18,
+    "green_blue_margin": 10,
+    "red_minimum": 105,
+    "red_green_margin": 28,
+    "red_blue_margin": 18
+  },
+  "player_cue": {
+    "green_size": [20, 140],
+    "green_extent": [7, 24],
+    "red_size": [20, 240],
+    "red_extent": [5, 24],
+    "maximum_pair_l1_distance": 7.0,
+    "reset_after_missing_frames": 10
+  },
+  "action_order": ["STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE"],
+  "class_counts": {"STOP": 8, "N": 3, "S": 3, "W": 3, "E": 3, "NW": 3, "NE": 3, "SW": 3, "SE": 3},
+  "sequence_frames": 16,
+  "unique_source_windows": 5,
+  "frame_period_ms": 200,
+  "goal_distance_pixels": 24,
+  "stop_radius_pixels": 8.0,
+  "marker": {"rgb": [245, 225, 45], "radius": 7, "thickness": 2},
+  "actor_input": "existing_derived_minimap_rgb_with_hollow_counterfactual_goal_ring",
+  "human_labels_consumed": false,
+  "raw_fullscreen_rgb_persisted": false,
+  "training_allowed": false,
+  "test_allowed": false,
+  "r2_allowed": false,
+  "device_input_allowed": false
+}

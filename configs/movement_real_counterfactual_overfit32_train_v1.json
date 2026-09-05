@@ -1,0 +1,29 @@
+{
+  "schema_version": "movement-real-counterfactual-overfit32-train-contract-v1",
+  "contract_sha256": "d09917a7d74aa90a2a09afa6433e7f1426a880b8bf29c74a5fea593d061d5cf8",
+  "data_contract_sha256": "f1a9540850b78756ead30385d8a315e2c47af9dd0d324c93498ff110ac7d6fdc",
+  "data_report_file_sha256": "c77e49bddedf043c598fadd5dc94723dfd2d97508e1b3b5a4a1c6749ecaaa721",
+  "data_report_sha256": "81b4aafdf01e24f4d600c20149b3f72be73c3712b609ab52f26dd8d4b43e2588",
+  "overfit_dataset_sha256": "0d17137539b12654d007e995eff8a697c78920b9de4a8d0eb91b5530690dd5bc",
+  "seed": 0,
+  "action_order": ["STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE"],
+  "stage_b": {
+    "batch_size": 8,
+    "maximum_updates": 200,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "minimum_eval_accuracy": 0.95,
+    "maximum_eval_loss": 0.05,
+    "selected_architecture": "task-specific",
+    "formal_training_initialization": "fresh-seed-0",
+    "diagnostic_attempt_limit": 1,
+    "diagnostic_attempts_used": 0
+  },
+  "actor_input": "existing_derived_minimap_rgb_with_hollow_counterfactual_goal_ring",
+  "labels_are_geometric_counterfactuals": true,
+  "labels_are_executed_actions": false,
+  "test_allowed": false,
+  "formal_training_allowed": false,
+  "r2_allowed": false,
+  "device_input_allowed": false
+}
