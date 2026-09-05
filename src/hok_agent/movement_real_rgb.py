@@ -639,3 +639,253 @@ def run_real_rgb_goal_canvas(
             staging.rmdir()
         raise
     return report
+
+
+def _mask_components(mask: np.ndarray) -> list[tuple[int, float, float, int, int]]:
+    if mask.shape != (128, 128) or mask.dtype != np.bool_:
+        raise ValueError("player cue color mask differs")
+    seen = np.zeros(mask.shape, dtype=np.bool_)
+    components: list[tuple[int, float, float, int, int]] = []
+    for raw_y, raw_x in zip(*np.where(mask), strict=True):
+        y, x = int(raw_y), int(raw_x)
+        if seen[y, x]:
+            continue
+        stack = [(y, x)]
+        seen[y, x] = True
+        points: list[tuple[int, int]] = []
+        while stack:
+            current_y, current_x = stack.pop()
+            points.append((current_y, current_x))
+            for delta_y, delta_x in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                next_y, next_x = current_y + delta_y, current_x + delta_x
+                if (
+                    0 <= next_y < 128
+                    and 0 <= next_x < 128
+                    and mask[next_y, next_x]
+                    and not seen[next_y, next_x]
+                ):
+                    seen[next_y, next_x] = True
+                    stack.append((next_y, next_x))
+        if len(points) < 3:
+            continue
+        values = np.asarray(points, dtype=np.int16)
+        components.append(
+            (
+                len(points),
+                float(values[:, 0].mean()),
+                float(values[:, 1].mean()),
+                int(np.ptp(values[:, 0]) + 1),
+                int(np.ptp(values[:, 1]) + 1),
+            )
+        )
+    return components
+
+
+def _player_candidates(
+    frame: np.ndarray, contract: dict[str, object]
+) -> list[tuple[float, float, float]]:
+    rgb = frame.astype(np.int16)
+    red, green, blue = (rgb[..., index] for index in range(3))
+    color = cast(dict[str, object], contract["color"])
+    green_mask = (
+        (green > int(cast(int, color["green_minimum"])))
+        & (green - red > int(cast(int, color["green_red_margin"])))
+        & (green - blue > int(cast(int, color["green_blue_margin"])))
+    )
+    red_mask = (
+        (red > int(cast(int, color["red_minimum"])))
+        & (red - green > int(cast(int, color["red_green_margin"])))
+        & (red - blue > int(cast(int, color["red_blue_margin"])))
+    )
+    config = cast(dict[str, object], contract["components"])
+    green_size = cast(list[int], config["green_size"])
+    green_extent = cast(list[int], config["green_extent"])
+    red_size = cast(list[int], config["red_size"])
+    red_extent = cast(list[int], config["red_extent"])
+    greens = [
+        item
+        for item in _mask_components(green_mask)
+        if green_size[0] <= item[0] <= green_size[1]
+        and green_extent[0] <= item[3] <= green_extent[1]
+        and green_extent[0] <= item[4] <= green_extent[1]
+        and 5 < item[1] < 123
+        and 5 < item[2] < 123
+    ]
+    reds = [
+        item
+        for item in _mask_components(red_mask)
+        if red_size[0] <= item[0] <= red_size[1]
+        and red_extent[0] <= item[3] <= red_extent[1]
+        and red_extent[0] <= item[4] <= red_extent[1]
+        and 4 < item[1] < 124
+        and 4 < item[2] < 124
+    ]
+    maximum = float(cast(float, config["maximum_pair_l1_distance"]))
+    candidates = []
+    for green_item in greens:
+        distances = [
+            abs(green_item[1] - red_item[1]) + abs(green_item[2] - red_item[2])
+            for red_item in reds
+        ]
+        if distances and min(distances) <= maximum:
+            candidates.append((green_item[1], green_item[2], min(distances)))
+    return candidates
+
+
+def run_real_player_cue_preflight(
+    contract_path: Path, session_root: Path, output_dir: Path
+) -> dict[str, object]:
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    if (
+        contract.get("schema_version") != "movement-real-player-cue-contract-v1"
+        or contract.get("training_allowed") is not False
+        or contract.get("test_allowed") is not False
+        or contract.get("r2_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+    ):
+        raise ValueError("real player cue contract differs")
+    if session_root.is_symlink() or not session_root.is_dir():
+        raise ValueError("real player cue session root differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("real player cue output already exists")
+    config = cast(dict[str, object], contract["components"])
+    gates = cast(dict[str, object], contract["gates"])
+    session_results: list[dict[str, object]] = []
+    opened_shards: list[dict[str, object]] = []
+    for declaration in cast(list[dict[str, object]], contract["sessions"]):
+        basename = str(declaration["basename"])
+        if Path(basename).name != basename:
+            raise ValueError("real player cue session basename differs")
+        directory = session_root / basename
+        summary_path = directory / "summary.json"
+        if _file_sha256(summary_path) != declaration["summary_sha256"]:
+            raise ValueError("real player cue summary file differs")
+        summary = _load_bound_json(summary_path, "summary_sha256")
+        if (
+            summary.get("status") != "PASSED"
+            or summary.get("derived_roi_rgb_persisted") is not True
+            or summary.get("raw_frames_persisted") is not False
+        ):
+            raise ValueError("real player cue source summary differs")
+        detections = single_candidates = missing_streak = maximum_missing = 0
+        previous: tuple[float, float] | None = None
+        jumps: list[float] = []
+        frames_seen = 0
+        for raw_row in cast(list[dict[str, object]], summary["observation_shards"]):
+            shard_basename = str(raw_row["path"])
+            path = directory / "shards" / shard_basename
+            if (
+                Path(shard_basename).name != shard_basename
+                or path.is_symlink()
+                or not path.is_file()
+                or _file_sha256(path) != raw_row["sha256"]
+            ):
+                raise ValueError("real player cue shard differs")
+            with np.load(path, allow_pickle=False) as shard:
+                frames = shard["minimap_rgb"]
+                timestamps = shard["scheduled_elapsed_ms"]
+                if (
+                    frames.dtype != np.uint8
+                    or frames.shape[1:] != (128, 128, 3)
+                    or len(frames) != raw_row["rows"]
+                    or timestamps.shape != (len(frames),)
+                ):
+                    raise ValueError("real player cue shard arrays differ")
+                for frame in frames:
+                    frames_seen += 1
+                    candidates = _player_candidates(frame, contract)
+                    if not candidates:
+                        missing_streak += 1
+                        maximum_missing = max(maximum_missing, missing_streak)
+                        if missing_streak > int(cast(int, config["reset_after_missing_frames"])):
+                            previous = None
+                        continue
+                    detections += 1
+                    single_candidates += int(len(candidates) == 1)
+                    if previous is None:
+                        selected = min(candidates, key=lambda item: item[2])
+                    else:
+                        selected = min(
+                            candidates,
+                            key=lambda item: float(
+                                np.linalg.norm(np.asarray(item[:2]) - np.asarray(previous))
+                            ),
+                        )
+                        jumps.append(
+                            float(np.linalg.norm(np.asarray(selected[:2]) - np.asarray(previous)))
+                        )
+                    previous = (selected[0], selected[1])
+                    missing_streak = 0
+            opened_shards.append(
+                {"session": basename, "basename": shard_basename, "sha256": raw_row["sha256"]}
+            )
+        coverage = detections / frames_seen
+        single_fraction = single_candidates / detections if detections else 0.0
+        jump_p95 = float(np.percentile(jumps, 95)) if jumps else 128.0
+        session_results.append(
+            {
+                "session": basename,
+                "frames": frames_seen,
+                "detections": detections,
+                "coverage": coverage,
+                "single_candidate_fraction": single_fraction,
+                "player_jump_p95": jump_p95,
+                "maximum_missing_streak": maximum_missing,
+            }
+        )
+    checks = {
+        "coverage": all(
+            float(cast(float, row["coverage"]))
+            >= float(cast(float, gates["minimum_coverage_per_session"]))
+            for row in session_results
+        ),
+        "single_candidate": all(
+            float(cast(float, row["single_candidate_fraction"]))
+            >= float(cast(float, gates["minimum_single_candidate_fraction"]))
+            for row in session_results
+        ),
+        "player_jump": all(
+            float(cast(float, row["player_jump_p95"]))
+            <= float(cast(float, gates["maximum_player_jump_p95"]))
+            for row in session_results
+        ),
+    }
+    passed = all(checks.values())
+    report: dict[str, object] = {
+        "schema_version": "movement-real-player-cue-report-v1",
+        "status": "REAL_PLAYER_CUE_PASSED" if passed else "REAL_PLAYER_CUE_FAILED",
+        "contract_sha256": contract["contract_sha256"],
+        "sessions": session_results,
+        "checks": checks,
+        "opened_shards": opened_shards,
+        "source": contract["input"],
+        "semantic_identity_verified": False,
+        "direction_accuracy_verified": False,
+        "human_labels_consumed": False,
+        "raw_rgb_persisted": False,
+        "new_recording_used": False,
+        "training_called": False,
+        "test_frames_read": 0,
+        "r2_allowed": False,
+        "device_input_commands_sent": 0,
+        "next_action": (
+            "bind_player_cue_to_goal_canvas_before_policy_training"
+            if passed
+            else "stop_real_player_cue_lineage_without_threshold_tuning"
+        ),
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        (staging / "report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return report

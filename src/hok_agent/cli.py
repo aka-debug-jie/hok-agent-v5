@@ -72,6 +72,7 @@ def _parser() -> argparse.ArgumentParser:
             "goal-canvas-localized-materialize",
             "goal-canvas-localized-overfit32",
             "goal-canvas-two-stage-overfit32",
+            "real-player-cue",
             "materialize-overfit32",
             "overfit32",
             "materialize-trajectories",
@@ -92,6 +93,7 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--prior-report", type=Path)
     movement_mvp.add_argument("--goal-canvas-report", type=Path)
     movement_mvp.add_argument("--overfit-report", type=Path)
+    movement_mvp.add_argument("--session-root", type=Path)
     movement_mvp.add_argument("--dataset", type=Path)
     movement_mvp.add_argument("--dataset-root", type=Path)
     movement_mvp.add_argument("--checkpoint", type=Path, action="append", default=[])
@@ -1394,7 +1396,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         elif args.command == "movement-mvp":
-            if args.mode == "goal-canvas-two-stage-overfit32":
+            if args.mode == "real-player-cue":
+                if args.session_root is None:
+                    raise ValueError("real-player-cue requires --session-root")
+                from hok_agent.movement_real_rgb import run_real_player_cue_preflight
+
+                result = run_real_player_cue_preflight(
+                    args.config, args.session_root, args.output_dir
+                )
+            elif args.mode == "goal-canvas-two-stage-overfit32":
                 if args.prior_report is None or args.dataset is None:
                     raise ValueError(
                         "goal-canvas-two-stage-overfit32 requires --prior-report and --dataset"

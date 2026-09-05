@@ -136,6 +136,11 @@ frozen-localizer action stage reached only 0.8125 accuracy and 0.871 loss. Synth
 now stopped. The next precondition is a high-resolution real-player-cue audit, not another toy-model
 head or longer training run.
 
+That player-cue audit now passes on the three existing derived minimap sessions: coverage is
+0.9771/0.9960/0.9785 and jump p95 stays below 1.32 pixels. It used no new recording, labels, test
+frames or device input. The automatic color-pair cue still lacks independent semantic truth, so the
+next step is read-only composition with the Macro goal canvas rather than policy training or R2.
+
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
 See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.

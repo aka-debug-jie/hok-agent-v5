@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `TWO_STAGE_ACTION_OVERFIT_FAILED`: localization passed, frozen action stage reached 0.8125 / 0.871 | Stop synthetic tuning; require high-resolution real player-cue evidence |
+| Engineering convergence | `REAL_PLAYER_CUE_ENGINEERING_PASSED_SEMANTICS_UNVERIFIED`: three existing sessions pass coverage/single/jump gates | Bind cue to goal canvas in read-only replay; no policy/R2 |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: freeze two-stage failure and return to the unresolved real player cue
-CURRENT STATUS: TWO_STAGE_ACTION_OVERFIT_FAILED; prior candidates and R0 remain frozen
-BLOCKING FAILURE: frozen localized features reach only 0.8125 action accuracy; real player cue unverified
-NEXT ACCEPTANCE: high-resolution real-player-cue preflight before any further policy model
-COMMAND STATUS: two-stage diagnostics exhausted; formal/holdout/test/real training/device unopened
+CURRENT GOAL: bind the passed real player cue to the Macro-provided goal canvas in read-only replay
+CURRENT STATUS: REAL_PLAYER_CUE_ENGINEERING_PASSED_SEMANTICS_UNVERIFIED; R0 remains frozen
+BLOCKING FAILURE: cue semantic identity, lane-coordinate meaning and direction accuracy are unverified
+NEXT ACCEPTANCE: combined player-cue plus goal-canvas continuity report; no learned policy yet
+COMMAND STATUS: 4,455 existing minimap frames audited; no recording/test/training/device work
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -876,6 +876,36 @@ expansion was introduced.
 - Verification passed: 16 focused localization/two-stage tests, Ruff, strict mypy (70 source files),
   project safety (253 files, 131 Python files, zero findings, four root Markdown files), and
   `git diff --check`. No full historical suite was rerun for these stopped diagnostics.
+
+## Existing real minimap player-cue preflight v1
+
+- Rehashing the 270 GiB raw-video directory merely to recover three privacy-discarded source paths
+  was rejected as inefficient. The audit instead reuses three already identity-bound derived
+  minimap sessions (002/003/005), each captured by cropping the high-resolution observation before
+  resizing to 128x128. No new recording, raw frame or source locator is created.
+- Contract SHA-256:
+  `cec63ae0762fe897c32a72b71a743bc81a85d1a4c40a518d32f0acfd503d2b8e`.
+  It binds all three summary files and their 18 observation shards, the existing green/red paired
+  component rule, minimum per-session coverage 0.95, minimum single-candidate fraction 0.50 and
+  maximum player-jump p95 5 pixels.
+- All gates pass over 4,455 frames. Session coverage is 0.9771, 0.9960 and 0.9785; single-candidate
+  fractions are 0.8794, 1.0 and 0.9972; player-jump p95 is 1.3174, 0.0 and 0.1022 pixels. Maximum
+  missing streaks are 6, 4 and 6 frames. These results are consistent with a stable engineering cue.
+- The cue comes from an automatic paired-color rule without independent human truth. Therefore
+  `semantic_identity_verified=false` and `direction_accuracy_verified=false`; coverage does not
+  prove that every selected component is the controlled hero. R2 remains false.
+- Formal report:
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-player-cue-v1/report.json`, 4,834 bytes.
+  File SHA-256:
+  `b0f01f205845d44b14be6bfe1c691093bbdd8c70c55bc2c7d0ef89a314ad1695`;
+  report self-hash:
+  `46596f93180baef63580180a2b3c2d44f58ba1c41fc606566278570336e14295`.
+- Human labels, test frames, training calls, new recordings and device input are all zero. The next
+  admissible step is read-only composition of this cue with the fixed Macro goal canvas, reporting
+  availability and temporal direction stability without claiming semantic action accuracy.
+- Verification passed: 5 focused real-RGB/player-cue tests, Ruff, strict mypy (70 source files),
+  project safety (254 files, 131 Python files, zero findings, four root Markdown files), and
+  `git diff --check`. No full historical suite was rerun for this read-only preflight.
 
 ## Frozen Global Agent execution state
 

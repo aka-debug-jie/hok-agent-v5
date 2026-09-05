@@ -35,8 +35,10 @@ The first automatic-localization correction is also frozen failed: mean slot err
 pixels, but slot-cell accuracy was 0.6875 and action accuracy/loss were 0.4375/1.055. Formal
 training did not run. Two-stage v1 stopped at its exact-cell gate; v2 used a predeclared one-cell
 tolerance, passed localization at 1.0 within-one-cell / 3.97 pixels, froze the localizer exactly,
-but action accuracy/loss were only 0.8125/0.871. Formal training did not run. Stop further synthetic
-model tuning; the next work must establish a high-resolution real player cue before any new policy.
+but action accuracy/loss were only 0.8125/0.871. Formal training did not run. Synthetic model tuning
+is stopped. A high-resolution real player-cue audit on existing sessions 002/003/005 now passes its
+coverage/single-candidate/jump gates, but semantic identity and direction accuracy remain unverified.
+The next work may bind this cue to the Macro goal canvas in read-only replay; no new policy or R2 yet.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

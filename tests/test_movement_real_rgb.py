@@ -10,6 +10,7 @@ import pytest
 from hok_agent.movement_real_rgb import (
     _canonical_content,
     _object_sha256,
+    run_real_player_cue_preflight,
     run_real_rgb_goal_canvas,
     run_real_rgb_preflight,
 )
@@ -17,6 +18,7 @@ from hok_agent.movement_real_rgb import (
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "configs" / "movement_real_rgb_preflight_v1.json"
 GOAL_CONTRACT = ROOT / "configs" / "movement_real_rgb_goal_canvas_v2.json"
+PLAYER_CONTRACT = ROOT / "configs" / "movement_real_player_cue_v1.json"
 
 
 def _dataset(tmp_path: Path, *, visible: bool) -> tuple[Path, Path]:
@@ -174,3 +176,60 @@ def test_real_rgb_goal_canvas_is_deterministic_and_counterfactual(tmp_path: Path
     assert all(row["counterfactual_changed"] for row in report["frame_results"])
     assert all(row["deterministic_repeat"] for row in report["frame_results"])
     assert {path.name for path in output.iterdir()} == {"report.json"}
+
+
+def test_real_player_cue_uses_existing_minimap_shards_without_labels(tmp_path: Path) -> None:
+    session_root = tmp_path / "sessions"
+    contract = json.loads(PLAYER_CONTRACT.read_text(encoding="utf-8"))
+    declarations = []
+    for ordinal in range(3):
+        basename = f"teacher-session-{ordinal:03d}"
+        directory = session_root / basename
+        (directory / "shards").mkdir(parents=True)
+        frames = np.zeros((32, 128, 128, 3), dtype=np.uint8)
+        for index, frame in enumerate(frames):
+            offset = index % 5
+            frame[20:28, 20 + offset : 28 + offset] = (20, 180, 40)
+            frame[21:27, 28 + offset : 34 + offset] = (200, 40, 30)
+        shard = directory / "shards" / "observations-0000.npz"
+        np.savez_compressed(
+            shard,
+            minimap_rgb=frames,
+            scheduled_elapsed_ms=np.arange(len(frames), dtype=np.int64) * 100,
+        )
+        summary = {
+            "status": "PASSED",
+            "derived_roi_rgb_persisted": True,
+            "raw_frames_persisted": False,
+            "observation_shards": [
+                {
+                    "path": shard.name,
+                    "rows": len(frames),
+                    "sha256": hashlib.sha256(shard.read_bytes()).hexdigest(),
+                }
+            ],
+        }
+        summary["summary_sha256"] = _object_sha256(summary)
+        summary_path = directory / "summary.json"
+        summary_path.write_text(json.dumps(summary), encoding="utf-8")
+        declarations.append(
+            {
+                "basename": basename,
+                "summary_sha256": hashlib.sha256(summary_path.read_bytes()).hexdigest(),
+            }
+        )
+    contract["sessions"] = declarations
+    contract.pop("contract_sha256")
+    contract["contract_sha256"] = _object_sha256(contract)
+    contract_path = tmp_path / "player-contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    report = run_real_player_cue_preflight(
+        contract_path, session_root, tmp_path / "player-output"
+    )
+    assert report["status"] == "REAL_PLAYER_CUE_PASSED"
+    assert all(row["coverage"] == 1.0 for row in report["sessions"])
+    assert all(row["single_candidate_fraction"] == 1.0 for row in report["sessions"])
+    assert report["semantic_identity_verified"] is False
+    assert report["human_labels_consumed"] is False
+    assert report["training_called"] is False
+    assert report["device_input_commands_sent"] == 0
