@@ -7,19 +7,34 @@ from pathlib import Path
 import numpy as np
 import pytest
 import torch
+from safetensors.torch import save_file
 from torch import nn
 
-from hok_agent.movement_mvp import materialize_stage_c_trajectories
+from hok_agent.movement_mvp import (
+    MOVEMENT_ACTIONS,
+    mark_visible_target,
+    materialize_stage_c_trajectories,
+    rule_movement_in_range,
+    stage_c_arena,
+    stage_c_scenarios,
+    to_arena_action,
+)
 from hok_agent.movement_mvp_train import (
     TaskSpecificMovement,
     TrajectoryWindowDataset,
     _rollout,
+    _window,
+    evaluate_stage_c_dev,
     run_overfit32,
+    stage_c_dev_gates,
     train_step,
 )
+from hok_agent.rich_arena import wait_action
+from hok_agent.rich_renderer import render
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "movement_mvp.json"
+CONFIG_V2 = ROOT / "configs" / "movement_mvp_stage_c_v2.json"
 
 
 def test_shared_train_step_updates_parameters() -> None:
@@ -101,3 +116,139 @@ def test_stage_c_windows_never_cross_episode_and_rule_baselines_reach(tmp_path: 
     for policy in ("teacher", "geometry"):
         result = _rollout(scenario, policy, 128, 16, 7001)
         assert result["status"] == "success"
+
+
+def test_recovery_actions_create_history_but_never_supervision(tmp_path: Path) -> None:
+    root = tmp_path / "recovery"
+    report = materialize_stage_c_trajectories(CONFIG_V2, root)
+    assert report["teacher_successes"] == {"train": 64, "dev": 24}
+    assert report["recovery_episodes"] == 16
+    manifest = json.loads((root / "manifest.json").read_text())
+    scenarios = manifest["episodes"]
+    assert [s["scenario_id"] for s in scenarios if s["split"] == "dev"] == [
+        s["scenario_id"] for s in stage_c_scenarios() if s["split"] == "dev"
+    ]
+    scenario = next(row for row in scenarios if row.get("recovery_cycles"))
+    with np.load(root / "episodes" / scenario["basename"], allow_pickle=False) as data:
+        frames, labels, ends = data["frames"], data["labels"], data["window_end"]
+    assert len(frames) - len(ends) == 16
+    assert ends[0] == 4
+    arena = stage_c_arena(scenario, 128, navigation_only=True)
+    for step, (frame, label) in enumerate(zip(frames, labels, strict=True)):
+        obs = arena.observe("blue")
+        assert np.array_equal(
+            frame, mark_visible_target(render(obs, scenario["render_seed"]), "opponent_hero")
+        )
+        action = MOVEMENT_ACTIONS[int(label)]
+        if step in ends:
+            pos = obs["self_position"]
+            assert action == rule_movement_in_range((pos["x"], pos["y"]), scenario["goal"])
+        arena.step(to_arena_action(action), wait_action())
+    dataset = TrajectoryWindowDataset(root, "train")
+    assert torch.equal(dataset[0][0], _window(list(frames[:5]), 16)[0])
+    assert int(dataset[0][1]) == int(labels[4])
+    assert np.array_equal(labels[-3:], [0, 0, 0])
+
+
+def test_navigation_success_requires_three_consecutive_stops() -> None:
+    class ScriptedPolicy(nn.Module):
+        def __init__(self, actions: list[str]) -> None:
+            super().__init__()
+            self.actions = iter(actions)
+
+        def forward(self, clips: torch.Tensor) -> torch.Tensor:
+            logits = torch.zeros((1, 9), device=clips.device)
+            logits[0, MOVEMENT_ACTIONS.index(next(self.actions))] = 1.0
+            return logits
+
+    scenario = {"start": [4, 3], "goal": [6, 3], "render_seed": 0, "scenario_id": "stops"}
+    result = _rollout(
+        scenario,
+        "learned",
+        6,
+        16,
+        0,
+        ScriptedPolicy(["E", "STOP", "E", "STOP", "STOP", "STOP"]),
+        torch.device("cpu"),
+        stop_confirmation_steps=3,
+        record_trace=True,
+        navigation_only=True,
+    )
+    assert result["status"] == "success"
+    assert result["steps"] == 6
+    assert result["stop_streak"] == 3
+    assert result["collisions"] == 1
+    result = _rollout(
+        scenario,
+        "learned",
+        3,
+        16,
+        0,
+        ScriptedPolicy(["STOP"] * 3),
+        torch.device("cpu"),
+        stop_confirmation_steps=3,
+        navigation_only=True,
+    )
+    assert result["status"] == "timeout"
+    assert result["steps"] == 3
+
+
+def test_v2_comparison_is_feasible_and_does_not_reclassify_v1() -> None:
+    v1 = json.loads(CONFIG.read_text())["stage_c"]
+    v2 = json.loads(CONFIG_V2.read_text())["stage_c"]
+    baselines = {
+        "teacher": {"successes": 24},
+        "random": {"successes": 18, "mean_steps": 62.0},
+        "fixed_east": {"successes": 2, "mean_steps": 118.0},
+    }
+    perfect = {
+        "successes": 24,
+        "collision_fraction": 0.0,
+        "oscillation_fraction": 0.0,
+        "mean_steps": 6.0,
+    }
+    assert not all(stage_c_dev_gates(v1, baselines, perfect).values())
+    assert all(stage_c_dev_gates(v2, baselines, perfect).values())
+    assert not all(stage_c_dev_gates(v2, baselines, {**perfect, "mean_steps": 100.0}).values())
+    assert not all(stage_c_dev_gates(v2, baselines, {**perfect, "successes": 20}).values())
+
+
+def test_mismatched_checkpoint_is_reference_only_never_promoted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hok_agent import movement_mvp_train
+
+    root = tmp_path / "dataset"
+    materialize_stage_c_trajectories(CONFIG_V2, root)
+    checkpoint = tmp_path / "old.safetensors"
+    save_file(TaskSpecificMovement().state_dict(), checkpoint, metadata={"config_sha256": "old"})
+
+    def fixed_result(
+        scenario: dict[str, object], policy: str, *args: object, **kwargs: object
+    ) -> dict[str, object]:
+        good = policy in ("teacher", "learned")
+        return {
+            "scenario_id": scenario["scenario_id"],
+            "status": "success" if good else "timeout",
+            "steps": 6 if good else 128,
+            "collisions": 0,
+            "movement_requests": 1,
+            "oscillations": 0,
+            "comparable_pairs": 1,
+        }
+
+    monkeypatch.setattr(movement_mvp_train, "_rollout", fixed_result)
+    with pytest.raises(ValueError, match="checkpoint contract binding"):
+        evaluate_stage_c_dev(CONFIG_V2, root, [checkpoint], tmp_path / "blocked", device_name="cpu")
+    report = evaluate_stage_c_dev(
+        CONFIG_V2,
+        root,
+        [checkpoint],
+        tmp_path / "reference",
+        device_name="cpu",
+        reference_only=True,
+    )
+    assert all(report["gate_results"].values())
+    assert report["reference_only"] is True
+    assert report["passed"] is False

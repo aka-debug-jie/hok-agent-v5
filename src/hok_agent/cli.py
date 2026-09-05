@@ -78,6 +78,8 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--dataset", type=Path)
     movement_mvp.add_argument("--dataset-root", type=Path)
     movement_mvp.add_argument("--checkpoint", type=Path, action="append", default=[])
+    movement_mvp.add_argument("--reference-only", action="store_true",
+                              help="evaluate an old checkpoint as a non-promoting reference")
     movement_mvp.add_argument("--representation", type=Path)
     movement_mvp.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     movement_mvp.add_argument("--freeze-batch-norm", action="store_true")
@@ -1417,6 +1419,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     tuple(args.checkpoint),
                     args.output_dir,
                     device_name=args.device,
+                    reference_only=args.reference_only,
                 )
         elif args.command == "shadow-video":
             from hok_agent.shadow import analyze_video

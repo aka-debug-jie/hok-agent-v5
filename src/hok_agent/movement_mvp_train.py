@@ -11,6 +11,7 @@ from typing import cast
 
 import numpy as np
 import torch
+from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
@@ -22,9 +23,10 @@ from hok_agent.movement_mvp import (
     mark_visible_target,
     rgb_geometry_movement,
     rule_movement_in_range,
+    stage_c_arena,
     to_arena_action,
 )
-from hok_agent.rich_arena import ArenaConfig, RichPixelArena, wait_action
+from hok_agent.rich_arena import wait_action
 from hok_agent.rich_renderer import render
 
 
@@ -326,10 +328,9 @@ def load_stage_c_manifest(dataset_root: Path) -> dict[str, object]:
         dict[str, object], json.loads((dataset_root / "manifest.json").read_text(encoding="utf-8"))
     )
     supplied = str(payload.pop("manifest_sha256"))
-    if (
-        payload.get("schema_version") != "movement-mvp-stage-c-trajectories-v0"
-        or supplied != _canonical_sha256(payload)
-    ):
+    if payload.get(
+        "schema_version"
+    ) != "movement-mvp-stage-c-trajectories-v0" or supplied != _canonical_sha256(payload):
         raise ValueError("stage C manifest binding differs")
     payload["manifest_sha256"] = supplied
     return payload
@@ -356,7 +357,11 @@ class TrajectoryWindowDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
                 window_end = data["window_end"]
             if (
                 len(frames) != len(labels)
-                or not np.array_equal(window_end, np.arange(len(labels)))
+                or window_end.ndim != 1
+                or len(window_end) == 0
+                or window_end[0] < 0
+                or window_end[-1] >= len(labels)
+                or np.any(np.diff(window_end) <= 0)
                 or not np.array_equal(
                     timestamps,
                     np.arange(len(labels)) * int(cast(int, manifest["step_duration_ms"])),
@@ -365,7 +370,7 @@ class TrajectoryWindowDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
                 raise ValueError("stage C causal episode arrays differ")
             episode_index = len(self.episodes)
             self.episodes.append((frames, labels))
-            self.references.extend((episode_index, end) for end in range(len(labels)))
+            self.references.extend((episode_index, int(end)) for end in window_end)
 
     def __len__(self) -> int:
         return len(self.references)
@@ -394,9 +399,11 @@ def train_stage_c_candidate(
         raise ValueError("stage C requires the selected task-specific architecture")
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "train-report.json"
-    if report_path.exists():
+    if report_path.exists() or any(output_dir.glob("*.safetensors")):
         raise ValueError("stage C training output already exists")
     manifest = load_stage_c_manifest(dataset_root)
+    if bool(stage.get("navigation_only", False)) != bool(manifest.get("navigation_only", False)):
+        raise ValueError("stage C training and dataset environments differ")
     train_rows = [
         row
         for row in cast(list[dict[str, object]], manifest["episodes"])
@@ -404,6 +411,24 @@ def train_stage_c_candidate(
     ]
     if len(train_rows) != int(cast(int, stage["train_episodes"])):
         raise ValueError("stage C train episode count differs")
+
+    config_hash = _sha256(config_path)
+    contract_path = output_dir / "training-contract.json"
+    if contract_path.exists():
+        raise ValueError("stage C training contract already exists")
+    contract = {
+        "config": raw,
+        "config_sha256": config_hash,
+        "manifest_sha256": manifest["manifest_sha256"],
+        "source_sha256": _sha256(Path(__file__)),
+        "movement_source_sha256": _sha256(Path(__file__).with_name("movement_mvp.py")),
+        "normalization": "uint8-rgb/127.5-1-fp32",
+        "action_order": list(MOVEMENT_ACTIONS),
+        "fresh_initialization": True,
+    }
+    contract_path.write_text(
+        json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     seed = int(cast(int, raw["seed"]))
     epochs = int(cast(int, stage["epochs"]))
@@ -465,12 +490,12 @@ def train_stage_c_candidate(
                     "purpose": "formal-simulator-bc-candidate",
                     "fresh_initialization": "true",
                     "manifest_sha256": str(manifest["manifest_sha256"]),
+                    "config_sha256": config_hash,
+                    "training_contract_sha256": _sha256(contract_path),
                     "epoch": str(epoch),
                 },
             )
-            checkpoints.append(
-                {"epoch": epoch, "basename": path.name, "sha256": _sha256(path)}
-            )
+            checkpoints.append({"epoch": epoch, "basename": path.name, "sha256": _sha256(path)})
     elapsed = time.monotonic() - started
     if first_update is None or not first_update["finite"] or not first_update["parameter_changed"]:
         raise ValueError("stage C first update gate failed")
@@ -481,6 +506,8 @@ def train_stage_c_candidate(
         "fresh_initialization": True,
         "diagnostic_checkpoint_loaded": False,
         "manifest_sha256": manifest["manifest_sha256"],
+        "config_sha256": config_hash,
+        "training_contract_sha256": _sha256(contract_path),
         "train_episodes": len(train_rows),
         "train_windows": len(dataset),
         "epochs": epochs,
@@ -560,19 +587,22 @@ def _rollout(
     random_seed: int,
     model: TaskSpecificMovement | None = None,
     device: torch.device | None = None,
+    *,
+    stop_confirmation_steps: int = 1,
+    record_trace: bool = False,
+    navigation_only: bool = False,
 ) -> dict[str, object]:
-    start = cast(tuple[int, int], tuple(cast(list[int], scenario["start"])))
     goal = cast(tuple[int, int], tuple(cast(list[int], scenario["goal"])))
     render_seed = int(cast(int, scenario["render_seed"]))
-    arena = RichPixelArena(
-        ArenaConfig(max_ticks=maximum_steps + 1, blue_start=start, red_start=goal)
-    )
-    arena.reset(render_seed)
+    arena = stage_c_arena(scenario, maximum_steps, navigation_only)
     rng = Random(random_seed + render_seed)
     frames: list[np.ndarray] = []
     previous: StageAMovement = "STOP"
     collisions = oscillations = comparable_pairs = movement_requests = 0
     path_length = 0.0
+    stop_streak = 0
+    trace: list[dict[str, object]] = []
+    error_reason: str | None = None
     try:
         for step in range(maximum_steps):
             observation = arena.observe("blue")
@@ -584,6 +614,7 @@ def _rollout(
             legal_names = tuple(
                 action for action in MOVEMENT_ACTIONS if to_arena_action(action) in legal
             )
+            requested: StageAMovement | None = None
             if policy == "teacher":
                 action = rule_movement_in_range(before, goal)
             elif policy == "geometry":
@@ -595,6 +626,7 @@ def _rollout(
             elif policy == "learned" and model is not None and device is not None:
                 with torch.no_grad():
                     logits = model(_batch(_window(frames, sequence_frames), device))[0]
+                requested = MOVEMENT_ACTIONS[int(logits.argmax())]
                 mask = torch.full_like(logits, -torch.inf)
                 for name in legal_names:
                     mask[MOVEMENT_ACTIONS.index(name)] = logits[MOVEMENT_ACTIONS.index(name)]
@@ -604,6 +636,18 @@ def _rollout(
             arena.step(to_arena_action(action), wait_action())
             after_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
             after = (after_raw["x"], after_raw["y"])
+            if record_trace:
+                trace.append(
+                    {
+                        "step": step,
+                        "before": list(before),
+                        "after": list(after),
+                        "requested_action": requested if requested is not None else action,
+                        "executed_action": action,
+                        "teacher_action": rule_movement_in_range(before, goal),
+                        "self_health": observation["self_health"],
+                    }
+                )
             if action != "STOP":
                 movement_requests += 1
                 collisions += int(after == before)
@@ -613,7 +657,14 @@ def _rollout(
                 comparable_pairs += 1
                 oscillations += int(_OPPOSITE.get(previous) == action)
             previous = action
-            if action == "STOP" and abs(goal[0] - before[0]) + abs(goal[1] - before[1]) <= 1:
+            stopped_at_goal = (
+                action == "STOP"
+                and abs(goal[0] - before[0]) + abs(goal[1] - before[1]) <= 1
+                and before == after
+                and (stop_confirmation_steps == 1 or _integer(observation["self_health"]) > 0)
+            )
+            stop_streak = stop_streak + 1 if stopped_at_goal else 0
+            if stop_streak >= stop_confirmation_steps:
                 return {
                     "scenario_id": scenario["scenario_id"],
                     "status": "success",
@@ -623,10 +674,13 @@ def _rollout(
                     "oscillations": oscillations,
                     "comparable_pairs": comparable_pairs,
                     "path_length": path_length,
+                    "stop_streak": stop_streak,
+                    **({"trace": trace} if record_trace else {}),
                 }
         status = "timeout"
-    except ValueError:
+    except ValueError as exc:
         status = "runtime_error"
+        error_reason = str(exc)
     return {
         "scenario_id": scenario["scenario_id"],
         "status": status,
@@ -636,7 +690,41 @@ def _rollout(
         "oscillations": oscillations,
         "comparable_pairs": comparable_pairs,
         "path_length": path_length,
+        "stop_streak": stop_streak,
+        "error_reason": error_reason,
+        **({"trace": trace} if record_trace else {}),
     }
+
+
+def stage_c_dev_gates(
+    stage: dict[str, object],
+    baselines: dict[str, dict[str, object]],
+    selected: dict[str, object],
+) -> dict[str, bool]:
+    better_simple = max(_integer(baselines[name]["successes"]) for name in ("fixed_east", "random"))
+    gates = {
+        "teacher_success": _integer(baselines["teacher"]["successes"])
+        >= _integer(stage["minimum_teacher_successes"]),
+        "learned_success": _integer(selected["successes"])
+        >= _integer(stage["minimum_learned_successes"]),
+        "collision": _number(selected["collision_fraction"])
+        <= _number(stage["maximum_collision_fraction"]),
+        "oscillation": _number(selected["oscillation_fraction"])
+        <= _number(stage["maximum_oscillation_fraction"]),
+    }
+    if stage.get("dev_contract_version") == "movement-mvp-dev-v2":
+        best_simple_cost = min(
+            _number(baselines[name]["mean_steps"]) for name in ("fixed_east", "random")
+        )
+        gates["simple_success_noninferior"] = _integer(selected["successes"]) >= better_simple
+        gates["failure_inclusive_step_cost"] = _number(selected["mean_steps"]) <= (
+            best_simple_cost * _number(stage["maximum_step_cost_ratio_vs_simple"])
+        )
+    else:
+        gates["gain_over_simple"] = _integer(selected["successes"]) - better_simple >= _integer(
+            stage["minimum_gain_over_random_or_fixed"]
+        )
+    return gates
 
 
 def evaluate_stage_c_dev(
@@ -646,14 +734,13 @@ def evaluate_stage_c_dev(
     output_dir: Path,
     *,
     device_name: str,
+    reference_only: bool = False,
 ) -> dict[str, object]:
     raw = cast(dict[str, object], json.loads(config_path.read_text(encoding="utf-8")))
     stage = cast(dict[str, object], raw["stage_c"])
     manifest = load_stage_c_manifest(dataset_root)
     scenarios = tuple(
-        row
-        for row in cast(list[dict[str, object]], manifest["episodes"])
-        if row["split"] == "dev"
+        row for row in cast(list[dict[str, object]], manifest["episodes"]) if row["split"] == "dev"
     )
     if len(scenarios) != int(cast(int, stage["dev_episodes"])) or not checkpoints:
         raise ValueError("stage C dev evaluation inputs differ")
@@ -664,11 +751,24 @@ def evaluate_stage_c_dev(
     maximum_steps = int(cast(int, stage["maximum_episode_steps"]))
     sequence_frames = int(cast(int, stage["sequence_frames"]))
     random_seed = int(cast(int, stage["random_baseline_seed"]))
+    v2 = stage.get("dev_contract_version") == "movement-mvp-dev-v2"
+    stop_confirmation_steps = _integer(stage.get("stop_confirmation_steps", 1))
+    navigation_only = bool(stage.get("navigation_only", False))
+    config_hash = _sha256(config_path)
     device = torch.device(device_name)
+    started = time.monotonic()
     baselines = {
         name: _aggregate_rollouts(
             [
-                _rollout(scenario, name, maximum_steps, sequence_frames, random_seed)
+                _rollout(
+                    scenario,
+                    name,
+                    maximum_steps,
+                    sequence_frames,
+                    random_seed,
+                    stop_confirmation_steps=stop_confirmation_steps,
+                    navigation_only=navigation_only,
+                )
                 for scenario in scenarios
             ]
         )
@@ -676,6 +776,14 @@ def evaluate_stage_c_dev(
     }
     candidates: list[dict[str, object]] = []
     for checkpoint in checkpoints:
+        if v2 and not reference_only:
+            with safe_open(checkpoint, framework="pt", device="cpu") as saved:
+                metadata = saved.metadata() or {}
+            if (
+                metadata.get("manifest_sha256") != manifest["manifest_sha256"]
+                or metadata.get("config_sha256") != config_hash
+            ):
+                raise ValueError("stage C checkpoint contract binding differs")
         model = TaskSpecificMovement().to(device)
         model.load_state_dict(load_file(checkpoint, device="cpu"), strict=True)
         model.eval()
@@ -689,13 +797,14 @@ def evaluate_stage_c_dev(
                     random_seed,
                     model,
                     device,
+                    stop_confirmation_steps=stop_confirmation_steps,
+                    record_trace=v2,
+                    navigation_only=navigation_only,
                 )
                 for scenario in scenarios
             ]
         )
-        candidates.append(
-            {"basename": checkpoint.name, "sha256": _sha256(checkpoint), **metrics}
-        )
+        candidates.append({"basename": checkpoint.name, "sha256": _sha256(checkpoint), **metrics})
     selected = max(
         candidates,
         key=lambda row: (
@@ -704,26 +813,17 @@ def evaluate_stage_c_dev(
             -_number(row["mean_steps"]),
         ),
     )
-    better_simple = max(
-        _integer(baselines[name]["successes"])
-        for name in ("fixed_east", "random")
-    )
-    passed = (
-        _integer(baselines["teacher"]["successes"])
-        >= int(cast(int, stage["minimum_teacher_successes"]))
-        and _integer(selected["successes"])
-        >= int(cast(int, stage["minimum_learned_successes"]))
-        and _integer(selected["successes"]) - better_simple
-        >= int(cast(int, stage["minimum_gain_over_random_or_fixed"]))
-        and _number(selected["collision_fraction"])
-        <= float(cast(float, stage["maximum_collision_fraction"]))
-        and _number(selected["oscillation_fraction"])
-        <= float(cast(float, stage["maximum_oscillation_fraction"]))
-    )
+    gates = stage_c_dev_gates(stage, baselines, selected)
+    passed = all(gates.values()) and not reference_only
     report: dict[str, object] = {
         "status": "PASSED" if passed else "FAILED",
         "schema_version": "movement-mvp-stage-c-dev-report-v0",
         "manifest_sha256": manifest["manifest_sha256"],
+        "config_sha256": config_hash,
+        "evaluation_contract": stage,
+        "reference_only": reference_only,
+        "gate_results": gates,
+        "elapsed_seconds": time.monotonic() - started,
         "dev_episodes": len(scenarios),
         "baselines": baselines,
         "candidates": candidates,

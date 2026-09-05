@@ -11,6 +11,7 @@ import numpy as np
 
 from hok_agent.frame_bus import FramePacket, LatestFrameBus, RgbView, ViewName
 from hok_agent.rich_arena import (
+    LANE_Y,
     ArenaConfig,
     FactorizedAction,
     RichPixelArena,
@@ -313,9 +314,7 @@ def _file_sha256(path: Path) -> str:
 
 def stage_c_scenarios() -> tuple[dict[str, object], ...]:
     positions = tuple((x, y) for x in range(2, 13) for y in (2, 3, 4))
-    buckets: dict[StageAMovement, list[tuple[tuple[int, int], tuple[int, int]]]] = defaultdict(
-        list
-    )
+    buckets: dict[StageAMovement, list[tuple[tuple[int, int], tuple[int, int]]]] = defaultdict(list)
     for start in positions:
         for goal in positions:
             action = rule_movement_in_range(start, goal)
@@ -343,19 +342,58 @@ def stage_c_scenarios() -> tuple[dict[str, object], ...]:
     return tuple(rows)
 
 
-def _materialize_teacher_episode(
-    scenario: dict[str, object], maximum_steps: int, step_duration_ms: int
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, bool]:
+def stage_c_arena(
+    scenario: dict[str, object], maximum_steps: int, navigation_only: bool = False
+) -> RichPixelArena:
     start = cast(tuple[int, int], tuple(cast(list[int], scenario["start"])))
     goal = cast(tuple[int, int], tuple(cast(list[int], scenario["goal"])))
-    render_seed = int(cast(int, scenario["render_seed"]))
-    arena = RichPixelArena(
-        ArenaConfig(max_ticks=maximum_steps + 1, blue_start=start, red_start=goal)
+    config = ArenaConfig(max_ticks=maximum_steps + 1, blue_start=start, red_start=goal)
+    if navigation_only:
+        from dataclasses import replace
+
+        config = replace(config, tower_damage=0, minion_damage=0)
+    arena = RichPixelArena(config)
+    arena.reset(int(cast(int, scenario["render_seed"])))
+    return arena
+
+
+def _recovery_action(
+    position: tuple[int, int], goal: tuple[int, int], identity: str, cycle: int, step: int
+) -> StageAMovement:
+    if step >= 2:
+        return "STOP"
+    candidates = [
+        action
+        for action, (dx, dy) in _VECTORS.items()
+        if 2 <= position[0] + dx <= 12
+        and position[1] + dy in LANE_Y
+        and (position[0] + dx, position[1] + dy) != goal
+    ]
+    return cast(
+        StageAMovement,
+        min(candidates, key=lambda action: _canonical_sha256([identity, cycle, step, action])),
     )
-    arena.reset(render_seed)
+
+
+def _materialize_teacher_episode(
+    scenario: dict[str, object],
+    maximum_steps: int,
+    step_duration_ms: int,
+    *,
+    stop_confirmation_steps: int = 1,
+    navigation_only: bool = False,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, bool]:
+    goal = cast(tuple[int, int], tuple(cast(list[int], scenario["goal"])))
+    render_seed = int(cast(int, scenario["render_seed"]))
+    arena = stage_c_arena(scenario, maximum_steps, navigation_only)
     frames: list[np.ndarray] = []
     labels: list[int] = []
     timestamps_ms: list[int] = []
+    window_end: list[int] = []
+    recovery_cycles = int(cast(int, scenario.get("recovery_cycles", 0)))
+    cycle = 0
+    perturb_step = 0 if recovery_cycles else 4
+    stop_streak = 0
     success = False
     for step in range(maximum_steps):
         observation = arena.observe("blue")
@@ -364,16 +402,29 @@ def _materialize_teacher_episode(
         timestamps_ms.append(step * step_duration_ms)
         position_raw = cast(dict[str, int], observation["self_position"])
         position = (position_raw["x"], position_raw["y"])
-        action = rule_movement_in_range(position, goal)
+        supervised = perturb_step >= 4
+        if supervised:
+            action = rule_movement_in_range(position, goal)
+            window_end.append(step)
+        else:
+            action = _recovery_action(
+                position, goal, str(scenario["scenario_id"]), cycle, perturb_step
+            )
+            perturb_step += 1
         labels.append(MOVEMENT_ACTIONS.index(action))
         arena.step(to_arena_action(action), wait_action())
-        if action == "STOP":
-            success = True
-            break
+        stop_streak = stop_streak + 1 if supervised and action == "STOP" else 0
+        if stop_streak >= stop_confirmation_steps:
+            cycle += 1
+            if cycle >= max(1, recovery_cycles):
+                success = True
+                break
+            perturb_step = stop_streak = 0
     return (
         np.stack(frames).astype(np.uint8),
         np.asarray(labels, dtype=np.int64),
         np.asarray(timestamps_ms, dtype=np.int64),
+        np.asarray(window_end, dtype=np.int64),
         success,
     )
 
@@ -394,25 +445,37 @@ def materialize_stage_c_trajectories(config_path: Path, output_dir: Path) -> dic
     episodes: list[dict[str, object]] = []
     counts: Counter[str] = Counter()
     teacher_successes: Counter[str] = Counter()
+    recovery_per_direction: Counter[str] = Counter()
+    recovery_episodes = int(cast(int, stage.get("recovery_episodes", 0)))
     for scenario in stage_c_scenarios():
+        scenario = dict(scenario)
         split = str(scenario["split"])
+        direction = str(scenario["initial_action"])
+        if split == "train" and recovery_per_direction[direction] < recovery_episodes // 8:
+            scenario["recovery_cycles"] = int(cast(int, stage["recovery_cycles"]))
+            recovery_per_direction[direction] += 1
         ordinal = counts[split]
         basename = f"{split}-{ordinal:03d}.npz"
-        frames, labels, timestamps_ms, success = _materialize_teacher_episode(
-            scenario, maximum_steps, step_duration_ms
+        frames, labels, timestamps_ms, window_end, success = _materialize_teacher_episode(
+            scenario,
+            maximum_steps,
+            step_duration_ms,
+            stop_confirmation_steps=int(cast(int, stage.get("stop_confirmation_steps", 1))),
+            navigation_only=bool(stage.get("navigation_only", False)),
         )
         np.savez_compressed(
             episodes_dir / basename,
             frames=frames,
             labels=labels,
             frame_timestamps_ms=timestamps_ms,
-            window_end=np.arange(len(labels), dtype=np.int64),
+            window_end=window_end,
         )
         episodes.append(
             {
                 **scenario,
                 "basename": basename,
                 "steps": len(labels),
+                "supervised_windows": len(window_end),
                 "teacher_success": success,
                 "artifact_sha256": _file_sha256(episodes_dir / basename),
             }
@@ -444,6 +507,9 @@ def materialize_stage_c_trajectories(config_path: Path, output_dir: Path) -> dic
         "schema_version": "movement-mvp-stage-c-trajectories-v0",
         "step_duration_ms": step_duration_ms,
         "sequence_frames": int(cast(int, stage["sequence_frames"])),
+        "config_sha256": _file_sha256(config_path),
+        "navigation_only": bool(stage.get("navigation_only", False)),
+        "stop_confirmation_steps": int(cast(int, stage.get("stop_confirmation_steps", 1))),
         "episodes": episodes,
     }
     manifest = {
@@ -453,13 +519,11 @@ def materialize_stage_c_trajectories(config_path: Path, output_dir: Path) -> dic
     manifest_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    label_counts = {
-        split: {action: 0 for action in MOVEMENT_ACTIONS} for split in ("train", "dev")
-    }
+    label_counts = {split: {action: 0 for action in MOVEMENT_ACTIONS} for split in ("train", "dev")}
     for row in episodes:
         split = str(row["split"])
         with np.load(episodes_dir / str(row["basename"]), allow_pickle=False) as data:
-            for label in data["labels"].tolist():
+            for label in data["labels"][data["window_end"]].tolist():
                 label_counts[split][MOVEMENT_ACTIONS[int(label)]] += 1
     report: dict[str, object] = {
         "status": "PASSED" if passed else "FAILED",
@@ -472,6 +536,8 @@ def materialize_stage_c_trajectories(config_path: Path, output_dir: Path) -> dic
         },
         "label_counts": label_counts,
         "scenario_overlap": scenario_overlap,
+        "recovery_episodes": sum(recovery_per_direction.values()),
+        "perturbation_actions_excluded_from_supervision": True,
         "frames_stored_once_per_episode": True,
         "windows_stored_as_indices": True,
         "actor_input": "goal_marked_rgb_only",
@@ -634,9 +700,7 @@ def run_stage_a(config_path: Path, output_dir: Path) -> dict[str, object]:
     episode_id = f"movement-stage-a-seed-{config.seed}"
     bus = LatestFrameBus()
     step_ns = config.step_duration_ms * 1_000_000
-    observation = _packet(
-        output_dir, episode_id, 0, 0, arena.observe("blue"), config.seed
-    )
+    observation = _packet(output_dir, episode_id, 0, 0, arena.observe("blue"), config.seed)
     bus.publish(observation)
     previous_action: StageAMovement = "STOP"
     positions = [config.start]

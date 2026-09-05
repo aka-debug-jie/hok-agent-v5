@@ -30,7 +30,11 @@ attempts are closed. Run `make movement-mvp-stage-c-smoke` for the current regre
 The first Stage C candidate is now frozen failed. Its 64/24 trajectory source passed and training
 loss converged, but epoch 20 completed only 15/24 dev episodes with 27.1% collision steps. Random
 completed 18/24, exposing an infeasible +8 comparison on a 24-episode set. No model is promoted and
-holdout remains unopened; a feasible dev contract must be frozen before any second training run.
+holdout remains unopened. The v2 contract now isolates navigation, requires three consecutive STOPs
+and uses failure-inclusive efficiency. Its 64/24 recovery data passed, but the uniform-sampling
+candidate reached 0/24; one bounded class-balanced correction remains. Use
+`--config configs/movement_mvp_stage_c_v2.json` for this route and `--reference-only` when
+reevaluating an older checkpoint; reference results cannot promote a model.
 
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.

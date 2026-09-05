@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `STAGE_C_INITIAL_CANDIDATE_FAILED`: 64/24 trajectories passed; epoch-20 reached 15/24 with 0.271 collision fraction | No promotion/holdout; revise the internally infeasible dev comparison contract before any second training |
+| Engineering convergence | `STAGE_C_RECOVERY_CANDIDATE_FAILED`: v2 64/24 data passed, but uniform sampling reached 0/24 | One class-balanced correction remains this round; no promotion/holdout |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: close the failed initial Stage C candidate and version a feasible dev contract
-CURRENT STATUS: STAGE_C_INITIAL_CANDIDATE_FAILED; no promotion, holdout, video or device work
-BLOCKING FAILURE: epoch-20 is 15/24 with collision 0.271; random is 18/24, making +8 impossible
-NEXT ACCEPTANCE: a pre-run v2 dev contract with feasible paired metrics; no second training yet
-COMMAND STATUS: materialize/train/evaluate modes completed; holdout remains unopened
+CURRENT GOAL: complete the last bounded class-balanced correction, then leave Stage C tuning
+CURRENT STATUS: STAGE_C_RECOVERY_CANDIDATE_FAILED; prior failures preserved
+BLOCKING FAILURE: recovery uniform sampling predicts STOP; STOP is 336/535 supervised windows
+NEXT ACCEPTANCE: one fresh class-balanced run on the same data and v2 dev contract
+COMMAND STATUS: materialization/reference/recovery candidate completed; holdout unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -530,6 +530,26 @@ expansion was introduced.
 - New Stage C artifacts use about 5.7 MiB. Focused regression: 24 passed; Ruff, strict mypy
   (67 source files), project safety (238 files, 125 Python files, 57,130 nonblank Python lines),
   and diff check passed. The full historical suite was not rerun under the risk-tiered policy.
+
+## Engineering convergence stage C v2 recovery correction
+
+- Pre-run config SHA-256: `1242547ec87045c2d4ab29eb966923be58eb9f9db18d117324350d2abeaffac1`.
+  The same 24 dev scenarios now require three consecutive STOPs; navigation-only damage settings
+  remove combat/respawn confounding. The feasible comparison uses failure-inclusive mean steps.
+- New data has 64/24 successful teacher trajectories, 16 train recovery episodes, 535 train windows
+  and no scenario overlap. Actual perturbations remain in RGB history but are excluded from labels.
+  Manifest hash: `234d91ba626599a1208defd11e11d6c3cacf4efa564bb9ddc36e8ca56e35da00`.
+- Old epoch-20, reevaluated as reference-only under v2, remains 15/24 with collision fraction 0.66.
+  Same-protocol baselines: teacher 24/24, geometry 21/24, random 1/24, fixed-east 0/24. Geometry
+  also fails the collision gate; neither rule nor learned success is inferred from an old protocol.
+- The recovery-only fresh run took 24.67 seconds, peak CUDA memory 312,573,440 bytes. Epoch-20 loss
+  is 1.33646; both saved checkpoints reach 0/24. This candidate is frozen failed. STOP is 336/535
+  supervised windows, so the remaining correction changes only the training sampler to class balance.
+  Model, data, epochs, learning rate, optimizer and evaluation criteria remain fixed.
+- External runs: `stage-c-v2-reference-v1`, `stage-c-bc-seed0-v2-recovery`,
+  `stage-c-dev-seed0-v2-recovery`. Old v1 report/checkpoint/config hashes remain unchanged.
+- Focused tests passed (26 plus one new checkpoint/reference binding test); Ruff, strict mypy and
+  project check passed. No full historical suite or overfit diagnostic was rerun.
 
 ## Frozen Global Agent execution state
 
