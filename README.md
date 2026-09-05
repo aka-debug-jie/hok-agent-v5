@@ -99,6 +99,23 @@ The frozen v2 run passed crop, repeatability and two-goal counterfactual checks 
 It does not verify player localization, the gameplay meaning of the fixed lane coordinate, or policy
 performance, so training, promotion and R2 remain closed.
 
+The next simulator-only learnability gate uses the same minimap-plus-goal-ring task:
+
+```bash
+python -m hok_agent movement-mvp --mode goal-canvas-overfit32-materialize \
+  --config configs/movement_goal_canvas_overfit32_v1.json \
+  --goal-canvas-report "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-rgb-goal-canvas-v2/report.json" \
+  --output-dir "$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/goal-canvas-overfit32-v1"
+python -m hok_agent movement-mvp --mode overfit32 \
+  --config configs/movement_goal_canvas_overfit32_v1.json \
+  --dataset "$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/goal-canvas-overfit32-v1/overfit32.npz" \
+  --output-dir "$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/goal-canvas-overfit32-seed0-v1" \
+  --device cuda --architecture task-specific
+```
+
+The frozen run passed accuracy 1.0 and loss 0.00614 with all nine recalls at 1.0. Its checkpoint is
+diagnostic-only; formal trajectory training must initialize a fresh model.
+
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
 See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.

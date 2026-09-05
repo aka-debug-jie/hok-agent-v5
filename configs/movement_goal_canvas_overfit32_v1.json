@@ -1,0 +1,35 @@
+{
+  "schema_version": "movement-goal-canvas-overfit32-contract-v1",
+  "contract_sha256": "a5795ceb46606787aa2ce39bf0d6b549376d9547c2da76d0b4956e0acd8a11af",
+  "goal_canvas_contract_sha256": "243aa47aa164af2e9783a9ad08aa7cd372c602537704a75685374c72c9704e28",
+  "goal_canvas_report_sha256": "8321314577d3405b9f78628aa44700ae864f063a768baf151db7a3905ea8ad0c",
+  "seed": 0,
+  "sequence_frames": 16,
+  "step_duration_ms": 100,
+  "action_order": ["STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE"],
+  "direction_samples": 3,
+  "stop_samples": 8,
+  "marker": {
+    "rgb": [245, 225, 45],
+    "radius": 7,
+    "thickness": 2
+  },
+  "stage_b": {
+    "batch_size": 8,
+    "maximum_updates": 200,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "minimum_eval_accuracy": 0.95,
+    "maximum_eval_loss": 0.05,
+    "selected_architecture": "task-specific",
+    "formal_training_initialization": "fresh-seed-0",
+    "diagnostic_attempt_limit": 1,
+    "diagnostic_attempts_used": 0
+  },
+  "actor_input": "synthetic_minimap_rgb_with_hollow_goal_ring",
+  "real_rgb_training_frames": 0,
+  "test_allowed": false,
+  "formal_training_allowed": false,
+  "r2_allowed": false,
+  "device_input_allowed": false
+}

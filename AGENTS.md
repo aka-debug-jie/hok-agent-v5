@@ -21,8 +21,11 @@ pair coverage and 0.4128 marker-jump fraction; one train session reached only 0.
 Do not run R2, train from these candidates, lower the gates, or open video-test. A separately
 versioned v2 goal canvas now passes deterministic crop/marker/counterfactual checks on the same 288
 frames by taking its semantic goal from Macro instead of detecting red targets. Player localization,
-lane-coordinate semantics and policy value remain unresolved. The next work requires a new
-simulator goal-canvas learnability contract; do not treat canvas generation as learned promotion.
+lane-coordinate semantics and policy value remain unresolved. The new simulator goal-canvas
+overfit32 contract passed at accuracy 1.0 / loss 0.00614 with all nine recalls at 1.0. Its sole
+diagnostic attempt is consumed and its checkpoint is not reusable for formal training. The next
+work may create fresh 64/24 simulator trajectories using this input; do not treat the 32-sample
+result as generalization, real-domain value or learned promotion.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

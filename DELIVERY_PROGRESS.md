@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `REAL_RGB_GOAL_CANVAS_V2_PASSED_SELF_LOCALIZATION_UNRESOLVED`: 288/288 counterfactual target inputs passed after v1 detector failure | New simulator goal-canvas learnability contract; no R2/promotion |
+| Engineering convergence | `GOAL_CANVAS_OVERFIT32_PASSED`: accuracy 1.0, loss 0.00614, all nine recalls 1.0 | Fresh 64/24 simulator trajectories; no R2/promotion |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: define a simulator learnability contract for the v2 minimap goal canvas
-CURRENT STATUS: REAL_RGB_GOAL_CANVAS_V2_PASSED_SELF_LOCALIZATION_UNRESOLVED; R0 remains valid
-BLOCKING FAILURE: player localization, lane-coordinate semantics and policy value are not verified
-NEXT ACCEPTANCE: new 32-sample causal overfit using minimap RGB plus Macro-provided goal; no R2 yet
-COMMAND STATUS: v1 detector failed; v2 crop/goal/counterfactual passed on the same 288 frames
+CURRENT GOAL: generate fresh 64/24 simulator trajectories for the minimap goal-canvas input
+CURRENT STATUS: GOAL_CANVAS_OVERFIT32_PASSED; R0 remains valid
+BLOCKING FAILURE: trajectory generalization, player localization and lane-coordinate semantics remain unverified
+NEXT ACCEPTANCE: one fresh simulator-only 64/24 candidate; diagnostic checkpoint must not be loaded
+COMMAND STATUS: 32 causal samples passed all nine actions; test, real training and device unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -720,6 +720,36 @@ expansion was introduced.
 - Verification passed: 18 focused tests, Ruff, strict mypy (69 source files), project safety
   (245 files, 129 Python files, zero findings, four root Markdown files), and `git diff --check`.
   No model, GPU run or full historical test suite was needed for this bounded canvas change.
+
+## Minimap goal-canvas overfit32 v1
+
+- A separate contract binds the passed v2 goal-canvas report and a new simulator-only nine-action
+  learnability check. It uses 16 frames, STOP 8, each direction 3, seed 0, AdamW, batch 8,
+  learning rate 1e-3 and at most 200 updates. Contract SHA-256:
+  `a5795ceb46606787aa2ce39bf0d6b549376d9547c2da76d0b4956e0acd8a11af`.
+- Materialization created 32 independent action-driven episodes. Every input window contains
+  state change, the label action executes only after frame 16, and eight same-player/background
+  target counterfactuals change both image and expected action. Inputs contain only synthetic
+  minimap RGB plus the hollow goal ring; no direction arrow or structured coordinate enters the
+  model. Dataset/report SHA-256:
+  `8b7104f55b71fc6a54b9be3d7c6204c50d1d357288c2e2bc30e9abc14ac33cde` /
+  `8e8381dffa3e2dda46fada164947c2705648feab99fdad8dea5706afdb7e45e4`.
+- The sole seed-0 CUDA diagnostic reused the selected 686,281-parameter GroupNorm+GRU and shared
+  `train_step`. First update loss was 2.22269, gradient norm 7.46891 and parameters changed. After
+  200 updates, eval accuracy was 1.0, cross-entropy 0.006135 and every nine-action recall was 1.0.
+  Report file SHA-256:
+  `a80d84fd7f83ecdbef471ab88ca8ba6cdcd89895a4c27f63099e4ad435de931c`.
+- Diagnostic checkpoint SHA-256:
+  `4ced74317fa228d2f0f2b241cfc038adbca7173d826e545f98070e285ebb121d`.
+  It is explicitly diagnostic-only and cannot initialize formal training. The run took 3.75 seconds;
+  dataset/run artifacts use about 5.2/2.7 MiB. Real RGB training frames, test reads and device input
+  are zero; formal training, semantic lane coordinates, R2 and promotion remain closed.
+- This proves only that the new synthetic input/label/training chain can memorize 32 causal samples.
+  The next step is fresh 64/24 simulator trajectory training initialized from seed 0, followed by
+  independent rollout. It does not reopen the previous failed candidate or its exhausted repairs.
+- Verification passed: 15 focused goal-canvas/real-RGB/training tests, Ruff, strict mypy (70 source
+  files), project safety (248 files, 131 Python files, zero findings, four root Markdown files),
+  and `git diff --check`. No full historical suite was rerun for this bounded diagnostic.
 
 ## Frozen Global Agent execution state
 
