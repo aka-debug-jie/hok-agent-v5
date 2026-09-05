@@ -398,15 +398,19 @@ RichPixelArena，把tower_damage和minion_damage设为0，落实连续STOP三步
 
 ### E：一个入口交付，不再铺框架（12 小时）
 
-1. 为新任务只加一个 lazy CLI，建议形式 `movement-mvp --mode materialize|train|evaluate|replay`；
-   名称为待实现建议，不是当前可运行命令。规则/学习策略由同一配置字段选择，
+本阶段已按R0收口。`movement-mvp --mode package`将D0中断版和连续版核验后写入一个原子目录，
+`--verify-only`在独立进程只读复核。最终包为521,244字节，包含90条transition、10条终局、
+100个派生帧和单一manifest，不含checkpoint。当前状态与hash以进度账本为准。
+
+1. 为新任务只加一个 lazy CLI；当前可运行入口为`movement-mvp`，规则运行、训练诊断、评估、
+   恢复与package均通过其mode选择。规则/学习策略由同一配置字段选择，
    不为每次候选新增 CLI/Make target。默认配置完全离线。
 2. 保留一份 resolved config、一份 summary.json 和必要 step 记录；摘要自动汇总实际能力、
    pure/hybrid/rule 指标、耗时/峰值显存、预算、checkpoint 来源及失败码，直接供进度账本引用。
    不手抄多份哈希清单、不建立报告签名链；历史产物不删除。
    额外结果只加现有 summary 字段：RGB 规则对照、失败分类、三种频率与观察年龄。
    候选权重和当前应用选择分开记录：学习通过但规则更好时，两者可以不同。
-3. C 通过才跑一次 40 场景学习 holdout；不通过则报告 R0_ONLY，避免为了“完成评估”消费 test。
+3. C 通过才跑一次 40 场景学习 holdout；本轮C未通过，已经报告R0_ONLY且未消费holdout。
    一条干净命令可加载配置/权重完成离线运行；断网运行不应触发下载或手机接口导入。
 4. 完成交付回归与一次全量 `make check`，写清安装环境、命令、恢复方式及应用限制；
    不为文档措辞再重训，不要求第二个代理重复全量验收。

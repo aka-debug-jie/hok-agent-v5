@@ -53,6 +53,23 @@ mid-episode recovery, not learned navigation or phone-state recovery, and it loa
 interface. Actual results and remaining work are recorded only in
 [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md).
 
+Create and independently verify the final local R0 package with the same top-level command:
+
+```bash
+MOVEMENT_EVIDENCE_ROOT="${HOK_LARGE_ROOT:?set HOK_LARGE_ROOT}/runs/hierarchical-movement-mvp"
+python -m hok_agent movement-mvp --mode package \
+  --source-run "$MOVEMENT_EVIDENCE_ROOT/stage-d-rule-batch-v2-recovery" \
+  --control-run "$MOVEMENT_EVIDENCE_ROOT/stage-d-rule-batch-v2-continuous" \
+  --output-dir "$MOVEMENT_EVIDENCE_ROOT/r0-delivery-v1"
+python -m hok_agent movement-mvp --mode package --verify-only \
+  --output-dir "$MOVEMENT_EVIDENCE_ROOT/r0-delivery-v1"
+```
+
+The package is an immutable local evidence directory with a resolved config, final summary, compact
+SQLite backup, 100 derived frame bundles and a final manifest. It contains no trained checkpoint.
+Its delivery grade is rule-only `R0_RULE_OFFLINE`; it does not establish learned navigation or
+real-video/mobile performance.
+
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.
 See [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md) for executed state.

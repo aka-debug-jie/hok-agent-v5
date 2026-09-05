@@ -64,6 +64,7 @@ def _parser() -> argparse.ArgumentParser:
         choices=(
             "stage-a",
             "rule-batch",
+            "package",
             "materialize-overfit32",
             "overfit32",
             "materialize-trajectories",
@@ -77,6 +78,9 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--episodes", type=int, choices=(1, 3, 10), default=10)
     movement_mvp.add_argument("--resume", action="store_true")
     movement_mvp.add_argument("--step-budget", type=int)
+    movement_mvp.add_argument("--source-run", type=Path)
+    movement_mvp.add_argument("--control-run", type=Path)
+    movement_mvp.add_argument("--verify-only", action="store_true")
     movement_mvp.add_argument("--dataset", type=Path)
     movement_mvp.add_argument("--dataset-root", type=Path)
     movement_mvp.add_argument("--checkpoint", type=Path, action="append", default=[])
@@ -1377,7 +1381,20 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         elif args.command == "movement-mvp":
-            if args.mode == "stage-a":
+            if args.mode == "package":
+                from hok_agent.movement_delivery import create_r0_package, verify_r0_package
+
+                if args.verify_only:
+                    if args.source_run is not None or args.control_run is not None:
+                        raise ValueError("package --verify-only accepts only --output-dir")
+                    result = verify_r0_package(args.output_dir)
+                else:
+                    if args.source_run is None or args.control_run is None:
+                        raise ValueError("package creation requires --source-run and --control-run")
+                    result = create_r0_package(
+                        args.source_run, args.control_run, args.output_dir
+                    )
+            elif args.mode == "stage-a":
                 from hok_agent.movement_mvp import run_stage_a
 
                 result = run_stage_a(args.config, args.output_dir)

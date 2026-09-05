@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `D0_R0_RULE_OFFLINE_PASSED`: interrupted and continuous 10-episode runs matched at 90 transitions and 100 frame bundles | E packaging/conclusion only; no learned promotion/holdout |
+| Engineering convergence | `E_R0_DELIVERY_COMPLETE`: immutable local package verified at 10 episodes, 90 transitions and 100 frame bundles | Cycle closed at rule-only R0; any learned/real-RGB work requires a new cycle |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: complete E packaging and close this engineering cycle at R0
-CURRENT STATUS: D0_R0_RULE_OFFLINE_PASSED; learned Movement remains not promoted
+CURRENT GOAL: none; engineering convergence cycle closed at R0
+CURRENT STATUS: E_R0_DELIVERY_COMPLETE; learned Movement remains not promoted
 BLOCKING FAILURE: both new Movement candidates are 0/24; no training attempts remain this cycle
-NEXT ACCEPTANCE: one final package/claim audit and deliverable code freeze; no further training
-COMMAND STATUS: step-4 interruption -> resume -> 10 and uninterrupted 10 matched; holdout unopened
+NEXT ACCEPTANCE: none in this cycle; a new contract is required for real RGB or learned Movement
+COMMAND STATUS: package creation and independent verify-only process passed; holdout unopened
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -623,6 +623,36 @@ expansion was introduced.
 - Delivery-freeze verification passed: 32 focused tests, Ruff, strict mypy, `git diff --check`,
   and the complete `make check` with 390 tests in 63.31 seconds. Project safety found zero issues
   across 239 files and retained exactly four root Markdown authority files.
+
+## Engineering convergence E R0 package closure
+
+- Added lazy `movement-mvp --mode package`. Creation requires the accepted interrupted and
+  continuous D0 directories plus a new output directory; `--verify-only` reads an existing package
+  without modifying it. The packaging module imports no phone, video, training or model module.
+- Creation independently audits each D0 summary self-hash, run contract, 90 SQLite transitions,
+  10 terminal rows and 100 RGB bundles. It requires the interrupted run to recover four committed
+  transitions and the control to recover zero, then requires identical transition and frame-view
+  hashes. Failed checkpoints and SQLite WAL/SHM files are excluded.
+- The immutable local directory is
+  `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/r0-delivery-v1`. It contains one resolved config,
+  one final summary, one SQLite backup, 100 frame bundles and a final manifest: 104 files total,
+  521,244 bytes. Manifest payload covers 103 files and 502,353 bytes.
+- A separate verify-only process passed with 10 episodes, 90 transitions, 10 terminal transitions,
+  100 frames, zero reward, zero input and SQLite integrity `ok`. Transition SHA-256 remains
+  `b58bb1cee16fd906e3d6321095ff230e8423cebf2567c0c652d24be93d80b52c`; frame-view SHA-256 remains
+  `9977bd0f25ab90531444bb28cd39e72794514f3569e8cd09193a899e34f2072d`.
+- Manifest file SHA-256:
+  `63fbe6e92f382e6f4a239d80166ffd0a4cb152d4c36fbb6c9166e5cff4e7d9ab`;
+  summary file SHA-256:
+  `83c08d9626040b15a44b20a1361c0a6c9b085e6d03797293c435cd13d049962e`.
+  The package contains no absolute source paths, model checkpoint, raw video or device identity.
+- Final capability is action-driven deterministic PixelArena navigation with causal transition
+  persistence and mid-episode recovery. Learned navigation is false: the initial candidate reached
+  15/24 with collision failure, and both bounded corrections reached 0/24. Real RGB, phone control,
+  Reward, RL and holdout remain unopened. The cycle therefore closes at `R0_RULE_OFFLINE`.
+- Final verification passed: 41 focused tests, Ruff, strict mypy, `git diff --check`, and the full
+  `make check` with 399 tests in 66.22 seconds. Project safety reported zero findings across 241
+  files and exactly four root Markdown authority files.
 
 ## Frozen Global Agent execution state
 
