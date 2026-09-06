@@ -201,6 +201,12 @@ does not verify controlled-player or Houyi identity. The next step is a session-
 for nine counterfactual target directions using only window-end confirmed anchors; model training
 remains closed until that gate passes.
 
+The counterfactual data gate now passes from cached evidence without decoding video: 8 train groups
+from 7 sessions yield 72 balanced samples; 9 dev groups from 6 sessions yield 81. Every group has
+`STOP + 8 directions`, session splits are disjoint, and current tracker output exactly reproduces
+the frozen reports. This opens one small weak-anchor relation diagnostic only. Labels are synthetic
+target directions, never human/executed actions; Movement deployment and identity claims remain closed.
+
 The older diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
 
 ```bash

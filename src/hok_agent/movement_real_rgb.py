@@ -1445,7 +1445,12 @@ def run_real_player_goal_continuity(
 
 
 def _counterfactual_goal(
-    player_yx: tuple[float, float], action: str, distance: int, marker_radius: int
+    player_yx: tuple[float, float],
+    action: str,
+    distance: int,
+    marker_radius: int,
+    *,
+    canvas_size: int = 128,
 ) -> tuple[int, int] | None:
     offsets = {
         "STOP": (0, 0),
@@ -1462,8 +1467,8 @@ def _counterfactual_goal(
     goal_y = round(player_yx[0]) + delta_y
     goal_x = round(player_yx[1]) + delta_x
     if not (
-        marker_radius <= goal_y < 128 - marker_radius
-        and marker_radius <= goal_x < 128 - marker_radius
+        marker_radius <= goal_y < canvas_size - marker_radius
+        and marker_radius <= goal_x < canvas_size - marker_radius
     ):
         return None
     return goal_y, goal_x
@@ -2968,4 +2973,174 @@ def run_native_anchor_cohort_audit(
     report["report_sha256"] = _object_sha256(report)
     (staging / "report.json").write_bytes(_canonical(report) + b"\n")
     staging.rename(output_dir)
+    return report
+
+
+def audit_native_anchor_counterfactual(
+    source_run: Path,
+    repair_report_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    """Define balanced visual-relation targets without treating them as executed actions."""
+    if output_dir.exists():
+        raise ValueError("native anchor counterfactual output already exists")
+    source = _load_bound_json(source_run / "report.json", "report_sha256")
+    repair = _load_bound_json(repair_report_path, "report_sha256")
+    if (
+        source.get("schema_version") != "native-weak-visual-anchor-cohort-audit-v1"
+        or source.get("status") != "WEAK_VISUAL_ANCHOR_COHORT_INSUFFICIENT"
+        or repair.get("schema_version") != "native-weak-visual-anchor-cohort-audit-v2"
+        or repair.get("status") != "WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY"
+        or repair.get("prior_report_file_sha256") != _file_sha256(source_run / "report.json")
+        or repair.get("prior_report_sha256") != source.get("report_sha256")
+    ):
+        raise ValueError("native anchor counterfactual source reports differ")
+    repair_run = repair_report_path.parent
+    actions = ("STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE")
+    groups: list[dict[str, object]] = []
+    opened: list[dict[str, object]] = []
+    for audit, directory in ((source, source_run), (repair, repair_run)):
+        for session in cast(list[dict[str, object]], audit["sessions"]):
+            identity = str(session["session_hash"])
+            data_name = identity[:8] + "-anchor-windows.npz"
+            artifact = next(
+                item
+                for item in cast(list[dict[str, object]], session["artifacts"])
+                if item["basename"] == data_name
+            )
+            path = directory / data_name
+            if path.is_symlink() or _file_sha256(path) != artifact["sha256"]:
+                raise ValueError("native anchor counterfactual cached data differs")
+            with np.load(path, allow_pickle=False) as arrays:
+                frames = arrays["minimap_rgb"]
+                window_ids = arrays["window_id"]
+                timestamps = arrays["timestamp_us"]
+                if (
+                    frames.shape != (48, 256, 256, 3)
+                    or frames.dtype != np.uint8
+                    or window_ids.shape != (48,)
+                    or timestamps.shape != (48,)
+                ):
+                    raise ValueError("native anchor counterfactual cached arrays differ")
+                for window in cast(list[dict[str, object]], session["windows"]):
+                    window_id = cast(int, window["window_id"])
+                    indices = np.flatnonzero(window_ids == window_id)
+                    if len(indices) != 16 or not np.all(np.diff(timestamps[indices]) > 0):
+                        raise ValueError("native anchor counterfactual window differs")
+                    positions = green_ring_track(frames[indices])
+                    expected = [
+                        tuple(item) if item is not None else None
+                        for item in cast(list[list[int] | None], window["confirmed_positions_yx"])
+                    ]
+                    if positions != expected:
+                        raise ValueError(
+                            "native anchor counterfactual tracker reproduction differs"
+                        )
+                    anchor = positions[-1]
+                    goals = (
+                        {
+                            action: _counterfactual_goal(
+                                anchor,
+                                action,
+                                24,
+                                7,
+                                canvas_size=256,
+                            )
+                            for action in actions
+                        }
+                        if anchor is not None
+                        else {}
+                    )
+                    eligible = (
+                        cast(int, window["confirmed_frames"]) >= 8
+                        and anchor is not None
+                        and all(goal is not None for goal in goals.values())
+                    )
+                    if eligible:
+                        groups.append(
+                            {
+                                "group_id": f"{identity}:{window_id}",
+                                "session_hash": identity,
+                                "split": session["split"],
+                                "window_id": window_id,
+                                "source_npz_sha256": artifact["sha256"],
+                                "source_indices": indices.tolist(),
+                                "anchor_yx": anchor,
+                                "targets_yx": goals,
+                                "labels": list(actions),
+                            }
+                        )
+            opened.append(
+                {
+                    "session_hash": identity,
+                    "split": session["split"],
+                    "basename": data_name,
+                    "sha256": artifact["sha256"],
+                }
+            )
+    support = {
+        split: {
+            "sessions": len({row["session_hash"] for row in groups if row["split"] == split}),
+            "groups": sum(row["split"] == split for row in groups),
+            "samples": sum(row["split"] == split for row in groups) * len(actions),
+            "per_action": {
+                action: sum(row["split"] == split for row in groups) for action in actions
+            },
+        }
+        for split in ("train", "dev")
+    }
+    train_sessions = {row["session_hash"] for row in groups if row["split"] == "train"}
+    dev_sessions = {row["session_hash"] for row in groups if row["split"] == "dev"}
+    checks = {
+        "train_sessions": cast(int, support["train"]["sessions"]) >= 6,
+        "train_groups": cast(int, support["train"]["groups"]) >= 8,
+        "dev_sessions": cast(int, support["dev"]["sessions"]) >= 4,
+        "dev_groups": cast(int, support["dev"]["groups"]) >= 6,
+        "balanced_nine_actions": all(
+            len(set(cast(dict[str, int], support[split]["per_action"]).values())) == 1
+            for split in ("train", "dev")
+        ),
+        "session_split_isolation": not (train_sessions & dev_sessions),
+        "group_ids_unique": len({row["group_id"] for row in groups}) == len(groups),
+    }
+    passed = all(checks.values())
+    report: dict[str, object] = {
+        "schema_version": "native-weak-anchor-counterfactual-data-audit-v1",
+        "status": "WEAK_ANCHOR_COUNTERFACTUAL_DATA_SUPPORTED"
+        if passed
+        else "WEAK_ANCHOR_COUNTERFACTUAL_DATA_INSUFFICIENT",
+        "source_report_sha256": source["report_sha256"],
+        "source_report_file_sha256": _file_sha256(source_run / "report.json"),
+        "repair_report_sha256": repair["report_sha256"],
+        "repair_report_file_sha256": _file_sha256(repair_report_path),
+        "implementation_sha256": _file_sha256(Path(__file__)),
+        "sequence_frames": 16,
+        "anchor_frame": 15,
+        "goal_distance_pixels": 24,
+        "goal_ring_radius_pixels": 7,
+        "canvas_size": 256,
+        "action_order": list(actions),
+        "support": support,
+        "checks": checks,
+        "groups": groups,
+        "opened_cached_files": opened,
+        "synthetic_relation_labels_defined": passed,
+        "relation_diagnostic_training_allowed": passed,
+        "movement_policy_training_allowed": False,
+        "executed_action_labels_created": False,
+        "controlled_player_identity_verified": False,
+        "hero_identity_verified": False,
+        "test_frames_read": 0,
+        "video_frames_decoded": 0,
+        "input_commands_sent": 0,
+        "model_runs": 0,
+        "gpu_seconds": 0,
+        "claim_scope": (
+            "counterfactual direction relative to a weak green-ring anchor; not human action, "
+            "game-world position, controlled-player identity, or navigation performance"
+        ),
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.mkdir(parents=True)
+    (output_dir / "report.json").write_bytes(_canonical(report) + b"\n")
     return report

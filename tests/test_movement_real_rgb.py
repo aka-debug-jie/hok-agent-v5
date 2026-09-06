@@ -436,6 +436,103 @@ def test_native_anchor_repair_adds_only_four_new_dev_sources(
     assert report["training_allowed"] is report["promotion_allowed"] is False
 
 
+def test_native_counterfactual_audit_is_balanced_and_non_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hok_agent import movement_real_rgb as module
+
+    source_run = tmp_path / "source"
+    repair_run = tmp_path / "repair"
+    source_run.mkdir()
+    repair_run.mkdir()
+    identities = [hashlib.sha256(str(index).encode()).hexdigest() for index in range(10)]
+    source_bindings = {
+        identity: "train" if index < 6 else "dev" for index, identity in enumerate(identities[:8])
+    }
+    repair_bindings = {identity: "dev" for identity in identities[8:]}
+    monkeypatch.setattr(module, "NATIVE_ANCHOR_AUDIT_SOURCES", source_bindings)
+    frames = np.zeros((48, 256, 256, 3), dtype=np.uint8)
+    yy, xx = np.indices((256, 256))
+    distance = np.hypot(yy - 100, xx - 110)
+    frames[:, (distance >= 9) & (distance <= 11)] = (20, 220, 30)
+    positions = module.green_ring_track(frames[:16])
+
+    def sessions(bindings: dict[str, str], directory: Path) -> list[dict[str, object]]:
+        rows = []
+        for identity, split in bindings.items():
+            name = identity[:8] + "-anchor-windows.npz"
+            path = directory / name
+            np.savez_compressed(
+                path,
+                minimap_rgb=frames,
+                timestamp_us=np.arange(48) * 200_000,
+                window_id=np.repeat(np.arange(3, dtype=np.int8), 16),
+            )
+            rows.append(
+                {
+                    "session_hash": identity,
+                    "split": split,
+                    "artifacts": [
+                        {"basename": name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                    ],
+                    "windows": [
+                        {
+                            "window_id": window_id,
+                            "confirmed_frames": 15,
+                            "confirmed_positions_yx": positions,
+                        }
+                        for window_id in range(3)
+                    ],
+                }
+            )
+        return rows
+
+    source = {
+        "schema_version": "native-weak-visual-anchor-cohort-audit-v1",
+        "status": "WEAK_VISUAL_ANCHOR_COHORT_INSUFFICIENT",
+        "sessions": sessions(source_bindings, source_run),
+    }
+    source["report_sha256"] = _object_sha256(source)
+    (source_run / "report.json").write_text(json.dumps(source))
+    repair = {
+        "schema_version": "native-weak-visual-anchor-cohort-audit-v2",
+        "status": "WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY",
+        "prior_report_file_sha256": hashlib.sha256(
+            (source_run / "report.json").read_bytes()
+        ).hexdigest(),
+        "prior_report_sha256": source["report_sha256"],
+        "sessions": sessions(repair_bindings, repair_run),
+    }
+    repair["report_sha256"] = _object_sha256(repair)
+    repair_path = repair_run / "report.json"
+    repair_path.write_text(json.dumps(repair))
+    output = tmp_path / "audit"
+    report = module.audit_native_anchor_counterfactual(source_run, repair_path, output)
+    assert report["status"] == "WEAK_ANCHOR_COUNTERFACTUAL_DATA_SUPPORTED"
+    assert report["support"]["train"] == {
+        "sessions": 6,
+        "groups": 18,
+        "samples": 162,
+        "per_action": {action: 18 for action in report["action_order"]},
+    }
+    assert report["support"]["dev"]["sessions"] == 4
+    assert report["support"]["dev"]["groups"] == 12
+    assert report["relation_diagnostic_training_allowed"] is True
+    assert report["movement_policy_training_allowed"] is False
+    assert report["executed_action_labels_created"] is False
+    assert report["video_frames_decoded"] == report["test_frames_read"] == 0
+    assert len({row["group_id"] for row in report["groups"]}) == 30
+    with pytest.raises(ValueError, match="already exists"):
+        module.audit_native_anchor_counterfactual(source_run, repair_path, output)
+
+
+def test_counterfactual_goal_canvas_size_is_explicit() -> None:
+    from hok_agent.movement_real_rgb import _counterfactual_goal
+
+    assert _counterfactual_goal((120, 120), "SE", 24, 7) is None
+    assert _counterfactual_goal((120, 120), "SE", 24, 7, canvas_size=256) == (144, 144)
+
+
 CONTRACT = ROOT / "configs" / "movement_real_rgb_preflight_v1.json"
 GOAL_CONTRACT = ROOT / "configs" / "movement_real_rgb_goal_canvas_v2.json"
 PLAYER_CONTRACT = ROOT / "configs" / "movement_real_player_cue_v1.json"

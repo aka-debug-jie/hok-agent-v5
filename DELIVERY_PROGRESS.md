@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY`: one fixed repair reaches train 7/8/130 and dev 6/8/171 | Build session-isolated nine-direction counterfactual data gate; identity and policy training remain closed |
+| Engineering convergence | `WEAK_ANCHOR_COUNTERFACTUAL_DATA_SUPPORTED`: 8 train groups/7 sessions and 9 dev groups/6 sessions, balanced nine-way | Materialize 153 weak relation samples and run one small diagnostic; not action BC or deployable Movement |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: build a session-isolated nine-direction weak-anchor counterfactual data gate
-CURRENT STATUS: WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY; identity/policy promotion remain false
-BLOCKING FAILURE: coverage now passes, but no causal nine-class dataset or learned relation evidence exists
-NEXT ACCEPTANCE: confirmed window-end anchors only, nine targets per group, train/dev session isolation and geometry support
-COMMAND STATUS: v1 failure immutable; one v2 coverage repair complete; no training or checkpoint
+CURRENT GOAL: materialize and diagnose the weak green-ring/target-ring relation
+CURRENT STATUS: WEAK_ANCHOR_COUNTERFACTUAL_DATA_SUPPORTED; identity/policy promotion remain false
+BLOCKING FAILURE: data geometry passes, but no learned cross-session relation evidence exists yet
+NEXT ACCEPTANCE: exactly 153 samples from frozen groups, then one small seed-0 relation diagnostic with source-group dev
+COMMAND STATUS: cached data audit complete; relation diagnostic training is allowed, Movement policy training is not
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1274,6 +1274,31 @@ expansion was introduced.
 - Focused tests cover prior-report binding, exact four-source decode, 12 new group calls, combined
   support and non-promoting flags. Affected real-RGB/boundary tests, Ruff, strict mypy, project
   safety and `git diff --check` passed.
+
+### Weak-anchor counterfactual data gate (2026-09-06)
+
+- Added `native-anchor-counterfactual-audit`, reading only the 16 cached cohort NPZs bound by the
+  immutable v1/v2 reports. It opens no video. Every current green-ring track must exactly reproduce
+  its frozen per-window positions before a group can be considered.
+- Eligibility requires at least 8 confirmed frames in the 16-frame window, a confirmed final-frame
+  anchor, and all nine targets fitting inside a 256x256 canvas at 24-pixel offset and 7-pixel ring.
+  Existing 128x128 counterfactual behavior remains the default; canvas size is now explicit for
+  this 256px audit and regression-tested.
+- Result: train has 8 groups from 7 sessions and dev has 9 groups from 6 sessions. Each group
+  supplies exactly `STOP,N,S,W,E,NW,NE,SW,SE`, producing 72/81 balanced synthetic-relation samples.
+  Group IDs are unique and train/dev session hashes are disjoint. All seven gates pass.
+- Status is `WEAK_ANCHOR_COUNTERFACTUAL_DATA_SUPPORTED`. It permits one seed-0 weak visual-relation
+  diagnostic after materialization. It is not executed-action BC: controlled-player/Houyi identity,
+  game-world coordinates, navigation performance, Movement policy training and deployment stay false.
+- Evidence: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/native-anchor-counterfactual-data-v1`.
+  Report file/self SHA-256:
+  `0ff57047baaa350ef7aa54aa61fa664082bd9a03cd75d8c83a7c7ff04d3baa91` /
+  `a00ecaa7fb04ab466393ece8bc2d7f80d08f5da56f50294e59dd7772967369c8`.
+  The 14,827-byte report binds v1/v2 file/self hashes and every cached NPZ hash; no new RGB is stored.
+  Model/GPU/video/test/device-input counts remain zero.
+- Focused tests cover balanced group construction, split isolation, cached-hash binding, output
+  immutability, explicit canvas geometry and non-policy flags. Affected real-RGB/boundary tests,
+  Ruff, strict mypy, project safety and `git diff --check` passed.
 
 ## Frozen Global Agent execution state
 
