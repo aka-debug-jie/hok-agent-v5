@@ -207,6 +207,12 @@ from 7 sessions yield 72 balanced samples; 9 dev groups from 6 sessions yield 81
 the frozen reports. This opens one small weak-anchor relation diagnostic only. Labels are synthetic
 target directions, never human/executed actions; Movement deployment and identity claims remain closed.
 
+Materialization is complete in deduplicated form: 17 source clips plus a 153-row relation index,
+rather than nine RGB copies per group. Source RGB is unchanged; the fixed yellow target ring is
+rendered deterministically after copying at training time, then nearest-sampled to 128x128.
+Train/dev remain 72/81 rows with all nine classes at 17 total each. This dataset permits one
+seed-0 relation diagnostic with full, anchor-masked and goal-only inputs; it is not deployable BC.
+
 The older diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
 
 ```bash

@@ -522,15 +522,39 @@ def test_native_counterfactual_audit_is_balanced_and_non_policy(
     assert report["executed_action_labels_created"] is False
     assert report["video_frames_decoded"] == report["test_frames_read"] == 0
     assert len({row["group_id"] for row in report["groups"]}) == 30
+    dataset_dir = tmp_path / "dataset"
+    dataset_report = module.materialize_native_anchor_counterfactual(
+        output / "report.json", source_run, repair_run, dataset_dir
+    )
+    assert dataset_report["source_groups"] == 30
+    assert dataset_report["logical_samples"] == 270
+    assert dataset_report["split_counts"] == {
+        "train": {"groups": 18, "samples": 162},
+        "dev": {"groups": 12, "samples": 108},
+    }
+    assert dataset_report["movement_policy_training_allowed"] is False
+    with np.load(dataset_dir / "weak-anchor-counterfactual.npz", allow_pickle=False) as arrays:
+        assert arrays["source_clips"].shape == (30, 16, 256, 256, 3)
+        assert arrays["sample_group_index"].shape == (270,)
+        assert arrays["sample_label"].tolist() == list(range(9)) * 30
+        assert len(set(arrays["group_id"].tolist())) == 30
+        assert not np.shares_memory(arrays["source_clips"][0], frames)
     with pytest.raises(ValueError, match="already exists"):
         module.audit_native_anchor_counterfactual(source_run, repair_path, output)
 
 
 def test_counterfactual_goal_canvas_size_is_explicit() -> None:
-    from hok_agent.movement_real_rgb import _counterfactual_goal
+    from hok_agent.movement_real_rgb import _counterfactual_goal, mark_pixel_goal
 
     assert _counterfactual_goal((120, 120), "SE", 24, 7) is None
     assert _counterfactual_goal((120, 120), "SE", 24, 7, canvas_size=256) == (144, 144)
+    source = np.zeros((256, 256, 3), dtype=np.uint8)
+    marked = mark_pixel_goal(source, (144, 144))
+    assert not source.any()
+    assert marked[144, 151].tolist() == [245, 225, 45]
+    assert marked[144, 144].tolist() == [0, 0, 0]
+    with pytest.raises(ValueError, match="outside"):
+        mark_pixel_goal(source, (2, 2))
 
 
 CONTRACT = ROOT / "configs" / "movement_real_rgb_preflight_v1.json"

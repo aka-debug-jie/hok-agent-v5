@@ -80,6 +80,7 @@ def _parser() -> argparse.ArgumentParser:
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
             "native-anchor-counterfactual-audit",
+            "native-anchor-counterfactual-materialize",
             "real-counterfactual-overfit32-materialize",
             "real-counterfactual-grouped-eval",
             "materialize-overfit32",
@@ -107,6 +108,7 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--cohort-dir", type=Path)
     movement_mvp.add_argument("--pre-ingest", type=Path)
     movement_mvp.add_argument("--repair-report", type=Path)
+    movement_mvp.add_argument("--repair-run", type=Path)
     movement_mvp.add_argument("--train-visibility-scan", action="store_true")
     movement_mvp.add_argument("--dataset", type=Path)
     movement_mvp.add_argument("--dataset-root", type=Path)
@@ -1433,6 +1435,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.overfit_report,
                     args.output_dir,
                     device_name=args.device,
+                )
+            elif args.mode == "native-anchor-counterfactual-materialize":
+                if args.prior_report is None or args.source_run is None or args.repair_run is None:
+                    raise ValueError(
+                        "native-anchor-counterfactual-materialize requires --prior-report, "
+                        "--source-run and --repair-run"
+                    )
+                from hok_agent.movement_real_rgb import materialize_native_anchor_counterfactual
+
+                result = materialize_native_anchor_counterfactual(
+                    args.prior_report, args.source_run, args.repair_run, args.output_dir
                 )
             elif args.mode == "native-anchor-counterfactual-audit":
                 if args.source_run is None or args.repair_report is None:

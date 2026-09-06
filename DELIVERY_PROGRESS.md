@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `WEAK_ANCHOR_COUNTERFACTUAL_DATA_SUPPORTED`: 8 train groups/7 sessions and 9 dev groups/6 sessions, balanced nine-way | Materialize 153 weak relation samples and run one small diagnostic; not action BC or deployable Movement |
+| Engineering convergence | `WEAK_ANCHOR_COUNTERFACTUAL_DATASET_READY`: 17 deduplicated source groups index 153 balanced relation rows | One seed-0 full/masked/goal-only diagnostic; not action BC or deployable Movement |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: materialize and diagnose the weak green-ring/target-ring relation
-CURRENT STATUS: WEAK_ANCHOR_COUNTERFACTUAL_DATA_SUPPORTED; identity/policy promotion remain false
-BLOCKING FAILURE: data geometry passes, but no learned cross-session relation evidence exists yet
-NEXT ACCEPTANCE: exactly 153 samples from frozen groups, then one small seed-0 relation diagnostic with source-group dev
-COMMAND STATUS: cached data audit complete; relation diagnostic training is allowed, Movement policy training is not
+CURRENT GOAL: run one seed-0 weak-anchor relation diagnostic with two shortcut controls
+CURRENT STATUS: WEAK_ANCHOR_COUNTERFACTUAL_DATASET_READY; identity/policy promotion remain false
+BLOCKING FAILURE: data is ready but cross-session visual relation learning has not been demonstrated
+NEXT ACCEPTANCE: overfit sanity then full dev accuracy/F1/recall and >=0.15 gains over anchor-masked and goal-only
+COMMAND STATUS: 17 deduplicated source clips plus 153-row index ready; no model or checkpoint yet
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1299,6 +1299,27 @@ expansion was introduced.
 - Focused tests cover balanced group construction, split isolation, cached-hash binding, output
   immutability, explicit canvas geometry and non-policy flags. Affected real-RGB/boundary tests,
   Ruff, strict mypy, project safety and `git diff --check` passed.
+
+### Weak-anchor counterfactual materialization (2026-09-06)
+
+- Added `native-anchor-counterfactual-materialize`. It verifies the passing audit and every source
+  cache hash, then stores each of the 17 source clips once. A separate 153-row index binds group,
+  nine-class label and target coordinate. No RGB is copied nine times.
+- Dataset arrays are `source_clips[17,16,256,256,3]`, group/session/split/anchor/source-hash rows,
+  and sample group/label/target arrays of lengths 153/153/153. All 17 source clip and group hashes
+  are unique; each of nine labels has exactly 17 logical rows. Train/dev remain 8/9 groups and
+  72/81 samples.
+- Target RGB is not persisted. Training must copy a source clip, draw the fixed hollow yellow
+  ring (`radius=7`, `thickness=2`, RGB 245/225/45) at the indexed 256px target, then use fixed
+  even-index nearest sampling to 128px. The source cache stays unchanged.
+- Evidence: `$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/native-anchor-counterfactual-v1`.
+  Dataset SHA-256 `4464e2fe14290d9c1198276945f920cf9accbff01290b83cb098db616dc81e95`;
+  report file/self SHA-256:
+  `fe3063e66ce47f45dd3105639a08b109b53671a9d7daeaf3f12cc67673ce8148` /
+  `b0f2bef291fc121c8c0fb552be29b9b54267a968b9352731922b107a56290ded`.
+  Two files occupy 33,839,002 bytes.
+- This opens one relation diagnostic only. Executed-action labels, identity verification,
+  Movement policy training, test/video decode, model runs, GPU and device input remain zero.
 
 ## Frozen Global Agent execution state
 

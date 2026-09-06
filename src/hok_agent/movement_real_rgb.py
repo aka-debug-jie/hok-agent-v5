@@ -720,6 +720,35 @@ def _mark_goal(minimap: np.ndarray, goal_xy: list[float], marker: dict[str, obje
     return marked
 
 
+def mark_pixel_goal(
+    image: np.ndarray,
+    goal_yx: tuple[int, int],
+    *,
+    radius: int = 7,
+    thickness: int = 2,
+) -> np.ndarray:
+    """Draw the fixed yellow hollow goal in pixel coordinates on square RGB."""
+    if (
+        image.ndim != 3
+        or image.shape[0] != image.shape[1]
+        or image.shape[2] != 3
+        or image.dtype != np.uint8
+        or radius <= 0
+        or not 0 < thickness <= radius
+    ):
+        raise ValueError("pixel goal image or marker differs")
+    y, x = goal_yx
+    size = image.shape[0]
+    if not radius <= y < size - radius or not radius <= x < size - radius:
+        raise ValueError("pixel goal outside canvas")
+    marked = image.copy()
+    yy, xx = np.ogrid[:size, :size]
+    squared = (yy - y) ** 2 + (xx - x) ** 2
+    ring = ((radius - thickness) ** 2 <= squared) & (squared <= radius**2)
+    marked[ring] = (245, 225, 45)
+    return marked
+
+
 def run_real_rgb_goal_canvas(
     contract_path: Path,
     prior_report_path: Path,
@@ -3143,4 +3172,126 @@ def audit_native_anchor_counterfactual(
     report["report_sha256"] = _object_sha256(report)
     output_dir.mkdir(parents=True)
     (output_dir / "report.json").write_bytes(_canonical(report) + b"\n")
+    return report
+
+
+def materialize_native_anchor_counterfactual(
+    audit_report_path: Path,
+    source_run: Path,
+    repair_run: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    """Store source windows once and a reproducible 153-row relation index."""
+    if output_dir.exists():
+        raise ValueError("native anchor dataset output already exists")
+    audit = _load_bound_json(audit_report_path, "report_sha256")
+    if (
+        audit.get("schema_version") != "native-weak-anchor-counterfactual-data-audit-v1"
+        or audit.get("status") != "WEAK_ANCHOR_COUNTERFACTUAL_DATA_SUPPORTED"
+        or audit.get("relation_diagnostic_training_allowed") is not True
+        or audit.get("movement_policy_training_allowed") is not False
+    ):
+        raise ValueError("native anchor dataset audit differs")
+    directories = (source_run, repair_run)
+    source_clips: list[np.ndarray] = []
+    group_ids: list[str] = []
+    session_hashes: list[str] = []
+    splits: list[str] = []
+    anchors: list[tuple[int, int]] = []
+    logical_group: list[int] = []
+    labels: list[int] = []
+    targets: list[tuple[int, int]] = []
+    source_hashes: list[str] = []
+    actions = cast(list[str], audit["action_order"])
+    for group_index, group in enumerate(cast(list[dict[str, object]], audit["groups"])):
+        session_hash = str(group["session_hash"])
+        basename = session_hash[:8] + "-anchor-windows.npz"
+        expected_hash = str(group["source_npz_sha256"])
+        matches = [path / basename for path in directories if (path / basename).is_file()]
+        if (
+            len(matches) != 1
+            or matches[0].is_symlink()
+            or _file_sha256(matches[0]) != expected_hash
+        ):
+            raise ValueError("native anchor dataset source cache differs")
+        indices = np.asarray(cast(list[int], group["source_indices"]), dtype=np.int64)
+        with np.load(matches[0], allow_pickle=False) as arrays:
+            clip = arrays["minimap_rgb"][indices]
+        if clip.shape != (16, 256, 256, 3) or clip.dtype != np.uint8:
+            raise ValueError("native anchor dataset source clip differs")
+        source_clips.append(clip.copy())
+        group_ids.append(str(group["group_id"]))
+        session_hashes.append(session_hash)
+        splits.append(str(group["split"]))
+        anchor_values = cast(list[int], group["anchor_yx"])
+        if len(anchor_values) != 2:
+            raise ValueError("native anchor dataset anchor differs")
+        anchors.append((anchor_values[0], anchor_values[1]))
+        source_hashes.append(hashlib.sha256(clip.tobytes()).hexdigest())
+        group_targets = cast(dict[str, list[int]], group["targets_yx"])
+        if cast(list[str], group["labels"]) != actions:
+            raise ValueError("native anchor dataset action order differs")
+        for label, action in enumerate(actions):
+            logical_group.append(group_index)
+            labels.append(label)
+            target_values = group_targets[action]
+            if len(target_values) != 2:
+                raise ValueError("native anchor dataset target differs")
+            targets.append((target_values[0], target_values[1]))
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    dataset_path = staging / "weak-anchor-counterfactual.npz"
+    np.savez_compressed(
+        dataset_path,
+        source_clips=np.stack(source_clips),
+        group_id=np.asarray(group_ids, dtype="U66"),
+        session_hash=np.asarray(session_hashes, dtype="U64"),
+        split=np.asarray(splits, dtype="U5"),
+        anchor_yx=np.asarray(anchors, dtype=np.int16),
+        source_clip_sha256=np.asarray(source_hashes, dtype="U64"),
+        sample_group_index=np.asarray(logical_group, dtype=np.int16),
+        sample_label=np.asarray(labels, dtype=np.int8),
+        sample_target_yx=np.asarray(targets, dtype=np.int16),
+    )
+    split_counts = {
+        split: {
+            "groups": splits.count(split),
+            "samples": sum(splits[index] == split for index in logical_group),
+        }
+        for split in ("train", "dev")
+    }
+    report: dict[str, object] = {
+        "schema_version": "native-weak-anchor-counterfactual-dataset-v1",
+        "status": "WEAK_ANCHOR_COUNTERFACTUAL_DATASET_READY",
+        "audit_report_sha256": audit["report_sha256"],
+        "audit_report_file_sha256": _file_sha256(audit_report_path),
+        "implementation_sha256": _file_sha256(Path(__file__)),
+        "dataset_basename": dataset_path.name,
+        "dataset_sha256": _file_sha256(dataset_path),
+        "source_groups": len(source_clips),
+        "logical_samples": len(labels),
+        "split_counts": split_counts,
+        "action_order": actions,
+        "source_storage_deduplicated": True,
+        "target_render": {
+            "source_canvas": 256,
+            "radius": 7,
+            "thickness": 2,
+            "rgb": [245, 225, 45],
+            "render_after_source_copy": True,
+            "model_resize": "nearest_even_index_to_128",
+        },
+        "relation_diagnostic_training_allowed": True,
+        "movement_policy_training_allowed": False,
+        "executed_action_labels_created": False,
+        "controlled_player_identity_verified": False,
+        "test_frames_read": 0,
+        "video_frames_decoded": 0,
+        "model_runs": 0,
+        "gpu_seconds": 0,
+        "input_commands_sent": 0,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
     return report
