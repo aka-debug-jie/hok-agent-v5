@@ -36,15 +36,14 @@ pixels, but slot-cell accuracy was 0.6875 and action accuracy/loss were 0.4375/1
 training did not run. Two-stage v1 stopped at its exact-cell gate; v2 used a predeclared one-cell
 tolerance, passed localization at 1.0 within-one-cell / 3.97 pixels, froze the localizer exactly,
 but action accuracy/loss were only 0.8125/0.871. Formal training did not run. Synthetic model tuning
-is stopped. A high-resolution real player-cue audit on existing sessions 002/003/005 passes its
-coverage/single-candidate/jump gates. Its read-only composition with the Macro goal canvas also
-passes availability and continuity gates over 4,455 frames, but observes only E/S/SE and is heavily
-S-dominated. Semantic identity, lane-coordinate meaning and direction accuracy remain unverified;
-policy training and R2 remain closed.
-One separately frozen real-counterfactual overfit32 diagnostic now passes at accuracy 1.0 / loss
-0.00732 with all nine recalls at 1.0. Its 32 samples reuse five non-overlapping source windows with
-different goal rings; they are geometric targets, not executed actions. The checkpoint is
-diagnostic-only, source-window generalization is unverified, and formal training remains closed.
+is stopped. Player-localization audit v2 proves that the old near-100% cue coverage was dominated
+by a fixed top-right UI marker. After excluding it, session 002 has 0.1401 partial coverage and
+action-response support; sessions 003/005 have no usable track. The old cue, continuity and
+overfit32 results are non-promoting. A five-group, three-variant grouped evaluation then failed:
+full mean accuracy was 0.7778 and exceeded player-masked/goal-only controls by only 0.0889/0.1111.
+Freeze the result as `REAL_COUNTERFACTUAL_MODEL_SHORTCUT_OR_NO_GENERALIZATION`; do not tune this
+model path. The next work may only repair automatic player localization coverage. Formal training,
+R2 and device input remain closed.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.
@@ -416,7 +415,9 @@ result and device-authorization restrictions continue to apply.
   input surface.
 - No annotation UI is an active V5/V6 surface. The T8 calibration picker may use Tk only to pick
   in-memory layout coordinates for the owner-authorized self-built test app; it never writes a
-  screenshot or creates training labels. A future Tk/Pillow preference UI, if authorized,
+  screenshot or creates training labels. `movement_real_rgb.py` may use Pillow only to write
+  non-interactive, offline QA contact sheets under `HOK_LARGE_ROOT`; it exposes no annotation UI
+  and creates no training label. A future Tk/Pillow preference UI, if authorized,
   may be offline only and may show complete read-only PixelArena game pairs for quality ranking.
   It
   must never open a capture node, collect action/frame labels, or feed commercial-client data

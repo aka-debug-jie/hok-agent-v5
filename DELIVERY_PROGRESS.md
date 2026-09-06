@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `REAL_COUNTERFACTUAL_OVERFIT32_PASSED_SOURCE_GENERALIZATION_UNVERIFIED`: nine geometric goal classes fit on five real source windows | Diagnostic checkpoint only; no formal training or R2 |
+| Engineering convergence | `REAL_COUNTERFACTUAL_MODEL_SHORTCUT_OR_NO_GENERALIZATION`: localization v2 exposes fixed-UI confusion; grouped full model fails accuracy and control-gain gates | Stop model tuning; repair player localization coverage only |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: freeze the real-counterfactual 32-sample learnability result
-CURRENT STATUS: REAL_COUNTERFACTUAL_OVERFIT32_PASSED_SOURCE_GENERALIZATION_UNVERIFIED; R0 remains frozen
-BLOCKING FAILURE: only five source windows; semantic identity and source-window generalization are unverified
-NEXT ACCEPTANCE: separately frozen source-window holdout design; no formal training yet
-COMMAND STATUS: 512 derived RGB frames, one diagnostic CUDA run; no recording/test/formal-training/device work
+CURRENT GOAL: repair automatic player localization coverage before any further learned Movement work
+CURRENT STATUS: REAL_COUNTERFACTUAL_MODEL_SHORTCUT_OR_NO_GENERALIZATION; R0 remains frozen
+BLOCKING FAILURE: sessions 003/005 have no usable player track; full model does not beat shortcut controls
+NEXT ACCEPTANCE: a new localization method must establish multi-session action-response evidence
+COMMAND STATUS: localization v2 plus one 15-run grouped batch complete; no checkpoint retained
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -963,6 +963,47 @@ expansion was introduced.
 - Verification passed: 18 focused real-RGB/training tests, Ruff, strict mypy (70 source files),
   project safety (257 files, 131 Python files, zero findings, four root Markdown files), and
   `git diff --check`. No full historical suite was rerun for this bounded diagnostic.
+
+## Player localization audit v2 and grouped model value gate
+
+- Visual QA identified the old paired-color cue's near-continuous top-right candidate as a fixed UI
+  marker. Audit v2 freezes exclusion `[112,0,128,16]` without changing color/component thresholds.
+  Its first zero-noise interpretation was preserved under
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-player-localization-v2-zero-tolerance-failed`;
+  four isolated session-005 detections motivated the finalized unsupported-session ceiling of 1%.
+- The final audit opens all 4,455 bound minimap frames. Session 002 retains 208 detections
+  (coverage 0.1401), single-candidate fraction 1.0 and jump p95 4.72 pixels. At the fixed 1,000 ms
+  response lag, 15/17 sent-action events have positive displacement projection (0.8824), with
+  median projection 2.009 pixels. Session 003 retains 0 detections; session 005 retains 4
+  non-continuous detections (0.0027) and zero response events. The supported scope is therefore
+  session 002 partial only, not three-session localization.
+- Contract SHA-256:
+  `e2b281d32b5376e03a61e8c7783fa7e19eccf2b49cf351f98613ca4dae0623cb`.
+  Final report file/self SHA-256:
+  `11684e3d4050b9d45af3b18fb8fd2567f48e2597f0cfc9d8babdb420e42fc9e0` /
+  `4ab5200b045620f8587a3aec604d20e0eddbdc58aff2dc70c31db36150ffb353`.
+  Three hash-bound QA contact sheets remain beside the report.
+- The grouped value gate uses five non-overlapping session-002 source windows. A 20-pixel goal
+  distance is the smallest implementation repair that supplies all five groups while remaining
+  above the fixed 8-pixel STOP radius; the 24-pixel preflight stopped before training. Each group
+  contains all nine actions, producing 45 unique clips per variant with no group crossing.
+- One command executes five folds for each of `full`, `player_masked` and `goal_only`: 15 fresh
+  seed-0 models, 200 updates each, no checkpoint persistence. Full mean accuracy/macro-F1 are
+  0.7778/0.7370 and worst-fold accuracy is 0.3333. Player-masked accuracy is 0.6889 and goal-only
+  accuracy is 0.6667, so full gains are only 0.0889 and 0.1111 versus the required 0.15. Only
+  group isolation and aggregate per-class recall pass; the remaining five gates fail.
+- Final status is `REAL_COUNTERFACTUAL_MODEL_SHORTCUT_OR_NO_GENERALIZATION`. The run took 33.17
+  seconds on CUDA with peak allocation 309,823,488 bytes. Contract SHA-256:
+  `afb7cc2295d328371146e0f04dda2b59fe129d367ea2561850d966ffef39fa4f`.
+  Report file/self SHA-256:
+  `1ee4ad8ddbd73025deef0463b7d341b0d288f2f6546df8b8ed8e5ff10f6e0691` /
+  `8d549f28471ae424909eb3d5de3e91679613b132abb7f4345e6de5afeb9fa356`.
+- No fold checkpoint, new training dataset, test frame, human training label or device input was
+  produced. The previous 32-sample checkpoint remains diagnostic history and is not promoted.
+- Verification passed: 23 focused real-RGB/training/boundary tests, Ruff, strict mypy (70 source
+  files), project safety (259 files, 131 Python files, 62,893 Python lines, zero findings,
+  four root Markdown files), contract/report self-hash checks and `git diff --check`. No full
+  historical suite was rerun.
 
 ## Frozen Global Agent execution state
 

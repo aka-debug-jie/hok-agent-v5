@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import tempfile
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -417,6 +419,302 @@ def run_overfit32(
         "input_commands_sent": 0,
     }
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return report
+
+
+def _classification_metrics(
+    predicted: np.ndarray, labels: np.ndarray, classes: int
+) -> dict[str, object]:
+    confusion = np.zeros((classes, classes), dtype=np.int64)
+    for expected, actual in zip(labels, predicted, strict=True):
+        confusion[int(expected), int(actual)] += 1
+    recalls: list[float] = []
+    f1_values: list[float] = []
+    for label in range(classes):
+        true_positive = int(confusion[label, label])
+        actual_support = int(confusion[:, label].sum())
+        expected_support = int(confusion[label].sum())
+        recall = true_positive / expected_support if expected_support else 0.0
+        precision = true_positive / actual_support if actual_support else 0.0
+        recalls.append(recall)
+        f1_values.append(
+            2.0 * precision * recall / (precision + recall)
+            if precision + recall
+            else 0.0
+        )
+    return {
+        "accuracy": float(np.mean(predicted == labels)),
+        "macro_f1": float(np.mean(f1_values)),
+        "recall": dict(zip(MOVEMENT_ACTIONS, recalls, strict=True)),
+        "confusion": confusion.tolist(),
+    }
+
+
+def _train_group_fold(
+    clips: np.ndarray,
+    labels: np.ndarray,
+    groups: np.ndarray,
+    holdout_group: int,
+    stage: dict[str, object],
+    device: torch.device,
+) -> tuple[dict[str, object], np.ndarray, np.ndarray]:
+    seed = int(cast(int, stage["seed"]))
+    torch.manual_seed(seed)
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(seed)
+    model = TaskSpecificMovement().to(device)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=float(cast(float, stage["learning_rate"])),
+        weight_decay=float(cast(float, stage["weight_decay"])),
+    )
+    train_indices = np.flatnonzero(groups != holdout_group)
+    dev_indices = np.flatnonzero(groups == holdout_group)
+    source_group_leakage = bool(
+        set(groups[train_indices].tolist()) & set(groups[dev_indices].tolist())
+    )
+    batch_size = int(cast(int, stage["batch_size"]))
+    updates = int(cast(int, stage["updates"]))
+    generator = torch.Generator().manual_seed(seed)
+    order = torch.empty(0, dtype=torch.int64)
+    offset = 0
+    losses: list[float] = []
+    started = time.monotonic()
+    clip_tensor = torch.from_numpy(clips)
+    label_tensor = torch.from_numpy(labels)
+    for _update in range(updates):
+        if offset >= len(order):
+            order = torch.from_numpy(train_indices)[
+                torch.randperm(len(train_indices), generator=generator)
+            ]
+            offset = 0
+        selected = order[offset : offset + batch_size]
+        offset += len(selected)
+        loss, _gradient = train_step(
+            model,
+            _batch(clip_tensor[selected], device),
+            label_tensor[selected].to(device),
+            optimizer,
+        )
+        losses.append(loss)
+    model.eval()
+    with torch.no_grad():
+        logits = model(_batch(clip_tensor[dev_indices], device)).cpu()
+    predicted = logits.argmax(1).numpy()
+    expected = labels[dev_indices]
+    metrics = _classification_metrics(predicted, expected, len(MOVEMENT_ACTIONS))
+    metrics.update(
+        {
+            "holdout_group": holdout_group,
+            "train_samples": len(train_indices),
+            "dev_samples": len(dev_indices),
+            "source_group_leakage": source_group_leakage,
+            "initial_loss": losses[0],
+            "final_update_loss": losses[-1],
+            "elapsed_seconds": time.monotonic() - started,
+        }
+    )
+    return metrics, predicted, expected
+
+
+def run_real_counterfactual_grouped_eval(
+    contract_path: Path,
+    localization_report_path: Path,
+    session_root: Path,
+    old_dataset_path: Path,
+    old_data_report_path: Path,
+    output_dir: Path,
+    *,
+    device_name: str,
+) -> dict[str, object]:
+    from hok_agent.movement_real_rgb import (
+        _file_sha256,
+        _load_bound_json,
+        _object_sha256,
+        prepare_real_counterfactual_grouped_data,
+    )
+
+    raw = cast(dict[str, object], json.loads(contract_path.read_text(encoding="utf-8")))
+    supplied_hash = str(raw.pop("contract_sha256", ""))
+    raw["contract_sha256"] = supplied_hash
+    if (
+        raw.get("schema_version") != "movement-real-counterfactual-grouped-eval-v1"
+        or supplied_hash
+        != _canonical_sha256({key: value for key, value in raw.items() if key != "contract_sha256"})
+        or raw.get("test_allowed") is not False
+        or raw.get("formal_training_allowed") is not False
+        or raw.get("r2_allowed") is not False
+        or raw.get("device_input_allowed") is not False
+        or raw.get("variants") != ["full", "player_masked", "goal_only"]
+        or raw.get("folds") != 5
+        or raw.get("expected_model_runs") != 15
+        or raw.get("checkpoints_persisted") != 0
+        or cast(dict[str, object], raw["training"]).get("model")
+        != "task_specific_groupnorm_gru"
+    ):
+        raise ValueError("real grouped evaluation contract differs")
+    localization = _load_bound_json(localization_report_path, "report_sha256")
+    old_data_report = _load_bound_json(old_data_report_path, "report_sha256")
+    if (
+        localization.get("status") != "PLAYER_CUE_PARTIAL_SESSION002_ONLY"
+        or localization.get("semantic_identity_scope")
+        != "session002_partial_action_response_supported"
+        or _file_sha256(localization_report_path)
+        != raw.get("localization_report_file_sha256")
+        or localization.get("report_sha256") != raw.get("localization_report_sha256")
+        or _file_sha256(old_dataset_path) != raw.get("old_dataset_sha256")
+        or _file_sha256(old_data_report_path) != raw.get("old_data_report_file_sha256")
+        or old_data_report.get("report_sha256") != raw.get("old_data_report_sha256")
+        or old_data_report.get("dataset_sha256") != raw.get("old_dataset_sha256")
+    ):
+        raise ValueError("real grouped evaluation lineage differs")
+    if session_root.is_symlink() or not session_root.is_dir():
+        raise ValueError("real grouped evaluation session root differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("real grouped evaluation output already exists")
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA is unavailable")
+
+    with np.load(old_dataset_path, allow_pickle=False) as old_dataset:
+        old_clips = old_dataset["rgb_sequence"]
+        old_unique_clips = len(
+            {hashlib.sha256(clip.tobytes()).hexdigest() for clip in old_clips}
+        )
+        old_unique_windows = len(np.unique(old_dataset["end_timestamp_ms"]))
+    old_duplicates = len(old_clips) - old_unique_clips
+    expected_old = cast(dict[str, object], raw["old_dataset_expected"])
+    if (
+        len(old_clips) != expected_old["samples"]
+        or old_unique_clips != expected_old["unique_clips"]
+        or old_unique_windows != expected_old["unique_source_windows"]
+        or old_duplicates != expected_old["duplicate_clips"]
+    ):
+        raise ValueError("real grouped old duplicate audit differs")
+
+    variants, labels, groups, data_metadata = prepare_real_counterfactual_grouped_data(
+        raw, session_root
+    )
+    if (
+        labels.shape != (45,)
+        or groups.shape != (45,)
+        or sorted(np.bincount(groups, minlength=5).tolist()) != [9] * 5
+        or any(clips.shape != (45, 16, 128, 128, 3) for clips in variants.values())
+    ):
+        raise ValueError("real grouped generated data differs")
+    stage = cast(dict[str, object], raw["training"])
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+    run_started = time.monotonic()
+    fold_rows: list[dict[str, object]] = []
+    aggregate_predictions: dict[str, list[np.ndarray]] = {
+        name: [] for name in cast(list[str], raw["variants"])
+    }
+    aggregate_expected: dict[str, list[np.ndarray]] = {
+        name: [] for name in cast(list[str], raw["variants"])
+    }
+    for variant in cast(list[str], raw["variants"]):
+        for holdout_group in range(int(cast(int, raw["folds"]))):
+            metrics, predicted, expected = _train_group_fold(
+                variants[variant], labels, groups, holdout_group, stage, device
+            )
+            metrics["variant"] = variant
+            fold_rows.append(metrics)
+            aggregate_predictions[variant].append(predicted)
+            aggregate_expected[variant].append(expected)
+    elapsed = time.monotonic() - run_started
+    aggregate: dict[str, dict[str, object]] = {}
+    for variant in cast(list[str], raw["variants"]):
+        metrics = _classification_metrics(
+            np.concatenate(aggregate_predictions[variant]),
+            np.concatenate(aggregate_expected[variant]),
+            len(MOVEMENT_ACTIONS),
+        )
+        variant_folds = [row for row in fold_rows if row["variant"] == variant]
+        metrics["mean_fold_accuracy"] = float(
+            np.mean([float(cast(float, row["accuracy"])) for row in variant_folds])
+        )
+        metrics["mean_fold_macro_f1"] = float(
+            np.mean([float(cast(float, row["macro_f1"])) for row in variant_folds])
+        )
+        metrics["worst_fold_accuracy"] = min(
+            float(cast(float, row["accuracy"])) for row in variant_folds
+        )
+        aggregate[variant] = metrics
+    full = aggregate["full"]
+    controls = {
+        name: float(cast(float, full["mean_fold_accuracy"]))
+        - float(cast(float, aggregate[name]["mean_fold_accuracy"]))
+        for name in ("player_masked", "goal_only")
+    }
+    gates = cast(dict[str, object], raw["gates"])
+    gate_results = {
+        "mean_accuracy": float(cast(float, full["mean_fold_accuracy"]))
+        >= float(cast(float, gates["minimum_full_mean_accuracy"])),
+        "mean_macro_f1": float(cast(float, full["mean_fold_macro_f1"]))
+        >= float(cast(float, gates["minimum_full_mean_macro_f1"])),
+        "worst_fold_accuracy": float(cast(float, full["worst_fold_accuracy"]))
+        >= float(cast(float, gates["minimum_full_worst_fold_accuracy"])),
+        "per_class_recall": min(cast(dict[str, float], full["recall"]).values())
+        >= float(cast(float, gates["minimum_full_per_class_recall"])),
+        "player_mask_gain": controls["player_masked"]
+        >= float(cast(float, gates["minimum_control_accuracy_gain"])),
+        "goal_only_gain": controls["goal_only"]
+        >= float(cast(float, gates["minimum_control_accuracy_gain"])),
+        "group_isolation": all(row["source_group_leakage"] is False for row in fold_rows),
+    }
+    passed = all(gate_results.values())
+    report: dict[str, object] = {
+        "schema_version": "movement-real-counterfactual-grouped-eval-report-v1",
+        "status": "SESSION002_RELATION_SIGNAL_PASSED"
+        if passed
+        else "REAL_COUNTERFACTUAL_MODEL_SHORTCUT_OR_NO_GENERALIZATION",
+        "contract_sha256": supplied_hash,
+        "localization_report_sha256": localization["report_sha256"],
+        "old_data_report_sha256": old_data_report["report_sha256"],
+        "old_dataset_duplicate_audit": {
+            "samples": len(old_clips),
+            "unique_clips": old_unique_clips,
+            "duplicate_clips": old_duplicates,
+            "unique_source_windows": old_unique_windows,
+        },
+        "generated_data": data_metadata,
+        "folds": fold_rows,
+        "aggregate": aggregate,
+        "full_accuracy_gain_over_controls": controls,
+        "gate_results": gate_results,
+        "model_runs": len(fold_rows),
+        "expected_model_runs": raw["expected_model_runs"],
+        "elapsed_seconds": elapsed,
+        "peak_cuda_bytes": torch.cuda.max_memory_allocated(device)
+        if device.type == "cuda"
+        else 0,
+        "checkpoints_persisted": 0,
+        "source_window_generalization_verified": passed,
+        "session_generalization_verified": False,
+        "semantic_accuracy_verified": False,
+        "formal_training_allowed": False,
+        "test_frames_read": 0,
+        "device_input_commands_sent": 0,
+        "next_action": "expand_automatic_player_localization_coverage"
+        if passed
+        else "stop_model_tuning_and_repair_player_localization",
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        with (staging / "report.json").open("w", encoding="utf-8") as handle:
+            handle.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
     return report
 
 

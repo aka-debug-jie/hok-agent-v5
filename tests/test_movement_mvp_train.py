@@ -30,9 +30,11 @@ from hok_agent.movement_mvp_train import (
     evaluate_stage_c_dev,
     localized_train_step,
     run_overfit32,
+    run_real_counterfactual_grouped_eval,
     stage_c_dev_gates,
     train_step,
 )
+from hok_agent.movement_real_rgb import _object_sha256
 from hok_agent.rich_arena import wait_action
 from hok_agent.rich_renderer import render
 
@@ -42,6 +44,7 @@ CONFIG_V2 = ROOT / "configs" / "movement_mvp_stage_c_v2.json"
 REAL_COUNTERFACTUAL_TRAIN = (
     ROOT / "configs" / "movement_real_counterfactual_overfit32_train_v1.json"
 )
+REAL_GROUPED_EVAL = ROOT / "configs" / "movement_real_counterfactual_grouped_eval_v1.json"
 
 
 def test_shared_train_step_updates_parameters() -> None:
@@ -166,6 +169,113 @@ def test_real_counterfactual_training_contract_rejects_dataset_drift(
     dataset.write_bytes(b"drift")
     with pytest.raises(ValueError, match="training contract differs"):
         run_overfit32(config, dataset, None, tmp_path / "output", device_name="cpu")
+
+
+def test_real_grouped_eval_isolates_groups_and_persists_no_checkpoints(
+    tmp_path: Path,
+) -> None:
+    session_root = tmp_path / "sessions"
+    directory = session_root / "teacher-session-002"
+    (directory / "shards").mkdir(parents=True)
+    frames = np.zeros((192, 128, 128, 3), dtype=np.uint8)
+    for index, frame in enumerate(frames):
+        y = 40 + index // 5
+        frame[y : y + 8, 52:60] = (20, 180, 40)
+        frame[y + 1 : y + 7, 60:66] = (200, 40, 30)
+    shard = directory / "shards" / "observations-0000.npz"
+    np.savez_compressed(
+        shard,
+        minimap_rgb=frames,
+        scheduled_elapsed_ms=np.arange(len(frames), dtype=np.int64) * 200,
+    )
+    summary = {
+        "status": "PASSED",
+        "derived_roi_rgb_persisted": True,
+        "raw_frames_persisted": False,
+        "observation_shards": [
+            {
+                "path": shard.name,
+                "rows": len(frames),
+                "sha256": hashlib.sha256(shard.read_bytes()).hexdigest(),
+            }
+        ],
+    }
+    summary["summary_sha256"] = _object_sha256(summary)
+    summary_path = directory / "summary.json"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    localization = {
+        "status": "PLAYER_CUE_PARTIAL_SESSION002_ONLY",
+        "semantic_identity_scope": "session002_partial_action_response_supported",
+    }
+    localization["report_sha256"] = _object_sha256(localization)
+    localization_path = tmp_path / "localization.json"
+    localization_path.write_text(json.dumps(localization), encoding="utf-8")
+
+    old_clips = np.arange(32, dtype=np.uint8)[:, None, None, None]
+    old_clips[29:] = old_clips[:3]
+    old_dataset_path = tmp_path / "old.npz"
+    np.savez_compressed(
+        old_dataset_path,
+        rgb_sequence=old_clips,
+        end_timestamp_ms=np.resize(np.arange(5, dtype=np.int64), 32),
+    )
+    old_dataset_sha = hashlib.sha256(old_dataset_path.read_bytes()).hexdigest()
+    old_report = {"status": "PASSED", "dataset_sha256": old_dataset_sha}
+    old_report["report_sha256"] = _object_sha256(old_report)
+    old_report_path = tmp_path / "old-report.json"
+    old_report_path.write_text(json.dumps(old_report), encoding="utf-8")
+
+    contract = json.loads(REAL_GROUPED_EVAL.read_text(encoding="utf-8"))
+    contract["localization_report_file_sha256"] = hashlib.sha256(
+        localization_path.read_bytes()
+    ).hexdigest()
+    contract["localization_report_sha256"] = localization["report_sha256"]
+    contract["old_data_report_file_sha256"] = hashlib.sha256(
+        old_report_path.read_bytes()
+    ).hexdigest()
+    contract["old_data_report_sha256"] = old_report["report_sha256"]
+    contract["old_dataset_sha256"] = old_dataset_sha
+    contract["source_session"] = {
+        "basename": "teacher-session-002",
+        "summary_sha256": hashlib.sha256(summary_path.read_bytes()).hexdigest(),
+    }
+    contract["training"]["updates"] = 1
+    contract.pop("contract_sha256")
+    contract["contract_sha256"] = _object_sha256(contract)
+    contract_path = tmp_path / "grouped-contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+
+    output = tmp_path / "grouped-output"
+    report = run_real_counterfactual_grouped_eval(
+        contract_path,
+        localization_path,
+        session_root,
+        old_dataset_path,
+        old_report_path,
+        output,
+        device_name="cpu",
+    )
+    assert report["status"] == "REAL_COUNTERFACTUAL_MODEL_SHORTCUT_OR_NO_GENERALIZATION"
+    assert report["model_runs"] == 15
+    assert report["checkpoints_persisted"] == 0
+    assert len(report["generated_data"]["source_windows"]) == 5
+    assert len(report["generated_data"]["samples"]) == 45
+    assert report["generated_data"]["duplicates_by_variant"] == {
+        "full": 0,
+        "goal_only": 0,
+        "player_masked": 0,
+    }
+    assert set(report["generated_data"]["variant_sha256"]) == {
+        "full",
+        "goal_only",
+        "player_masked",
+    }
+    assert all(row["train_samples"] == 36 for row in report["folds"])
+    assert all(row["dev_samples"] == 9 for row in report["folds"])
+    assert all(row["source_group_leakage"] is False for row in report["folds"])
+    assert report["old_dataset_duplicate_audit"]["duplicate_clips"] == 3
+    assert {path.name for path in output.iterdir()} == {"report.json"}
 
 
 def test_failed_overfit_records_first_update_and_checkpoint(tmp_path: Path) -> None:

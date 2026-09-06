@@ -74,7 +74,9 @@ def _parser() -> argparse.ArgumentParser:
             "goal-canvas-two-stage-overfit32",
             "real-player-cue",
             "real-player-goal-continuity",
+            "real-player-localization-audit-v2",
             "real-counterfactual-overfit32-materialize",
+            "real-counterfactual-grouped-eval",
             "materialize-overfit32",
             "overfit32",
             "materialize-trajectories",
@@ -1398,7 +1400,47 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         elif args.command == "movement-mvp":
-            if args.mode == "real-counterfactual-overfit32-materialize":
+            if args.mode == "real-counterfactual-grouped-eval":
+                if (
+                    args.session_root is None
+                    or args.prior_report is None
+                    or args.dataset is None
+                    or args.overfit_report is None
+                ):
+                    raise ValueError(
+                        "real-counterfactual-grouped-eval requires --session-root, "
+                        "--prior-report, --dataset and --overfit-report"
+                    )
+                from hok_agent.movement_mvp_train import (
+                    run_real_counterfactual_grouped_eval,
+                )
+
+                result = run_real_counterfactual_grouped_eval(
+                    args.config,
+                    args.prior_report,
+                    args.session_root,
+                    args.dataset,
+                    args.overfit_report,
+                    args.output_dir,
+                    device_name=args.device,
+                )
+            elif args.mode == "real-player-localization-audit-v2":
+                if args.session_root is None or args.prior_report is None:
+                    raise ValueError(
+                        "real-player-localization-audit-v2 requires "
+                        "--session-root and --prior-report"
+                    )
+                from hok_agent.movement_real_rgb import (
+                    run_real_player_localization_audit_v2,
+                )
+
+                result = run_real_player_localization_audit_v2(
+                    args.config,
+                    args.prior_report,
+                    args.session_root,
+                    args.output_dir,
+                )
+            elif args.mode == "real-counterfactual-overfit32-materialize":
                 if args.session_root is None or args.prior_report is None:
                     raise ValueError(
                         "real-counterfactual-overfit32-materialize requires "

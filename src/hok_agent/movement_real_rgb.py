@@ -1466,3 +1466,576 @@ def materialize_real_counterfactual_overfit32(
             staging.rmdir()
         raise
     return data_report
+
+
+def _filtered_player_positions(
+    frames: np.ndarray,
+    cue_contract: dict[str, object],
+    exclusion_xyxy: tuple[int, int, int, int],
+) -> tuple[list[list[tuple[float, float, float]]], list[tuple[float, float] | None]]:
+    x0, y0, x1, y1 = exclusion_xyxy
+    candidates_by_frame: list[list[tuple[float, float, float]]] = []
+    positions: list[tuple[float, float] | None] = []
+    previous: tuple[float, float] | None = None
+    missing = 0
+    reset_after = int(
+        cast(
+            int,
+            cast(dict[str, object], cue_contract["components"])[
+                "reset_after_missing_frames"
+            ],
+        )
+    )
+    for frame in frames:
+        raw = _player_candidates(frame, cue_contract)
+        candidates_by_frame.append(raw)
+        candidates = [
+            item for item in raw if not (x0 <= item[1] < x1 and y0 <= item[0] < y1)
+        ]
+        if not candidates:
+            positions.append(None)
+            missing += 1
+            if missing > reset_after:
+                previous = None
+            continue
+        selected = (
+            min(candidates, key=lambda item: item[2])
+            if previous is None
+            else min(
+                candidates,
+                key=lambda item: float(
+                    np.linalg.norm(np.asarray(item[:2]) - np.asarray(previous))
+                ),
+            )
+        )
+        previous = (selected[0], selected[1])
+        positions.append(previous)
+        missing = 0
+    return candidates_by_frame, positions
+
+
+def _write_localization_contact_sheet(
+    path: Path,
+    frames: np.ndarray,
+    indices: list[int],
+    candidates: list[list[tuple[float, float, float]]],
+    positions: list[tuple[float, float] | None],
+    exclusion_xyxy: tuple[int, int, int, int],
+) -> None:
+    from PIL import Image, ImageDraw
+
+    columns = 4
+    scale = 2
+    rows = math.ceil(len(indices) / columns)
+    canvas = Image.new("RGB", (columns * 128 * scale, rows * 128 * scale))
+    for ordinal, index in enumerate(indices):
+        image = Image.fromarray(frames[index].copy())
+        draw = ImageDraw.Draw(image)
+        x0, y0, x1, y1 = exclusion_xyxy
+        draw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(255, 225, 0), width=1)
+        for y, x, _distance in candidates[index]:
+            draw.ellipse((x - 5, y - 5, x + 5, y + 5), outline=(255, 0, 255), width=2)
+        if positions[index] is not None:
+            y, x = cast(tuple[float, float], positions[index])
+            draw.ellipse((x - 7, y - 7, x + 7, y + 7), outline=(0, 255, 255), width=2)
+        draw.text(
+            (2, 2), str(index), fill=(255, 255, 255), stroke_width=1, stroke_fill=(0, 0, 0)
+        )
+        image = image.resize((128 * scale, 128 * scale), Image.Resampling.NEAREST)
+        canvas.paste(
+            image,
+            ((ordinal % columns) * 128 * scale, (ordinal // columns) * 128 * scale),
+        )
+    canvas.save(path, format="PNG", optimize=False)
+
+
+def run_real_player_localization_audit_v2(
+    contract_path: Path,
+    prior_report_path: Path,
+    session_root: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    prior = _load_bound_json(prior_report_path, "report_sha256")
+    if (
+        contract.get("schema_version") != "movement-real-player-localization-audit-v2"
+        or contract.get("test_allowed") is not False
+        or contract.get("training_allowed") is not False
+        or contract.get("r2_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+        or prior.get("status") != "REAL_PLAYER_CUE_PASSED"
+        or _file_sha256(prior_report_path) != contract.get("prior_report_file_sha256")
+        or prior.get("report_sha256") != contract.get("prior_report_sha256")
+    ):
+        raise ValueError("player localization audit v2 contract differs")
+    if session_root.is_symlink() or not session_root.is_dir():
+        raise ValueError("player localization audit v2 session root differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("player localization audit v2 output already exists")
+
+    exclusion = tuple(map(int, cast(list[int], contract["excluded_ui_xyxy"])))
+    if exclusion != (112, 0, 128, 16):
+        raise ValueError("player localization audit v2 exclusion differs")
+    movement_names = (
+        "wait",
+        "north",
+        "north_east",
+        "east",
+        "south_east",
+        "south",
+        "south_west",
+        "west",
+        "north_west",
+    )
+    movement_vectors = {
+        "north": (-1.0, 0.0),
+        "north_east": (-1.0, 1.0),
+        "east": (0.0, 1.0),
+        "south_east": (1.0, 1.0),
+        "south": (1.0, 0.0),
+        "south_west": (1.0, -1.0),
+        "west": (0.0, -1.0),
+        "north_west": (-1.0, -1.0),
+    }
+    frame_period_ms = int(cast(int, contract["frame_period_ms"]))
+    response_lag_ms = int(cast(int, contract["response_lag_ms"]))
+    if response_lag_ms % frame_period_ms:
+        raise ValueError("player localization response lag differs")
+    response_lag_frames = response_lag_ms // frame_period_ms
+    cue_contract: dict[str, object] = {
+        "color": contract["color"],
+        "components": contract["components"],
+    }
+    gates = cast(dict[str, object], contract["gates"])
+    visual_qa = cast(dict[str, str], contract["developer_visual_qa"])
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    session_results: list[dict[str, object]] = []
+    opened_shards: list[dict[str, object]] = []
+    contact_sheets: list[dict[str, object]] = []
+    try:
+        for declaration in cast(list[dict[str, object]], contract["sessions"]):
+            basename = str(declaration["basename"])
+            directory = session_root / basename
+            summary_path = directory / "summary.json"
+            if (
+                Path(basename).name != basename
+                or _file_sha256(summary_path) != declaration["summary_sha256"]
+            ):
+                raise ValueError("player localization audit v2 summary differs")
+            summary = _load_bound_json(summary_path, "summary_sha256")
+            if (
+                summary.get("status") != "PASSED"
+                or summary.get("derived_roi_rgb_persisted") is not True
+                or summary.get("raw_frames_persisted") is not False
+            ):
+                raise ValueError("player localization audit v2 source summary differs")
+            frame_parts: list[np.ndarray] = []
+            timestamp_parts: list[np.ndarray] = []
+            movement_parts: list[np.ndarray] = []
+            sent_parts: list[np.ndarray] = []
+            for raw_row in cast(list[dict[str, object]], summary["observation_shards"]):
+                shard_name = str(raw_row["path"])
+                shard_path = directory / "shards" / shard_name
+                if (
+                    Path(shard_name).name != shard_name
+                    or shard_path.is_symlink()
+                    or _file_sha256(shard_path) != raw_row["sha256"]
+                ):
+                    raise ValueError("player localization audit v2 shard differs")
+                with np.load(shard_path, allow_pickle=False) as shard:
+                    required = {
+                        "minimap_rgb",
+                        "scheduled_elapsed_ms",
+                        "movement_id",
+                        "movement_input_sent",
+                    }
+                    if not required.issubset(shard.files):
+                        raise ValueError("player localization audit v2 shard fields differ")
+                    frame_parts.append(shard["minimap_rgb"].copy())
+                    timestamp_parts.append(shard["scheduled_elapsed_ms"].copy())
+                    movement_parts.append(shard["movement_id"].copy())
+                    sent_parts.append(shard["movement_input_sent"].copy())
+                opened_shards.append(
+                    {"session": basename, "basename": shard_name, "sha256": raw_row["sha256"]}
+                )
+            frames = np.concatenate(frame_parts)
+            timestamps = np.concatenate(timestamp_parts)
+            movement_ids = np.concatenate(movement_parts).astype(np.int64)
+            movement_sent = np.concatenate(sent_parts).astype(bool)
+            if (
+                frames.dtype != np.uint8
+                or frames.shape[1:] != (128, 128, 3)
+                or timestamps.shape != (len(frames),)
+                or movement_ids.shape != (len(frames),)
+                or movement_sent.shape != (len(frames),)
+                or not np.all(np.diff(timestamps) == frame_period_ms)
+            ):
+                raise ValueError("player localization audit v2 arrays differ")
+            candidates, positions = _filtered_player_positions(frames, cue_contract, exclusion)
+            raw_detected = sum(bool(row) for row in candidates)
+            filtered_detected = sum(position is not None for position in positions)
+            single = sum(
+                sum(
+                    not (
+                        exclusion[0] <= item[1] < exclusion[2]
+                        and exclusion[1] <= item[0] < exclusion[3]
+                    )
+                    for item in row
+                )
+                == 1
+                for row in candidates
+            )
+            rejected_ui = sum(
+                any(
+                    exclusion[0] <= item[1] < exclusion[2]
+                    and exclusion[1] <= item[0] < exclusion[3]
+                    for item in row
+                )
+                for row in candidates
+            )
+            valid_indices = [
+                index for index, position in enumerate(positions) if position is not None
+            ]
+            jumps = [
+                math.dist(
+                    cast(tuple[float, float], positions[left]),
+                    cast(tuple[float, float], positions[right]),
+                )
+                for left, right in zip(valid_indices, valid_indices[1:], strict=False)
+                if right == left + 1
+            ]
+            maximum_missing = 0
+            missing = 0
+            heat = np.zeros((8, 8), dtype=np.int64)
+            for position in positions:
+                if position is None:
+                    missing += 1
+                    maximum_missing = max(maximum_missing, missing)
+                    continue
+                missing = 0
+                y, x = position
+                heat[min(int(y) // 16, 7), min(int(x) // 16, 7)] += 1
+            projections: list[float] = []
+            response_rows: list[dict[str, object]] = []
+            for index in range(len(frames) - response_lag_frames):
+                action = movement_names[int(movement_ids[index])]
+                start = positions[index]
+                end = positions[index + response_lag_frames]
+                if not movement_sent[index] or action == "wait" or start is None or end is None:
+                    continue
+                vector_y, vector_x = movement_vectors[action]
+                norm = math.hypot(vector_y, vector_x)
+                delta_y, delta_x = end[0] - start[0], end[1] - start[1]
+                projection = (delta_y * vector_y + delta_x * vector_x) / norm
+                projections.append(projection)
+                response_rows.append(
+                    {
+                        "frame_index": index,
+                        "action": action,
+                        "projection_pixels": round(projection, 6),
+                    }
+                )
+            qa_count = int(cast(int, contract["qa_frames_per_supported_session"]))
+            if basename == "teacher-session-002" and valid_indices:
+                qa_indices = [
+                    valid_indices[round(index * (len(valid_indices) - 1) / (qa_count - 1))]
+                    for index in range(qa_count)
+                ]
+            else:
+                qa_indices = [
+                    round(index * (len(frames) - 1) / (qa_count - 1))
+                    for index in range(qa_count)
+                ]
+            contact_name = f"{basename}-contact.png"
+            _write_localization_contact_sheet(
+                staging / contact_name,
+                frames,
+                qa_indices,
+                candidates,
+                positions,
+                exclusion,
+            )
+            contact_sheets.append(
+                {
+                    "session": basename,
+                    "path": contact_name,
+                    "sha256": _file_sha256(staging / contact_name),
+                    "frame_indices": qa_indices,
+                }
+            )
+            positive_fraction = (
+                sum(value > 0.0 for value in projections) / len(projections)
+                if projections
+                else 0.0
+            )
+            median_projection = float(np.median(projections)) if projections else 0.0
+            session_results.append(
+                {
+                    "session": basename,
+                    "frames": len(frames),
+                    "raw_candidate_coverage": raw_detected / len(frames),
+                    "filtered_candidate_coverage": filtered_detected / len(frames),
+                    "filtered_single_candidate_fraction": single / filtered_detected
+                    if filtered_detected
+                    else 0.0,
+                    "rejected_ui_candidate_coverage": rejected_ui / len(frames),
+                    "filtered_jump_p95": float(np.percentile(jumps, 95)) if jumps else None,
+                    "maximum_filtered_missing_streak": maximum_missing,
+                    "candidate_heatmap_8x8": heat.tolist(),
+                    "response_events": len(projections),
+                    "positive_projection_fraction": positive_fraction,
+                    "median_projection_pixels": median_projection,
+                    "response_rows": response_rows,
+                    "developer_visual_qa": visual_qa[basename],
+                }
+            )
+        by_session = {str(row["session"]): row for row in session_results}
+        supported = by_session["teacher-session-002"]
+        unsupported = [by_session[name] for name in ("teacher-session-003", "teacher-session-005")]
+        checks = {
+            "session002_filtered_coverage": float(
+                cast(float, supported["filtered_candidate_coverage"])
+            )
+            >= float(cast(float, gates["minimum_session002_filtered_coverage"])),
+            "session002_response_events": int(cast(int, supported["response_events"]))
+            >= int(cast(int, gates["minimum_response_events"])),
+            "session002_response_alignment": float(
+                cast(float, supported["positive_projection_fraction"])
+            )
+            >= float(cast(float, gates["minimum_positive_projection_fraction"])),
+            "session002_response_distance": float(
+                cast(float, supported["median_projection_pixels"])
+            )
+            >= float(cast(float, gates["minimum_median_projection_pixels"])),
+            "session002_visual_qa": supported["developer_visual_qa"]
+            == "consistent_with_controlled_player",
+            "session003_005_unsupported": all(
+                float(cast(float, row["filtered_candidate_coverage"]))
+                <= float(cast(float, gates["maximum_unsupported_session_coverage"]))
+                for row in unsupported
+            ),
+            "fixed_ui_confusion_reproduced": all(
+                float(cast(float, row["rejected_ui_candidate_coverage"]))
+                >= float(cast(float, gates["minimum_fixed_ui_coverage"]))
+                for row in unsupported
+            ),
+        }
+        passed = all(checks.values())
+        audit: dict[str, object] = {
+            "schema_version": "movement-real-player-localization-audit-report-v2",
+            "status": "PLAYER_CUE_PARTIAL_SESSION002_ONLY" if passed else "PLAYER_CUE_V2_FAILED",
+            "contract_sha256": contract["contract_sha256"],
+            "prior_report_sha256": prior["report_sha256"],
+            "excluded_ui_xyxy": list(exclusion),
+            "sessions": session_results,
+            "checks": checks,
+            "contact_sheets": contact_sheets,
+            "opened_shards": opened_shards,
+            "old_player_cue_report_promoting": False,
+            "old_continuity_report_promoting": False,
+            "old_overfit32_report_promoting": False,
+            "semantic_identity_scope": "session002_partial_action_response_supported"
+            if passed
+            else "unverified",
+            "general_three_session_localization_verified": False,
+            "human_training_labels_created": False,
+            "training_called": False,
+            "test_frames_read": 0,
+            "r2_allowed": False,
+            "device_input_commands_sent": 0,
+        }
+        audit["report_sha256"] = _object_sha256(audit)
+        (staging / "report.json").write_text(
+            json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return audit
+
+
+def _mask_player_patch(
+    frame: np.ndarray, player_yx: tuple[float, float], radius: int
+) -> np.ndarray:
+    center_y, center_x = map(round, player_yx)
+    y0, y1 = max(0, center_y - radius), min(128, center_y + radius + 1)
+    x0, x1 = max(0, center_x - radius), min(128, center_x + radius + 1)
+    outer = radius + 4
+    outer_y0, outer_y1 = max(0, center_y - outer), min(128, center_y + outer + 1)
+    outer_x0, outer_x1 = max(0, center_x - outer), min(128, center_x + outer + 1)
+    surround = frame[outer_y0:outer_y1, outer_x0:outer_x1].copy()
+    inner_y0, inner_y1 = y0 - outer_y0, y1 - outer_y0
+    inner_x0, inner_x1 = x0 - outer_x0, x1 - outer_x0
+    keep = np.ones(surround.shape[:2], dtype=bool)
+    keep[inner_y0:inner_y1, inner_x0:inner_x1] = False
+    fill = np.median(surround[keep], axis=0).astype(np.uint8)
+    masked = frame.copy()
+    masked[y0:y1, x0:x1] = fill
+    return masked
+
+
+def prepare_real_counterfactual_grouped_data(
+    contract: dict[str, object], session_root: Path
+) -> tuple[dict[str, np.ndarray], np.ndarray, np.ndarray, dict[str, object]]:
+    actions = ("STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE")
+    if contract.get("action_order") != list(actions):
+        raise ValueError("real grouped action order differs")
+    declaration = cast(dict[str, object], contract["source_session"])
+    basename = str(declaration["basename"])
+    directory = session_root / basename
+    summary_path = directory / "summary.json"
+    if (
+        basename != "teacher-session-002"
+        or _file_sha256(summary_path) != declaration["summary_sha256"]
+    ):
+        raise ValueError("real grouped source summary differs")
+    summary = _load_bound_json(summary_path, "summary_sha256")
+    if (
+        summary.get("status") != "PASSED"
+        or summary.get("derived_roi_rgb_persisted") is not True
+        or summary.get("raw_frames_persisted") is not False
+    ):
+        raise ValueError("real grouped source summary content differs")
+    frames_parts: list[np.ndarray] = []
+    timestamp_parts: list[np.ndarray] = []
+    opened_shards: list[dict[str, object]] = []
+    for raw_row in cast(list[dict[str, object]], summary["observation_shards"]):
+        name = str(raw_row["path"])
+        path = directory / "shards" / name
+        if Path(name).name != name or path.is_symlink() or _file_sha256(path) != raw_row["sha256"]:
+            raise ValueError("real grouped source shard differs")
+        with np.load(path, allow_pickle=False) as shard:
+            frames_parts.append(shard["minimap_rgb"].copy())
+            timestamp_parts.append(shard["scheduled_elapsed_ms"].copy())
+        opened_shards.append({"basename": name, "sha256": raw_row["sha256"]})
+    frames = np.concatenate(frames_parts)
+    timestamps = np.concatenate(timestamp_parts)
+    sequence_frames = int(cast(int, contract["sequence_frames"]))
+    frame_period_ms = int(cast(int, contract["frame_period_ms"]))
+    if (
+        frames.dtype != np.uint8
+        or frames.shape[1:] != (128, 128, 3)
+        or timestamps.shape != (len(frames),)
+        or not np.all(np.diff(timestamps) == frame_period_ms)
+    ):
+        raise ValueError("real grouped source arrays differ")
+    cue_contract: dict[str, object] = {
+        "color": contract["color"],
+        "components": contract["components"],
+    }
+    exclusion = cast(
+        tuple[int, int, int, int],
+        tuple(map(int, cast(list[int], contract["excluded_ui_xyxy"]))),
+    )
+    _candidates, positions = _filtered_player_positions(frames, cue_contract, exclusion)
+    goal_distance = int(cast(int, contract["goal_distance_pixels"]))
+    stop_radius = float(cast(float, contract["stop_radius_pixels"]))
+    marker = cast(dict[str, object], contract["marker"])
+    marker_radius = int(cast(int, marker["radius"]))
+    group_count = int(cast(int, contract["source_group_count"]))
+    used: set[int] = set()
+    source_windows: list[tuple[int, int, np.ndarray, list[tuple[float, float]]]] = []
+    for end in range(sequence_frames - 1, len(frames)):
+        start = end - sequence_frames + 1
+        if any(index in used for index in range(start, end + 1)):
+            continue
+        window_positions_raw = positions[start : end + 1]
+        if any(position is None for position in window_positions_raw):
+            continue
+        window_positions = [cast(tuple[float, float], item) for item in window_positions_raw]
+        if not np.all(np.diff(timestamps[start : end + 1]) == frame_period_ms):
+            continue
+        player = window_positions[-1]
+        goals = [
+            _counterfactual_goal(player, action, goal_distance, marker_radius)
+            for action in actions
+        ]
+        if any(goal is None for goal in goals) or any(
+            _goal_direction(player, cast(tuple[int, int], goal), stop_radius) != action
+            for action, goal in zip(actions, goals, strict=True)
+        ):
+            continue
+        source_windows.append((start, end, frames[start : end + 1], window_positions))
+        used.update(range(start, end + 1))
+        if len(source_windows) == group_count:
+            break
+    if len(source_windows) != group_count:
+        raise ValueError("real grouped source-window support differs")
+
+    mask_radius = int(cast(int, contract["player_mask_radius_pixels"]))
+    neutral = np.asarray(cast(list[int], contract["goal_only_rgb"]), dtype=np.uint8)
+    variant_rows: dict[str, list[np.ndarray]] = {
+        "full": [],
+        "player_masked": [],
+        "goal_only": [],
+    }
+    labels: list[int] = []
+    groups: list[int] = []
+    sample_rows: list[dict[str, object]] = []
+    group_rows: list[dict[str, object]] = []
+    for group, (start, end, source_clip, player_positions) in enumerate(source_windows):
+        group_rows.append(
+            {
+                "group": group,
+                "start_index": start,
+                "end_index": end,
+                "end_timestamp_ms": int(timestamps[end]),
+                "source_rgb_sha256": hashlib.sha256(source_clip.tobytes()).hexdigest(),
+            }
+        )
+        player = player_positions[-1]
+        masked_source = np.stack(
+            [
+                _mask_player_patch(frame, position, mask_radius)
+                for frame, position in zip(source_clip, player_positions, strict=True)
+            ]
+        )
+        goal_only_source = np.empty_like(source_clip)
+        goal_only_source[:] = neutral
+        for label, action in enumerate(actions):
+            goal_yx = _counterfactual_goal(player, action, goal_distance, marker_radius)
+            if goal_yx is None:
+                raise ValueError("real grouped goal geometry differs")
+            goal_y, goal_x = goal_yx
+            goal_xy = [goal_x / 127.0, goal_y / 127.0]
+            generated = {
+                "full": np.stack([_mark_goal(frame, goal_xy, marker) for frame in source_clip]),
+                "player_masked": np.stack(
+                    [_mark_goal(frame, goal_xy, marker) for frame in masked_source]
+                ),
+                "goal_only": np.stack(
+                    [_mark_goal(frame, goal_xy, marker) for frame in goal_only_source]
+                ),
+            }
+            hashes: dict[str, str] = {}
+            for variant, clip in generated.items():
+                variant_rows[variant].append(clip)
+                hashes[variant] = hashlib.sha256(clip.tobytes()).hexdigest()
+            labels.append(label)
+            groups.append(group)
+            sample_rows.append(
+                {"group": group, "action": action, "goal_xy": [goal_x, goal_y], "hashes": hashes}
+            )
+    variants = {name: np.stack(rows).astype(np.uint8) for name, rows in variant_rows.items()}
+    labels_array = np.asarray(labels, dtype=np.int64)
+    groups_array = np.asarray(groups, dtype=np.int64)
+    duplicates = {
+        name: len(clips) - len({hashlib.sha256(clip.tobytes()).hexdigest() for clip in clips})
+        for name, clips in variants.items()
+    }
+    metadata: dict[str, object] = {
+        "source_session": basename,
+        "source_windows": group_rows,
+        "samples": sample_rows,
+        "duplicates_by_variant": duplicates,
+        "variant_sha256": {
+            name: hashlib.sha256(clips.tobytes()).hexdigest() for name, clips in variants.items()
+        },
+        "opened_shards": opened_shards,
+    }
+    return variants, labels_array, groups_array, metadata

@@ -1,0 +1,69 @@
+{
+  "schema_version": "movement-real-counterfactual-grouped-eval-v1",
+  "contract_sha256": "afb7cc2295d328371146e0f04dda2b59fe129d367ea2561850d966ffef39fa4f",
+  "localization_report_file_sha256": "11684e3d4050b9d45af3b18fb8fd2567f48e2597f0cfc9d8babdb420e42fc9e0",
+  "localization_report_sha256": "4ab5200b045620f8587a3aec604d20e0eddbdc58aff2dc70c31db36150ffb353",
+  "old_data_report_file_sha256": "c77e49bddedf043c598fadd5dc94723dfd2d97508e1b3b5a4a1c6749ecaaa721",
+  "old_data_report_sha256": "81b4aafdf01e24f4d600c20149b3f72be73c3712b609ab52f26dd8d4b43e2588",
+  "old_dataset_sha256": "0d17137539b12654d007e995eff8a697c78920b9de4a8d0eb91b5530690dd5bc",
+  "old_dataset_expected": {
+    "samples": 32,
+    "unique_clips": 29,
+    "duplicate_clips": 3,
+    "unique_source_windows": 5
+  },
+  "source_session": {
+    "basename": "teacher-session-002",
+    "summary_sha256": "ca8f6d315b736f96c040bbf3cd727dd9c295d75511834eaceb446fb06ab07216"
+  },
+  "color": {
+    "green_minimum": 85,
+    "green_red_margin": 18,
+    "green_blue_margin": 10,
+    "red_minimum": 105,
+    "red_green_margin": 28,
+    "red_blue_margin": 18
+  },
+  "components": {
+    "green_size": [20, 140],
+    "green_extent": [7, 24],
+    "red_size": [20, 240],
+    "red_extent": [5, 24],
+    "maximum_pair_l1_distance": 7.0,
+    "reset_after_missing_frames": 10
+  },
+  "excluded_ui_xyxy": [112, 0, 128, 16],
+  "action_order": ["STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE"],
+  "source_group_count": 5,
+  "sequence_frames": 16,
+  "frame_period_ms": 200,
+  "goal_distance_pixels": 20,
+  "stop_radius_pixels": 8.0,
+  "marker": {"rgb": [245, 225, 45], "radius": 7, "thickness": 2},
+  "player_mask_radius_pixels": 12,
+  "goal_only_rgb": [32, 32, 32],
+  "variants": ["full", "player_masked", "goal_only"],
+  "folds": 5,
+  "expected_model_runs": 15,
+  "training": {
+    "model": "task_specific_groupnorm_gru",
+    "seed": 0,
+    "batch_size": 8,
+    "updates": 200,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0
+  },
+  "gates": {
+    "minimum_full_mean_accuracy": 0.80,
+    "minimum_full_mean_macro_f1": 0.80,
+    "minimum_full_worst_fold_accuracy": 0.6666666666666666,
+    "minimum_full_per_class_recall": 0.60,
+    "minimum_control_accuracy_gain": 0.15
+  },
+  "checkpoints_persisted": 0,
+  "human_labels_consumed": false,
+  "test_allowed": false,
+  "formal_training_allowed": false,
+  "r2_allowed": false,
+  "device_input_allowed": false
+}

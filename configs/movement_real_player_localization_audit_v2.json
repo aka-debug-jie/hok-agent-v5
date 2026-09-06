@@ -1,0 +1,49 @@
+{
+  "schema_version": "movement-real-player-localization-audit-v2",
+  "contract_sha256": "e2b281d32b5376e03a61e8c7783fa7e19eccf2b49cf351f98613ca4dae0623cb",
+  "prior_report_file_sha256": "b0f01f205845d44b14be6bfe1c691093bbdd8c70c55bc2c7d0ef89a314ad1695",
+  "prior_report_sha256": "46596f93180baef63580180a2b3c2d44f58ba1c41fc606566278570336e14295",
+  "sessions": [
+    {"basename": "teacher-session-002", "summary_sha256": "ca8f6d315b736f96c040bbf3cd727dd9c295d75511834eaceb446fb06ab07216"},
+    {"basename": "teacher-session-003", "summary_sha256": "150eeca5e2cdb61535289145d12b87a956660c169d0e5fbddbdf5370e1fcba63"},
+    {"basename": "teacher-session-005", "summary_sha256": "74a436ed6482a0f0ae60bb6cc5f6e8459e35ae782b496173f1ff463b0663fb69"}
+  ],
+  "color": {
+    "green_minimum": 85,
+    "green_red_margin": 18,
+    "green_blue_margin": 10,
+    "red_minimum": 105,
+    "red_green_margin": 28,
+    "red_blue_margin": 18
+  },
+  "components": {
+    "green_size": [20, 140],
+    "green_extent": [7, 24],
+    "red_size": [20, 240],
+    "red_extent": [5, 24],
+    "maximum_pair_l1_distance": 7.0,
+    "reset_after_missing_frames": 10
+  },
+  "excluded_ui_xyxy": [112, 0, 128, 16],
+  "frame_period_ms": 200,
+  "response_lag_ms": 1000,
+  "qa_frames_per_supported_session": 12,
+  "developer_visual_qa": {
+    "teacher-session-002": "consistent_with_controlled_player",
+    "teacher-session-003": "fixed_ui_only",
+    "teacher-session-005": "fixed_ui_only"
+  },
+  "gates": {
+    "minimum_session002_filtered_coverage": 0.10,
+    "minimum_response_events": 10,
+    "minimum_positive_projection_fraction": 0.75,
+    "minimum_median_projection_pixels": 1.0,
+    "maximum_unsupported_session_coverage": 0.01,
+    "minimum_fixed_ui_coverage": 0.95
+  },
+  "human_training_labels_created": false,
+  "training_allowed": false,
+  "test_allowed": false,
+  "r2_allowed": false,
+  "device_input_allowed": false
+}

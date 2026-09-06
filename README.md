@@ -136,17 +136,36 @@ frozen-localizer action stage reached only 0.8125 accuracy and 0.871 loss. Synth
 now stopped. The next precondition is a high-resolution real-player-cue audit, not another toy-model
 head or longer training run.
 
-That player-cue audit passes on the three existing derived minimap sessions: coverage is
-0.9771/0.9960/0.9785 and jump p95 stays below 1.32 pixels. Its read-only composition with the Macro
-goal also passes availability and continuity gates, but the 4,455 frames contain only E/S/SE
-directions and are overwhelmingly S. The automatic cue still lacks independent semantic truth;
-`policy_training_allowed=false`, so this result does not open policy training or R2.
+Player-localization audit v2 invalidates the old near-continuous cue: it was primarily a fixed
+top-right UI marker. After excluding that region, only session 002 retains partial action-responsive
+coverage (0.1401); sessions 003/005 have no usable track. The old cue and continuity reports remain
+historical evidence and cannot authorize training or R2.
 
 A bounded real-counterfactual learnability check now reuses five non-overlapping source windows
 from session 002, changes only the hollow Macro goal ring, and forms the balanced 32-sample
 nine-action diagnostic. The task-specific GroupNorm+GRU fits it at accuracy 1.0 and loss 0.00732.
-This is a memorization result, not held-out-window or executed-action evidence; the checkpoint is
-diagnostic-only and formal training remains disabled.
+This is a memorization result, not held-out-window or executed-action evidence. The subsequent
+five-group evaluation confirms the limitation: full accuracy is 0.7778, versus 0.6889 with the
+player masked and 0.6667 from the target ring alone; its control gains miss the frozen 0.15 gate.
+The route is frozen as shortcut/no-generalization evidence, with no promoted checkpoint.
+
+The two frozen entrypoints are:
+
+```bash
+python -m hok_agent movement-mvp --mode real-player-localization-audit-v2 \
+  --config configs/movement_real_player_localization_audit_v2.json \
+  --prior-report "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-player-cue-v1/report.json" \
+  --session-root "$HOK_LARGE_ROOT/datasets/operation-movement-teacher-v1" \
+  --output-dir "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-player-localization-v2"
+python -m hok_agent movement-mvp --mode real-counterfactual-grouped-eval \
+  --config configs/movement_real_counterfactual_grouped_eval_v1.json \
+  --prior-report "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-player-localization-v2/report.json" \
+  --session-root "$HOK_LARGE_ROOT/datasets/operation-movement-teacher-v1" \
+  --dataset "$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/real-counterfactual-overfit32-v1/overfit32.npz" \
+  --overfit-report "$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/real-counterfactual-overfit32-v1/report.json" \
+  --output-dir "$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/real-counterfactual-grouped-v1" \
+  --device cuda
+```
 
 The plan supersedes the future schedule and growth proposals in the historical sections below.
 It does not change frozen results, reopen video-test, authorize phone control or start RL.

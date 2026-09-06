@@ -13,6 +13,7 @@ from hok_agent.movement_real_rgb import (
     materialize_real_counterfactual_overfit32,
     run_real_player_cue_preflight,
     run_real_player_goal_continuity,
+    run_real_player_localization_audit_v2,
     run_real_rgb_goal_canvas,
     run_real_rgb_preflight,
 )
@@ -24,6 +25,9 @@ PLAYER_CONTRACT = ROOT / "configs" / "movement_real_player_cue_v1.json"
 CONTINUITY_CONTRACT = ROOT / "configs" / "movement_real_player_goal_continuity_v1.json"
 COUNTERFACTUAL_DATA_CONTRACT = (
     ROOT / "configs" / "movement_real_counterfactual_overfit32_data_v1.json"
+)
+LOCALIZATION_AUDIT_CONTRACT = (
+    ROOT / "configs" / "movement_real_player_localization_audit_v2.json"
 )
 
 
@@ -115,6 +119,70 @@ def _goal_contract(tmp_path: Path, target: Path) -> tuple[Path, Path]:
     return contract_path, prior_path
 
 
+def _localization_audit_inputs(
+    tmp_path: Path, *, response_events: bool
+) -> tuple[Path, Path, Path]:
+    session_root = tmp_path / "localization-sessions"
+    declarations = []
+    for ordinal in range(3):
+        basename = f"teacher-session-00{2 if ordinal == 0 else 3 if ordinal == 1 else 5}"
+        directory = session_root / basename
+        (directory / "shards").mkdir(parents=True)
+        frames = np.zeros((192, 128, 128, 3), dtype=np.uint8)
+        for index, frame in enumerate(frames):
+            frame[6:14, 116:124] = (20, 180, 40)
+            frame[7:13, 111:117] = (200, 40, 30)
+            if ordinal == 0:
+                y = 40 + index // 5
+                frame[y : y + 8, 52:60] = (20, 180, 40)
+                frame[y + 1 : y + 7, 60:66] = (200, 40, 30)
+        sent = np.zeros(len(frames), dtype=np.uint8)
+        if ordinal == 0 and response_events:
+            sent[np.arange(0, 110, 10)] = 1
+        shard = directory / "shards" / "observations-0000.npz"
+        np.savez_compressed(
+            shard,
+            minimap_rgb=frames,
+            scheduled_elapsed_ms=np.arange(len(frames), dtype=np.int64) * 200,
+            movement_id=np.full(len(frames), 5, dtype=np.int8),
+            movement_input_sent=sent,
+        )
+        summary = {
+            "status": "PASSED",
+            "derived_roi_rgb_persisted": True,
+            "raw_frames_persisted": False,
+            "observation_shards": [
+                {
+                    "path": shard.name,
+                    "rows": len(frames),
+                    "sha256": hashlib.sha256(shard.read_bytes()).hexdigest(),
+                }
+            ],
+        }
+        summary["summary_sha256"] = _object_sha256(summary)
+        summary_path = directory / "summary.json"
+        summary_path.write_text(json.dumps(summary), encoding="utf-8")
+        declarations.append(
+            {
+                "basename": basename,
+                "summary_sha256": hashlib.sha256(summary_path.read_bytes()).hexdigest(),
+            }
+        )
+    prior = {"status": "REAL_PLAYER_CUE_PASSED"}
+    prior["report_sha256"] = _object_sha256(prior)
+    prior_path = tmp_path / "old-player-report.json"
+    prior_path.write_text(json.dumps(prior), encoding="utf-8")
+    contract = json.loads(LOCALIZATION_AUDIT_CONTRACT.read_text(encoding="utf-8"))
+    contract["sessions"] = declarations
+    contract["prior_report_file_sha256"] = hashlib.sha256(prior_path.read_bytes()).hexdigest()
+    contract["prior_report_sha256"] = prior["report_sha256"]
+    contract.pop("contract_sha256")
+    contract["contract_sha256"] = _object_sha256(contract)
+    contract_path = tmp_path / "localization-contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    return session_root, prior_path, contract_path
+
+
 def test_real_rgb_preflight_reads_only_selected_train_dev(tmp_path: Path) -> None:
     target, contract = _dataset(tmp_path, visible=True)
     output = tmp_path / "report"
@@ -133,6 +201,47 @@ def test_real_rgb_preflight_reads_only_selected_train_dev(tmp_path: Path) -> Non
     assert report["raw_rgb_persisted"] is False
     assert {path.name for path in output.iterdir()} == {"report.json"}
     assert not (target / "shards" / "must-not-open.npz").exists()
+
+
+def test_localization_v2_excludes_fixed_ui_and_requires_action_response(
+    tmp_path: Path,
+) -> None:
+    session_root, prior, contract = _localization_audit_inputs(
+        tmp_path, response_events=True
+    )
+    output = tmp_path / "localization-audit"
+    report = run_real_player_localization_audit_v2(
+        contract, prior, session_root, output
+    )
+    assert report["status"] == "PLAYER_CUE_PARTIAL_SESSION002_ONLY"
+    assert all(report["checks"].values())
+    sessions = {row["session"]: row for row in report["sessions"]}
+    assert sessions["teacher-session-002"]["filtered_candidate_coverage"] == 1.0
+    assert sessions["teacher-session-002"]["response_events"] == 11
+    assert sessions["teacher-session-002"]["positive_projection_fraction"] == 1.0
+    assert sessions["teacher-session-003"]["raw_candidate_coverage"] == 1.0
+    assert sessions["teacher-session-003"]["filtered_candidate_coverage"] == 0.0
+    assert sessions["teacher-session-003"]["rejected_ui_candidate_coverage"] == 1.0
+    assert sessions["teacher-session-005"]["filtered_candidate_coverage"] == 0.0
+    assert len(report["contact_sheets"]) == 3
+    assert {path.name for path in output.iterdir()} == {
+        "report.json",
+        "teacher-session-002-contact.png",
+        "teacher-session-003-contact.png",
+        "teacher-session-005-contact.png",
+    }
+
+    no_response_root, no_response_prior, no_response_contract = _localization_audit_inputs(
+        tmp_path / "no-response", response_events=False
+    )
+    failed = run_real_player_localization_audit_v2(
+        no_response_contract,
+        no_response_prior,
+        no_response_root,
+        tmp_path / "no-response-output",
+    )
+    assert failed["status"] == "PLAYER_CUE_V2_FAILED"
+    assert failed["checks"]["session002_response_events"] is False
 
 
 def test_real_rgb_preflight_reports_non_observable_without_training(tmp_path: Path) -> None:
