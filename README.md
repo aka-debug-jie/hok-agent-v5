@@ -170,6 +170,14 @@ The current green-ring cue confirms 9/16 dev frames and 0/16 train frames; overl
 and background grass remain limitations. This is a partial visual cue, not verified player identity
 or an action label. There is no training, device input, or navigation integration.
 
+Cached background comparison is available through the same mode with `--source-run <native-run>`:
+it reads no video and does not change RGB. Removing background candidates left confirmed counts
+unchanged (train 0, dev 9). The bounded `--train-visibility-scan` option subsequently sampled only
+the same train video's 5/10/15-percent windows, with confirmed counts 0/13/15 out of 16. Thus two
+clearer train-side clips exist without detector retuning or using dev as training. These are
+selected visual-cue examples from one source, not independent episodes or verified action data.
+The 15-percent clip is the preferred next perception-QA fixture; no model training is opened.
+
 The older diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
 
 ```bash

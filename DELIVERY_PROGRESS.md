@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `NATIVE_PLAYER_CUE_PARTIAL_NOT_PROMOTED`: native 256px map windows work; green-ring continuity confirms dev 9/16, train 0/16 | Unknown under occlusion; identity and training-source coverage unresolved; no training or navigation integration |
+| Engineering convergence | `NATIVE_TRAIN_VISIBLE_WINDOWS_FOUND_QA_ONLY`: fixed cue confirms 13/16 and 15/16 in two earlier windows of the same train video; original train window remains 0/16 | Selected perception QA only; not independent episodes, identity accuracy or policy training data |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: retain native-resolution evidence and separate visibility failures from identity uncertainty
-CURRENT STATUS: NATIVE_PLAYER_CUE_PARTIAL_NOT_PROMOTED; failed learned model and R0 remain frozen
-BLOCKING FAILURE: overlapping train portraits prevent confirmed tracking; dev has a partial green-ring cue, not independently verified identity
-NEXT ACCEPTANCE: inspect at most three earlier windows from the same train source; background pruning alone cannot recover the missing cue
-COMMAND STATUS: cached background audit complete; no new decoding or threshold changes in that audit; zero model runs
+CURRENT GOAL: use the existing clear train-side clips to check identity and coordinate stability
+CURRENT STATUS: NATIVE_TRAIN_VISIBLE_WINDOWS_FOUND_QA_ONLY; failed learned model and R0 remain frozen
+BLOCKING FAILURE: visual cue is available in selected clips but player identity and policy-label validity remain unverified
+NEXT ACCEPTANCE: perception QA on the saved 10/15-percent clips; no detector retuning, source expansion or training
+COMMAND STATUS: cached background audit plus one capped three-window train scan complete; dev/test untouched by the scan; zero model runs
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1146,6 +1146,44 @@ expansion was introduced.
 - Next bounded action is visibility screening of at most three earlier windows in the same
   approved train source. Dev/test will not be decoded or reassigned; a visible candidate is not
   sufficient to verify controlled-player identity or unlock training.
+
+### Train-only visibility screening (2026-09-06)
+
+- Added `--train-visibility-scan` to the existing native pilot rather than a new command or
+  protocol. It opens only the existing `0667d97c` train source and inspects exactly three fixed
+  windows at 5/10/15 percent, each 16 frames with unchanged 200 ms sampling, crop and ring rules.
+  The cached-audit path and source-scan flag cannot be combined. Dev/test video files are not
+  opened by this scan, and source identities/splits remain bound to the existing cohort.
+- Outcomes: 43.826–46.839 s gives 0/16 confirmed frames; 87.652–90.654 s gives 13/16;
+  131.478–134.470 s gives 15/16. The last window has a unique raw ring candidate in all 16
+  frames and loses only the first frame to confirmation warm-up. The middle window has a
+  briefly obscuring panel; unknown and reacquisition are retained. The earliest window and
+  original 20-percent window retain overlapping-portrait failures without threshold changes.
+- Developer inspected all three map sheets and both clearer main-view sheets. The candidates
+  follow the green portrait with main-view activity consistent with gameplay. This supports
+  selected cue visibility, not independently verified controlled-player identity or exact
+  coordinates. The main-view/hero appearance is not established as Houyi. These two useful
+  windows are from the same video, not two episodes; they are selected QA examples, not a
+  random benchmark or demonstrated model improvement. No policy training labels were created.
+- Preferred next QA fixture is `0667d97c-f15-native-window.npz`; the 10-percent fixture is a
+  retained short occlusion/reacquisition example. They are already saved; do not decode or
+  re-run the scan just to inspect them. All three windows, including the failure, remain in
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/native-train-visibility-v1`.
+- Report file/self SHA-256:
+  `3d36508a0b443fe7adf5a029f7c2c9a595f1bf68eec5d127662f628266cbb45d` /
+  `5ffc25862858e67e06b33a0931c266dbf9d28c2396cce0680544b6a0863bac54`.
+  All nine artifact hashes and the executed implementation hash were checked. New scan
+  artifacts total 22,040,523 bytes; 48 new sampled frames plus decoder preroll, zero GPU/model
+  runs and zero input. Cached audit report file hash is
+  `c2873757ffaeba51f7072f67db988923d99a82339f5b074de3cce491aba12bcc`.
+- Verification: 19 focused real-RGB/boundary tests passed for the cached audit; seven affected
+  native/ring/background selections passed after the scan extension, including a mechanical
+  check that only train is decoded at the three fixed fractions. Ruff, strict mypy on 70 source
+  files, project safety, artifact hashes and `git diff --check` passed. No historical full suite.
+- State is `NATIVE_TRAIN_VISIBLE_WINDOWS_FOUND_QA_ONLY`. Continue from saved clear clips, not
+  more background filtering or repeated attempts on occluded frames. Identity verification and
+  coordinate stability remain the next questions; formal Movement training and navigation
+  integration remain closed.
 
 ## Frozen Global Agent execution state
 

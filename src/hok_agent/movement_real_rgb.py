@@ -2491,7 +2491,7 @@ def run_real_player_tracking_audit(
     return report
 
 
-def _native_landscape_window(path: Path) -> dict[str, np.ndarray]:
+def _native_landscape_window(path: Path, *, start_fraction: float = 0.2) -> dict[str, np.ndarray]:
     """A 3-second development window; crop before resizing, never decode audio."""
     import av
 
@@ -2508,7 +2508,7 @@ def _native_landscape_window(path: Path) -> dict[str, np.ndarray]:
             raise ValueError("native window requires video duration and time base")
         if stream.width <= stream.height or pre_ingest._rotation(stream) != 0:
             raise ValueError("native pilot accepts the two landscape sources only")
-        start = int(stream.duration * 0.2)
+        start = int(stream.duration * start_fraction)
         start_us = round(start * stream.time_base * 1_000_000)
         container.seek(start, stream=stream, backward=True)
         for frame in container.decode(stream):
@@ -2548,6 +2548,8 @@ def run_native_player_pilot(
     cohort_dir: Path,
     pre_ingest_path: Path,
     output_dir: Path,
+    *,
+    train_visibility_scan: bool = False,
 ) -> dict[str, object]:
     """Materialize only the two identity-bound landscape development windows."""
     from PIL import Image, ImageDraw
@@ -2558,7 +2560,12 @@ def run_native_player_pilot(
     if output_dir.exists():
         raise ValueError("native pilot output already exists")
     cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
-    if any(cohort.session_splits.get(key) != split for key, split in NATIVE_PLAYER_SOURCES.items()):
+    selected_sources = {
+        identity: split
+        for identity, split in NATIVE_PLAYER_SOURCES.items()
+        if not train_visibility_scan or split == "train"
+    }
+    if any(cohort.session_splits.get(key) != split for key, split in selected_sources.items()):
         raise ValueError("native player source split binding differs")
     sources: dict[str, Path] = {}
     for path in pre_ingest._scan(source_root):
@@ -2571,19 +2578,26 @@ def run_native_player_pilot(
                 ]
             )
         )
-        if identity in NATIVE_PLAYER_SOURCES:
+        if identity in selected_sources:
             sources[identity] = path
-    if set(sources) != set(NATIVE_PLAYER_SOURCES):
+    if set(sources) != set(selected_sources):
         raise ValueError("native player source identities unavailable")
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
     rows: list[dict[str, object]] = []
-    for identity, path in sorted(sources.items()):
+    fractions = (0.05, 0.10, 0.15) if train_visibility_scan else (0.2,)
+    jobs = [
+        (identity, path, fraction)
+        for identity, path in sorted(sources.items())
+        for fraction in fractions
+    ]
+    for identity, path, fraction in jobs:
         if pre_ingest._candidate(path, source_root).candidate_id != identity:
             raise ValueError("native source identity changed")
-        arrays = _native_landscape_window(path)
+        arrays = _native_landscape_window(path, start_fraction=fraction)
         positions = green_ring_track(arrays["minimap_rgb"])
-        basename = identity[:8] + "-native-window.npz"
+        prefix = identity[:8] + (f"-f{round(fraction * 100):02d}" if train_visibility_scan else "")
+        basename = prefix + "-native-window.npz"
         np.savez_compressed(
             staging / basename,
             minimap_rgb=arrays["minimap_rgb"],
@@ -2601,9 +2615,9 @@ def run_native_player_pilot(
                 ImageDraw.Draw(sheet).ellipse(
                     (x + px - 16, y + py + 4, x + px + 16, y + py + 36), outline="magenta", width=2
                 )
-        qa_name = identity[:8] + "-minimap-qa.png"
+        qa_name = prefix + "-minimap-qa.png"
         sheet.save(staging / qa_name)
-        main_name = identity[:8] + "-main-qa.png"
+        main_name = prefix + "-main-qa.png"
         for index in range(16):
             x, y = index % 4 * 256, index // 4 * 276
             sheet.paste(Image.fromarray(arrays["main_rgb"][index]), (x, y + 20))
@@ -2611,6 +2625,7 @@ def run_native_player_pilot(
         rows.append(
             {
                 "session_hash": identity,
+                "start_fraction": fraction,
                 "split": NATIVE_PLAYER_SOURCES[identity],
                 "frames": 16,
                 "window_start_us": int(arrays["timestamp_us"][0]),
@@ -2628,11 +2643,14 @@ def run_native_player_pilot(
             }
         )
     report: dict[str, object] = {
-        "status": "NATIVE_LANDSCAPE_WINDOWS_MATERIALIZED_QA_ONLY",
+        "status": "NATIVE_TRAIN_VISIBILITY_SCAN_QA_ONLY"
+        if train_visibility_scan
+        else "NATIVE_LANDSCAPE_WINDOWS_MATERIALIZED_QA_ONLY",
         "cohort_sha256": cohort.cohort_sha256,
         "implementation_sha256": _file_sha256(Path(__file__)),
         "sessions": rows,
-        "start_fraction": 0.2,
+        "start_fractions": list(fractions),
+        "train_visibility_scan": train_visibility_scan,
         "sampling_period_ms": 200,
         "minimap_source_roi_xyxy_fraction": [0.025, 0.0, 0.215, 0.4],
         "main_source_roi_xyxy_fraction": [0.3, 0.15, 0.7, 0.85],

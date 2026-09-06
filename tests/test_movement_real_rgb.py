@@ -205,10 +205,12 @@ def test_native_pilot_opens_selected_sources_only(
         ),
     )
     decoded = []
+    fractions_seen = []
 
-    def decode(path):
+    def decode(path, *, start_fraction=0.2):
         assert path != paths[2]
         decoded.append(path)
+        fractions_seen.append(start_fraction)
         return {
             "minimap_rgb": np.zeros((16, 256, 256, 3), dtype=np.uint8),
             "main_rgb": np.zeros((16, 256, 256, 3), dtype=np.uint8),
@@ -223,6 +225,18 @@ def test_native_pilot_opens_selected_sources_only(
     assert report["test_frames_decoded"] == report["model_runs"] == 0
     assert report["action_labels_created"] is report["training_allowed"] is False
     assert len(list(output.glob("*.npz"))) == 2
+    scan = module.run_native_player_pilot(
+        raw,
+        tmp_path,
+        tmp_path,
+        tmp_path / "scan",
+        train_visibility_scan=True,
+    )
+    assert decoded[2:] == [paths[0]] * 3
+    assert fractions_seen[2:] == [0.05, 0.10, 0.15]
+    assert len(scan["sessions"]) == 3 and {row["split"] for row in scan["sessions"]} == {"train"}
+    assert {row["start_fraction"] for row in scan["sessions"]} == {0.05, 0.10, 0.15}
+    assert len(list((tmp_path / "scan").glob("*.npz"))) == 3
     with pytest.raises(ValueError, match="already exists"):
         module.run_native_player_pilot(raw, tmp_path, tmp_path, output)
     assert set(decoded) == set(paths[:2])

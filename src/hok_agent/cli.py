@@ -103,6 +103,7 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--source-root", type=Path)
     movement_mvp.add_argument("--cohort-dir", type=Path)
     movement_mvp.add_argument("--pre-ingest", type=Path)
+    movement_mvp.add_argument("--train-visibility-scan", action="store_true")
     movement_mvp.add_argument("--dataset", type=Path)
     movement_mvp.add_argument("--dataset-root", type=Path)
     movement_mvp.add_argument("--checkpoint", type=Path, action="append", default=[])
@@ -1430,6 +1431,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     device_name=args.device,
                 )
             elif args.mode == "native-player-pilot":
+                if args.source_run is not None and args.train_visibility_scan:
+                    raise ValueError(
+                        "cached audit and train visibility scan are separate operations"
+                    )
                 if args.source_run is not None:
                     from hok_agent.movement_real_rgb import audit_native_player_background
 
@@ -1442,7 +1447,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     from hok_agent.movement_real_rgb import run_native_player_pilot
 
                     result = run_native_player_pilot(
-                        args.source_root, args.cohort_dir, args.pre_ingest, args.output_dir
+                        args.source_root,
+                        args.cohort_dir,
+                        args.pre_ingest,
+                        args.output_dir,
+                        train_visibility_scan=args.train_visibility_scan,
                     )
             elif args.mode == "real-player-tracking-audit":
                 if args.session_root is None or args.prior_report is None:
