@@ -557,6 +557,96 @@ def test_counterfactual_goal_canvas_size_is_explicit() -> None:
         mark_pixel_goal(source, (2, 2))
 
 
+def test_native_death_banner_and_health_crops_use_frozen_geometry() -> None:
+    from hok_agent.movement_real_rgb import (
+        native_center_health_frame,
+        native_death_banner_evidence,
+    )
+
+    frame = np.zeros((720, 1600, 3), dtype=np.uint8)
+    frame[:22, 720:880] = (130, 30, 20)
+    frame[:2, 720:800] = (220, 220, 220)
+    visible, red_fraction, white_fraction = native_death_banner_evidence(frame)
+    assert visible is True
+    assert red_fraction >= 1000 / (160 * 22)
+    assert white_fraction >= 40 / (160 * 22)
+    frame[:22, 720:880] = 0
+    assert native_death_banner_evidence(frame)[0] is False
+    yy, xx = np.indices((720, 1600))
+    geometry = np.stack([xx % 256, yy % 256, np.zeros_like(xx)], axis=-1).astype(np.uint8)
+    health = native_center_health_frame(geometry)
+    assert health.shape == (128, 128, 3)
+    assert health[0, 0].tolist() == [224, 108, 0]
+    assert health[-1, -1].tolist() == [95, 99, 0]
+
+
+def test_native_death_preflight_opens_fixed_train_dev_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    from hok_agent import movement_real_rgb as module
+    from hok_agent import pre_ingest, v5_data
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    paths = [raw / f"{index}.mp4" for index in range(4)]
+    for path in paths:
+        path.write_bytes(b"dummy")
+    identities = [pre_ingest._candidate(path, raw).candidate_id for path in paths]
+    selected = {identities[0]: "train", identities[1]: "train", identities[2]: "dev"}
+    monkeypatch.setattr(module, "NATIVE_ANCHOR_AUDIT_SOURCES", selected)
+    monkeypatch.setattr(
+        v5_data,
+        "load_automatic_cohort",
+        lambda *_args: SimpleNamespace(
+            session_splits=selected | {identities[3]: "test"}, cohort_sha256="3" * 64
+        ),
+    )
+    opened: list[Path] = []
+
+    def scan(
+        path: Path,
+        session_hash: str,
+        split: str,
+        _contract: Path,
+        _qa_dir: Path,
+    ) -> dict[str, object]:
+        assert path != paths[3]
+        opened.append(path)
+        return {
+            "session_hash": session_hash,
+            "split": split,
+            "decoded_frames": 100,
+            "sampled_frames": 20,
+            "health_visible_fraction": 0.5,
+            "banner_frames": 5,
+            "banner_without_health_frames": 5,
+            "event_counts": {"DEATH": 1, "RESPAWN": 1},
+            "event_timestamps_ms": [],
+            "qa_basename": None,
+            "qa_sha256": None,
+            "candidate_qa_frames": 0,
+            "context_qa_frames": 3,
+            "source_locator_persisted": False,
+        }
+
+    monkeypatch.setattr(module, "_scan_native_death_source", scan)
+    output = tmp_path / "output"
+    report = module.run_native_death_cue_preflight(
+        raw, tmp_path, tmp_path, ROOT / "configs/hierarchical_event_e1_health.json", output
+    )
+    assert set(opened) == set(paths[:3])
+    assert report["status"] == "NATIVE_DEATH_CUE_PREFLIGHT_SUPPORTED"
+    assert report["positive_sessions"] == 3
+    assert report["video_test_opened"] is report["reward_allowed"] is False
+    assert report["input_commands_sent"] == report["model_runs"] == 0
+    with pytest.raises(ValueError, match="already exists"):
+        module.run_native_death_cue_preflight(
+            raw, tmp_path, tmp_path, ROOT / "configs/hierarchical_event_e1_health.json", output
+        )
+
+
 CONTRACT = ROOT / "configs" / "movement_real_rgb_preflight_v1.json"
 GOAL_CONTRACT = ROOT / "configs" / "movement_real_rgb_goal_canvas_v2.json"
 PLAYER_CONTRACT = ROOT / "configs" / "movement_real_player_cue_v1.json"

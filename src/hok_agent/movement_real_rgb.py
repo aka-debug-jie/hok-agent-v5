@@ -3298,3 +3298,270 @@ def materialize_native_anchor_counterfactual(
     (staging / "report.json").write_bytes(_canonical(report) + b"\n")
     staging.rename(output_dir)
     return report
+
+
+def native_death_banner_evidence(frame: np.ndarray) -> tuple[bool, float, float]:
+    """Scale the frozen 1600x720 death-banner pixel counts into fractions."""
+    if frame.ndim != 3 or frame.shape[2] != 3 or frame.dtype != np.uint8:
+        raise ValueError("native death banner requires uint8 RGB")
+    height, width = frame.shape[:2]
+    y1 = max(1, round(height * 22 / 720))
+    x0, x1 = round(width * 0.45), round(width * 0.55)
+    roi = frame[:y1, x0:x1].astype(np.int16)
+    red = (roi[..., 0] > 80) & (roi[..., 0] - roi[..., 1] > 20) & (roi[..., 0] - roi[..., 2] > 10)
+    white = (roi.min(axis=2) > 170) & (roi.max(axis=2) - roi.min(axis=2) < 45)
+    red_fraction = float(red.mean())
+    white_fraction = float(white.mean())
+    return (
+        red_fraction >= 1000 / (160 * 22) and white_fraction >= 40 / (160 * 22),
+        red_fraction,
+        white_fraction,
+    )
+
+
+def native_center_health_frame(frame: np.ndarray) -> np.ndarray:
+    if frame.ndim != 3 or frame.shape[2] != 3 or frame.dtype != np.uint8:
+        raise ValueError("native health crop requires uint8 RGB")
+    height, width = frame.shape[:2]
+    crop = frame[
+        round(height * 0.15) : round(height * 0.85),
+        round(width * 0.30) : round(width * 0.70),
+    ]
+    rows = np.linspace(0, crop.shape[0] - 1, 128).astype(np.int64)
+    columns = np.linspace(0, crop.shape[1] - 1, 128).astype(np.int64)
+    return np.ascontiguousarray(crop[rows[:, None], columns[None, :]])
+
+
+def _scan_native_death_source(
+    path: Path,
+    session_hash: str,
+    split: str,
+    health_contract_path: Path,
+    qa_dir: Path,
+) -> dict[str, object]:
+    import av
+    from PIL import Image, ImageDraw
+
+    from hok_agent import pre_ingest
+    from hok_agent.hierarchical_e1 import (
+        HealthBannerConsensusEngine,
+        detect_center_health_bar,
+        load_health_contract,
+    )
+    from hok_agent.visual_events import EventEngineIdentity, VisualEvent, VisualEventType
+
+    config, _contract, contract_sha256 = load_health_contract(health_contract_path)
+    identity = EventEngineIdentity("native-death-banner-preflight-v1", contract_sha256)
+    engine = HealthBannerConsensusEngine(session_hash, identity, config)
+    descriptor, opened = pre_ingest._open_regular(path)
+    decoded = 0
+    sampled = 0
+    health_visible = 0
+    banner_frames = 0
+    banner_without_health = 0
+    events: list[VisualEvent] = []
+    candidate_images: list[tuple[int, Image.Image]] = []
+    context_images: list[tuple[int, Image.Image]] = []
+    with os.fdopen(descriptor, "rb") as handle, av.open(handle, mode="r") as container:
+        streams = list(container.streams.video)
+        if len(streams) != 1:
+            raise ValueError("native death preflight requires one video stream")
+        stream = streams[0]
+        if (
+            stream.duration is None
+            or stream.time_base is None
+            or stream.width <= stream.height
+            or pre_ingest._rotation(stream) != 0
+        ):
+            raise ValueError("native death preflight requires landscape duration geometry")
+        duration_us = round(stream.duration * stream.time_base * 1_000_000)
+        context_targets = [round(duration_us * fraction) for fraction in (0.1, 0.5, 0.9)]
+        context_index = 0
+        first_us: int | None = None
+        next_sample_us: int | None = None
+        for video_frame in container.decode(stream):
+            decoded += 1
+            if video_frame.pts is None:
+                raise ValueError("native death preflight frame has no timestamp")
+            timestamp_us = round(video_frame.pts * stream.time_base * 1_000_000)
+            first_us = timestamp_us if first_us is None else first_us
+            next_sample_us = timestamp_us if next_sample_us is None else next_sample_us
+            if timestamp_us < next_sample_us:
+                continue
+            while next_sample_us <= timestamp_us:
+                next_sample_us += 200_000
+            rgb = video_frame.to_ndarray(format="rgb24")
+            health = detect_center_health_bar(native_center_health_frame(rgb), config)
+            banner, red_fraction, white_fraction = native_death_banner_evidence(rgb)
+            update = engine.update(
+                f"{session_hash}:{sampled:07d}",
+                timestamp_us * 1_000,
+                health,
+                banner,
+            )
+            events.extend(update.events)
+            sampled += 1
+            health_visible += int(health.visible)
+            banner_frames += int(banner)
+            banner_without_health += int(banner and not health.visible)
+            keep_candidate = banner and not health.visible and len(candidate_images) < 12
+            keep_context = (
+                context_index < len(context_targets)
+                and timestamp_us - first_us >= context_targets[context_index]
+            )
+            if keep_candidate or keep_context:
+                image = Image.fromarray(rgb)
+                image.thumbnail((320, 180))
+                draw = ImageDraw.Draw(image)
+                x0, x1 = round(image.width * 0.45), round(image.width * 0.55)
+                y1 = max(1, round(image.height * 22 / 720))
+                draw.rectangle((x0, 0, x1, y1), outline="yellow", width=2)
+                draw.text(
+                    (2, 2),
+                    f"t={timestamp_us / 1e6:.1f} b={int(banner)} h={int(health.visible)} "
+                    f"r={red_fraction:.3f} w={white_fraction:.3f}",
+                    fill="white",
+                    stroke_width=1,
+                    stroke_fill="black",
+                )
+                if keep_candidate:
+                    candidate_images.append((timestamp_us, image.copy()))
+                if keep_context:
+                    context_images.append((timestamp_us, image.copy()))
+                    context_index += 1
+        pre_ingest._assert_unchanged(handle.fileno(), opened)
+    images = [("candidate", *item) for item in candidate_images] + [
+        ("context", *item) for item in context_images
+    ]
+    qa_name = session_hash[:8] + "-death-cue-qa.png"
+    if images:
+        columns = 3
+        cell_width, cell_height = 320, 200
+        sheet = Image.new(
+            "RGB", (columns * cell_width, math.ceil(len(images) / columns) * cell_height)
+        )
+        for index, (kind, timestamp_us, image) in enumerate(images):
+            x, y = index % columns * cell_width, index // columns * cell_height
+            sheet.paste(image, (x, y + 20))
+            ImageDraw.Draw(sheet).text((x + 2, y + 2), f"{kind} {timestamp_us / 1e6:.1f}s")
+        sheet.save(qa_dir / qa_name)
+    counts = {
+        event_type.value: sum(event.event_type == event_type for event in events)
+        for event_type in (VisualEventType.DEATH, VisualEventType.RESPAWN)
+    }
+    return {
+        "session_hash": session_hash,
+        "split": split,
+        "decoded_frames": decoded,
+        "sampled_frames": sampled,
+        "health_visible_fraction": health_visible / sampled,
+        "banner_frames": banner_frames,
+        "banner_without_health_frames": banner_without_health,
+        "event_counts": counts,
+        "event_timestamps_ms": [
+            {"type": event.event_type.value, "end_ms": event.end_ns // 1_000_000}
+            for event in events
+            if event.event_type in {VisualEventType.DEATH, VisualEventType.RESPAWN}
+        ],
+        "qa_basename": qa_name if images else None,
+        "qa_sha256": _file_sha256(qa_dir / qa_name) if images else None,
+        "candidate_qa_frames": len(candidate_images),
+        "context_qa_frames": len(context_images),
+        "source_locator_persisted": False,
+    }
+
+
+def run_native_death_cue_preflight(
+    source_root: Path,
+    cohort_dir: Path,
+    pre_ingest_path: Path,
+    health_contract_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    from hok_agent import pre_ingest
+    from hok_agent.hierarchical_e1 import load_health_contract
+    from hok_agent.v5_data import load_automatic_cohort
+
+    if output_dir.exists():
+        raise ValueError("native death preflight output already exists")
+    _config, _contract, health_contract_sha256 = load_health_contract(health_contract_path)
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    if any(
+        cohort.session_splits.get(identity) != split
+        for identity, split in NATIVE_ANCHOR_AUDIT_SOURCES.items()
+    ):
+        raise ValueError("native death preflight split binding differs")
+    sources: dict[str, Path] = {}
+    for path in pre_ingest._scan(source_root):
+        identity = pre_ingest._candidate(path, source_root).candidate_id
+        if identity in NATIVE_ANCHOR_AUDIT_SOURCES:
+            sources[identity] = path
+    if set(sources) != set(NATIVE_ANCHOR_AUDIT_SOURCES):
+        raise ValueError("native death preflight source identities unavailable")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    sessions = [
+        _scan_native_death_source(
+            path,
+            identity,
+            NATIVE_ANCHOR_AUDIT_SOURCES[identity],
+            health_contract_path,
+            staging,
+        )
+        for identity, path in sorted(sources.items())
+    ]
+    positive = [
+        row
+        for row in sessions
+        if cast(dict[str, int], row["event_counts"])["DEATH"] >= 1
+        and cast(dict[str, int], row["event_counts"])["RESPAWN"] >= 1
+    ]
+    unpaired = [
+        row
+        for row in sessions
+        if (cast(dict[str, int], row["event_counts"])["DEATH"] > 0)
+        != (cast(dict[str, int], row["event_counts"])["RESPAWN"] > 0)
+    ]
+    checks = {
+        "minimum_positive_sessions": len(positive) >= 3,
+        "no_unpaired_sessions": not unpaired,
+        "train_dev_present": {row["split"] for row in sessions} == {"train", "dev"},
+        "qa_context_complete": all(cast(int, row["context_qa_frames"]) == 3 for row in sessions),
+    }
+    payload: dict[str, object] = {
+        "schema_version": "native-death-banner-health-preflight-v1",
+        "status": "NATIVE_DEATH_CUE_PREFLIGHT_SUPPORTED"
+        if all(checks.values())
+        else "NATIVE_DEATH_CUE_PREFLIGHT_INSUFFICIENT",
+        "cohort_sha256": cohort.cohort_sha256,
+        "health_contract_sha256": health_contract_sha256,
+        "implementation_sha256": _file_sha256(Path(__file__)),
+        "sampling_period_ms": 200,
+        "source_sessions": len(sessions),
+        "positive_sessions": len(positive),
+        "unpaired_sessions": len(unpaired),
+        "decoded_frames": sum(cast(int, row["decoded_frames"]) for row in sessions),
+        "sampled_frames": sum(cast(int, row["sampled_frames"]) for row in sessions),
+        "sessions": sessions,
+        "checks": checks,
+        "banner_roi_fraction": [0.45, 0.0, 0.55, 22 / 720],
+        "banner_red_fraction_minimum": 1000 / (160 * 22),
+        "banner_white_fraction_minimum": 40 / (160 * 22),
+        "threshold_origin": "frozen mobile death-banner pixel counts normalized by ROI area",
+        "candidate_definition": "HealthBannerConsensusEngine over 200ms raw-video samples",
+        "raw_full_resolution_frames_persisted": False,
+        "derived_full_view_qa_only": True,
+        "raw_source_locators_persisted": False,
+        "semantic_accuracy_verified": False,
+        "reward_allowed": False,
+        "training_allowed": False,
+        "promotion_allowed": False,
+        "video_test_opened": False,
+        "input_commands_sent": 0,
+        "model_runs": 0,
+        "gpu_seconds": 0,
+    }
+    payload["report_sha256"] = _object_sha256(payload)
+    (staging / "report.json").write_bytes(_canonical(payload) + b"\n")
+    staging.rename(output_dir)
+    return payload

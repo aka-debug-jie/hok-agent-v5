@@ -82,6 +82,7 @@ def _parser() -> argparse.ArgumentParser:
             "native-anchor-counterfactual-audit",
             "native-anchor-counterfactual-materialize",
             "native-anchor-relation-train",
+            "native-death-cue-preflight",
             "real-counterfactual-overfit32-materialize",
             "real-counterfactual-grouped-eval",
             "materialize-overfit32",
@@ -1413,7 +1414,22 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         elif args.command == "movement-mvp":
-            if args.mode == "real-counterfactual-grouped-eval":
+            if args.mode == "native-death-cue-preflight":
+                if args.source_root is None or args.cohort_dir is None or args.pre_ingest is None:
+                    raise ValueError(
+                        "native-death-cue-preflight requires --source-root, --cohort-dir "
+                        "and --pre-ingest"
+                    )
+                from hok_agent.movement_real_rgb import run_native_death_cue_preflight
+
+                result = run_native_death_cue_preflight(
+                    args.source_root,
+                    args.cohort_dir,
+                    args.pre_ingest,
+                    args.config,
+                    args.output_dir,
+                )
+            elif args.mode == "real-counterfactual-grouped-eval":
                 if (
                     args.session_root is None
                     or args.prior_report is None

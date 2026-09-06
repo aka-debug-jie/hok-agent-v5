@@ -66,6 +66,11 @@ The frozen two-cue consensus retains the sole known death/respawn and rejects bo
 hard-stop rising edges. It still has only one positive session, so Reward remains closed. The next
 bounded work may inspect at most 12 existing train/dev raw videos for a visible death-banner or
 countdown layout before materializing clips; do not infer labels from hard-stop outside its source.
+That 12-session raw-video preflight is complete and frozen domain-mismatched: the normalized mobile
+top-center cue repeatedly selects scoreboard/kill/persistent red UI, while center-health geometry
+is not cross-layout stable. Eleven paired automatic outputs are rejected by QA and one is unpaired.
+Do not repair thresholds, materialize death clips, train Reward, or branch to tower/economy weak
+labels without a new semantic source. Keep the zero-reward Event-to-Store baseline.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.
@@ -435,9 +440,10 @@ result and device-authorization restrictions continue to apply.
   `hierarchical_e1c_anchor.py`, and focused tests. The E1 terminal modules may decode only their
   frozen train/dev offline samples; they cannot open video-test, a live capture source, or any
   input surface.
-  `movement_real_rgb.py` may decode only the two cohort-bound landscape train/dev sources
-  selected by `native-player-pilot`, crop before resizing, and persist derived offline QA windows.
-  It cannot decode test, connect a device, create action labels or train from these windows.
+  `movement_real_rgb.py` may decode the cohort-bound landscape train/dev sources selected by
+  `native-player-pilot` and the fixed 8-train/4-dev death-cue preflight, crop before resizing, and
+  persist derived offline QA windows. It cannot decode test, connect a device, create action or
+  semantic death labels, or train from these windows.
 - No annotation UI is an active V5/V6 surface. The T8 calibration picker may use Tk only to pick
   in-memory layout coordinates for the owner-authorized self-built test app; it never writes a
   screenshot or creates training labels. `movement_real_rgb.py` may use Pillow only to write

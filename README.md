@@ -238,6 +238,13 @@ active, then confirms respawn only after the banner clears and health stabilizes
 The known positive remains 1/1, while both session-002 hard-stop rising edges are rejected. This
 improves candidate specificity but does not solve the one-positive-session data shortage.
 
+The capped 12-session raw-video preflight is also complete and rejected. It decoded 652,190
+train/dev frames and sampled 52,868 at 200 ms, but the normalized mobile banner ROI fires on
+scoreboards, kill notifications and persistent red UI. Eleven automatic paired sessions and one
+unpaired session are therefore not semantic death evidence. Developer QA shows active gameplay in
+candidate frames. The result is `NATIVE_DEATH_CUE_PREFLIGHT_DOMAIN_MISMATCH`; no threshold repair,
+clip materialization, Reward training or test access follows.
+
 ```bash
 python -m hok_agent.hierarchical_e1 \
   --contract configs/hierarchical_event_e1_health.json \

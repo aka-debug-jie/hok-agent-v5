@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `DEATH_BANNER_CONSENSUS_DATA_INSUFFICIENT`: two-cue engine preserves 1 known positive and rejects 2 misleading hard-stop rises | Inspect at most 12 existing train/dev videos for cross-layout banner/countdown visibility; Reward remains closed |
+| Engineering convergence | `NATIVE_DEATH_CUE_PREFLIGHT_DOMAIN_MISMATCH`: 12-session full scan shows mobile banner/health geometry does not transfer across video layouts | Keep zero-reward Event-to-Store baseline; no more weak Reward labels without a new semantic source |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: inspect cross-layout death-banner/countdown visibility in at most 12 existing train/dev videos
-CURRENT STATUS: DEATH_BANNER_CONSENSUS_DATA_INSUFFICIENT; Event-to-Store passes, Reward remains false
-BLOCKING FAILURE: consensus rejects misleading hard stops but still has only 1 positive operational session
-NEXT ACCEPTANCE: a fixed raw-video ROI/cue preflight with at least three non-test positive sessions and explicit occlusion rejection
-COMMAND STATUS: 8-session consensus complete; 1 positive, 7 negative, 2 rejected hard-stop rises; zero training/input
+CURRENT GOAL: freeze zero-reward Event-to-Store engineering baseline and stop unsupported Reward labeling
+CURRENT STATUS: NATIVE_DEATH_CUE_PREFLIGHT_DOMAIN_MISMATCH; no semantic death dataset or Reward
+BLOCKING FAILURE: mobile top-center and center-health geometry produces cross-layout UI false positives in all 12 raw-video sessions
+NEXT ACCEPTANCE: none in this lineage; a new semantic source is required before any death/tower/economy Reward work
+COMMAND STATUS: 652190 raw train/dev frames decoded once, 52868 sampled, QA rejected 11 paired automatic outputs; zero model/input/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1436,6 +1436,38 @@ expansion was introduced.
 - No video/test/model/GPU/input work occurred. Next is a capped 12-session train/dev raw-video
   visibility preflight for cross-layout banner/countdown cues; do not reuse local hard-stop bits
   as external-video labels.
+
+### Native raw-video death-cue preflight closure (2026-09-06)
+
+- Added `movement-mvp --mode native-death-cue-preflight` in the already video-allowlisted
+  `movement_real_rgb.py`. It binds the same fixed 8 train/4 dev anonymous landscape sessions and
+  cohort/privacy evidence used by the prior native audit. No test source is selected.
+- Sequentially decoded all 652,190 video frames once and sampled 52,868 observations at 200 ms.
+  The center-health input crops before resizing to 128. The independent banner ROI is normalized
+  from the frozen mobile `[720,0,880,22]` geometry; red/white minimum pixel counts become fixed
+  area fractions 0.28409/0.01136. No threshold was selected from these videos.
+- Automatic output superficially reports 11 paired positive sessions and one unpaired session.
+  This fails the no-unpaired gate. More importantly, banner detections number 118–850 frames per
+  session and 18–398 frames also lack the center health cue, inconsistent with a short death
+  overlay and indicating broad domain mismatch.
+- Developer inspected five representative train/dev contact sheets. The top-center ROI repeatedly
+  selects scoreboard values, kill notifications and persistent red UI; candidate frames visibly
+  show ongoing movement or combat. The center-health detector is also not identity/layout invariant.
+  Consequently all 11 automatic paired outputs are rejected as semantic death evidence; the QA
+  does not replace them with manual labels or estimate a true positive count.
+- Frozen conclusion is `NATIVE_DEATH_CUE_PREFLIGHT_DOMAIN_MISMATCH`, not a near-pass. Do not adjust
+  ROI, color fractions, health crop, confirmation timing or model capacity. Do not materialize
+  candidate clips, train Reward, open test or branch to tower/economy weak labels without a new
+  independent semantic source.
+- Evidence: `$HOK_LARGE_ROOT/audit/hierarchical-event-e1/native-death-cue-preflight-v1`.
+  Machine report file/self SHA-256:
+  `082d69886d505e034c8f9b1e68ce4f19566d485f323479d04e847f3fc406cca7` /
+  `5ae851ee573bf2f439af4ef729b73b1877ea3719fa7344738cc7201fb9a68885`.
+  QA conclusion file SHA-256:
+  `e32c9219892136d3fc4b366001a71fe77a37fc72c96b30dde5066da7f3434926`. Twelve contact sheets
+  plus reports occupy about 13.7 MiB; no full-resolution frame or source locator is persisted.
+- Tests cover normalized frozen pixel counts, exact center crop geometry, fixed train/dev source
+  selection, test exclusion and output immutability. GPU/model/input counts remain zero.
 
 ## Frozen Global Agent execution state
 
