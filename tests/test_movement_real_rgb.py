@@ -106,6 +106,81 @@ def test_ring_track_nearby_confirmation_missing_and_jump(monkeypatch: pytest.Mon
     assert p == [None, (101, 101), (102, 102), None, None, (104, 104), None, (201, 201)]
 
 
+def test_ring_regions_preserve_margin_and_explain_unknown() -> None:
+    from hok_agent.movement_real_rgb import _confirm_ring_candidates, _ring_diagnostic_region
+
+    assert _ring_diagnostic_region((100, 100)) == "interior"
+    assert _ring_diagnostic_region((215, 100)) == "edge_margin"
+    assert _ring_diagnostic_region((240, 100)) == "context"
+    positions, reasons = _confirm_ring_candidates(
+        [
+            [],
+            [(100, 100)],
+            [(101, 101)],
+            [(150, 150)],
+            [(151, 151), (152, 152)],
+        ]
+    )
+    assert positions == [None, None, (101, 101), None, None]
+    assert reasons == [
+        "no_ring_evidence",
+        "awaiting_confirmation",
+        "confirmed_visual_cue",
+        "discontinuous_candidate",
+        "ambiguous_candidates",
+    ]
+
+
+def test_cached_background_audit_never_decodes_and_rejects_tampering(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hok_agent import movement_real_rgb as module
+
+    source = tmp_path / "source"
+    source.mkdir()
+    rows = []
+    for identity, split in module.NATIVE_PLAYER_SOURCES.items():
+        name = identity[:8] + "-native-window.npz"
+        path = source / name
+        np.savez_compressed(path, minimap_rgb=np.zeros((16, 256, 256, 3), dtype=np.uint8))
+        rows.append(
+            {
+                "session_hash": identity,
+                "split": split,
+                "artifacts": [
+                    {"basename": name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                ],
+                "confirmed_green_ring_yx": [None] * 16,
+            }
+        )
+    report = {"status": "NATIVE_LANDSCAPE_WINDOWS_MATERIALIZED_QA_ONLY", "sessions": rows}
+    report["report_sha256"] = _object_sha256(report)
+    (source / "report.json").write_text(json.dumps(report))
+
+    def forbidden(*_args):
+        raise AssertionError("must not decode")
+
+    monkeypatch.setattr(module, "_native_landscape_window", forbidden)
+    result = module.audit_native_player_background(source, tmp_path / "audit")
+    assert result["video_frames_decoded"] == result["model_runs"] == 0
+    assert result["rgb_modified"] is result["runtime_filter_promoted"] is False
+    for session in result["sessions"]:
+        for variant in session["variants"].values():
+            assert variant["reason_counts"] == {"no_ring_evidence": 16}
+    with pytest.raises(ValueError, match="already exists"):
+        module.audit_native_player_background(source, tmp_path / "audit")
+    monkeypatch.setattr(module, "green_ring_candidates", lambda _frame: [(100, 100), (240, 100)])
+    filtered = module.audit_native_player_background(source, tmp_path / "filtered")
+    for session in filtered["sessions"]:
+        assert session["variants"]["unfiltered"]["confirmed_frames"] == 0
+        assert session["variants"]["interior_plus_edge"]["confirmed_frames"] == 15
+        assert session["candidate_regions"] == {"interior": 16, "context": 16}
+    (source / rows[0]["artifacts"][0]["basename"]).write_bytes(b"modified")
+    with pytest.raises(ValueError, match="hash differs"):
+        module.audit_native_player_background(source, tmp_path / "bad")
+
+
 def test_native_pilot_opens_selected_sources_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

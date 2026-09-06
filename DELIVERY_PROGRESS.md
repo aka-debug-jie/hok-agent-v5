@@ -425,8 +425,8 @@ results remain evidence and reusable components, not reopened parallel routes.
 CURRENT GOAL: retain native-resolution evidence and separate visibility failures from identity uncertainty
 CURRENT STATUS: NATIVE_PLAYER_CUE_PARTIAL_NOT_PROMOTED; failed learned model and R0 remain frozen
 BLOCKING FAILURE: overlapping train portraits prevent confirmed tracking; dev has a partial green-ring cue, not independently verified identity
-NEXT ACCEPTANCE: use cached frames to separate map/background and unknown reasons; never fill occluded positions or repurpose dev as training
-COMMAND STATUS: native-player-pilot CLI implemented; 32 unique sampled frames; integer-time regression fixed; zero model runs
+NEXT ACCEPTANCE: inspect at most three earlier windows from the same train source; background pruning alone cannot recover the missing cue
+COMMAND STATUS: cached background audit complete; no new decoding or threshold changes in that audit; zero model runs
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1124,6 +1124,28 @@ expansion was introduced.
   do not lower detection thresholds to force the occluded train window through, and do not feed
   the dev example back into training. Next inspect only the cached map/background separation and
   failure reasons before deciding whether additional visible train-only footage is useful.
+
+### Cached map/background diagnostic (2026-09-06)
+
+- Reused the existing native pilot via `--mode native-player-pilot --source-run <cached-run>`;
+  no new command or detector. Factored unchanged temporal confirmation into a reusable helper
+  that also explains unknown: no ring, ambiguity, first confirmation or discontinuity. The
+  unfiltered output is mechanically checked against the source report before comparison.
+- Compared provisional QA rectangles for interior, edge margin and external context. They are
+  not automatic semantic map masks or training labels. Filtering happens to candidate lists,
+  not pixels; the unsafe interior-only variant is diagnostic only and is not promoted.
+- Dev: 55 raw candidates comprise 14 interior, 22 edge-margin and 19 context candidates.
+  Keeping interior+edge leaves 36; interior-only leaves 14. All three variants confirm exactly
+  9/16 frames. Train: only one interior candidate, 15 frames without ring evidence, and zero
+  confirmed frames in every variant. Thus the tested background pruning cannot by itself repair
+  these windows; do not add more filtering or lower ring thresholds to force coverage.
+- Evidence: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/native-player-background-audit-v1/report.json`;
+  self hash `85898f623ba4bef21fd96b6cfff0c1ffca4a9df305b154e04ea971cc0374635a`.
+  It binds cached NPZ hashes and reproduces the frozen track. No RGB modification, video decode,
+  model run, GPU work, action label or runtime filter promotion occurred.
+- Next bounded action is visibility screening of at most three earlier windows in the same
+  approved train source. Dev/test will not be decoded or reassigned; a visible candidate is not
+  sufficient to verify controlled-player identity or unlock training.
 
 ## Frozen Global Agent execution state
 

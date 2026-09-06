@@ -68,22 +68,144 @@ def green_ring_candidates(frame: np.ndarray) -> list[tuple[int, int]]:
 
 def green_ring_track(frames: np.ndarray) -> list[tuple[int, int] | None]:
     """Only a unique observed ring can be confirmed; no extrapolation or identity claim."""
+    return _confirm_ring_candidates([green_ring_candidates(frame) for frame in frames])[0]
+
+
+def _confirm_ring_candidates(
+    rows: list[list[tuple[int, int]]],
+) -> tuple[list[tuple[int, int] | None], list[str]]:
     previous: tuple[int, int] | None = None
     positions: list[tuple[int, int] | None] = []
-    for frame in frames:
-        candidates = green_ring_candidates(frame)
+    reasons: list[str] = []
+    for row in rows:
+        candidates = row
         if previous is not None:
             nearby = [point for point in candidates if math.dist(previous, point) <= 12]
             if nearby:
                 candidates = nearby
         selected = candidates[0] if len(candidates) == 1 else None
-        positions.append(
-            selected
-            if previous is not None and selected is not None and math.dist(previous, selected) <= 12
-            else None
+        reason = (
+            "no_ring_evidence"
+            if not candidates
+            else "ambiguous_candidates"
+            if selected is None
+            else "awaiting_confirmation"
+            if previous is None
+            else "discontinuous_candidate"
+            if math.dist(previous, selected) > 12
+            else "confirmed_visual_cue"
         )
+        positions.append(selected if reason == "confirmed_visual_cue" else None)
+        reasons.append(reason)
         previous = selected
-    return positions
+    return positions, reasons
+
+
+def _ring_diagnostic_region(point: tuple[int, int]) -> str:
+    """Provisional QA envelopes, not semantic map boundaries or runtime masks."""
+    y, x = point
+    if 16 <= x < 224 and 0 <= y < 205:
+        return "interior"
+    if 4 <= x < 236 and 0 <= y < 225:
+        return "edge_margin"
+    return "context"
+
+
+def audit_native_player_background(source_run: Path, output_dir: Path) -> dict[str, object]:
+    """Compare spatial pruning using only the two cached windows; never modify RGB."""
+    if output_dir.exists():
+        raise ValueError("background audit output already exists")
+    source = _load_bound_json(source_run / "report.json", "report_sha256")
+    if source.get("status") != "NATIVE_LANDSCAPE_WINDOWS_MATERIALIZED_QA_ONLY":
+        raise ValueError("background audit requires native pilot evidence")
+    rows = cast(list[dict[str, object]], source["sessions"])
+    if {str(row["session_hash"]): row["split"] for row in rows} != NATIVE_PLAYER_SOURCES:
+        raise ValueError("background audit source sessions differ")
+    sessions: list[dict[str, object]] = []
+    for row in rows:
+        identity = str(row["session_hash"])
+        name = identity[:8] + "-native-window.npz"
+        artifact = next(
+            item
+            for item in cast(list[dict[str, object]], row["artifacts"])
+            if item["basename"] == name
+        )
+        path = source_run / name
+        if path.is_symlink() or _file_sha256(path) != artifact["sha256"]:
+            raise ValueError("background audit cached window hash differs")
+        with np.load(path, allow_pickle=False) as arrays:
+            frames = arrays["minimap_rgb"]
+            candidates = [green_ring_candidates(frame) for frame in frames]
+        variants: dict[str, object] = {}
+        for variant in ("unfiltered", "interior_plus_edge", "interior_only_diagnostic"):
+            kept = [
+                [
+                    point
+                    for point in points
+                    if variant == "unfiltered"
+                    or _ring_diagnostic_region(point) == "interior"
+                    or (
+                        variant == "interior_plus_edge"
+                        and _ring_diagnostic_region(point) == "edge_margin"
+                    )
+                ]
+                for points in candidates
+            ]
+            positions, reasons = _confirm_ring_candidates(kept)
+            if (
+                variant == "unfiltered"
+                and [list(p) if p is not None else None for p in positions]
+                != row["confirmed_green_ring_yx"]
+            ):
+                raise ValueError("background audit no longer reproduces the frozen tracker")
+            variants[variant] = {
+                "candidate_count": sum(map(len, kept)),
+                "confirmed_frames": sum(p is not None for p in positions),
+                "positions_yx": positions,
+                "reason_counts": dict(Counter(reasons)),
+                "reason_by_frame": reasons,
+                "frames_emptied_by_envelope": [
+                    i for i, points in enumerate(kept) if not points and candidates[i]
+                ],
+            }
+        sessions.append(
+            {
+                "session_hash": identity,
+                "split": row["split"],
+                "frames": len(candidates),
+                "cached_window_sha256": artifact["sha256"],
+                "candidate_regions": dict(
+                    Counter(_ring_diagnostic_region(p) for points in candidates for p in points)
+                ),
+                "candidates_yx": candidates,
+                "variants": variants,
+            }
+        )
+    report: dict[str, object] = {
+        "status": "NATIVE_BACKGROUND_ABLATION_DIAGNOSTIC_ONLY",
+        "source_report_sha256": source["report_sha256"],
+        "implementation_sha256": _file_sha256(Path(__file__)),
+        "sessions": sessions,
+        "diagnostic_interior_xyxy": [16, 0, 224, 205],
+        "diagnostic_expanded_xyxy": [4, 0, 236, 225],
+        "envelope_note": (
+            "provisional rectangles from existing QA; not exact map segmentation, "
+            "identity labels, or runtime masks"
+        ),
+        "candidate_thresholds_changed": False,
+        "rgb_modified": False,
+        "video_frames_decoded": 0,
+        "training_allowed": False,
+        "runtime_filter_promoted": False,
+        "controlled_player_identity_verified": False,
+        "input_commands_sent": 0,
+        "model_runs": 0,
+        "gpu_seconds": 0,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.mkdir(parents=True)
+    (output_dir / "report.json").write_bytes(_canonical(report) + b"\n")
+    return report
 
 
 def _canonical(value: object) -> bytes:

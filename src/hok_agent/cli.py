@@ -1430,15 +1430,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                     device_name=args.device,
                 )
             elif args.mode == "native-player-pilot":
-                if args.source_root is None or args.cohort_dir is None or args.pre_ingest is None:
+                if args.source_run is not None:
+                    from hok_agent.movement_real_rgb import audit_native_player_background
+
+                    result = audit_native_player_background(args.source_run, args.output_dir)
+                elif args.source_root is None or args.cohort_dir is None or args.pre_ingest is None:
                     raise ValueError(
                         "native-player-pilot requires --source-root, --cohort-dir and --pre-ingest"
                     )
-                from hok_agent.movement_real_rgb import run_native_player_pilot
+                else:
+                    from hok_agent.movement_real_rgb import run_native_player_pilot
 
-                result = run_native_player_pilot(
-                    args.source_root, args.cohort_dir, args.pre_ingest, args.output_dir
-                )
+                    result = run_native_player_pilot(
+                        args.source_root, args.cohort_dir, args.pre_ingest, args.output_dir
+                    )
             elif args.mode == "real-player-tracking-audit":
                 if args.session_root is None or args.prior_report is None:
                     raise ValueError(
