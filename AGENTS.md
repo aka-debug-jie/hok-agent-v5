@@ -62,6 +62,10 @@ three required, with seven negative sessions and no false death events. Session 
 hard-stop frames but zero frozen-engine death events, so hard-stop is not a death label. The next
 cycle may only seek additional dynamic candidates in existing train/dev video using a separately
 observable second cue; do not change E1a thresholds or open test/Reward/training/device input.
+The frozen two-cue consensus retains the sole known death/respawn and rejects both session-002
+hard-stop rising edges. It still has only one positive session, so Reward remains closed. The next
+bounded work may inspect at most 12 existing train/dev raw videos for a visible death-banner or
+countdown layout before materializing clips; do not infer labels from hard-stop outside its source.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

@@ -232,6 +232,12 @@ despite six legacy hard-stop frames, confirming that hard-stop is not a death la
 three positive sessions are unavailable, so death Reward remains closed. Future work must source
 additional dynamic candidates from existing train/dev video without treating bar absence as truth.
 
+A two-cue consensus diagnostic is now available with `--banner-consensus`. It confirms death only
+when the frozen health state is `DEAD` while the independently derived death-banner hard-stop is
+active, then confirms respawn only after the banner clears and health stabilizes to `ALIVE`.
+The known positive remains 1/1, while both session-002 hard-stop rising edges are rejected. This
+improves candidate specificity but does not solve the one-positive-session data shortage.
+
 ```bash
 python -m hok_agent.hierarchical_e1 \
   --contract configs/hierarchical_event_e1_health.json \

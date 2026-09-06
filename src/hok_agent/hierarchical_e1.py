@@ -345,6 +345,97 @@ class HealthTemporalEventEngine:
         return HealthUpdate(state, tuple(emitted))
 
 
+class HealthBannerConsensusEngine:
+    """Confirm health-state death with the independent full-frame banner hard stop."""
+
+    def __init__(
+        self,
+        episode_id: str,
+        identity: EventEngineIdentity,
+        config: HealthBarConfig,
+    ) -> None:
+        self.episode_id = episode_id
+        self.health = HealthTemporalEventEngine(episode_id, identity, config)
+        self.fusion = ExactOnceEventFusion(identity)
+        self._pending_death: VisualEvent | None = None
+        self._pending_respawn: VisualEvent | None = None
+        self._death_confirmed = False
+        self._event_sequence = 0
+
+    def _consensus_event(
+        self,
+        event_type: VisualEventType,
+        source: VisualEvent,
+        end_ns: int,
+    ) -> VisualEvent:
+        self._event_sequence += 1
+        event_id = f"{self.episode_id}:consensus-{self._event_sequence:04d}:{event_type.value}"
+        return VisualEvent(
+            event_id=event_id,
+            event_type=event_type,
+            start_ns=source.start_ns,
+            end_ns=max(source.end_ns, end_ns),
+            old_value=source.old_value,
+            new_value=source.new_value,
+            delta=None,
+            confidence=source.confidence,
+            roi_id="main_center_health_bar+death_banner_state",
+            dedup_key=f"{self.episode_id}:consensus:{event_type.value}",
+            source=EventSource.RGB_FUSION,
+        )
+
+    def update(
+        self,
+        observation_id: str,
+        timestamp_ns: int,
+        evidence: HealthBarEvidence,
+        hard_stop: bool,
+    ) -> HealthUpdate:
+        health_update = self.health.update(observation_id, timestamp_ns, evidence)
+        emitted = [
+            event
+            for event in health_update.events
+            if event.event_type == VisualEventType.SELF_HP_DELTA
+        ]
+        for event in health_update.events:
+            if event.event_type == VisualEventType.DEATH:
+                self._pending_death = event
+            elif event.event_type == VisualEventType.RESPAWN:
+                self._pending_respawn = event
+        if (
+            not self._death_confirmed
+            and hard_stop
+            and health_update.state.life_state == LifeState.DEAD
+            and self._pending_death is not None
+        ):
+            event = self._consensus_event(VisualEventType.DEATH, self._pending_death, timestamp_ns)
+            if self.fusion.accept(event):
+                emitted.append(event)
+            self._death_confirmed = True
+        if (
+            self._death_confirmed
+            and not hard_stop
+            and health_update.state.life_state == LifeState.ALIVE
+            and self._pending_respawn is not None
+        ):
+            event = self._consensus_event(
+                VisualEventType.RESPAWN, self._pending_respawn, timestamp_ns
+            )
+            if self.fusion.accept(event):
+                emitted.append(event)
+            self._death_confirmed = False
+            self._pending_death = None
+            self._pending_respawn = None
+        elif (
+            not self._death_confirmed
+            and health_update.state.life_state == LifeState.ALIVE
+            and self._pending_respawn is not None
+        ):
+            self._pending_death = None
+            self._pending_respawn = None
+        return HealthUpdate(health_update.state, tuple(emitted))
+
+
 def _load_session_frames(session: AuditSession) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if session.directory.is_symlink() or not session.directory.is_dir():
         raise E1Error("audit session must be a regular directory")
@@ -881,6 +972,124 @@ def audit_existing_health_candidates(
     return payload
 
 
+def _consensus_session_report(
+    session: AuditSession,
+    config: HealthBarConfig,
+    identity: EventEngineIdentity,
+) -> dict[str, object]:
+    frames, timestamps_ms, hard_stops = _load_session_frames(session)
+    engine = HealthBannerConsensusEngine(session.session_id, identity, config)
+    events: list[VisualEvent] = []
+    for sequence, (frame, timestamp_ms, hard_stop) in enumerate(
+        zip(frames, timestamps_ms, hard_stops, strict=True)
+    ):
+        update = engine.update(
+            f"{session.session_id}:{sequence:06d}",
+            int(timestamp_ms) * 1_000_000,
+            detect_center_health_bar(frame, config),
+            bool(hard_stop),
+        )
+        events.extend(update.events)
+    counts = {
+        event_type.value: sum(event.event_type == event_type for event in events)
+        for event_type in (
+            VisualEventType.DEATH,
+            VisualEventType.RESPAWN,
+            VisualEventType.SELF_HP_DELTA,
+        )
+    }
+    health_counts = {
+        event_type.value: sum(
+            event.event_type == event_type for event in engine.health.fusion.accepted
+        )
+        for event_type in (VisualEventType.DEATH, VisualEventType.RESPAWN)
+    }
+    rising_edges = int(np.sum(hard_stops & ~np.pad(hard_stops[:-1], (1, 0))))
+    rejected_rising_edges = max(0, rising_edges - counts["DEATH"])
+    summary_path = session.directory / "summary.json"
+    return {
+        "session_id": session.session_id,
+        "summary_sha256": _sha(summary_path.read_bytes()),
+        "frames": len(frames),
+        "legacy_hard_stop_frames": int(hard_stops.sum()),
+        "legacy_hard_stop_rising_edges": rising_edges,
+        "rejected_hard_stop_rising_edges": rejected_rising_edges,
+        "health_event_counts": health_counts,
+        "consensus_event_counts": counts,
+        "source_locator_persisted": False,
+    }
+
+
+def audit_existing_health_banner_consensus(
+    contract_path: Path,
+    sessions: tuple[AuditSession, ...],
+    output_dir: Path,
+) -> dict[str, object]:
+    if output_dir.exists() or output_dir.is_symlink():
+        raise E1Error("health banner consensus output already exists")
+    config, _contract, contract_sha256 = load_health_contract(contract_path)
+    identity = EventEngineIdentity("observable-death-banner-consensus-v1", contract_sha256)
+    rows = [_consensus_session_report(session, config, identity) for session in sessions]
+    if len(rows) < 3 or len({row["session_id"] for row in rows}) != len(rows):
+        raise E1Error("health banner consensus requires unique existing sessions")
+    positive = [
+        row
+        for row in rows
+        if cast(dict[str, int], row["consensus_event_counts"])["DEATH"] >= 1
+        and cast(dict[str, int], row["consensus_event_counts"])["RESPAWN"] >= 1
+    ]
+    negative = [
+        row
+        for row in rows
+        if cast(dict[str, int], row["consensus_event_counts"])["DEATH"] == 0
+        and cast(dict[str, int], row["consensus_event_counts"])["RESPAWN"] == 0
+    ]
+    unpaired = [
+        row
+        for row in rows
+        if (cast(dict[str, int], row["consensus_event_counts"])["DEATH"] > 0)
+        != (cast(dict[str, int], row["consensus_event_counts"])["RESPAWN"] > 0)
+    ]
+    rejected_edges = sum(cast(int, row["rejected_hard_stop_rising_edges"]) for row in rows)
+    checks = {
+        "known_positive_preserved": len(positive) >= 1,
+        "minimum_positive_sessions": len(positive) >= 3,
+        "minimum_negative_sessions": len(negative) >= 3,
+        "no_unpaired_sessions": not unpaired,
+        "independent_hard_stop_rejections_observed": rejected_edges >= 1,
+    }
+    payload: dict[str, object] = {
+        "schema_version": "observable-death-banner-consensus-audit-v1",
+        "status": "DEATH_BANNER_CONSENSUS_CANDIDATES_SUPPORTED"
+        if all(checks.values())
+        else "DEATH_BANNER_CONSENSUS_DATA_INSUFFICIENT",
+        "health_contract_sha256": contract_sha256,
+        "event_engine_version": identity.version,
+        "event_engine_sha256": identity.sha256,
+        "sessions": rows,
+        "session_count": len(rows),
+        "positive_sessions": len(positive),
+        "negative_sessions": len(negative),
+        "unpaired_sessions": len(unpaired),
+        "rejected_hard_stop_rising_edges": rejected_edges,
+        "checks": checks,
+        "semantic_accuracy_verified": False,
+        "reward_allowed": False,
+        "training_allowed": False,
+        "promotion_allowed": False,
+        "video_test_opened": False,
+        "video_frames_decoded": 0,
+        "input_commands_sent": 0,
+        "model_runs": 0,
+    }
+    payload["report_sha256"] = _sha(_canonical(payload))
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    (staging / "report.json").write_bytes(_canonical(payload) + b"\n")
+    os.replace(staging, output_dir)
+    return payload
+
+
 def _session(raw: str, role: SessionRole) -> AuditSession:
     session_id, separator, path = raw.partition("=")
     if not separator or not session_id or "/" in session_id:
@@ -897,6 +1106,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--replay-health-report", type=Path)
     parser.add_argument("--replay-session", type=Path)
     parser.add_argument("--candidate-session", action="append", default=[])
+    parser.add_argument("--banner-consensus", action="store_true")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.candidate_session:
@@ -908,13 +1118,22 @@ def main(argv: list[str] | None = None) -> int:
             or args.challenge
         ):
             raise E1Error("health candidate audit arguments must be exclusive")
-        payload = audit_existing_health_candidates(
-            args.contract,
-            tuple(_session(value, "challenge_false_positive") for value in args.candidate_session),
-            args.output_dir,
+        candidate_sessions = tuple(
+            _session(value, "challenge_false_positive") for value in args.candidate_session
+        )
+        payload = (
+            audit_existing_health_banner_consensus(
+                args.contract, candidate_sessions, args.output_dir
+            )
+            if args.banner_consensus
+            else audit_existing_health_candidates(
+                args.contract, candidate_sessions, args.output_dir
+            )
         )
         print(json.dumps(payload, sort_keys=True))
         return 0
+    if args.banner_consensus:
+        raise E1Error("--banner-consensus requires --candidate-session")
     if args.replay_health_report is not None or args.replay_session is not None:
         if (
             args.replay_health_report is None

@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `DEATH_RESPAWN_CANDIDATES_INSUFFICIENT`: Event-to-Store passes, but only 1/8 existing operational sessions has paired death/respawn | Seek a second visual cue in existing train/dev video; Reward, training, test and device stages remain closed |
+| Engineering convergence | `DEATH_BANNER_CONSENSUS_DATA_INSUFFICIENT`: two-cue engine preserves 1 known positive and rejects 2 misleading hard-stop rises | Inspect at most 12 existing train/dev videos for cross-layout banner/countdown visibility; Reward remains closed |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: locate a second dynamic death cue in existing train/dev video without semantic labels
-CURRENT STATUS: DEATH_RESPAWN_CANDIDATES_INSUFFICIENT; Event-to-Store passes, Reward remains false
-BLOCKING FAILURE: only 1 of 8 existing operational sessions contains paired frozen-engine death/respawn
-NEXT ACCEPTANCE: at least three non-test video sessions with health disappearance plus an independent countdown/respawn visual cue
-COMMAND STATUS: 7080 derived frames inventoried; 1 positive, 7 negative, 0 unpaired; zero training/input
+CURRENT GOAL: inspect cross-layout death-banner/countdown visibility in at most 12 existing train/dev videos
+CURRENT STATUS: DEATH_BANNER_CONSENSUS_DATA_INSUFFICIENT; Event-to-Store passes, Reward remains false
+BLOCKING FAILURE: consensus rejects misleading hard stops but still has only 1 positive operational session
+NEXT ACCEPTANCE: a fixed raw-video ROI/cue preflight with at least three non-test positive sessions and explicit occlusion rejection
+COMMAND STATUS: 8-session consensus complete; 1 positive, 7 negative, 2 rejected hard-stop rises; zero training/input
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1408,6 +1408,34 @@ expansion was introduced.
 - Focused tests cover one-positive/three-negative failure, paired-event accounting, zero-hard-stop
   false-positive gate, path-free report and immutable output. Next work may only search existing
   train/dev video for an independent death countdown/respawn cue; E1a thresholds remain frozen.
+
+### Health plus death-banner consensus (2026-09-06)
+
+- Added `HealthBannerConsensusEngine` without changing the frozen health detector. It retains
+  SELF_HP_DELTA events, buffers a health-derived death, and confirms DEATH only while the existing
+  full-frame death-banner hard-stop is active. It confirms RESPAWN only after the banner clears
+  and health returns to stable ALIVE. Episode-local fusion keeps each event exact-once.
+- Unit evidence proves neither cue is sufficient alone: health disappearance without hard-stop
+  and hard-stop while health stays visible both emit no death. A reporting test also covers the
+  banner appearing before the three-frame health confirmation; rejected rising edges are settled
+  after the full session, not prematurely counted.
+- The same eight-session inventory was rerun with `--banner-consensus`. The known death-stop
+  session retains exactly one DEATH and one RESPAWN. Session 002 has two hard-stop rising edges;
+  both are rejected because health remains alive. The other six sessions remain event-free.
+  There are seven negatives, zero unpaired sessions and two rejected misleading rises.
+- The known-positive, negative-support, no-unpaired and rejection checks pass; the frozen minimum
+  of three positive sessions still fails. Status is `DEATH_BANNER_CONSENSUS_DATA_INSUFFICIENT`.
+  This improves candidate specificity but does not verify semantic accuracy or authorize Reward.
+- Report: `$HOK_LARGE_ROOT/audit/hierarchical-event-e1/death-banner-consensus-v1/report.json`;
+  file/self SHA-256:
+  `921b45d55a0f086ecb8de95178db362bf54c0f771daf146119c628864cd97e95` /
+  `e4bc50722c3c4b23561b7ae195b1188ecdd23d7f12bd53b0a6b4dc208094f9f7`.
+  The 3,919-byte report persists no source locators. An 18-frame developer-only main/HUD contact
+  sheet supports the visible dim/death/return sequence; it is not a training label. Its SHA-256 is
+  `2b58fbfc4b8bb5b9284675a31b49dfd7a5b1181bf92c6bd4f2caeb278d3097bf`.
+- No video/test/model/GPU/input work occurred. Next is a capped 12-session train/dev raw-video
+  visibility preflight for cross-layout banner/countdown cues; do not reuse local hard-stop bits
+  as external-video labels.
 
 ## Frozen Global Agent execution state
 

@@ -9,7 +9,9 @@ import pytest
 from hok_agent.hierarchical_e1 import (
     AuditSession,
     E1Error,
+    HealthBannerConsensusEngine,
     HealthTemporalEventEngine,
+    audit_existing_health_banner_consensus,
     audit_existing_health_candidates,
     audit_health_sessions,
     detect_center_health_bar,
@@ -67,6 +69,40 @@ def test_health_temporal_engine_emits_hp_death_and_respawn_once() -> None:
     assert events[0].delta == -0.5
     assert update.state.life_state == LifeState.ALIVE
     assert len(engine.fusion.accepted) == 3
+
+
+def test_health_banner_consensus_requires_both_cues_and_respawn_stability() -> None:
+    config, _contract, contract_sha = load_health_contract(CONTRACT)
+
+    def run(runs: list[int], stops: list[bool]) -> list[VisualEventType]:
+        engine = HealthBannerConsensusEngine(
+            "episode-consensus",
+            EventEngineIdentity("health-banner-consensus-v1", contract_sha),
+            config,
+        )
+        events = []
+        for index, (length, stop) in enumerate(zip(runs, stops, strict=True)):
+            events.extend(
+                engine.update(
+                    f"obs-{index}",
+                    index * 200_000_000,
+                    detect_center_health_bar(_frame(length), config),
+                    stop,
+                ).events
+            )
+        return [event.event_type for event in events]
+
+    paired = run(
+        [12, 12, 12, 0, 0, 0, 0, 0, 12, 12, 12, 12],
+        [False, False, False, False, False, False, True, True, True, False, False, False],
+    )
+    assert paired == [VisualEventType.DEATH, VisualEventType.RESPAWN]
+    health_only = run([12, 12, 12, 0, 0, 0, 0, 12, 12, 12], [False] * 10)
+    assert VisualEventType.DEATH not in health_only
+    banner_only = run(
+        [12] * 10, [False, False, False, True, True, False, False, False, False, False]
+    )
+    assert VisualEventType.DEATH not in banner_only
 
 
 def _write_session(path: Path, runs: list[int], hard_stops: list[int]) -> None:
@@ -208,7 +244,8 @@ def test_existing_health_candidate_audit_freezes_insufficient_positive_sessions(
         [12, 12, 12, 0, 0, 0, 0, 12, 12, 12],
         [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
     )
-    for path in (negative_a, negative_b, negative_c):
+    _write_session(negative_a, [12] * 10, [0, 0, 0, 1, 1, 0, 0, 0, 0, 0])
+    for path in (negative_b, negative_c):
         _write_session(path, [12] * 10, [0] * 10)
     output = tmp_path / "candidate-audit"
     report = audit_existing_health_candidates(
@@ -230,5 +267,24 @@ def test_existing_health_candidate_audit_freezes_insufficient_positive_sessions(
     }
     assert report["reward_allowed"] is report["training_allowed"] is False
     assert str(tmp_path) not in (output / "report.json").read_text()
+    consensus = audit_existing_health_banner_consensus(
+        CONTRACT,
+        tuple(
+            AuditSession(path.name, "challenge_false_positive", path)
+            for path in (positive, negative_a, negative_b, negative_c)
+        ),
+        tmp_path / "consensus-audit",
+    )
+    assert consensus["status"] == "DEATH_BANNER_CONSENSUS_DATA_INSUFFICIENT"
+    assert consensus["positive_sessions"] == 1 and consensus["negative_sessions"] == 3
+    assert consensus["rejected_hard_stop_rising_edges"] == 1
+    assert consensus["checks"] == {
+        "known_positive_preserved": True,
+        "minimum_positive_sessions": False,
+        "minimum_negative_sessions": True,
+        "no_unpaired_sessions": True,
+        "independent_hard_stop_rejections_observed": True,
+    }
+    assert consensus["reward_allowed"] is consensus["training_allowed"] is False
     with pytest.raises(E1Error, match="already exists"):
         audit_existing_health_candidates(CONTRACT, (), output)
