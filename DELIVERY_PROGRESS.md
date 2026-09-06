@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `WEAK_VISUAL_ANCHOR_COHORT_INSUFFICIENT`: 8/4-session audit passes train support but dev has only 2/4 supported sessions | One four-session dev coverage repair allowed; detector/gates/windows frozen; no training |
+| Engineering convergence | `WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY`: one fixed repair reaches train 7/8/130 and dev 6/8/171 | Build session-isolated nine-direction counterfactual data gate; identity and policy training remain closed |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: run one frozen four-session dev coverage repair for the weak visual anchor
-CURRENT STATUS: WEAK_VISUAL_ANCHOR_COHORT_INSUFFICIENT; failed learned model and R0 remain frozen
-BLOCKING FAILURE: train passes 7/8 and 130 frames; dev reaches only 2/4 supported sessions despite 64 frames
-NEXT ACCEPTANCE: add four unseen dev sessions in anonymous order with unchanged detector/windows/gates; stop if combined support remains below 3
-COMMAND STATUS: first 12-session/36-window audit complete and immutable; no training or checkpoint
+CURRENT GOAL: build a session-isolated nine-direction weak-anchor counterfactual data gate
+CURRENT STATUS: WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY; identity/policy promotion remain false
+BLOCKING FAILURE: coverage now passes, but no causal nine-class dataset or learned relation evidence exists
+NEXT ACCEPTANCE: confirmed window-end anchors only, nine targets per group, train/dev session isolation and geometry support
+COMMAND STATUS: v1 failure immutable; one v2 coverage repair complete; no training or checkpoint
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1247,6 +1247,33 @@ expansion was introduced.
   freezing the detector, fractions, support definition and all v1 evidence. It cannot tune from
   dev, change the 3-session gate or train a policy. If combined support remains below three dev
   sessions, stop the green-ring weak-supervision route.
+
+### Weak visual-anchor dev coverage repair v2 (2026-09-06)
+
+- Added one separately versioned `native-anchor-cohort-repair` mode. It requires the immutable v1
+  failed report and validates its source identities, status and five gate outcomes. Four new dev
+  landscape sessions were selected in anonymous hash order: `cdcad062`, `d13bfda2`, `d41ffac3`,
+  `d81cc35a`. Detection thresholds, 10/30/60-percent windows, support definitions and all v1
+  artifacts remain unchanged.
+- The repair adds 12 windows/192 frames and combines counts with v1 without copying or rewriting
+  prior artifacts. Combined train remains 7/8 supported sessions and 130 confirmed frames; dev
+  rises from 2/4/64 to 6/8/171. All five frozen gates pass, including session split isolation.
+- Developer inspected all eight new map/main sheets. Confirmed cues follow plausible green
+  portraits rather than the old fixed corner UI; shop overlays, clustered portraits and absent
+  rings still produce unknown. This QA does not independently verify controlled-player identity,
+  Houyi identity, semantic accuracy or action correctness.
+- Result: `WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY`. It authorizes only a new data audit for
+  session-isolated counterfactual visual-anchor relations. It does not authorize Movement policy
+  training, deployment, phone input, reward or RL.
+- Evidence: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/native-anchor-cohort-repair-v2`;
+  report file/self SHA-256:
+  `6a2c4baa305485d8959157a2675d7300b00d2daea58658b8811fdc02b8679896` /
+  `9b051154b9275e9914aff338509e3a6f88a95ef0eff4b413a5b2257ad528e79a`.
+  The 13 new files occupy 32,131,242 bytes and bind the v1 report file/self hashes. GPU/model/input
+  counts remain zero; no test frame or raw source locator was persisted.
+- Focused tests cover prior-report binding, exact four-source decode, 12 new group calls, combined
+  support and non-promoting flags. Affected real-RGB/boundary tests, Ruff, strict mypy, project
+  safety and `git diff --check` passed.
 
 ## Frozen Global Agent execution state
 

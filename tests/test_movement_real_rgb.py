@@ -345,6 +345,97 @@ def test_native_anchor_cohort_audit_keeps_groups_and_splits(
     assert report["policy_action_labels_created"] is False
 
 
+def test_native_anchor_repair_adds_only_four_new_dev_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    from hok_agent import movement_real_rgb as module
+    from hok_agent import pre_ingest, v5_data
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    paths = [raw / f"{index:02d}.mp4" for index in range(17)]
+    for path in paths:
+        path.write_bytes(b"dummy")
+    identities = [pre_ingest._candidate(path, raw).candidate_id for path in paths]
+    original = {
+        identity: "train" if index < 8 else "dev" for index, identity in enumerate(identities[:12])
+    }
+    repair = {identity: "dev" for identity in identities[12:16]}
+    monkeypatch.setattr(module, "NATIVE_ANCHOR_AUDIT_SOURCES", original)
+    monkeypatch.setattr(module, "NATIVE_ANCHOR_REPAIR_SOURCES", repair)
+    monkeypatch.setattr(
+        v5_data,
+        "load_automatic_cohort",
+        lambda *_args: SimpleNamespace(
+            session_splits=original | repair | {identities[16]: "test"},
+            cohort_sha256="2" * 64,
+        ),
+    )
+    old_sessions = [
+        {
+            "session_hash": identity,
+            "split": split,
+            "supported_session": (index < 7 if split == "train" else index < 10),
+            "confirmed_frames": (
+                19
+                if split == "train" and index < 6
+                else 16
+                if split == "train" and index == 6
+                else 32
+                if split == "dev" and index < 10
+                else 0
+            ),
+        }
+        for index, (identity, split) in enumerate(original.items())
+    ]
+    prior = {
+        "schema_version": "native-weak-visual-anchor-cohort-audit-v1",
+        "status": "WEAK_VISUAL_ANCHOR_COHORT_INSUFFICIENT",
+        "checks": {
+            "train_supported_sessions": True,
+            "dev_supported_sessions": False,
+            "train_confirmed_frames": True,
+            "dev_confirmed_frames": True,
+            "session_split_isolation": True,
+        },
+        "sessions": old_sessions,
+    }
+    prior["report_sha256"] = _object_sha256(prior)
+    prior_path = tmp_path / "prior.json"
+    prior_path.write_text(json.dumps(prior))
+    frames = np.zeros((16, 256, 256, 3), dtype=np.uint8)
+    yy, xx = np.indices((256, 256))
+    distance = np.hypot(yy - 100, xx - 110)
+    frames[:, (distance >= 9) & (distance <= 11)] = (20, 220, 30)
+    decoded: list[Path] = []
+
+    def decode(path: Path, *, start_fraction: float = 0.2) -> dict[str, np.ndarray]:
+        assert path not in paths[:12] and path != paths[16]
+        decoded.append(path)
+        return {
+            "minimap_rgb": frames.copy(),
+            "main_rgb": np.zeros_like(frames),
+            "timestamp_us": np.arange(16) * 200_000,
+            "native_crop_sha256": np.asarray(["b" * 64] * 16, dtype="U64"),
+        }
+
+    monkeypatch.setattr(module, "_native_landscape_window", decode)
+    output = tmp_path / "repair"
+    report = module.run_native_anchor_cohort_audit(
+        raw, tmp_path, tmp_path, output, prior_report_path=prior_path
+    )
+    assert report["schema_version"] == "native-weak-visual-anchor-cohort-audit-v2"
+    assert report["status"] == "WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY"
+    assert len(decoded) == 12 and set(decoded) == set(paths[12:16])
+    assert report["source_sessions"] == 16 and report["new_source_sessions"] == 4
+    assert report["windows"] == 48 and report["new_windows"] == 12
+    assert report["support"]["train"]["sessions"] == 8
+    assert report["support"]["dev"]["supported_sessions"] == 6
+    assert report["training_allowed"] is report["promotion_allowed"] is False
+
+
 CONTRACT = ROOT / "configs" / "movement_real_rgb_preflight_v1.json"
 GOAL_CONTRACT = ROOT / "configs" / "movement_real_rgb_goal_canvas_v2.json"
 PLAYER_CONTRACT = ROOT / "configs" / "movement_real_player_cue_v1.json"

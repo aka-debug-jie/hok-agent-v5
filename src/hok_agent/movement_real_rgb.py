@@ -44,6 +44,12 @@ NATIVE_ANCHOR_AUDIT_SOURCES = {
     "c84d549a0e1c149f294883b897830229f68bda9f36011be788034aba7e68df88": "dev",
 }
 NATIVE_ANCHOR_AUDIT_FRACTIONS = (0.1, 0.3, 0.6)
+NATIVE_ANCHOR_REPAIR_SOURCES = {
+    "cdcad0621f8abec83ccd66c5feed2fb14347b2ad82e2aae46c862b48129b609e": "dev",
+    "d13bfda28eb4057a05e62528074b0c540f6c7aada944d67c2d44f1ea3802d72d": "dev",
+    "d41ffac336abbb96f5b2c9dc96662f53ebc324c2dcd90449779f7bf032f75cba": "dev",
+    "d81cc35a4e461a3052d59e344f79b1cc9adbf8d07c9b9343d18a8f13ab2adab5": "dev",
+}
 
 
 def green_ring_candidates(frame: np.ndarray) -> list[tuple[int, int]]:
@@ -2760,6 +2766,8 @@ def run_native_anchor_cohort_audit(
     cohort_dir: Path,
     pre_ingest_path: Path,
     output_dir: Path,
+    *,
+    prior_report_path: Path | None = None,
 ) -> dict[str, object]:
     """Audit fixed weak-anchor coverage across 8 train and 4 dev source sessions."""
     from PIL import Image, ImageDraw
@@ -2770,17 +2778,40 @@ def run_native_anchor_cohort_audit(
     if output_dir.exists():
         raise ValueError("native anchor audit output already exists")
     cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    source_bindings = (
+        NATIVE_ANCHOR_REPAIR_SOURCES
+        if prior_report_path is not None
+        else NATIVE_ANCHOR_AUDIT_SOURCES
+    )
+    prior: dict[str, object] | None = None
+    if prior_report_path is not None:
+        prior = _load_bound_json(prior_report_path, "report_sha256")
+        prior_sessions = cast(list[dict[str, object]], prior.get("sessions"))
+        if (
+            prior.get("schema_version") != "native-weak-visual-anchor-cohort-audit-v1"
+            or prior.get("status") != "WEAK_VISUAL_ANCHOR_COHORT_INSUFFICIENT"
+            or prior.get("checks")
+            != {
+                "train_supported_sessions": True,
+                "dev_supported_sessions": False,
+                "train_confirmed_frames": True,
+                "dev_confirmed_frames": True,
+                "session_split_isolation": True,
+            }
+            or {str(row["session_hash"]): row["split"] for row in prior_sessions}
+            != NATIVE_ANCHOR_AUDIT_SOURCES
+        ):
+            raise ValueError("native anchor repair prior report differs")
     if any(
-        cohort.session_splits.get(identity) != split
-        for identity, split in NATIVE_ANCHOR_AUDIT_SOURCES.items()
+        cohort.session_splits.get(identity) != split for identity, split in source_bindings.items()
     ):
         raise ValueError("native anchor audit split binding differs")
     sources: dict[str, Path] = {}
     for path in pre_ingest._scan(source_root):
         identity = pre_ingest._candidate(path, source_root).candidate_id
-        if identity in NATIVE_ANCHOR_AUDIT_SOURCES:
+        if identity in source_bindings:
             sources[identity] = path
-    if set(sources) != set(NATIVE_ANCHOR_AUDIT_SOURCES):
+    if set(sources) != set(source_bindings):
         raise ValueError("native anchor audit source identities unavailable")
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
@@ -2849,7 +2880,7 @@ def run_native_anchor_cohort_audit(
         sessions.append(
             {
                 "session_hash": identity,
-                "split": NATIVE_ANCHOR_AUDIT_SOURCES[identity],
+                "split": source_bindings[identity],
                 "windows": window_rows,
                 "supported_session": supported,
                 "confirmed_frames": sum(cast(int, row["confirmed_frames"]) for row in window_rows),
@@ -2859,14 +2890,22 @@ def run_native_anchor_cohort_audit(
                 ],
             }
         )
+    combined_sessions = (
+        cast(list[dict[str, object]], prior["sessions"]) + sessions
+        if prior is not None
+        else sessions
+    )
     support = {
         split: {
-            "sessions": sum(row["split"] == split for row in sessions),
+            "sessions": sum(row["split"] == split for row in combined_sessions),
             "supported_sessions": sum(
-                row["split"] == split and bool(row["supported_session"]) for row in sessions
+                row["split"] == split and bool(row["supported_session"])
+                for row in combined_sessions
             ),
             "confirmed_frames": sum(
-                cast(int, row["confirmed_frames"]) for row in sessions if row["split"] == split
+                cast(int, row["confirmed_frames"])
+                for row in combined_sessions
+                if row["split"] == split
             ),
         }
         for split in ("train", "dev")
@@ -2877,26 +2916,40 @@ def run_native_anchor_cohort_audit(
         "train_confirmed_frames": support["train"]["confirmed_frames"] >= 128,
         "dev_confirmed_frames": support["dev"]["confirmed_frames"] >= 48,
         "session_split_isolation": not (
-            {row["session_hash"] for row in sessions if row["split"] == "train"}
-            & {row["session_hash"] for row in sessions if row["split"] == "dev"}
+            {row["session_hash"] for row in combined_sessions if row["split"] == "train"}
+            & {row["session_hash"] for row in combined_sessions if row["split"] == "dev"}
         ),
     }
     passed = all(checks.values())
     report: dict[str, object] = {
-        "schema_version": "native-weak-visual-anchor-cohort-audit-v1",
+        "schema_version": (
+            "native-weak-visual-anchor-cohort-audit-v2"
+            if prior is not None
+            else "native-weak-visual-anchor-cohort-audit-v1"
+        ),
         "status": "WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY"
         if passed
         else "WEAK_VISUAL_ANCHOR_COHORT_INSUFFICIENT",
         "cohort_sha256": cohort.cohort_sha256,
         "implementation_sha256": _file_sha256(Path(__file__)),
-        "source_sessions": len(sessions),
-        "windows": len(sessions) * len(NATIVE_ANCHOR_AUDIT_FRACTIONS),
-        "frames": len(sessions) * len(NATIVE_ANCHOR_AUDIT_FRACTIONS) * 16,
+        "source_sessions": len(combined_sessions),
+        "new_source_sessions": len(sessions),
+        "windows": len(combined_sessions) * len(NATIVE_ANCHOR_AUDIT_FRACTIONS),
+        "new_windows": len(sessions) * len(NATIVE_ANCHOR_AUDIT_FRACTIONS),
+        "frames": len(combined_sessions) * len(NATIVE_ANCHOR_AUDIT_FRACTIONS) * 16,
+        "new_frames": len(sessions) * len(NATIVE_ANCHOR_AUDIT_FRACTIONS) * 16,
         "fractions": list(NATIVE_ANCHOR_AUDIT_FRACTIONS),
         "selection_note": (
-            "fixed after a separate 15-percent exploratory preflight; formal windows exclude "
-            "that fraction and are not a random benchmark"
+            "four new dev sources selected in anonymous hash order after v1 failure; detector, "
+            "fractions, support definition and v1 evidence unchanged"
+            if prior is not None
+            else "fixed after a separate 15-percent exploratory preflight; formal windows "
+            "exclude that fraction and are not a random benchmark"
         ),
+        "prior_report_file_sha256": (
+            _file_sha256(prior_report_path) if prior_report_path is not None else None
+        ),
+        "prior_report_sha256": prior["report_sha256"] if prior is not None else None,
         "support": support,
         "checks": checks,
         "sessions": sessions,

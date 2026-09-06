@@ -194,6 +194,13 @@ Train support passes at 7/8 sessions and 130 confirmed frames; dev reaches only 
 and non-universal ring presentation. One separately versioned coverage repair may add four new,
 anonymous-order dev sessions without changing detection or windows; it cannot rewrite this result.
 
+That one repair is complete. Four new anonymous-order dev sessions raise combined dev support to
+6/8 sessions and 171 confirmed frames; train remains 7/8 and 130. All original gates now pass and
+the result is `WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY`. It still creates no action labels and
+does not verify controlled-player or Houyi identity. The next step is a session-isolated data gate
+for nine counterfactual target directions using only window-end confirmed anchors; model training
+remains closed until that gate passes.
+
 The older diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
 
 ```bash

@@ -78,6 +78,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-player-tracking-audit",
             "native-player-pilot",
             "native-anchor-cohort-audit",
+            "native-anchor-cohort-repair",
             "real-counterfactual-overfit32-materialize",
             "real-counterfactual-grouped-eval",
             "materialize-overfit32",
@@ -1431,16 +1432,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.output_dir,
                     device_name=args.device,
                 )
-            elif args.mode == "native-anchor-cohort-audit":
+            elif args.mode in {"native-anchor-cohort-audit", "native-anchor-cohort-repair"}:
                 if args.source_root is None or args.cohort_dir is None or args.pre_ingest is None:
                     raise ValueError(
                         "native-anchor-cohort-audit requires --source-root, "
                         "--cohort-dir and --pre-ingest"
                     )
+                if args.mode == "native-anchor-cohort-repair" and args.prior_report is None:
+                    raise ValueError("native-anchor-cohort-repair requires --prior-report")
                 from hok_agent.movement_real_rgb import run_native_anchor_cohort_audit
 
                 result = run_native_anchor_cohort_audit(
-                    args.source_root, args.cohort_dir, args.pre_ingest, args.output_dir
+                    args.source_root,
+                    args.cohort_dir,
+                    args.pre_ingest,
+                    args.output_dir,
+                    prior_report_path=(
+                        args.prior_report if args.mode == "native-anchor-cohort-repair" else None
+                    ),
                 )
             elif args.mode == "native-player-pilot":
                 if args.source_run is not None and args.train_visibility_scan:
