@@ -178,6 +178,14 @@ clearer train-side clips exist without detector retuning or using dev as trainin
 selected visual-cue examples from one source, not independent episodes or verified action data.
 The 15-percent clip is the preferred next perception-QA fixture; no model training is opened.
 
+Identity/coordinate QA on the two clear cached clips is now complete. All 112 supported
+translation comparisons have zero equivariance error, with unchanged confirmation/unknown counts;
+conversion back to the actual source sampling grid is exact. These are geometric checks, not
+localization accuracy. Enlarged portraits are visually consistent across the two clips, but
+controlled-player identity and Houyi identity remain unverified. Retain these as non-promoting
+perception regression fixtures; do not repeat the same QA or treat their coordinates as action
+labels or game-world ground truth.
+
 The older diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
 
 ```bash

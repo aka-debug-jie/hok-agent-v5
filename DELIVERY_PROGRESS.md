@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `NATIVE_TRAIN_VISIBLE_WINDOWS_FOUND_QA_ONLY`: fixed cue confirms 13/16 and 15/16 in two earlier windows of the same train video; original train window remains 0/16 | Selected perception QA only; not independent episodes, identity accuracy or policy training data |
+| Engineering convergence | `NATIVE_COORDINATE_GEOMETRY_PASSED_IDENTITY_QA_ONLY`: two clear clips pass supported translation and source-coordinate checks | Non-promoting visual-anchor fixtures; controlled-player identity, action labels and training remain unverified/closed |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: use the existing clear train-side clips to check identity and coordinate stability
-CURRENT STATUS: NATIVE_TRAIN_VISIBLE_WINDOWS_FOUND_QA_ONLY; failed learned model and R0 remain frozen
-BLOCKING FAILURE: visual cue is available in selected clips but player identity and policy-label validity remain unverified
-NEXT ACCEPTANCE: perception QA on the saved 10/15-percent clips; no detector retuning, source expansion or training
-COMMAND STATUS: cached background audit plus one capped three-window train scan complete; dev/test untouched by the scan; zero model runs
+CURRENT GOAL: retain the completed visual-anchor regression evidence without promoting semantic claims
+CURRENT STATUS: NATIVE_COORDINATE_GEOMETRY_PASSED_IDENTITY_QA_ONLY; failed learned model and R0 remain frozen
+BLOCKING FAILURE: geometric consistency is established locally, not controlled-player identity or policy-label validity
+NEXT ACCEPTANCE: no repeat QA on these clips; define a weak visual-anchor learning scope before any new learning work
+COMMAND STATUS: cached identity/coordinate QA complete; source sampling conversion implemented; zero model runs
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1184,6 +1184,37 @@ expansion was introduced.
   more background filtering or repeated attempts on occluded frames. Identity verification and
   coordinate stability remain the next questions; formal Movement training and navigation
   integration remain closed.
+
+### Cached identity and coordinate closure (2026-09-06)
+
+- Used only the saved 10/15-percent train windows: 32 original cached frames from one source.
+  Added a sampled-map-cell to source-screen-pixel conversion and fixed translation diagnostics,
+  with tests for axis order, exact sampling-grid round trips, unchanged input arrays and zero
+  evidence not being misreported as a successful comparison. No decoder or new CLI was added.
+- Four shifts, up/down/left/right by 4 pixels, preserve every baseline confirmation/unknown
+  decision. All 112 supported comparisons have zero coordinate equivariance error. These are
+  transformed observations of 28 confirmed frames, not 112 independent examples or a measured
+  localization accuracy. Adjacent point displacement maxima are 3.00/2.24 pixels, medians 1/1;
+  these include real movement and quantization and must not be called localization error.
+- The conversion uses the exact integer linspace sampling grid and the hash-bound 2400x1080
+  source geometry from the recoverability report. Round trips are exact for every confirmed
+  point. Output is source-screen XY, not game-world coordinates or a proven lane mapping.
+- Enlarged portrait/main/map QA is visually consistent with the same moving green portrait in
+  both windows, unlike the historical fixed corner UI. Camera panning/viewport overlays are
+  visible in the 10-percent clip; main-view screen center is not used as a position label.
+  Independent self identity, Houyi identity, action supervision and global semantic accuracy
+  remain unverified. Stop repeated inspections of the same selected examples here.
+- Evidence: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/native-player-coordinate-identity-v1`;
+  report file SHA-256 `57837b07ba8d8c28713478c03a6067d7451c514ec20ae48ef20d36a0a171505a`;
+  `identity-contact.png` SHA-256
+  `77b65f181d49942f4801825d07d40fd6dca31605335f220eb590c21f662b1c7c`.
+  The report binds source NPZ/geometry/implementation hashes. No raw video, dev/test, model,
+  GPU, new action labels or device input was involved.
+- Verification: 21 focused real-RGB/boundary tests, Ruff, strict mypy on 70 source files,
+  project safety and `git diff --check` passed. State is
+  `NATIVE_COORDINATE_GEOMETRY_PASSED_IDENTITY_QA_ONLY`. These are fixed non-promoting perception
+  fixtures; any future weak visual-anchor learning task must state its own limited purpose
+  and cannot reopen failed Movement training or relabel these coordinates as ground truth.
 
 ## Frozen Global Agent execution state
 

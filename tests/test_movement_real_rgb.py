@@ -86,6 +86,41 @@ def test_ring_cue_requires_hollow_shape_and_rgb() -> None:
         green_ring_candidates(rgb[:128])
 
 
+def test_native_coordinate_axes_match_sampling_grid() -> None:
+    from hok_agent.movement_real_rgb import native_map_point_to_source_xy
+
+    rows = np.linspace(0, round(1080 * 0.4) - 1, 256).astype(int)
+    columns = np.linspace(round(2400 * 0.025), round(2400 * 0.215) - 1, 256).astype(int)
+    for i in range(256):
+        x, y = native_map_point_to_source_xy((i, 255 - i), (2400, 1080))
+        assert (x, y) == (columns[255 - i], rows[i])
+        assert int(np.argmin(abs(columns - x))) == 255 - i
+        assert int(np.argmin(abs(rows - y))) == i
+    with pytest.raises(ValueError, match="outside"):
+        native_map_point_to_source_xy((256, 0), (2400, 1080))
+
+
+def test_native_translation_reports_support_and_rejects_vacuous_success() -> None:
+    from hok_agent.movement_real_rgb import native_coordinate_diagnostic
+
+    frames = np.zeros((4, 256, 256, 3), dtype=np.uint8)
+    yy, xx = np.indices((256, 256))
+    for i, frame in enumerate(frames):
+        distance = np.hypot(yy - 100 - i, xx - 110)
+        frame[(distance >= 9) & (distance <= 11)] = (20, 220, 30)
+    original = frames.copy()
+    result = native_coordinate_diagnostic(frames)
+    assert np.array_equal(frames, original)
+    assert result["confirmed_frames"] == 3
+    for row in result["translations"]:
+        assert row["compared_frames"] == 3
+        assert row["maximum_equivariance_error_pixels"] == 0
+        assert row["lost_confirmations"] == row["new_confirmations"] == 0
+    empty = native_coordinate_diagnostic(np.zeros_like(frames))
+    assert empty["confirmed_frames"] == 0
+    assert all(row["maximum_equivariance_error_pixels"] is None for row in empty["translations"])
+
+
 def test_ring_track_nearby_confirmation_missing_and_jump(monkeypatch: pytest.MonkeyPatch) -> None:
     from hok_agent import movement_real_rgb as module
 

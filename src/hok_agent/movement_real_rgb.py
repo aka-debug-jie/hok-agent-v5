@@ -71,6 +71,72 @@ def green_ring_track(frames: np.ndarray) -> list[tuple[int, int] | None]:
     return _confirm_ring_candidates([green_ring_candidates(frame) for frame in frames])[0]
 
 
+def native_map_point_to_source_xy(
+    point_yx: tuple[int, int],
+    source_wh: tuple[int, int],
+) -> tuple[int, int]:
+    """Return the actual source pixel sampled at this map cell, not a world coordinate."""
+    y, x = point_yx
+    if not (0 <= y < 256 and 0 <= x < 256):
+        raise ValueError("native map coordinate outside 256x256")
+    width, height = source_wh
+    columns = np.linspace(round(width * 0.025), round(width * 0.215) - 1, 256).astype(np.int64)
+    rows = np.linspace(0, round(height * 0.4) - 1, 256).astype(np.int64)
+    return int(columns[x]), int(rows[y])
+
+
+def native_coordinate_diagnostic(frames: np.ndarray) -> dict[str, object]:
+    """Fixed translation checks on cached RGB; no parameters are selected or changed."""
+    baseline = green_ring_track(frames)
+    valid = [i for i, p in enumerate(baseline) if p is not None]
+    jumps = [
+        math.dist(cast(tuple[int, int], baseline[i - 1]), cast(tuple[int, int], baseline[i]))
+        for i in valid
+        if i and baseline[i - 1] is not None
+    ]
+    translations: list[dict[str, object]] = []
+    for dy, dx in ((-4, 0), (4, 0), (0, -4), (0, 4)):
+        shifted = np.roll(frames, (dy, dx), axis=(1, 2))
+        if dy > 0:
+            shifted[:, :dy] = 0
+        elif dy < 0:
+            shifted[:, dy:] = 0
+        if dx > 0:
+            shifted[:, :, :dx] = 0
+        elif dx < 0:
+            shifted[:, :, dx:] = 0
+        predicted = green_ring_track(shifted)
+        errors = [
+            math.dist((a[0] + dy, a[1] + dx), b)
+            for a, b in zip(baseline, predicted, strict=True)
+            if a is not None and b is not None
+        ]
+        translations.append(
+            {
+                "shift_yx": [dy, dx],
+                "compared_frames": len(errors),
+                "lost_confirmations": sum(
+                    a is not None and b is None for a, b in zip(baseline, predicted, strict=True)
+                ),
+                "new_confirmations": sum(
+                    a is None and b is not None for a, b in zip(baseline, predicted, strict=True)
+                ),
+                "maximum_equivariance_error_pixels": max(errors) if errors else None,
+            }
+        )
+    return {
+        "positions_yx": baseline,
+        "confirmed_frames": len(valid),
+        "maximum_adjacent_jump_pixels": max(jumps) if jumps else None,
+        "median_adjacent_jump_pixels": float(np.median(jumps)) if jumps else None,
+        "translations": translations,
+        "scope": (
+            "geometric consistency only; zero error does not establish identity "
+            "or localization accuracy"
+        ),
+    }
+
+
 def _confirm_ring_candidates(
     rows: list[list[tuple[int, int]]],
 ) -> tuple[list[tuple[int, int] | None], list[str]]:
