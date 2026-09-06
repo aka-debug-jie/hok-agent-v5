@@ -15,7 +15,14 @@ runtime guard passes.
 
 ## Current development plan
 
-Latest continuation: `PLAYER_FLOW_GAP_INSUFFICIENT`. One offline optical-flow pass recovered
+The current joystick visibility pilot found readable translucent knob displacement in both sampled
+train/dev recordings. Six four-second native-crop windows are available for a bounded automatic
+extractor; this is visual feasibility only, with no action labels or policy training yet.
+`movement-mvp --mode joystick-visibility` takes the existing `--source-root`, `--cohort-dir`,
+`--pre-ingest`, and a fresh external `--output-dir`. It opens only the two frozen train/dev sources.
+Shop occlusion is unknown; future Actor inputs must exclude the joystick used to generate targets.
+
+Previous continuation: `PLAYER_FLOW_GAP_INSUFFICIENT`. One offline optical-flow pass recovered
 15 frames across 9 short gaps in session002, but continuous frames increased only 9.6%;
 003/005 remain unsupported. No training was started. See the current progress ledger for evidence.
 The optional `flow-audit` dependency group records the installed OpenCV version. Reproduction:

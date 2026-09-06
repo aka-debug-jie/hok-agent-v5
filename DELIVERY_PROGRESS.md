@@ -423,14 +423,34 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: close the authorized short-gap optical-flow experiment
-CURRENT STATUS: PLAYER_FLOW_GAP_INSUFFICIENT; R1 package unchanged
-BLOCKING FAILURE: session002 gains 9.6% continuous frames and 9 gaps; sessions003/005 unsupported
-NEXT ACCEPTANCE: none in this batch; no retuning or Movement training
-COMMAND STATUS: 4455 existing frames; independent windows 8/0/0; GPU/input/test/raw decode zero
+CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
+CURRENT STATUS: JOYSTICK_FEEDBACK_VISUALLY_OBSERVABLE on two sampled train/dev sources
+BLOCKING FAILURE: automatic base/knob/active-state extraction and timing alignment remain unvalidated
+NEXT ACCEPTANCE: bounded extractor on cached windows; train-only calibration, unchanged dev; no policy training
+COMMAND STATUS: six four-second windows, 240 native crops, six QA sheets; GPU/input/test zero
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick visibility pilot (2026-09-07)
+
+- User confirmed that existing recordings retain translucent live joystick feedback. The new
+  pilot sampled the existing native-player train/dev sources at duration fractions 0.1/0.3/0.6,
+  40 frames each at nominal 100ms spacing, using actual PTS. No test container was opened.
+- Six native lower-left RGB bundles and contact sheets are saved under
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/joystick-visibility-v1`.
+  Crops are 594×840 (train) and 594×819 (dev); actual maximum sampled PTS gap is 116ms.
+  Data plus machine report/QA images occupy 156,030,102 bytes before the QA conclusion.
+- All six sheets (72 displayed frames of 240 sampled) were inspected. Both sources show
+  displaced knob/directional decoration. Train includes maintained displacement, changes and
+  dim centered appearance; dev includes shop occlusion. These are feasibility observations,
+  not frame labels, full nine-class support or measured automatic extraction accuracy.
+- `qa-conclusion.json` closes the pilot as `JOYSTICK_FEEDBACK_VISUALLY_OBSERVABLE`.
+  Next: one automatic extractor on cached windows; unknown for occlusion/ambiguity, STOP only
+  with positive center/release evidence. Joystick must not enter future Actor tensors.
+- No model, action labels, new recording, phone or test access. The source-bound report records
+  the executed source; QA records the subsequent equivalent explicit-keyword NumPy type fix.
+  Validation: 32 focused tests and strict mypy passed; no full historical suite required.
 
 ### Short-gap optical flow closure (2026-09-07)
 

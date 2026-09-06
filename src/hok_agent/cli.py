@@ -78,6 +78,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-player-localization-audit-v2",
             "real-player-tracking-audit",
             "real-player-flow-audit",
+            "joystick-visibility",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1557,6 +1558,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
+            elif args.mode == "joystick-visibility":
+                if args.source_root is None or args.cohort_dir is None or args.pre_ingest is None:
+                    raise ValueError("joystick visibility requires source/cohort/pre-ingest")
+                from hok_agent.movement_real_rgb import run_joystick_visibility
+
+                result = run_joystick_visibility(
+                    args.source_root, args.cohort_dir, args.pre_ingest, args.output_dir
+                )
             elif args.mode == "real-player-flow-audit":
                 if args.session_root is None or args.prior_report is None:
                     raise ValueError("flow audit requires --session-root and --prior-report")

@@ -5,6 +5,11 @@
 
 ## Current planning authority (2026-09-05)
 
+User-confirmed translucent joystick feedback authorizes a separate visibility pilot: the existing
+two native-player train/dev sources, three fixed four-second windows each, lower-left native RGB.
+`movement_real_rgb.py` may decode these windows with existing PyAV and write offline Pillow QA.
+No action labels or training follow automatically; no test, mobile input or old detector retuning.
+
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its
 focused tests may lazily import OpenCV for this run. No historical detector thresholds change;

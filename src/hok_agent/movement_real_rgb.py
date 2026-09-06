@@ -2891,6 +2891,109 @@ def _native_landscape_window(path: Path, *, start_fraction: float = 0.2) -> dict
     }
 
 
+def _joystick_window(path: Path, fraction: float) -> dict[str, np.ndarray]:
+    """Four seconds of native lower-left RGB, with decoded presentation timestamps."""
+    import av
+
+    from hok_agent import pre_ingest
+
+    descriptor, opened = pre_ingest._open_regular(path)
+    crops: list[np.ndarray] = []
+    times: list[int] = []
+    with os.fdopen(descriptor, "rb") as handle, av.open(handle, mode="r") as container:
+        stream = container.streams.video[0]
+        if (stream.duration is None or stream.time_base is None
+                or stream.width <= stream.height or pre_ingest._rotation(stream) != 0):
+            raise ValueError("joystick inspection requires unrotated landscape timestamps")
+        start = int(stream.duration * fraction)
+        start_us = round(start * stream.time_base * 1_000_000)
+        container.seek(start, stream=stream, backward=True)
+        for frame in container.decode(stream):
+            if frame.pts is None:
+                raise ValueError("joystick frame lacks PTS")
+            timestamp = round(frame.pts * stream.time_base * 1_000_000)
+            if timestamp < start_us + len(times) * 100_000:
+                continue
+            rgb = frame.to_ndarray(format="rgb24")
+            height, width = rgb.shape[:2]
+            # Broad lower-left region includes floating as well as fixed joystick bases.
+            crops.append(rgb[round(height * 0.45):, :round(width * 0.35)].copy())
+            times.append(timestamp)
+            if len(times) == 40:
+                break
+        pre_ingest._assert_unchanged(handle.fileno(), opened)
+    if len(times) != 40 or not np.all(np.diff(times) > 0):
+        raise ValueError("incomplete joystick inspection window")
+    return {"rgb": np.stack(crops), "timestamp_us": np.asarray(times, dtype=np.int64)}
+
+
+def run_joystick_visibility(
+    source_root: Path, cohort_dir: Path, pre_ingest_path: Path, output_dir: Path,
+) -> dict[str, object]:
+    from PIL import Image, ImageDraw
+
+    from hok_agent import pre_ingest
+    from hok_agent.v5_data import load_automatic_cohort
+
+    if output_dir.exists():
+        raise ValueError("joystick inspection output exists")
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    if any(cohort.session_splits.get(k) != v for k, v in NATIVE_PLAYER_SOURCES.items()):
+        raise ValueError("joystick source split differs")
+    sources: dict[str, Path] = {}
+    # Resolve identities from stat metadata only; never open unselected/test containers.
+    for path in pre_ingest._scan(source_root):
+        identity = pre_ingest._sha(pre_ingest._canonical([
+            "candidate-v2-file-atomic", path.relative_to(source_root).as_posix(),
+            pre_ingest._stat_signature(path.stat()),
+        ]))
+        if identity in NATIVE_PLAYER_SOURCES:
+            sources[identity] = path
+    if set(sources) != set(NATIVE_PLAYER_SOURCES):
+        raise ValueError("joystick selected sources unavailable")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-visibility-", dir=output_dir.parent))
+    rows: list[dict[str, object]] = []
+    for identity, path in sorted(sources.items()):
+        if pre_ingest._candidate(path, source_root).candidate_id != identity:
+            raise ValueError("joystick source identity changed")
+        for fraction in (0.1, 0.3, 0.6):
+            arrays = _joystick_window(path, fraction)
+            prefix = f"{identity[:8]}-f{round(fraction * 100):02d}"
+            data = staging / f"{prefix}.npz"
+            np.savez_compressed(data, rgb=arrays["rgb"], timestamp_us=arrays["timestamp_us"])
+            sheet = Image.new("RGB", (4 * 320, 3 * 220))
+            for ordinal, index in enumerate(np.linspace(0, 39, 12).astype(int)):
+                image = Image.fromarray(arrays["rgb"][index])
+                image.thumbnail((320, 195))
+                x, y = ordinal % 4 * 320, ordinal // 4 * 220
+                sheet.paste(image, (x, y + 22))
+                ImageDraw.Draw(sheet).text(
+                    (x, y), f"{index}: {arrays['timestamp_us'][index] / 1e6:.3f}s", fill="white"
+                )
+            qa = staging / f"{prefix}.png"
+            sheet.save(qa)
+            rows.append({"session": identity, "split": NATIVE_PLAYER_SOURCES[identity],
+                         "fraction": fraction, "shape": list(arrays["rgb"].shape),
+                         "data": data.name, "data_sha256": _file_sha256(data),
+                         "qa": qa.name, "qa_sha256": _file_sha256(qa),
+                         "max_pts_gap_us": int(np.diff(arrays["timestamp_us"]).max())})
+    report: dict[str, object] = {
+        "schema_version": "joystick-visibility-v1", "windows": rows,
+        "roi_xyxy_normalized": [0, 0.45, 0.35, 1], "sample_period_us": 100000,
+        "source_sha256": _file_sha256(Path(__file__)),
+        "pre_ingest_sha256": _file_sha256(pre_ingest_path),
+        "status": "VISUAL_INSPECTION_REQUIRED", "sampled_frames": 240,
+        "labels_created": 0, "training_allowed": False, "gpu_seconds": 0,
+        "test_containers_opened": 0, "input_commands_sent": 0,
+        "actor_input_policy": "joystick pixels excluded from any future policy input",
+    }
+    report["report_sha256"] = _object_sha256(report)
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return report
+
+
 def run_native_player_pilot(
     source_root: Path,
     cohort_dir: Path,

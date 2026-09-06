@@ -85,7 +85,7 @@ def test_native_window_crops_before_resize_and_rejects_eof(
     from fractions import Fraction
     from types import SimpleNamespace
 
-    from hok_agent.movement_real_rgb import _native_landscape_window
+    from hok_agent.movement_real_rgb import _joystick_window, _native_landscape_window
 
     source = tmp_path / "source.mp4"
     source.write_bytes(b"synthetic descriptor")
@@ -119,12 +119,44 @@ def test_native_window_crops_before_resize_and_rejects_eof(
     assert result["minimap_rgb"][0, -1, -1].tolist() == [68, 71, 0]
     assert result["main_rgb"][0, 0, 0].tolist() == [96, 27, 0]
     assert np.diff(result["timestamp_us"]).tolist() == [200000] * 15
+    frames[:] = [SimpleNamespace(pts=1000 + i * 100, to_ndarray=lambda **_kw: rgb)
+                 for i in range(40)]
+    joystick = _joystick_window(source, 0.2)
+    assert joystick["rgb"].shape == (40, 99, 112, 3)
+    assert np.array_equal(joystick["rgb"][0], rgb[81:, :112])
+    assert np.diff(joystick["timestamp_us"]).tolist() == [100000] * 39
     frames[:] = frames[:3]
+    with pytest.raises(ValueError, match="incomplete"):
+        _joystick_window(source, 0.2)
     with pytest.raises(ValueError, match="incomplete"):
         _native_landscape_window(source)
     stream.width = 100
     with pytest.raises(ValueError, match="landscape"):
         _native_landscape_window(source)
+
+
+def test_joystick_split_rejected_before_source_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from hok_agent import pre_ingest, v5_data
+    from hok_agent.movement_real_rgb import NATIVE_PLAYER_SOURCES, run_joystick_visibility
+
+    monkeypatch.setattr(
+        v5_data, "load_automatic_cohort",
+        lambda *_args: SimpleNamespace(
+            session_splits=dict.fromkeys(NATIVE_PLAYER_SOURCES, "test")
+        ),
+    )
+
+    def forbidden(*args):
+        pytest.fail("source scan/open must not happen after split mismatch")
+
+    monkeypatch.setattr(pre_ingest, "_scan", forbidden)
+    with pytest.raises(ValueError, match="split"):
+        run_joystick_visibility(tmp_path, tmp_path, tmp_path, tmp_path / "output")
+    assert not (tmp_path / "output").exists()
 
 
 def test_ring_cue_requires_hollow_shape_and_rgb() -> None:
