@@ -310,6 +310,13 @@ dev-death的285帧经现有HealthTemporalEventEngine生成284条NOOP transition�
 HP数值准确或Reward可用。下一步应从既有train/dev派生数据只读盘点跨session死亡候选；在至少
 三局一致前不赋死亡奖励，不接手机，不打开test。
 
+现有operational派生数据的完整盘点已执行：共8局、7080帧，冻结引擎只在death-stop局产生
+1组DEATH/RESPAWN，其余7局均为负对照且无死亡误报；session 002虽有6个legacy hard-stop帧，
+健康条覆盖仍为1.0且没有死亡事件。因此`DEATH_RESPAWN_CANDIDATES_INSUFFICIENT`，3局正样本门
+未过。不能用hard-stop、血条暂时不可见或已知session名称补语义标签。下一步若继续，只能对
+既有train/dev原视频建立动态候选预检，先找死亡倒计时/复活回场等第二视觉线索；不读test，
+不训练Reward模型，不修改E1a阈值。
+
 不再要求用户录制或标注。先在既有 train/dev 中抽取至多 12 个 session、每局 3 段短片，
 总计最多 36 段，跨旋转、尺度与场景检查。人工查看由开发者完成，仅做预处理 QA，不创建训练标签。
 旋转矩阵正确性需结合图像确认；“成功解码”不能当作方向正确的证据。

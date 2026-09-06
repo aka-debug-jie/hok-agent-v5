@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `DEATH_RESPAWN_EVENT_TRANSITION_REPLAY_PASSED`: frozen E1a dev replay writes 284 causal non-training transitions with zero reward | Audit cross-session death candidates from existing train/dev; semantic Reward and device stages remain closed |
+| Engineering convergence | `DEATH_RESPAWN_CANDIDATES_INSUFFICIENT`: Event-to-Store passes, but only 1/8 existing operational sessions has paired death/respawn | Seek a second visual cue in existing train/dev video; Reward, training, test and device stages remain closed |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: audit cross-session death/respawn candidates from existing train/dev artifacts
-CURRENT STATUS: DEATH_RESPAWN_EVENT_TRANSITION_REPLAY_PASSED; semantic accuracy and Reward remain false
-BLOCKING FAILURE: Event-to-Store works on one frozen dev-death session, but multi-session semantic evidence is absent
-NEXT ACCEPTANCE: at least three existing non-test sessions with reproducible death/respawn candidate windows and false-positive accounting
-COMMAND STATUS: 285-frame replay complete; 284 causal non-training transitions; zero reward/input/model runs
+CURRENT GOAL: locate a second dynamic death cue in existing train/dev video without semantic labels
+CURRENT STATUS: DEATH_RESPAWN_CANDIDATES_INSUFFICIENT; Event-to-Store passes, Reward remains false
+BLOCKING FAILURE: only 1 of 8 existing operational sessions contains paired frozen-engine death/respawn
+NEXT ACCEPTANCE: at least three non-test video sessions with health disappearance plus an independent countdown/respawn visual cue
+COMMAND STATUS: 7080 derived frames inventoried; 1 positive, 7 negative, 0 unpaired; zero training/input
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1384,6 +1384,30 @@ expansion was introduced.
 - This is `DEATH_RESPAWN_EVENT_TRANSITION_REPLAY_PASSED`, an engineering result only. It does not
   validate event semantics or authorize death reward. Next use existing non-test artifacts to
   count cross-session candidate windows and false positives before any RewardHub change.
+
+### Existing operational death-candidate inventory (2026-09-06)
+
+- Added an exclusive `--candidate-session ID=/absolute/directory` mode to the same E1 health CLI.
+  It reuses the frozen detector and reads only existing derived RGB shards; output stores anonymous
+  session IDs and summary hashes, never source paths. No raw video or test is decoded.
+- Inventoried every current PASSED operational session with persisted ROI RGB: 8 sessions and
+  7,080 frames. Only `death60s` emits a paired DEATH/RESPAWN; the other seven are negatives with
+  neither event. There are zero unpaired sessions and zero death events on sessions whose legacy
+  hard-stop count is zero.
+- `teacher002` contains six legacy hard-stop frames but health visibility is 1.0 and the frozen
+  engine emits no death. This is useful disagreement evidence: hard-stop cannot be repurposed as
+  automatic death truth. SELF_HP_DELTA counts likewise remain diagnostic and do not authorize HP
+  reward.
+- Frozen gate requires at least three paired positive and three negative sessions. Negatives pass
+  7/3; positives fail 1/3. Status is `DEATH_RESPAWN_CANDIDATES_INSUFFICIENT`; semantic accuracy,
+  Reward, training, promotion and device input remain false.
+- Evidence: `$HOK_LARGE_ROOT/audit/hierarchical-event-e1/death-respawn-candidate-inventory-v1/report.json`;
+  file SHA-256 `5f2fddf77d3a9f4b0cba56af19635f7523c903ac65fadb71e005f0b84f02186e`;
+  self hash `8adb406226af73a2ae456ff626c27d1998c3c8825001e8cb60a45d389767abce`;
+  3,861 bytes. Model/video/GPU/test/input counts are zero.
+- Focused tests cover one-positive/three-negative failure, paired-event accounting, zero-hard-stop
+  false-positive gate, path-free report and immutable output. Next work may only search existing
+  train/dev video for an independent death countdown/respawn cue; E1a thresholds remain frozen.
 
 ## Frozen Global Agent execution state
 

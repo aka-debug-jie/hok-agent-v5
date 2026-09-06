@@ -57,6 +57,11 @@ RESPAWN, 17 SELF_HP_DELTA events, zero reward and a terminal VIDEO_EOF row commi
 Freeze detector thresholds and E1a evidence. This permits only a read-only cross-session death
 candidate audit on existing train/dev artifacts; semantic accuracy, Reward, promotion, phone,
 test and RL remain closed.
+That operational inventory is now complete and insufficient: one paired positive session versus
+three required, with seven negative sessions and no false death events. Session 002 has six legacy
+hard-stop frames but zero frozen-engine death events, so hard-stop is not a death label. The next
+cycle may only seek additional dynamic candidates in existing train/dev video using a separately
+observable second cue; do not change E1a thresholds or open test/Reward/training/device input.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

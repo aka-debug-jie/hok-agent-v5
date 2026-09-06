@@ -226,6 +226,12 @@ reproduces 1 death, 1 respawn and 17 HP-delta events, and commits a final `VIDEO
 All rewards are zero and all rows are explicitly non-training because semantic accuracy is still
 unverified. SQLite integrity and every frame reference pass; this is Event-to-Store evidence only.
 
+A follow-up inventory over all eight existing non-test operational sessions finds only one paired
+death/respawn session and seven negative sessions. The frozen engine emits no death on session 002
+despite six legacy hard-stop frames, confirming that hard-stop is not a death label. The required
+three positive sessions are unavailable, so death Reward remains closed. Future work must source
+additional dynamic candidates from existing train/dev video without treating bar absence as truth.
+
 ```bash
 python -m hok_agent.hierarchical_e1 \
   --contract configs/hierarchical_event_e1_health.json \

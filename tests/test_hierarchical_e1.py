@@ -10,6 +10,7 @@ from hok_agent.hierarchical_e1 import (
     AuditSession,
     E1Error,
     HealthTemporalEventEngine,
+    audit_existing_health_candidates,
     audit_health_sessions,
     detect_center_health_bar,
     load_health_contract,
@@ -193,3 +194,41 @@ def test_health_event_replay_writes_causal_zero_reward_nontraining_chain(tmp_pat
         replay_health_event_transitions(
             CONTRACT, audit_dir / "report.json", dev, tmp_path / "tampered-output"
         )
+
+
+def test_existing_health_candidate_audit_freezes_insufficient_positive_sessions(
+    tmp_path: Path,
+) -> None:
+    positive = tmp_path / "positive"
+    negative_a = tmp_path / "negative-a"
+    negative_b = tmp_path / "negative-b"
+    negative_c = tmp_path / "negative-c"
+    _write_session(
+        positive,
+        [12, 12, 12, 0, 0, 0, 0, 12, 12, 12],
+        [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+    )
+    for path in (negative_a, negative_b, negative_c):
+        _write_session(path, [12] * 10, [0] * 10)
+    output = tmp_path / "candidate-audit"
+    report = audit_existing_health_candidates(
+        CONTRACT,
+        tuple(
+            AuditSession(path.name, "challenge_false_positive", path)
+            for path in (positive, negative_a, negative_b, negative_c)
+        ),
+        output,
+    )
+    assert report["status"] == "DEATH_RESPAWN_CANDIDATES_INSUFFICIENT"
+    assert report["positive_sessions"] == 1
+    assert report["negative_sessions"] == 3
+    assert report["checks"] == {
+        "minimum_positive_sessions": False,
+        "minimum_negative_sessions": True,
+        "no_unpaired_sessions": True,
+        "no_death_on_zero_hard_stop_sessions": True,
+    }
+    assert report["reward_allowed"] is report["training_allowed"] is False
+    assert str(tmp_path) not in (output / "report.json").read_text()
+    with pytest.raises(E1Error, match="already exists"):
+        audit_existing_health_candidates(CONTRACT, (), output)

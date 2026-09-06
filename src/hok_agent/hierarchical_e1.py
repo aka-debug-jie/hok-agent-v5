@@ -804,6 +804,83 @@ def replay_health_event_transitions(
     return payload
 
 
+def audit_existing_health_candidates(
+    contract_path: Path,
+    sessions: tuple[AuditSession, ...],
+    output_dir: Path,
+) -> dict[str, object]:
+    """Count existing non-test candidate sessions without changing the frozen detector."""
+    if output_dir.exists() or output_dir.is_symlink():
+        raise E1Error("health candidate audit output already exists")
+    config, _contract, contract_sha256 = load_health_contract(contract_path)
+    identity = EventEngineIdentity("observable-death-candidate-audit-v1", contract_sha256)
+    rows = [_session_report(session, config, identity) for session in sessions]
+    if len(rows) < 3 or len({row["session_id"] for row in rows}) != len(rows):
+        raise E1Error("health candidate audit requires unique existing sessions")
+    positive = [
+        row
+        for row in rows
+        if cast(dict[str, int], row["event_counts"])["DEATH"] >= 1
+        and cast(dict[str, int], row["event_counts"])["RESPAWN"] >= 1
+    ]
+    negative = [
+        row
+        for row in rows
+        if cast(dict[str, int], row["event_counts"])["DEATH"] == 0
+        and cast(dict[str, int], row["event_counts"])["RESPAWN"] == 0
+    ]
+    unpaired = [
+        row
+        for row in rows
+        if (
+            cast(dict[str, int], row["event_counts"])["DEATH"] > 0
+            and cast(dict[str, int], row["event_counts"])["RESPAWN"] == 0
+        )
+        or (
+            cast(dict[str, int], row["event_counts"])["RESPAWN"] > 0
+            and cast(dict[str, int], row["event_counts"])["DEATH"] == 0
+        )
+    ]
+    checks = {
+        "minimum_positive_sessions": len(positive) >= 3,
+        "minimum_negative_sessions": len(negative) >= 3,
+        "no_unpaired_sessions": not unpaired,
+        "no_death_on_zero_hard_stop_sessions": all(
+            cast(int, row["legacy_hard_stop_frames"]) > 0
+            or cast(dict[str, int], row["event_counts"])["DEATH"] == 0
+            for row in rows
+        ),
+    }
+    payload: dict[str, object] = {
+        "schema_version": "observable-death-respawn-candidate-audit-v1",
+        "status": "DEATH_RESPAWN_CANDIDATES_SUPPORTED"
+        if all(checks.values())
+        else "DEATH_RESPAWN_CANDIDATES_INSUFFICIENT",
+        "health_contract_sha256": contract_sha256,
+        "sessions": rows,
+        "session_count": len(rows),
+        "positive_sessions": len(positive),
+        "negative_sessions": len(negative),
+        "unpaired_sessions": len(unpaired),
+        "checks": checks,
+        "frozen_detector_reused": True,
+        "semantic_accuracy_verified": False,
+        "reward_allowed": False,
+        "training_allowed": False,
+        "promotion_allowed": False,
+        "video_test_opened": False,
+        "video_frames_decoded": 0,
+        "input_commands_sent": 0,
+        "model_runs": 0,
+    }
+    payload["report_sha256"] = _sha(_canonical(payload))
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    (staging / "report.json").write_bytes(_canonical(payload) + b"\n")
+    os.replace(staging, output_dir)
+    return payload
+
+
 def _session(raw: str, role: SessionRole) -> AuditSession:
     session_id, separator, path = raw.partition("=")
     if not separator or not session_id or "/" in session_id:
@@ -819,8 +896,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--challenge", action="append", default=[])
     parser.add_argument("--replay-health-report", type=Path)
     parser.add_argument("--replay-session", type=Path)
+    parser.add_argument("--candidate-session", action="append", default=[])
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
+    if args.candidate_session:
+        if (
+            args.replay_health_report is not None
+            or args.replay_session is not None
+            or args.train_live
+            or args.dev_death
+            or args.challenge
+        ):
+            raise E1Error("health candidate audit arguments must be exclusive")
+        payload = audit_existing_health_candidates(
+            args.contract,
+            tuple(_session(value, "challenge_false_positive") for value in args.candidate_session),
+            args.output_dir,
+        )
+        print(json.dumps(payload, sort_keys=True))
+        return 0
     if args.replay_health_report is not None or args.replay_session is not None:
         if (
             args.replay_health_report is None
