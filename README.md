@@ -186,6 +186,14 @@ controlled-player identity and Houyi identity remain unverified. Retain these as
 perception regression fixtures; do not repeat the same QA or treat their coordinates as action
 labels or game-world ground truth.
 
+The first fixed cross-session weak-anchor audit is also complete. It materializes 8 train and
+4 dev landscape sessions at 10/30/60 percent, 36 independent session-window groups and 576 frames.
+Train support passes at 7/8 sessions and 130 confirmed frames; dev reaches only 2/4 sessions despite
+64 confirmed frames, failing the frozen 3-session requirement. The result is
+`WEAK_VISUAL_ANCHOR_COHORT_INSUFFICIENT`: no training or checkpoint. QA also shows shop overlays
+and non-universal ring presentation. One separately versioned coverage repair may add four new,
+anonymous-order dev sessions without changing detection or windows; it cannot rewrite this result.
+
 The older diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
 
 ```bash

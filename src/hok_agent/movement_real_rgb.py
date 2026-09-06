@@ -29,6 +29,22 @@ NATIVE_PLAYER_SOURCES = {
     "c1121610049b451fb1e3f8d3c3695da15ff04f5391898d7b9a0de867b685c009": "dev",
 }
 
+NATIVE_ANCHOR_AUDIT_SOURCES = {
+    "0667d97cdb3024f7c5d39d6e797bfe1d527cbd99c07e8e2d2e31cd6eb0ed0993": "train",
+    "06c5a8e67a7a19a59e4b13bdae9dafeaa2b07a0168e41406d58e5209ed0e2b4a": "train",
+    "08565f01b75fb400394b35d33cd2bab8a94298f082e127115edc27f0b073b46b": "train",
+    "0a84c341d16222bb3424e95cbb5d51797eecbea8b528417cd02d569ae9a360cc": "train",
+    "0c60062fdde6ed50e0bf2fe231fda206535b90911d2f74e6f0f171a54e486c6c": "train",
+    "0e34a785656d464bd946559e9a7ac9602ef2ffcd0e7a9c6d8ba265f37261de24": "train",
+    "109a2a343dd37d406f987cc22a4c4c876e59a4e93e9f4127bf5ba06107bd91d7": "train",
+    "12214351b55ac24beffe2c52b77464e009120a3a3cc69fc7cb17adcfe1f87e39": "train",
+    "c1121610049b451fb1e3f8d3c3695da15ff04f5391898d7b9a0de867b685c009": "dev",
+    "c154c394fd9b570544feb68c3b669e4cdb1a3f95146d66a44e6751424936946e": "dev",
+    "c5b6e1aeb6d509734afcd5830c2ebe399cf49fa9be35fd7a4ade0ad1a2352f4c": "dev",
+    "c84d549a0e1c149f294883b897830229f68bda9f36011be788034aba7e68df88": "dev",
+}
+NATIVE_ANCHOR_AUDIT_FRACTIONS = (0.1, 0.3, 0.6)
+
 
 def green_ring_candidates(frame: np.ndarray) -> list[tuple[int, int]]:
     """Uncalibrated visual cue on a 256px native-cropped map, not player identity."""
@@ -2728,6 +2744,169 @@ def run_native_player_pilot(
         "action_labels_created": False,
         "test_frames_decoded": 0,
         "raw_full_frames_persisted": False,
+        "raw_source_locators_persisted": False,
+        "model_runs": 0,
+        "gpu_seconds": 0,
+        "input_commands_sent": 0,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return report
+
+
+def run_native_anchor_cohort_audit(
+    source_root: Path,
+    cohort_dir: Path,
+    pre_ingest_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    """Audit fixed weak-anchor coverage across 8 train and 4 dev source sessions."""
+    from PIL import Image, ImageDraw
+
+    from hok_agent import pre_ingest
+    from hok_agent.v5_data import load_automatic_cohort
+
+    if output_dir.exists():
+        raise ValueError("native anchor audit output already exists")
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    if any(
+        cohort.session_splits.get(identity) != split
+        for identity, split in NATIVE_ANCHOR_AUDIT_SOURCES.items()
+    ):
+        raise ValueError("native anchor audit split binding differs")
+    sources: dict[str, Path] = {}
+    for path in pre_ingest._scan(source_root):
+        identity = pre_ingest._candidate(path, source_root).candidate_id
+        if identity in NATIVE_ANCHOR_AUDIT_SOURCES:
+            sources[identity] = path
+    if set(sources) != set(NATIVE_ANCHOR_AUDIT_SOURCES):
+        raise ValueError("native anchor audit source identities unavailable")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    sessions: list[dict[str, object]] = []
+    for identity, path in sorted(sources.items()):
+        maps: list[np.ndarray] = []
+        timestamps: list[np.ndarray] = []
+        window_ids: list[np.ndarray] = []
+        native_hashes: list[np.ndarray] = []
+        window_rows: list[dict[str, object]] = []
+        map_sheet = Image.new("RGB", (8 * 128, 6 * 144))
+        main_sheet = Image.new("RGB", (3 * 256, 3 * 276))
+        map_draw = ImageDraw.Draw(map_sheet)
+        main_draw = ImageDraw.Draw(main_sheet)
+        for window_id, fraction in enumerate(NATIVE_ANCHOR_AUDIT_FRACTIONS):
+            arrays = _native_landscape_window(path, start_fraction=fraction)
+            candidates = [green_ring_candidates(frame) for frame in arrays["minimap_rgb"]]
+            positions, reasons = _confirm_ring_candidates(candidates)
+            maps.append(arrays["minimap_rgb"])
+            timestamps.append(arrays["timestamp_us"])
+            window_ids.append(np.full(16, window_id, dtype=np.int8))
+            native_hashes.append(arrays["native_crop_sha256"])
+            for frame_index, frame in enumerate(arrays["minimap_rgb"]):
+                image = Image.fromarray(frame).resize((128, 128))
+                x = frame_index % 8 * 128
+                y = (window_id * 2 + frame_index // 8) * 144 + 16
+                map_sheet.paste(image, (x, y))
+                map_draw.text((x + 2, y - 14), f"w{window_id}:{frame_index}")
+                if positions[frame_index] is not None:
+                    py, px = cast(tuple[int, int], positions[frame_index])
+                    map_draw.ellipse(
+                        (x + px // 2 - 8, y + py // 2 - 8, x + px // 2 + 8, y + py // 2 + 8),
+                        outline="magenta",
+                        width=2,
+                    )
+            for column, frame_index in enumerate((0, 8, 15)):
+                x, y = column * 256, window_id * 276 + 20
+                main_sheet.paste(Image.fromarray(arrays["main_rgb"][frame_index]), (x, y))
+                main_draw.text((x + 2, y - 18), f"w{window_id}:{frame_index}")
+            window_rows.append(
+                {
+                    "window_id": window_id,
+                    "start_fraction": fraction,
+                    "start_us": int(arrays["timestamp_us"][0]),
+                    "end_us": int(arrays["timestamp_us"][-1]),
+                    "confirmed_frames": sum(position is not None for position in positions),
+                    "candidate_frames": sum(bool(row) for row in candidates),
+                    "candidate_total": sum(map(len, candidates)),
+                    "reason_counts": dict(Counter(reasons)),
+                    "confirmed_positions_yx": positions,
+                }
+            )
+        data_name = identity[:8] + "-anchor-windows.npz"
+        np.savez_compressed(
+            staging / data_name,
+            minimap_rgb=np.concatenate(maps),
+            timestamp_us=np.concatenate(timestamps),
+            window_id=np.concatenate(window_ids),
+            native_crop_sha256=np.concatenate(native_hashes),
+        )
+        map_name = identity[:8] + "-anchor-map-qa.png"
+        main_name = identity[:8] + "-anchor-main-qa.png"
+        map_sheet.save(staging / map_name)
+        main_sheet.save(staging / main_name)
+        supported = any(cast(int, row["confirmed_frames"]) >= 8 for row in window_rows)
+        sessions.append(
+            {
+                "session_hash": identity,
+                "split": NATIVE_ANCHOR_AUDIT_SOURCES[identity],
+                "windows": window_rows,
+                "supported_session": supported,
+                "confirmed_frames": sum(cast(int, row["confirmed_frames"]) for row in window_rows),
+                "artifacts": [
+                    {"basename": name, "sha256": _file_sha256(staging / name)}
+                    for name in (data_name, map_name, main_name)
+                ],
+            }
+        )
+    support = {
+        split: {
+            "sessions": sum(row["split"] == split for row in sessions),
+            "supported_sessions": sum(
+                row["split"] == split and bool(row["supported_session"]) for row in sessions
+            ),
+            "confirmed_frames": sum(
+                cast(int, row["confirmed_frames"]) for row in sessions if row["split"] == split
+            ),
+        }
+        for split in ("train", "dev")
+    }
+    checks = {
+        "train_supported_sessions": support["train"]["supported_sessions"] >= 6,
+        "dev_supported_sessions": support["dev"]["supported_sessions"] >= 3,
+        "train_confirmed_frames": support["train"]["confirmed_frames"] >= 128,
+        "dev_confirmed_frames": support["dev"]["confirmed_frames"] >= 48,
+        "session_split_isolation": not (
+            {row["session_hash"] for row in sessions if row["split"] == "train"}
+            & {row["session_hash"] for row in sessions if row["split"] == "dev"}
+        ),
+    }
+    passed = all(checks.values())
+    report: dict[str, object] = {
+        "schema_version": "native-weak-visual-anchor-cohort-audit-v1",
+        "status": "WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY"
+        if passed
+        else "WEAK_VISUAL_ANCHOR_COHORT_INSUFFICIENT",
+        "cohort_sha256": cohort.cohort_sha256,
+        "implementation_sha256": _file_sha256(Path(__file__)),
+        "source_sessions": len(sessions),
+        "windows": len(sessions) * len(NATIVE_ANCHOR_AUDIT_FRACTIONS),
+        "frames": len(sessions) * len(NATIVE_ANCHOR_AUDIT_FRACTIONS) * 16,
+        "fractions": list(NATIVE_ANCHOR_AUDIT_FRACTIONS),
+        "selection_note": (
+            "fixed after a separate 15-percent exploratory preflight; formal windows exclude "
+            "that fraction and are not a random benchmark"
+        ),
+        "support": support,
+        "checks": checks,
+        "sessions": sessions,
+        "weak_target": "green-ring visual anchor or unknown",
+        "controlled_player_identity_verified": False,
+        "hero_identity_verified": False,
+        "policy_action_labels_created": False,
+        "training_allowed": False,
+        "promotion_allowed": False,
+        "test_frames_decoded": 0,
         "raw_source_locators_persisted": False,
         "model_runs": 0,
         "gpu_seconds": 0,

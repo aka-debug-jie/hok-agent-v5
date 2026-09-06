@@ -277,6 +277,74 @@ def test_native_pilot_opens_selected_sources_only(
     assert set(decoded) == set(paths[:2])
 
 
+def test_native_anchor_cohort_audit_keeps_groups_and_splits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    from hok_agent import movement_real_rgb as module
+    from hok_agent import pre_ingest, v5_data
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    paths = [raw / f"{index:02d}.mp4" for index in range(13)]
+    for path in paths:
+        path.write_bytes(b"dummy")
+    identities = [pre_ingest._candidate(path, raw).candidate_id for path in paths]
+    selected = {
+        identity: "train" if index < 8 else "dev" for index, identity in enumerate(identities[:12])
+    }
+    monkeypatch.setattr(module, "NATIVE_ANCHOR_AUDIT_SOURCES", selected)
+    monkeypatch.setattr(
+        v5_data,
+        "load_automatic_cohort",
+        lambda *_args: SimpleNamespace(
+            session_splits=selected | {identities[12]: "test"}, cohort_sha256="1" * 64
+        ),
+    )
+    decoded: list[tuple[Path, float]] = []
+    frames = np.zeros((16, 256, 256, 3), dtype=np.uint8)
+    yy, xx = np.indices((256, 256))
+    for index, frame in enumerate(frames):
+        distance = np.hypot(yy - (100 + index // 4), xx - 110)
+        frame[(distance >= 9) & (distance <= 11)] = (20, 220, 30)
+
+    def decode(path: Path, *, start_fraction: float = 0.2) -> dict[str, np.ndarray]:
+        assert path != paths[12]
+        decoded.append((path, start_fraction))
+        return {
+            "minimap_rgb": frames.copy(),
+            "main_rgb": np.zeros_like(frames),
+            "timestamp_us": np.arange(16) * 200_000,
+            "native_crop_sha256": np.asarray(["a" * 64] * 16, dtype="U64"),
+        }
+
+    monkeypatch.setattr(module, "_native_landscape_window", decode)
+    output = tmp_path / "audit"
+    report = module.run_native_anchor_cohort_audit(raw, tmp_path, tmp_path, output)
+    assert report["status"] == "WEAK_VISUAL_ANCHOR_COHORT_SUPPORTED_QA_ONLY"
+    assert len(decoded) == 36
+    assert {fraction for _path, fraction in decoded} == {0.1, 0.3, 0.6}
+    assert {path for path, _fraction in decoded} == set(paths[:12])
+    assert report["support"]["train"] == {
+        "sessions": 8,
+        "supported_sessions": 8,
+        "confirmed_frames": 360,
+    }
+    assert report["support"]["dev"] == {
+        "sessions": 4,
+        "supported_sessions": 4,
+        "confirmed_frames": 180,
+    }
+    assert report["training_allowed"] is report["promotion_allowed"] is False
+    assert report["test_frames_decoded"] == report["model_runs"] == 0
+    assert len(list(output.glob("*.npz"))) == 12
+    assert len({row["session_hash"] for row in report["sessions"]}) == 12
+    with pytest.raises(ValueError, match="already exists"):
+        module.run_native_anchor_cohort_audit(raw, tmp_path, tmp_path, output)
+    assert report["policy_action_labels_created"] is False
+
+
 CONTRACT = ROOT / "configs" / "movement_real_rgb_preflight_v1.json"
 GOAL_CONTRACT = ROOT / "configs" / "movement_real_rgb_goal_canvas_v2.json"
 PLAYER_CONTRACT = ROOT / "configs" / "movement_real_player_cue_v1.json"

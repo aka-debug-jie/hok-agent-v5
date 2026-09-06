@@ -77,6 +77,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-player-localization-audit-v2",
             "real-player-tracking-audit",
             "native-player-pilot",
+            "native-anchor-cohort-audit",
             "real-counterfactual-overfit32-materialize",
             "real-counterfactual-grouped-eval",
             "materialize-overfit32",
@@ -1429,6 +1430,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.overfit_report,
                     args.output_dir,
                     device_name=args.device,
+                )
+            elif args.mode == "native-anchor-cohort-audit":
+                if args.source_root is None or args.cohort_dir is None or args.pre_ingest is None:
+                    raise ValueError(
+                        "native-anchor-cohort-audit requires --source-root, "
+                        "--cohort-dir and --pre-ingest"
+                    )
+                from hok_agent.movement_real_rgb import run_native_anchor_cohort_audit
+
+                result = run_native_anchor_cohort_audit(
+                    args.source_root, args.cohort_dir, args.pre_ingest, args.output_dir
                 )
             elif args.mode == "native-player-pilot":
                 if args.source_run is not None and args.train_visibility_scan:
