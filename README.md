@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The joystick extractor now supports `--normalize-scale`. Nine synthetic train-transform checks
+pass; dev knob matching improves, but only 3/120 frames produce full direction candidates because
+base matching remains weak. Current state: `JOYSTICK_SCALE_REGRESSION_PASSED_BASE_CUE_LIMITED`.
+Candidate labels are not ready for policy training. Existing dev is used only as a regression set.
+
 The first joystick extractor is implemented as `movement-mvp --mode joystick-extraction
 --source-run <visibility-cache> --output-dir <new-directory>`. Train-only templates are frozen
 before dev extraction. It yields 56/120 train candidates but 0/120 dev candidates, so it is not

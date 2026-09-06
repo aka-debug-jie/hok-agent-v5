@@ -36,6 +36,74 @@ def test_joystick_match_tracks_translation_and_rejects_blank() -> None:
     assert score < 0.35 and contrast == 0
 
 
+def test_joystick_scale_uses_joint_matches_and_restores_native_coordinates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hok_agent import movement_real_rgb as m
+
+    monkeypatch.setattr(m, "JOYSTICK_SCALES", (0.75, 1.0))
+    # At 1.0 only the knob looks good. The valid joint match is at 0.75.
+    matches = iter([
+        ((50, 50), 0.8, 0.2, 1), ((70, 50), 0.9, 0.3, 1),
+        ((50, 50), 0.1, 0.01, 1), ((90, 50), 0.99, 0.3, 1),
+    ])
+    monkeypatch.setattr(m, "_joystick_match", lambda *_args: next(matches))
+    templates = dict.fromkeys(("base", "knob", "base_mask", "knob_mask"), np.ones((3, 3)))
+    row = m.extract_joystick_sequence(
+        np.zeros((1, 200, 240, 3), np.uint8), templates, normalize_scale=True
+    )[0]
+    assert row["control_scale"] == 0.75 and row["candidate_action"] == "E"
+    assert row["base_xy"] == [75, 75] and row["knob_xy"] == [105, 75]
+    assert row["normalized_offset_xy"] == [40, 0] and row["offset_xy"] == [30, 0]
+
+
+def test_joystick_scale_stop_radius_is_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hok_agent import movement_real_rgb as m
+
+    monkeypatch.setattr(m, "JOYSTICK_SCALES", (0.6,))
+    matches = iter([((50, 50), 0.8, 0.2, 1), ((55, 50), 0.9, 0.3, 1)] * 2)
+    monkeypatch.setattr(m, "_joystick_match", lambda *_args: next(matches))
+    templates = dict.fromkeys(("base", "knob", "base_mask", "knob_mask"), np.ones((3, 3)))
+    rows = m.extract_joystick_sequence(
+        np.zeros((2, 200, 240, 3), np.uint8), templates, normalize_scale=True
+    )
+    assert [r["candidate_action"] for r in rows] == ["unknown", "STOP"]
+    assert rows[-1]["offset_xy"] == [6, 0]
+
+
+def test_joystick_failed_scale_regression_never_reads_dev(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hok_agent import movement_real_rgb as m
+
+    source = tmp_path / "source"
+    source.mkdir()
+    seed = source / "0667d97c-f30.npz"
+    np.savez_compressed(seed, rgb=np.zeros((40, 2, 2, 3), np.uint8), timestamp_us=np.arange(40))
+    payload = {
+        "schema_version": "joystick-visibility-v1",
+        "windows": [
+            {"data": seed.name, "data_sha256": hashlib.sha256(seed.read_bytes()).hexdigest(),
+             "split": "train"},
+            {"data": "dev-not-present.npz", "data_sha256": "must-not-open", "split": "dev"},
+        ],
+    }
+    payload["report_sha256"] = m._object_sha256(payload)
+    (source / "report.json").write_text(json.dumps(payload))
+    templates = {"base": np.ones((189, 189)), "knob": np.ones((57, 57)),
+                 "base_mask": np.ones((189, 189), np.uint8),
+                 "knob_mask": np.ones((57, 57), np.uint8)}
+    monkeypatch.setattr(m, "calibrate_joystick_templates", lambda *_args: templates)
+    monkeypatch.setattr(m, "_joystick_signal", lambda *_args: np.ones((210, 210), np.float32))
+    monkeypatch.setattr(m, "_joystick_match", lambda *_args: ((100, 100), 0.9, 0.5, 1))
+    monkeypatch.setattr(m, "joystick_scale_regression", lambda *_args: {"passed": False})
+    output = tmp_path / "output"
+    report = m.run_joystick_extraction(source, output, normalize_scale=True)
+    assert report["status"] == "SYNTHETIC_SCALE_REGRESSION_FAILED"
+    assert report["dev_frames_opened"] == 0 and report["training_allowed"] is False
+    assert (output / "report.json").exists()
+
+
 def test_joystick_stop_unknown_and_dynamic_base(monkeypatch: pytest.MonkeyPatch) -> None:
     from hok_agent import movement_real_rgb as m
 

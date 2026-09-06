@@ -424,13 +424,34 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_FIXED_SCALE_EXTRACTOR_NOT_TRANSFERABLE; visual feedback remains observable
-BLOCKING FAILURE: 56/120 train candidates, 0/120 dev; base background sensitivity and control-scale mismatch
-NEXT ACCEPTANCE: control-scale normalization on synthetic train transformations; reused dev is regression only
-COMMAND STATUS: six cached windows; no new decoding, GPU, policy training, input or test
+CURRENT STATUS: JOYSTICK_SCALE_REGRESSION_PASSED_BASE_CUE_LIMITED
+BLOCKING FAILURE: base match is still sparse: 3/120 dev versus 72/120 knob matches
+NEXT ACCEPTANCE: base directional-marker geometry; train first, existing dev remains regression only
+COMMAND STATUS: 9/9 synthetic scale cases; train 56/120 unchanged; dev 3/120 candidates; no training/input
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick scale normalization (2026-09-07)
+
+- Added `--normalize-scale`: base and knob share one of nine scales between 0.6 and 1.25.
+  Coordinates return to native pixels; STOP/range checks use normalized displacement.
+  Existing match/contrast thresholds are unchanged.
+- Nine train-derived synthetic cases pass coordinate/action consistency (W/NW/STOP at
+  0.75/1/1.25 scale and translated centers). This is not nine-class semantic accuracy. Initial
+  harness clipping was corrected by retaining the full crop and using grid-aligned translations.
+- Train candidates remain 56/120 with identical action sequence to v1. Previously inspected dev
+  yields 3/120 candidates (all W at scale0.85, f30 indices37–39), up from zero. Dev knob-score
+  support is 72/120 at >=0.65, but base-score support only 3/120 at >=0.35. Three dev QA sheets
+  show useful knob alignment, persistent base uncertainty and abstention under shop overlays.
+- Artifacts: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/joystick-extraction-v2-scale`.
+  `qa-conclusion.json` closes as `JOYSTICK_SCALE_REGRESSION_PASSED_BASE_CUE_LIMITED`.
+  Approximately 6.3 MiB; no decoding/model/input/test. Templates frozen before dev reuse.
+- Next: directional-marker geometry for the base, not another scale/threshold sweep. Candidates
+  remain non-training. Existing dev is a regression set, not an untouched benchmark.
+- Validation: 37 focused tests, then 7 joystick tests including the added failure-path test proving
+  synthetic failure writes a report before any dev read. Ruff and strict mypy passed. QA records
+  the sole post-run source change (line wrapping only) and both reproducible source hashes.
 
 ### Joystick extraction v1 (2026-09-07)
 

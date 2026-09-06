@@ -108,6 +108,7 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--event-run", type=Path)
     movement_mvp.add_argument("--failure-report", type=Path, action="append", default=[])
     movement_mvp.add_argument("--verify-only", action="store_true")
+    movement_mvp.add_argument("--normalize-scale", action="store_true")
     movement_mvp.add_argument("--target-root", type=Path)
     movement_mvp.add_argument("--prior-report", type=Path)
     movement_mvp.add_argument("--goal-canvas-report", type=Path)
@@ -1564,7 +1565,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raise ValueError("joystick extraction requires --source-run")
                 from hok_agent.movement_real_rgb import run_joystick_extraction
 
-                result = run_joystick_extraction(args.source_run, args.output_dir)
+                result = run_joystick_extraction(
+                    args.source_run, args.output_dir, normalize_scale=args.normalize_scale
+                )
             elif args.mode == "joystick-visibility":
                 if args.source_root is None or args.cohort_dir is None or args.pre_ingest is None:
                     raise ValueError("joystick visibility requires source/cohort/pre-ingest")

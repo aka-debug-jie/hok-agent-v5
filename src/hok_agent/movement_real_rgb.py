@@ -3057,16 +3057,30 @@ def calibrate_joystick_templates(rgb: np.ndarray) -> dict[str, np.ndarray]:
     return {"base": base, "knob": knob, "base_mask": mask, "knob_mask": knob_mask}
 
 
+JOYSTICK_SCALES = (0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 1.0, 1.1, 1.25)
+
+
 def extract_joystick_sequence(
-    frames: np.ndarray, templates: dict[str, np.ndarray],
+    frames: np.ndarray, templates: dict[str, np.ndarray], *, normalize_scale: bool = False,
 ) -> list[dict[str, object]]:
+    import cv2
+
     directions = ("E", "SE", "S", "SW", "W", "NW", "N", "NE")
     rows: list[dict[str, object]] = []
     centered = 0
     for frame in frames:
-        signal = _joystick_signal(frame)
-        base, bs, bm, bc = _joystick_match(signal, templates["base"], templates["base_mask"])
-        knob, ks, km, kc = _joystick_match(signal, templates["knob"], templates["knob_mask"])
+        candidates = []
+        for scale in JOYSTICK_SCALES if normalize_scale else (1.0,):
+            normalized = cv2.resize(frame, None, fx=1 / scale, fy=1 / scale,
+                                    interpolation=cv2.INTER_LINEAR) if scale != 1 else frame
+            signal = _joystick_signal(normalized)
+            base, bs, bm, bc = _joystick_match(signal, templates["base"], templates["base_mask"])
+            knob, ks, km, kc = _joystick_match(signal, templates["knob"], templates["knob_mask"])
+            valid = (bs >= 0.35 and ks >= 0.65 and min(bm, km) >= 0.04
+                     and min(bc, kc) >= 0.60 and math.dist(base, knob) * 2 <= 200)
+            candidates.append(((valid, min(bs / 0.35, ks / 0.65)),
+                               scale, base, bs, bm, bc, knob, ks, km, kc))
+        _, scale, base, bs, bm, bc, knob, ks, km, kc = max(candidates, key=lambda c: c[0])
         dx, dy = (knob[0] - base[0]) * 2, (knob[1] - base[1]) * 2
         distance = math.hypot(dx, dy)
         reason = "observed"
@@ -3090,8 +3104,11 @@ def extract_joystick_sequence(
                                                    / (math.pi / 4))) % 8]
         else:
             centered = 0
-        rows.append({"base_xy": [v * 2 for v in base], "knob_xy": [v * 2 for v in knob],
-                     "offset_xy": [dx, dy], "candidate_action": action, "reason": reason,
+        rows.append({"base_xy": [v * 2 * scale for v in base],
+                     "knob_xy": [v * 2 * scale for v in knob],
+                     "offset_xy": [dx * scale, dy * scale],
+                     "normalized_offset_xy": [dx, dy], "control_scale": scale,
+                     "candidate_action": action, "reason": reason,
                      "base_score": bs, "knob_score": ks, "base_margin": bm, "knob_margin": km,
                      "base_contrast_ratio": bc, "knob_contrast_ratio": kc,
                      "confidence": min(max(bs, 0), max(ks, 0)),
@@ -3099,7 +3116,46 @@ def extract_joystick_sequence(
     return rows
 
 
-def run_joystick_extraction(source_run: Path, output_dir: Path) -> dict[str, object]:
+def joystick_scale_regression(
+    frames: np.ndarray, templates: dict[str, np.ndarray],
+) -> dict[str, object]:
+    """Geometric consistency on train transforms, not semantic label accuracy."""
+    import cv2
+
+    results: list[dict[str, object]] = []
+    for index in (3, 17, 39):
+        original = frames[index]
+        reference = extract_joystick_sequence(np.stack([original] * 2), templates)[-1]
+        for scale in (0.75, 1.0, 1.25):
+            translation = (24 * scale, 16 * scale)
+            matrix = np.asarray(
+                [[scale, 0, translation[0]], [0, scale, translation[1]]], np.float32
+            )
+            canvas = (math.ceil(original.shape[1] * max(1, scale) + 48),
+                      math.ceil(original.shape[0] * max(1, scale) + 32))
+            transformed = cv2.warpAffine(original, matrix, canvas,
+                                         borderValue=(64, 64, 64))
+            row = extract_joystick_sequence(np.stack([transformed] * 2), templates,
+                                            normalize_scale=True)[-1]
+            errors = [math.dist(cast(list[float], row[key]),
+                               [v * scale + d for v, d in zip(
+                                   cast(list[float], reference[key]), translation, strict=True)])
+                      for key in ("base_xy", "knob_xy")]
+            same_action = row["candidate_action"] == reference["candidate_action"]
+            reference_known = reference["candidate_action"] != "unknown"
+            results.append({"train_frame": index, "scale": scale,
+                            "reference_action": reference["candidate_action"],
+                            "predicted_action": row["candidate_action"], "reason": row["reason"],
+                            "base_error_pixels": errors[0], "knob_error_pixels": errors[1],
+                            "action_consistent": same_action,
+                            "passed": max(errors) <= 8 and reference_known and same_action})
+    return {"cases": results, "passed": all(r["passed"] for r in results),
+            "meaning": "train-derived geometric consistency, not independent accuracy"}
+
+
+def run_joystick_extraction(
+    source_run: Path, output_dir: Path, *, normalize_scale: bool = False,
+) -> dict[str, object]:
     import cv2
     from PIL import Image, ImageDraw
 
@@ -3148,18 +3204,36 @@ def run_joystick_extraction(source_run: Path, output_dir: Path) -> dict[str, obj
                         base_mask=templates["base_mask"], knob_mask=templates["knob_mask"])
     # Freeze before reading any dev frame; no selection based on dev.
     frozen: dict[str, object] = {"settings": JOYSTICK_EXTRACT_SETTINGS,
+                                "scales": JOYSTICK_SCALES if normalize_scale else (1.0,),
+                                "normalize_scale": normalize_scale,
+                                "dev_usage": "previously inspected regression set",
                                 "train_calibration_patches": len(patches),
                                 "template_sha256": _file_sha256(template_path),
                                 "source_report_sha256": source["report_sha256"],
                                 "implementation_sha256": _file_sha256(Path(__file__))}
     frozen["contract_sha256"] = _object_sha256(frozen)
     (staging / "contract.json").write_bytes(_canonical(frozen) + b"\n")
+    scale_check: dict[str, object] | None = None
+    if normalize_scale:
+        frames, _ = read_window(seed)
+        scale_check = joystick_scale_regression(frames, templates)
+        (staging / "scale-regression.json").write_bytes(_canonical(scale_check) + b"\n")
+        if not scale_check["passed"]:
+            failure: dict[str, object] = {
+                "status": "SYNTHETIC_SCALE_REGRESSION_FAILED", "training_allowed": False,
+                "dev_frames_opened": 0, "scale_regression": scale_check,
+                "contract_sha256": frozen["contract_sha256"],
+            }
+            failure["report_sha256"] = _object_sha256(failure)
+            (staging / "report.json").write_bytes(_canonical(failure) + b"\n")
+            staging.rename(output_dir)
+            return failure
     results: list[dict[str, object]] = []
     for window in sorted(windows, key=lambda w: (w["split"] != "train", str(w["data"]))):
         if window["split"] not in {"train", "dev"}:
             raise ValueError("test window prohibited")
         frames, times = read_window(window)
-        predictions = extract_joystick_sequence(frames, templates)
+        predictions = extract_joystick_sequence(frames, templates, normalize_scale=normalize_scale)
         sheet = Image.new("RGB", (4 * 320, 3 * 240))
         for ordinal, index in enumerate(np.linspace(0, len(frames) - 1, 12).astype(int)):
             row = predictions[index]
@@ -3183,7 +3257,10 @@ def run_joystick_extraction(source_run: Path, output_dir: Path) -> dict[str, obj
                         "counts": dict(Counter(str(r["candidate_action"]) for r in predictions)),
                         "qa_sha256": _file_sha256(staging / qa_name)})
     report: dict[str, object] = {
-        "schema_version": "joystick-extraction-v1", "contract_sha256": frozen["contract_sha256"],
+        "schema_version": (
+            "joystick-extraction-v2-scale" if normalize_scale else "joystick-extraction-v1"
+        ),
+        "contract_sha256": frozen["contract_sha256"], "scale_regression": scale_check,
         "windows": results, "status": "QA_REQUIRED", "training_allowed": False,
         "automatic_accuracy_verified": False, "candidate_labels_only": True,
         "test_frames_opened": 0, "gpu_seconds": 0, "input_commands_sent": 0,
