@@ -51,6 +51,12 @@ anchor-masked and goal-only each collapsed to dev accuracy 0.1111 / macro-F1 0.0
 `WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED`; no further anchor detector, epochs, model, samples,
 checkpoint or Movement training. A new cycle must choose a separately observable target; R0 rule
 Movement remains the engineering baseline and phone/test/RL remain closed.
+The next observable-data cycle now passes an offline engineering replay only: the frozen E1a
+dev-death session produces 284 causal, explicitly non-training transitions with one DEATH, one
+RESPAWN, 17 SELF_HP_DELTA events, zero reward and a terminal VIDEO_EOF row committed before exit.
+Freeze detector thresholds and E1a evidence. This permits only a read-only cross-session death
+candidate audit on existing train/dev artifacts; semantic accuracy, Reward, promotion, phone,
+test and RL remain closed.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

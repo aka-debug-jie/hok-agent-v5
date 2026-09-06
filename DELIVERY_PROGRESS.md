@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED`: render repair passes overfit36, but all three formal dev variants collapse at 0.111 accuracy | Stop weak-anchor model tuning; retain deterministic rule Movement and choose a new observable-data cycle |
+| Engineering convergence | `DEATH_RESPAWN_EVENT_TRANSITION_REPLAY_PASSED`: frozen E1a dev replay writes 284 causal non-training transitions with zero reward | Audit cross-session death candidates from existing train/dev; semantic Reward and device stages remain closed |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: freeze the failed weak-anchor relation lineage and retain the deterministic R0 baseline
-CURRENT STATUS: WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED; no learned Movement checkpoint
-BLOCKING FAILURE: repaired overfit passes, but full/masked/goal-only all collapse to 0.111 dev accuracy
-NEXT ACCEPTANCE: new project cycle only; prioritize independently observable Event/Reward or hero-bound data, not more weak-anchor tuning
-COMMAND STATUS: initial run plus sole render repair complete; four v2 model runs; no checkpoint
+CURRENT GOAL: audit cross-session death/respawn candidates from existing train/dev artifacts
+CURRENT STATUS: DEATH_RESPAWN_EVENT_TRANSITION_REPLAY_PASSED; semantic accuracy and Reward remain false
+BLOCKING FAILURE: Event-to-Store works on one frozen dev-death session, but multi-session semantic evidence is absent
+NEXT ACCEPTANCE: at least three existing non-test sessions with reproducible death/respawn candidate windows and false-positive accounting
+COMMAND STATUS: 285-frame replay complete; 284 causal non-training transitions; zero reward/input/model runs
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1354,6 +1354,36 @@ expansion was introduced.
 - Focused tests cover source-preserving variant generation, render-order difference, overfit-stop,
   repair binding, control gates and no-checkpoint output. Affected real-RGB/training/boundary tests,
   Ruff, strict mypy, project safety and `git diff --check` passed.
+
+### Observable death/respawn Event-to-Store replay (2026-09-06)
+
+- Reused the immutable E1a width-repair contract/report and its single frozen dev-death session.
+  Detector thresholds, temporal confirmation, source frames and event types are unchanged. The
+  replay opens only derived `main/minimap/hud` shards whose file and summary hashes match the
+  frozen report; it does not decode video or open test.
+- `HealthTemporalEventEngine` initializes on frame 0, then attaches events produced by each next
+  observation to the corresponding zero-action transition. The 285 frames produce 284 contiguous
+  transitions and reproduce exactly 1 DEATH, 1 RESPAWN and 17 SELF_HP_DELTA events. Death appears
+  at step 69 (17.0 s) and respawn at step 85 (20.2 s). Episode-local exact-once remains active.
+- Every proposal is deterministic `HOLD/NONE/WAIT`; every executed action is acknowledged as
+  NOOP without an input attempt. Reward version is `reward-disabled-v0`; all four components,
+  total and reward event IDs are zero/empty. All rows are intentionally `training_eligible=false`
+  because semantic/HP accuracy is unverified and Reward is disabled.
+- Fixed TransitionStore propagation semantics: an intentionally non-training but causally valid
+  transition no longer makes the next row causally invalid. Propagation remains when the previous
+  payload itself has `causal_order_valid=false`. Dedicated tests cover both paths.
+- All 284 stored rows pass standalone validation and retain causal order; training count is zero.
+  The final VIDEO_EOF/TRUNCATED row is the only terminal and is committed before summary creation.
+  SQLite `integrity_check=ok`; all 285 derived frame bundles and the frame manifest are hash-bound.
+- Evidence: `$HOK_LARGE_ROOT/runs/hierarchical-event-e1/death-respawn-transition-replay-v1`.
+  Report file/self SHA-256:
+  `268f0c8ab65ea5895d06b27d928c9c29f309de75b69fbe603a666b223dccb133` /
+  `2e7dcbd634aafdbafe581b1b3cd1cf26a0cba450f4805fb8af9c37ece5682ecb`.
+  SQLite SHA-256 `dba9f55c19f48c6d7d7909dc499d678aff09d1c70f01c61cfe7b431fa5eff048`.
+  The 288 files occupy 31,831,775 bytes. Input, model, GPU, mobile capture and test counts are zero.
+- This is `DEATH_RESPAWN_EVENT_TRANSITION_REPLAY_PASSED`, an engineering result only. It does not
+  validate event semantics or authorize death reward. Next use existing non-test artifacts to
+  count cross-session candidate windows and false positives before any RewardHub change.
 
 ## Frozen Global Agent execution state
 

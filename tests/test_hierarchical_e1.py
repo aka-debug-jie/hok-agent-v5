@@ -14,7 +14,9 @@ from hok_agent.hierarchical_e1 import (
     detect_center_health_bar,
     load_health_contract,
     load_health_report,
+    replay_health_event_transitions,
 )
+from hok_agent.transition_store import UnifiedTransitionStore
 from hok_agent.visual_events import EventEngineIdentity, LifeState, VisualEventType
 
 CONTRACT = Path("configs/hierarchical_event_e1_health.json")
@@ -78,6 +80,38 @@ def _write_session(path: Path, runs: list[int], hard_stops: list[int]) -> None:
     (path / "summary.json").write_text('{"status":"SYNTHETIC"}\n', encoding="utf-8")
 
 
+def _write_bound_session(path: Path, runs: list[int], hard_stops: list[int]) -> Path:
+    shard_dir = path / "shards"
+    shard_dir.mkdir(parents=True)
+    frames = np.stack([_frame(run) for run in runs])
+    shard = shard_dir / "observations-0000.npz"
+    np.savez_compressed(
+        shard,
+        main_rgb=frames,
+        minimap_rgb=frames,
+        hud_rgb=frames,
+        scheduled_elapsed_ms=np.arange(len(frames), dtype=np.int64) * 200,
+        hard_stop=np.asarray(hard_stops, dtype=np.uint8),
+    )
+    import hashlib
+
+    summary = {
+        "status": "PASSED",
+        "derived_roi_rgb_persisted": True,
+        "raw_frames_persisted": False,
+        "observation_shards": [
+            {
+                "path": shard.name,
+                "rows": len(frames),
+                "sha256": hashlib.sha256(shard.read_bytes()).hexdigest(),
+            }
+        ],
+    }
+    summary_path = path / "summary.json"
+    summary_path.write_text(json.dumps(summary))
+    return shard
+
+
 def test_health_audit_is_path_free_transactional_and_non_promoting(tmp_path: Path) -> None:
     train_a = tmp_path / "train-a"
     train_b = tmp_path / "train-b"
@@ -112,3 +146,50 @@ def test_health_audit_is_path_free_transactional_and_non_promoting(tmp_path: Pat
         load_health_report(tampered, CONTRACT)
     with pytest.raises(E1Error, match="already exists"):
         audit_health_sessions(CONTRACT, (), output)
+
+
+def test_health_event_replay_writes_causal_zero_reward_nontraining_chain(tmp_path: Path) -> None:
+    train_a = tmp_path / "train-a"
+    train_b = tmp_path / "train-b"
+    dev = tmp_path / "dev-death"
+    challenge = tmp_path / "challenge"
+    _write_session(train_a, [12] * 10, [0] * 10)
+    _write_session(train_b, [12] * 10, [0] * 10)
+    shard = _write_bound_session(
+        dev,
+        [12, 12, 12, 0, 0, 0, 0, 12, 12, 12],
+        [0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
+    )
+    _write_session(challenge, [12] * 10, [0] * 10)
+    audit_dir = tmp_path / "audit"
+    audit_health_sessions(
+        CONTRACT,
+        (
+            AuditSession("train-a", "train_live", train_a),
+            AuditSession("train-b", "train_live", train_b),
+            AuditSession("dev-death", "dev_death", dev),
+            AuditSession("challenge", "challenge_false_positive", challenge),
+        ),
+        audit_dir,
+    )
+    output = tmp_path / "replay"
+    report = replay_health_event_transitions(CONTRACT, audit_dir / "report.json", dev, output)
+    assert report["status"] == "DEATH_RESPAWN_EVENT_TRANSITION_REPLAY_PASSED"
+    assert report["frames"] == 10 and report["transitions"] == 9
+    assert report["training_eligible_transitions"] == 0
+    assert report["event_counts"]["DEATH"] == report["event_counts"]["RESPAWN"] == 1
+    assert report["reward_total"] == 0.0 and all(report["checks"].values())
+    assert len(list((output / "frames").glob("*.npz"))) == 10
+    with UnifiedTransitionStore(output / "replay.sqlite3") as store:
+        rows = store.load_episode("offline-death-respawn-001")
+    assert all(row["causal_order_valid"] and not row["training_eligible"] for row in rows)
+    assert all(row["reward"]["total"] == 0 and row["reward"]["event_ids"] == [] for row in rows)
+    assert [row["done"] for row in rows] == [False] * 8 + [True]
+    assert rows[-1]["terminal_reason"] == "VIDEO_EOF"
+    with pytest.raises(E1Error, match="already exists"):
+        replay_health_event_transitions(CONTRACT, audit_dir / "report.json", dev, output)
+    shard.write_bytes(b"tampered")
+    with pytest.raises(E1Error, match="shard differs"):
+        replay_health_event_transitions(
+            CONTRACT, audit_dir / "report.json", dev, tmp_path / "tampered-output"
+        )

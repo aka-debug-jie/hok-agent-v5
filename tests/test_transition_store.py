@@ -177,6 +177,54 @@ def test_invalid_causal_transition_is_preserved_but_not_trainable(tmp_path: Path
         assert store.count(training_only=True) == 0
 
 
+def test_intentionally_nontraining_transition_keeps_causal_episode_chain(tmp_path: Path) -> None:
+    first = _transition()
+    first["training_eligible"] = False
+    first["ineligibility_reasons"] = ["semantic_accuracy_unverified"]
+    second = copy.deepcopy(first)
+    second["step_id"] = 1
+    second["observation"] = _frame("obs-001", 8_000_000, 9_000_000)
+    second["next_observation"] = _frame("obs-002", 15_000_000, 16_000_000)
+    for proposal in second["proposals"].values():
+        proposal["observation_id"] = "obs-001"
+        proposal["applied_observation_id"] = "obs-001"
+        proposal["decision_start_ns"] = 10_000_000
+        proposal["decision_end_ns"] = 11_000_000
+    second["executed_action"]["dispatch_start_ns"] = 12_000_000
+    second["executed_action"]["dispatch_ack_ns"] = 13_000_000
+    second["settle_end_ns"] = 14_000_000
+    with UnifiedTransitionStore(tmp_path / "replay.sqlite3") as store:
+        assert store.append(first).validation.valid is True
+        stored = store.append(second)
+        assert stored.validation.valid is True
+        assert stored.validation.causal_order_valid is True
+        assert stored.payload["training_eligible"] is False
+        assert store.count() == 2 and store.count(training_only=True) == 0
+
+
+def test_causally_invalid_nontraining_transition_still_poison_next_chain(tmp_path: Path) -> None:
+    first = _transition()
+    first["next_observation"]["capture_start_ns"] = 6_500_000
+    first["training_eligible"] = False
+    second = copy.deepcopy(_transition())
+    second["step_id"] = 1
+    second["observation"] = _frame("obs-001", 8_000_000, 9_000_000)
+    second["next_observation"] = _frame("obs-002", 15_000_000, 16_000_000)
+    for proposal in second["proposals"].values():
+        proposal["observation_id"] = "obs-001"
+        proposal["applied_observation_id"] = "obs-001"
+        proposal["decision_start_ns"] = 10_000_000
+        proposal["decision_end_ns"] = 11_000_000
+    second["executed_action"]["dispatch_start_ns"] = 12_000_000
+    second["executed_action"]["dispatch_ack_ns"] = 13_000_000
+    second["settle_end_ns"] = 14_000_000
+    with UnifiedTransitionStore(tmp_path / "replay.sqlite3") as store:
+        assert store.append(first).validation.causal_order_valid is False
+        stored = store.append(second)
+        assert "previous_transition_ineligible" in stored.validation.errors
+        assert stored.validation.causal_order_valid is False
+
+
 def test_stale_proposal_is_rejected() -> None:
     row = _transition()
     row["proposals"]["macro"]["valid_until_ns"] = 4_500_000

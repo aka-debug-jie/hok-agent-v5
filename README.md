@@ -220,6 +220,20 @@ session-isolated dev nevertheless collapsed to one class: full, anchor-masked an
 reached only 0.111 accuracy and 0.0222 macro-F1. No checkpoint was saved. Do not add updates, models,
 samples or threshold changes to this weak-anchor relation route.
 
+The next observable-event cycle now has a complete offline engineering replay for the frozen
+E1a death/respawn diagnostic. It replays 285 derived RGB frames into 284 causal, NOOP transitions,
+reproduces 1 death, 1 respawn and 17 HP-delta events, and commits a final `VIDEO_EOF` transition.
+All rewards are zero and all rows are explicitly non-training because semantic accuracy is still
+unverified. SQLite integrity and every frame reference pass; this is Event-to-Store evidence only.
+
+```bash
+python -m hok_agent.hierarchical_e1 \
+  --contract configs/hierarchical_event_e1_health.json \
+  --replay-health-report "$HOK_LARGE_ROOT/audit/hierarchical-event-e1/health-engineering-v2-width-repair/report.json" \
+  --replay-session "$HOK_LARGE_ROOT/runs/mobile-operation-base/death-stop-60s-v1" \
+  --output-dir "$HOK_LARGE_ROOT/runs/hierarchical-event-e1/death-respawn-transition-replay-v1"
+```
+
 The older diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
 
 ```bash

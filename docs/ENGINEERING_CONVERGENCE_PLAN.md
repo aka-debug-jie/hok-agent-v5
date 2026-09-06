@@ -301,6 +301,15 @@ accuracy 0.1111、macro-F1 0.0222并只预测SW。由此只能说明小样本可
 模型、窗口、伪标签或第二种定位特征，不保存checkpoint。真实Movement继续使用确定性规则底座；
 若开启下一工程周期，应转向独立的可观测事件/Reward数据面或英雄绑定数据，不再沿本路线调参。
 
+新的可观察事件周期已从`DEATH/RESPAWN`工程回放开始，不重开终局test或旧检测调参。冻结E1a
+dev-death的285帧经现有HealthTemporalEventEngine生成284条NOOP transition，复现1次死亡、1次
+复活和17次HP变化；最后一条以VIDEO_EOF截断，先写Store再结束。所有reward为0、所有样本
+`training_eligible=false`，但284条因果校验全部有效，SQLite integrity为ok。为支持这种合法的
+不可训练诊断链，Store只在上一条`causal_order_valid=false`时传播链错误；单纯主动禁用训练
+不再污染后续因果状态。该结果只证明Event→Transition→Store工程闭环，不证明死亡语义准确、
+HP数值准确或Reward可用。下一步应从既有train/dev派生数据只读盘点跨session死亡候选；在至少
+三局一致前不赋死亡奖励，不接手机，不打开test。
+
 不再要求用户录制或标注。先在既有 train/dev 中抽取至多 12 个 session、每局 3 段短片，
 总计最多 36 段，跨旋转、尺度与场景检查。人工查看由开发者完成，仅做预处理 QA，不创建训练标签。
 旋转矩阵正确性需结合图像确认；“成功解码”不能当作方向正确的证据。

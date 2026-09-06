@@ -353,7 +353,7 @@ class UnifiedTransitionStore:
         connection = self._require_connection()
         previous = connection.execute(
             """
-            SELECT step_id, next_observation_id, done, training_eligible
+            SELECT step_id, next_observation_id, done, training_eligible, payload_json
             FROM transitions
             WHERE episode_id = ?
             ORDER BY step_id DESC
@@ -366,16 +366,24 @@ class UnifiedTransitionStore:
             if row["step_id"] != 0:
                 errors.append("episode_does_not_start_at_step_zero")
         else:
-            previous_step, previous_next_observation, previous_done, previous_training_eligible = (
-                previous
-            )
+            (
+                previous_step,
+                previous_next_observation,
+                previous_done,
+                previous_training_eligible,
+                previous_payload_json,
+            ) = previous
             if row["step_id"] != int(previous_step) + 1:
                 errors.append("episode_step_not_contiguous")
             if row["observation"]["observation_id"] != str(previous_next_observation):
                 errors.append("episode_observation_chain_broken")
             if bool(previous_done):
                 errors.append("episode_continues_after_terminal")
-            if not bool(previous_training_eligible):
+            previous_payload = cast(dict[str, object], json.loads(str(previous_payload_json)))
+            if (
+                not bool(previous_training_eligible)
+                and previous_payload.get("causal_order_valid") is not True
+            ):
                 errors.append("previous_transition_ineligible")
 
         for head in ("macro", "movement", "combat"):

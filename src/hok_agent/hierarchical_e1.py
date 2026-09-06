@@ -5,13 +5,26 @@ import hashlib
 import json
 import os
 import shutil
+import sqlite3
 import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
 import numpy as np
 
+from hok_agent.frame_bus import FramePacket, FramePacketRecord, RgbView, ViewName
+from hok_agent.transition_store import (
+    ExecutedActionRecord,
+    HierarchicalTransitionRecord,
+    PolicyProposalRecord,
+    ProposalBundleRecord,
+    ReplayRecord,
+    RewardComponentsRecord,
+    RewardRecord,
+    UnifiedTransitionStore,
+)
 from hok_agent.visual_events import (
     EventEngineIdentity,
     EventSource,
@@ -410,9 +423,11 @@ def audit_health_sessions(
     if output_dir.exists() or output_dir.is_symlink():
         raise E1Error("audit output directory already exists")
     roles = [session.role for session in sessions]
-    if roles.count("train_live") < 2 or roles.count("dev_death") < 1 or roles.count(
-        "challenge_false_positive"
-    ) < 1:
+    if (
+        roles.count("train_live") < 2
+        or roles.count("dev_death") < 1
+        or roles.count("challenge_false_positive") < 1
+    ):
         raise E1Error("audit requires two train-live, one dev-death, and one challenge session")
     identity = EventEngineIdentity("hierarchical-e1-health-v1", contract_sha256)
     rows = [_session_report(session, config, identity) for session in sessions]
@@ -422,16 +437,13 @@ def audit_health_sessions(
     train_frames = sum(cast(int, row["frames"]) for row in train_rows)
     train_visible = sum(cast(int, row["health_visible_frames"]) for row in train_rows)
     train_false_deaths = sum(
-        cast(dict[str, int], row["event_counts"])[VisualEventType.DEATH.value]
-        for row in train_rows
+        cast(dict[str, int], row["event_counts"])[VisualEventType.DEATH.value] for row in train_rows
     )
     dev_deaths = sum(
-        cast(dict[str, int], row["event_counts"])[VisualEventType.DEATH.value]
-        for row in dev_rows
+        cast(dict[str, int], row["event_counts"])[VisualEventType.DEATH.value] for row in dev_rows
     )
     dev_respawns = sum(
-        cast(dict[str, int], row["event_counts"])[VisualEventType.RESPAWN.value]
-        for row in dev_rows
+        cast(dict[str, int], row["event_counts"])[VisualEventType.RESPAWN.value] for row in dev_rows
     )
     challenge_false_deaths = sum(
         cast(dict[str, int], row["event_counts"])[VisualEventType.DEATH.value]
@@ -444,8 +456,7 @@ def audit_health_sessions(
         "train_false_deaths": train_false_deaths
         <= int(cast(int, gate["maximum_train_false_death_events"])),
         "dev_death_events": dev_deaths >= int(cast(int, gate["minimum_dev_death_events"])),
-        "dev_respawn_events": dev_respawns
-        >= int(cast(int, gate["minimum_dev_respawn_events"])),
+        "dev_respawn_events": dev_respawns >= int(cast(int, gate["minimum_dev_respawn_events"])),
         "challenge_false_deaths": challenge_false_deaths
         <= int(cast(int, gate["maximum_challenge_false_death_events"])),
     }
@@ -489,6 +500,310 @@ def audit_health_sessions(
     return payload
 
 
+def _load_replay_views(
+    session_dir: Path, expected_summary_sha256: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    summary_path = session_dir / "summary.json"
+    if (
+        session_dir.is_symlink()
+        or not session_dir.is_dir()
+        or _sha(summary_path.read_bytes()) != expected_summary_sha256
+    ):
+        raise E1Error("health replay session summary differs")
+    summary = cast(dict[str, object], json.loads(summary_path.read_text(encoding="utf-8")))
+    if (
+        summary.get("status") != "PASSED"
+        or summary.get("derived_roi_rgb_persisted") is not True
+        or summary.get("raw_frames_persisted") is not False
+    ):
+        raise E1Error("health replay session boundary differs")
+    main_parts: list[np.ndarray] = []
+    minimap_parts: list[np.ndarray] = []
+    hud_parts: list[np.ndarray] = []
+    time_parts: list[np.ndarray] = []
+    for raw in cast(list[dict[str, object]], summary["observation_shards"]):
+        basename = str(raw["path"])
+        path = session_dir / "shards" / basename
+        if (
+            Path(basename).name != basename
+            or path.is_symlink()
+            or not path.is_file()
+            or _sha(path.read_bytes()) != raw["sha256"]
+        ):
+            raise E1Error("health replay observation shard differs")
+        with np.load(path, allow_pickle=False) as shard:
+            main_parts.append(shard["main_rgb"].copy())
+            minimap_parts.append(shard["minimap_rgb"].copy())
+            hud_parts.append(shard["hud_rgb"].copy())
+            time_parts.append(shard["scheduled_elapsed_ms"].copy())
+    main = np.concatenate(main_parts)
+    minimap = np.concatenate(minimap_parts)
+    hud = np.concatenate(hud_parts)
+    timestamps = np.concatenate(time_parts).astype(np.int64)
+    if (
+        main.shape != minimap.shape
+        or main.shape != hud.shape
+        or main.shape[1:] != (128, 128, 3)
+        or main.dtype != np.uint8
+        or minimap.dtype != np.uint8
+        or hud.dtype != np.uint8
+        or timestamps.shape != (len(main),)
+        or len(main) < 2
+        or not np.all(np.diff(timestamps) > 0)
+    ):
+        raise E1Error("health replay observation arrays differ")
+    return main, minimap, hud, timestamps
+
+
+def _replay_packet(
+    episode_id: str,
+    index: int,
+    timestamp_ns: int,
+    main: np.ndarray,
+    minimap: np.ndarray,
+    hud: np.ndarray,
+    frame_dir: Path,
+) -> FramePacketRecord:
+    basename = f"frame-{index:06d}.npz"
+    np.savez_compressed(frame_dir / basename, main=main, minimap=minimap, hud=hud)
+    views = tuple(
+        RgbView(cast(ViewName, name), frame.tobytes(), cast(tuple[int, int, int], frame.shape))
+        for name, frame in (("main", main), ("minimap", minimap), ("hud", hud))
+    )
+    return FramePacket(
+        observation_id=f"{episode_id}:obs-{index:06d}",
+        capture_start_ns=timestamp_ns,
+        capture_end_ns=timestamp_ns,
+        capture_source_class="offline_video",
+        frame_bundle_ref=basename,
+        views=views,
+    ).to_record()
+
+
+def _null_proposal(observation_id: str, value: str, decision_start_ns: int) -> PolicyProposalRecord:
+    return {
+        "observation_id": observation_id,
+        "applied_observation_id": observation_id,
+        "carried_forward": False,
+        "value": value,
+        "confidence": 1.0,
+        "decision_start_ns": decision_start_ns,
+        "decision_end_ns": decision_start_ns + 1,
+        "valid_until_ns": decision_start_ns + 1_000_000_000,
+        "policy_bundle_version": "offline-event-null-policy-v1",
+    }
+
+
+def replay_health_event_transitions(
+    contract_path: Path,
+    health_report_path: Path,
+    session_dir: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    """Replay one frozen dev-death session into zero-reward, non-training transitions."""
+    if output_dir.exists() or output_dir.is_symlink():
+        raise E1Error("health replay output already exists")
+    config, _contract, contract_sha256 = load_health_contract(contract_path)
+    health_report = load_health_report(health_report_path, contract_path)
+    dev_rows = [
+        row
+        for row in cast(list[dict[str, object]], health_report["sessions"])
+        if row["role"] == "dev_death"
+    ]
+    if len(dev_rows) != 1:
+        raise E1Error("health replay requires exactly one frozen dev-death session")
+    expected_events = cast(dict[str, int], dev_rows[0]["event_counts"])
+    if (
+        expected_events.get("DEATH") != 1
+        or expected_events.get("RESPAWN") != 1
+        or health_report.get("semantic_accuracy_verified") is not False
+        or health_report.get("reward_allowed") is not False
+    ):
+        raise E1Error("health replay frozen evidence differs")
+    main, minimap, hud, timestamps_ms = _load_replay_views(
+        session_dir, cast(str, dev_rows[0]["summary_sha256"])
+    )
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    frame_dir = staging / "frames"
+    frame_dir.mkdir()
+    episode_id = "offline-death-respawn-001"
+    packets = [
+        _replay_packet(
+            episode_id,
+            index,
+            int(timestamp_ms) * 1_000_000,
+            main[index],
+            minimap[index],
+            hud[index],
+            frame_dir,
+        )
+        for index, timestamp_ms in enumerate(timestamps_ms)
+    ]
+    identity = EventEngineIdentity("observable-death-respawn-v1", contract_sha256)
+    engine = HealthTemporalEventEngine(episode_id, identity, config)
+    first_evidence = detect_center_health_bar(main[0], config)
+    first_update = engine.update(
+        packets[0]["observation_id"], packets[0]["capture_end_ns"], first_evidence
+    )
+    state_counts = Counter([first_update.state.life_state.value])
+    emitted: list[VisualEvent] = []
+    policy_sha256 = _sha(b"offline-event-null-policy-v1")
+    validation_errors: list[str] = []
+    database_path = staging / "replay.sqlite3"
+    with UnifiedTransitionStore(database_path) as store:
+        for step_id in range(len(packets) - 1):
+            observation = packets[step_id]
+            next_observation = packets[step_id + 1]
+            evidence = detect_center_health_bar(main[step_id + 1], config)
+            update = engine.update(
+                next_observation["observation_id"], next_observation["capture_end_ns"], evidence
+            )
+            state_counts[update.state.life_state.value] += 1
+            emitted.extend(update.events)
+            decision_start = observation["capture_end_ns"] + 1
+            proposals: ProposalBundleRecord = {
+                "macro": _null_proposal(observation["observation_id"], "HOLD", decision_start),
+                "movement": _null_proposal(observation["observation_id"], "NONE", decision_start),
+                "combat": _null_proposal(observation["observation_id"], "WAIT", decision_start),
+            }
+            decision_end = decision_start + 1
+            executed: ExecutedActionRecord = {
+                "requested_movement": "NONE",
+                "applied_movement": "NONE",
+                "requested_combat": "WAIT",
+                "applied_combat": "WAIT",
+                "movement_command": "NOOP",
+                "combat_command": "NOOP",
+                "dispatch_start_ns": decision_end + 1,
+                "dispatch_ack_ns": decision_end + 2,
+                "first_attempt_status": "not_attempted",
+                "retry_status": "not_attempted",
+                "retry_count": 0,
+                "final_status": "noop",
+            }
+            components: RewardComponentsRecord = {
+                "terminal": 0.0,
+                "death": 0.0,
+                "self_hp_delta": 0.0,
+                "tower_damage": 0.0,
+            }
+            reward: RewardRecord = {
+                "reward_version": "reward-disabled-v0",
+                "components": components,
+                "total": 0.0,
+                "event_ids": [],
+            }
+            replay: ReplayRecord = {
+                "source": "offline_video",
+                "failure_tags": ["semantic_accuracy_unverified", "reward_disabled"],
+                "priority": 0.0,
+            }
+            done = step_id == len(packets) - 2
+            row: HierarchicalTransitionRecord = {
+                "schema_version": "hok-agent-hierarchical-transition-v0",
+                "episode_id": episode_id,
+                "step_id": step_id,
+                "policy_bundle_version": "offline-event-null-policy-v1",
+                "policy_bundle_sha256": policy_sha256,
+                "event_engine_version": identity.version,
+                "event_engine_sha256": identity.sha256,
+                "observation": observation,
+                "proposals": proposals,
+                "executed_action": executed,
+                "settle_end_ns": decision_end + 3,
+                "next_observation": next_observation,
+                "events": [event.to_record() for event in update.events],
+                "reward": reward,
+                "done": done,
+                "terminal_reason": "VIDEO_EOF" if done else "NOT_DONE",
+                "episode_end_kind": "TRUNCATED" if done else "NOT_DONE",
+                "causal_order_valid": True,
+                "training_eligible": False,
+                "ineligibility_reasons": [
+                    "semantic_accuracy_unverified",
+                    "reward_disabled",
+                    "offline_event_diagnostic",
+                ],
+                "replay": replay,
+            }
+            stored = store.append(row)
+            validation_errors.extend(stored.validation.errors)
+        stored_rows = store.load_episode(episode_id)
+        transition_count = store.count()
+        training_count = store.count(training_only=True)
+    connection = sqlite3.connect(database_path)
+    try:
+        integrity = cast(tuple[str], connection.execute("PRAGMA integrity_check").fetchone())[0]
+    finally:
+        connection.close()
+    event_counts = {
+        event_type.value: sum(event.event_type == event_type for event in emitted)
+        for event_type in (
+            VisualEventType.DEATH,
+            VisualEventType.RESPAWN,
+            VisualEventType.SELF_HP_DELTA,
+        )
+    }
+    frame_manifest = [
+        {"basename": path.name, "sha256": _sha(path.read_bytes())}
+        for path in sorted(frame_dir.iterdir())
+    ]
+    frame_manifest_payload: dict[str, object] = {"frames": frame_manifest}
+    frame_manifest_payload["manifest_sha256"] = _sha(_canonical(frame_manifest_payload))
+    manifest_path = staging / "frames-manifest.json"
+    manifest_path.write_bytes(_canonical(frame_manifest_payload) + b"\n")
+    checks = {
+        "source_event_counts_reproduced": event_counts == expected_events,
+        "transition_count": transition_count == len(main) - 1,
+        "training_count_zero": training_count == 0,
+        "validation_errors_zero": not validation_errors,
+        "all_causal": all(row["causal_order_valid"] for row in stored_rows),
+        "reward_total_zero": all(row["reward"]["total"] == 0 for row in stored_rows),
+        "terminal_last_only": sum(row["done"] for row in stored_rows) == 1
+        and stored_rows[-1]["terminal_reason"] == "VIDEO_EOF",
+        "sqlite_integrity": integrity == "ok",
+        "frame_count": len(frame_manifest) == len(main),
+    }
+    payload: dict[str, object] = {
+        "schema_version": "observable-death-respawn-transition-replay-v1",
+        "status": "DEATH_RESPAWN_EVENT_TRANSITION_REPLAY_PASSED"
+        if all(checks.values())
+        else "DEATH_RESPAWN_EVENT_TRANSITION_REPLAY_FAILED",
+        "health_contract_sha256": contract_sha256,
+        "health_report_file_sha256": _sha(health_report_path.read_bytes()),
+        "health_report_sha256": health_report["report_sha256"],
+        "source_summary_sha256": dev_rows[0]["summary_sha256"],
+        "event_engine_version": identity.version,
+        "event_engine_sha256": identity.sha256,
+        "episode_id": episode_id,
+        "frames": len(main),
+        "transitions": transition_count,
+        "training_eligible_transitions": training_count,
+        "event_counts": event_counts,
+        "life_state_counts": dict(state_counts),
+        "reward_total": 0.0,
+        "terminal_reason": "VIDEO_EOF",
+        "frame_manifest_file_sha256": _sha(manifest_path.read_bytes()),
+        "frame_manifest_sha256": frame_manifest_payload["manifest_sha256"],
+        "sqlite_integrity": integrity,
+        "checks": checks,
+        "semantic_accuracy_verified": False,
+        "self_hp_numeric_accuracy_verified": False,
+        "reward_allowed": False,
+        "training_allowed": False,
+        "promotion_allowed": False,
+        "video_test_opened": False,
+        "mobile_capture_used": False,
+        "input_commands_sent": 0,
+        "model_runs": 0,
+    }
+    payload["report_sha256"] = _sha(_canonical(payload))
+    (staging / "report.json").write_bytes(_canonical(payload) + b"\n")
+    os.replace(staging, output_dir)
+    return payload
+
+
 def _session(raw: str, role: SessionRole) -> AuditSession:
     session_id, separator, path = raw.partition("=")
     if not separator or not session_id or "/" in session_id:
@@ -502,8 +817,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--train-live", action="append", default=[])
     parser.add_argument("--dev-death", action="append", default=[])
     parser.add_argument("--challenge", action="append", default=[])
+    parser.add_argument("--replay-health-report", type=Path)
+    parser.add_argument("--replay-session", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
+    if args.replay_health_report is not None or args.replay_session is not None:
+        if (
+            args.replay_health_report is None
+            or args.replay_session is None
+            or args.train_live
+            or args.dev_death
+            or args.challenge
+        ):
+            raise E1Error("health replay arguments must be complete and exclusive")
+        payload = replay_health_event_transitions(
+            args.contract,
+            args.replay_health_report,
+            args.replay_session,
+            args.output_dir,
+        )
+        print(json.dumps(payload, sort_keys=True))
+        return 0
     sessions = tuple(
         [*(_session(value, "train_live") for value in args.train_live)]
         + [*(_session(value, "dev_death") for value in args.dev_death)]
