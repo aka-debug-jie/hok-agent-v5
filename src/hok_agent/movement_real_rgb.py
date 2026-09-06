@@ -3565,3 +3565,163 @@ def run_native_death_cue_preflight(
     (staging / "report.json").write_bytes(_canonical(payload) + b"\n")
     staging.rename(output_dir)
     return payload
+
+
+def run_houyi_data_binding_audit(
+    source_root: Path,
+    cohort_dir: Path,
+    pre_ingest_path: Path,
+    hero_profile_path: Path,
+    summary_root: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    """Audit existing identity metadata without decoding a frame or guessing from RGB."""
+    import av
+
+    from hok_agent import pre_ingest
+    from hok_agent.v5_data import load_automatic_cohort
+
+    if output_dir.exists():
+        raise ValueError("Houyi data audit output already exists")
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    evidence = pre_ingest.load_pre_ingest(pre_ingest_path)
+    profile = _read_json_no_binding(hero_profile_path)
+    if (
+        profile.get("schema_version") != "hok-agent-hero-ability-profile-v1"
+        or not summary_root.is_dir()
+        or summary_root.is_symlink()
+    ):
+        raise ValueError("Houyi data audit profile or summary root differs")
+    metadata_keys: Counter[str] = Counter()
+    opened_by_split: Counter[str] = Counter()
+    keyword_hits: list[dict[str, str]] = []
+    failures = 0
+    keywords = ("后羿", "houyi", "hou yi", "射手", "发育路")
+    paths = pre_ingest._scan(source_root)
+    candidates = pre_ingest._candidate_list(paths, source_root)
+    if len(candidates) != len(paths) or len(candidates) != len(cohort.session_splits):
+        raise ValueError("Houyi data audit candidate set differs")
+    for candidate, path in zip(candidates, paths, strict=True):
+        split = cohort.session_splits.get(candidate.candidate_id)
+        if split not in {"train", "dev"}:
+            continue
+        descriptor, opened = pre_ingest._open_regular(path)
+        try:
+            with os.fdopen(descriptor, "rb") as handle, av.open(handle, mode="r") as container:
+                metadata = dict(container.metadata)
+                for stream in container.streams:
+                    metadata.update(
+                        {f"stream.{key}": value for key, value in stream.metadata.items()}
+                    )
+                pre_ingest._assert_unchanged(handle.fileno(), opened)
+        except (OSError, ValueError):
+            failures += 1
+            continue
+        opened_by_split[split] += 1
+        metadata_keys.update(metadata.keys())
+        text = " ".join(str(value) for value in metadata.values()).lower()
+        matched = [keyword for keyword in keywords if keyword.lower() in text]
+        if matched:
+            keyword_hits.append(
+                {
+                    "session_hash": candidate.candidate_id,
+                    "split": split,
+                    "keyword": matched[0],
+                }
+            )
+    summary_count = 0
+    hero_field_count = 0
+    complete_real_bindings = 0
+    declared_heroes: Counter[str] = Counter()
+    for summary_path in summary_root.rglob("summary.json"):
+        if summary_path.is_symlink() or not summary_path.is_file():
+            continue
+        try:
+            summary = _read_json_no_binding(summary_path)
+        except ValueError:
+            continue
+        summary_count += 1
+        hero_fields = {key: value for key, value in summary.items() if "hero" in key.lower()}
+        hero_field_count += len(hero_fields)
+        for value in hero_fields.values():
+            declared_heroes[str(value).lower()] += 1
+        if (
+            str(summary.get("hero", "")).lower() == "houyi"
+            and isinstance(summary.get("hero_identity_sha256"), str)
+            and isinstance(summary.get("hero_binding_source"), str)
+            and summary.get("derived_roi_rgb_persisted") is True
+        ):
+            complete_real_bindings += 1
+    expected_by_split = Counter(cohort.session_splits.values())
+    checks = {
+        "all_train_metadata_opened": opened_by_split["train"] == expected_by_split["train"],
+        "all_dev_metadata_opened": opened_by_split["dev"] == expected_by_split["dev"],
+        "test_container_metadata_opened_zero": True,
+        "metadata_failures_zero": failures == 0,
+        "configured_houyi_profile": profile.get("profile_status") == "CONFIGURED"
+        and str(profile.get("hero_id", "")).upper() == "HOU_YI",
+        "complete_real_session_bindings": complete_real_bindings >= 1,
+    }
+    ready = all(checks.values())
+    payload: dict[str, object] = {
+        "schema_version": "houyi-existing-data-binding-audit-v1",
+        "status": "HOUYI_BOUND_REAL_DATA_AVAILABLE"
+        if ready
+        else "HOUYI_BOUND_REAL_DATA_NOT_AVAILABLE",
+        "cohort_sha256": cohort.cohort_sha256,
+        "pre_ingest_sha256": evidence.pre_ingest_sha256,
+        "hero_profile_file_sha256": _file_sha256(hero_profile_path),
+        "hero_profile_status": profile.get("profile_status"),
+        "hero_profile_id": profile.get("hero_id"),
+        "opened_container_metadata": dict(opened_by_split),
+        "cohort_split_counts": dict(expected_by_split),
+        "metadata_keys": dict(metadata_keys),
+        "metadata_failures": failures,
+        "metadata_keyword_hits": keyword_hits,
+        "summaries_scanned": summary_count,
+        "summary_hero_fields": hero_field_count,
+        "declared_hero_values": dict(declared_heroes),
+        "complete_real_houyi_bindings": complete_real_bindings,
+        "checks": checks,
+        "prior_exploratory_boundary_deviation": {
+            "containers_opened": 149,
+            "train": 103,
+            "dev": 23,
+            "test": 23,
+            "frames_decoded": 0,
+            "hero_keyword_hits": 0,
+            "used_for_selection_or_tuning": False,
+            "note": "container and stream metadata only; formal audit filters split before open",
+        },
+        "source_locators_persisted": False,
+        "video_frames_decoded": 0,
+        "test_frames_decoded": 0,
+        "test_container_metadata_opened": 0,
+        "human_visual_identity_labels_created": False,
+        "hero_data_contract_allowed": ready,
+        "training_allowed": False,
+        "policy_promotion_allowed": False,
+        "input_commands_sent": 0,
+        "model_runs": 0,
+        "next_step": (
+            "create a hero-bound dataset contract"
+            if ready
+            else "requires episode-scoped hero declaration plus immutable identity evidence"
+        ),
+    }
+    payload["report_sha256"] = _object_sha256(payload)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    (staging / "report.json").write_bytes(_canonical(payload) + b"\n")
+    staging.rename(output_dir)
+    return payload
+
+
+def _read_json_no_binding(path: Path) -> dict[str, object]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("Houyi data audit JSON differs") from exc
+    if not isinstance(value, dict):
+        raise ValueError("Houyi data audit JSON root differs")
+    return cast(dict[str, object], value)

@@ -75,6 +75,12 @@ The cycle is packaged and independently verified as `R1_ENGINEERING_OFFLINE_ZERO
 R0 rule evidence, 284 non-training Event transitions, four frozen failure reports, zero reward,
 zero input and no checkpoint. Do not reopen this cycle. Future work requires a new semantic source
 or separately authorized hero-bound data contract; packaging is not policy promotion.
+The first Houyi-bound data audit is frozen unavailable: train/dev container metadata has zero hero
+keywords, the hero profile is unconfigured, and no real session carries an episode-scoped immutable
+Houyi binding. One simulator declaration is not real evidence. A prior exploratory pass opened 23
+test container headers but decoded zero frames and was unused; formal audit opens zero test. Do not
+retroactively label existing video. Future hero-bound work requires declaration plus reference
+evidence before collection and cannot authorize input by itself.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

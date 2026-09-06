@@ -647,6 +647,92 @@ def test_native_death_preflight_opens_fixed_train_dev_only(
         )
 
 
+def test_houyi_data_audit_filters_test_before_container_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    from hok_agent import movement_real_rgb as module
+    from hok_agent import pre_ingest, v5_data
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    paths = [raw / f"{index}.mp4" for index in range(3)]
+    for path in paths:
+        path.write_bytes(b"dummy")
+    candidates = pre_ingest._candidate_list(paths, raw)
+    splits = {
+        candidates[0].candidate_id: "train",
+        candidates[1].candidate_id: "dev",
+        candidates[2].candidate_id: "test",
+    }
+    monkeypatch.setattr(
+        v5_data,
+        "load_automatic_cohort",
+        lambda *_args: SimpleNamespace(session_splits=splits, cohort_sha256="4" * 64),
+    )
+    monkeypatch.setattr(
+        pre_ingest,
+        "load_pre_ingest",
+        lambda _path: SimpleNamespace(pre_ingest_sha256="5" * 64),
+    )
+    opened = []
+
+    class Container:
+        metadata = {"creation_time": "2026-01-01", "encoder": "generic"}
+        streams = [SimpleNamespace(metadata={"handler_name": "VideoHandler"})]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    def open_container(handle, *, mode):
+        assert mode == "r"
+        opened.append(handle)
+        return Container()
+
+    monkeypatch.setitem(sys.modules, "av", SimpleNamespace(open=open_container))
+    profile = tmp_path / "hero-profile.json"
+    profile.write_text(
+        json.dumps(
+            {
+                "schema_version": "hok-agent-hero-ability-profile-v1",
+                "profile_status": "TEMPLATE_NOT_CONFIGURED",
+                "hero_id": "",
+            }
+        )
+    )
+    summaries = tmp_path / "summaries"
+    summaries.mkdir()
+    (summaries / "summary.json").write_text(json.dumps({"hero": "houyi"}))
+    output = tmp_path / "audit"
+    report = module.run_houyi_data_binding_audit(
+        raw, tmp_path, tmp_path, profile, summaries, output
+    )
+    assert len(opened) == 2
+    assert report["opened_container_metadata"] == {"train": 1, "dev": 1}
+    assert report["cohort_split_counts"] == {"train": 1, "dev": 1, "test": 1}
+    assert report["test_container_metadata_opened"] == 0
+    assert report["test_frames_decoded"] == report["video_frames_decoded"] == 0
+    assert report["metadata_keyword_hits"] == []
+    assert report["metadata_keys"] == {
+        "creation_time": 2,
+        "encoder": 2,
+        "stream.handler_name": 2,
+    }
+    assert all(isinstance(value, int) for value in report["metadata_keys"].values())
+    assert report["summary_hero_fields"] == 1
+    assert report["complete_real_houyi_bindings"] == 0
+    assert report["status"] == "HOUYI_BOUND_REAL_DATA_NOT_AVAILABLE"
+    assert report["training_allowed"] is report["hero_data_contract_allowed"] is False
+    assert str(tmp_path) not in (output / "report.json").read_text()
+    with pytest.raises(ValueError, match="already exists"):
+        module.run_houyi_data_binding_audit(raw, tmp_path, tmp_path, profile, summaries, output)
+
+
 CONTRACT = ROOT / "configs" / "movement_real_rgb_preflight_v1.json"
 GOAL_CONTRACT = ROOT / "configs" / "movement_real_rgb_goal_canvas_v2.json"
 PLAYER_CONTRACT = ROOT / "configs" / "movement_real_player_cue_v1.json"

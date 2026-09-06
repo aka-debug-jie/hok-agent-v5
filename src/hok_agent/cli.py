@@ -84,6 +84,7 @@ def _parser() -> argparse.ArgumentParser:
             "native-anchor-counterfactual-materialize",
             "native-anchor-relation-train",
             "native-death-cue-preflight",
+            "houyi-data-audit",
             "real-counterfactual-overfit32-materialize",
             "real-counterfactual-grouped-eval",
             "materialize-overfit32",
@@ -1417,7 +1418,28 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             result = accept_pixel_v3(args.output_dir, args.device, args.smoke)
         elif args.command == "movement-mvp":
-            if args.mode == "native-death-cue-preflight":
+            if args.mode == "houyi-data-audit":
+                if (
+                    args.source_root is None
+                    or args.cohort_dir is None
+                    or args.pre_ingest is None
+                    or args.target_root is None
+                ):
+                    raise ValueError(
+                        "houyi-data-audit requires --source-root, --cohort-dir, "
+                        "--pre-ingest and --target-root"
+                    )
+                from hok_agent.movement_real_rgb import run_houyi_data_binding_audit
+
+                result = run_houyi_data_binding_audit(
+                    args.source_root,
+                    args.cohort_dir,
+                    args.pre_ingest,
+                    args.config,
+                    args.target_root,
+                    args.output_dir,
+                )
+            elif args.mode == "native-death-cue-preflight":
                 if args.source_root is None or args.cohort_dir is None or args.pre_ingest is None:
                     raise ValueError(
                         "native-death-cue-preflight requires --source-root, --cohort-dir "

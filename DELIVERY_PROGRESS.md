@@ -22,6 +22,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 | Route | Current result | Promotion boundary |
 |---|---|---|
 | Engineering convergence | `R1_ENGINEERING_OFFLINE_ZERO_REWARD`: R0 rule runtime, zero-reward Event replay and four failure boundaries packaged and verified | Cycle closed; no policy/Reward/mobile promotion without a new semantic source |
+| Houyi-bound real data | `HOUYI_BOUND_REAL_DATA_NOT_AVAILABLE`: 103 train/23 dev metadata have no hero identity; profile and real-session bindings are absent | Requires future episode declaration plus immutable identity reference; no retroactive labels |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +423,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: preserve the verified R1 offline engineering package and end this cycle
-CURRENT STATUS: R1_ENGINEERING_OFFLINE_ZERO_REWARD; no learned Movement, semantic Reward or mobile promotion
-BLOCKING FAILURE: real RGB semantic labels remain unavailable; cross-layout death and weak-anchor routes are frozen failed
-NEXT ACCEPTANCE: new project cycle only, starting from an independently available semantic source or hero-bound data contract
-COMMAND STATUS: package-cycle create/verify passed; Makefile-bound full check passed 448 tests; 374 transitions, 385 frames, zero reward/input/checkpoints
+CURRENT GOAL: prepare a future-only Houyi episode binding without relabeling historical video
+CURRENT STATUS: HOUYI_BOUND_REAL_DATA_NOT_AVAILABLE; R1 offline package remains verified and unchanged
+BLOCKING FAILURE: no configured Houyi profile, owner/session hero binding or immutable loading-panel reference exists
+NEXT ACCEPTANCE: episode-scoped owner declaration plus identity reference captured before a future session; still no automatic input authorization
+COMMAND STATUS: formal metadata audit opened 103 train/23 dev containers, zero test containers/frames, zero hero hits; no training
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1503,6 +1504,42 @@ expansion was introduced.
   `PYTHONPATH=$(CURDIR)/src`. The exact Makefile command then passed Ruff, strict mypy, all 448
   tests in 106.79 seconds and project safety (259 files, 131 Python, 66,837 lines, zero findings).
   This is the final full check for this cycle; it is not repeated per evidence file.
+
+### Existing Houyi-bound data audit (2026-09-07)
+
+- Added `movement-mvp --mode houyi-data-audit`. It reconstructs anonymous candidate identities
+  from the frozen pre-ingest/cohort evidence, checks split before opening a container, reads only
+  container/stream metadata and decodes no frame. It also audits the current hero-profile template,
+  cohort owner attestation and existing summary hero fields without persisting source locators.
+- Formal results: all 103 train and 23 dev metadata containers open successfully; test container
+  opens and test frame decodes are both zero. The nine metadata keys are generic creation/Android/
+  MP4 handler fields, each present in all 126 records. Filename/directory/container hero keyword
+  hits are zero.
+- `configs/hero_profile.example.json` is `TEMPLATE_NOT_CONFIGURED` with empty hero ID. The cohort
+  owner attestation contains no hero field. Among 152 summaries, one declares `hero=houyi`, but it
+  is the PixelArena Stage A simulator result and lacks a real-session identity binding. Complete
+  real Houyi bindings are zero.
+- Status is `HOUYI_BOUND_REAL_DATA_NOT_AVAILABLE`; training and hero-data contract creation remain
+  false. Existing recordings cannot be relabeled from visual resemblance, role assumptions,
+  skill availability or configuration declarations.
+- The initial v1 report exposed a mechanical observability bug: `Counter.update(metadata)` treated
+  metadata values as counts and concatenated strings. It is preserved at
+  `$HOK_LARGE_ROOT/audit/hierarchical-policy-v0/houyi-existing-data-binding-v1` and is not evidence.
+  The sole fix counts `metadata.keys()` and adds an integer-count regression test; identity results
+  and split behavior are unchanged.
+- Final report:
+  `$HOK_LARGE_ROOT/audit/hierarchical-policy-v0/houyi-existing-data-binding-v2-metadata-count-fix/report.json`.
+  File/self SHA-256:
+  `8d3bafc33dcf855b31e6323c377f09e9adbbb157b1935e4919b3ae73fdacaf53` /
+  `67fd1e2e429618ec160ee26f1f12c9836443e0d6cd03c14558163abd4201d67c`;
+  1,877 bytes. The rejected v1 file SHA-256 is
+  `5cbbbe7eedd3db5daaf14ee1038cc41fe267d34dd50f9517944a4240497a517f`.
+- Boundary deviation: before this formal implementation, an exploratory script opened container
+  and stream metadata for all 149 MP4s, including 23 test files, before split filtering. It decoded
+  zero test frames, found zero hero hits and was not used for selection, thresholds or models.
+  Formal code and tests now prove test filtering occurs before `av.open`; no further test access.
+- Next work can only prepare a future-only episode declaration/reference contract. It must not
+  bind historical sessions and does not itself authorize capture, input, Reward or training.
 
 ## Frozen Global Agent execution state
 

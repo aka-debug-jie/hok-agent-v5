@@ -341,6 +341,15 @@ checkpoint。该R1是工程能力整理，不是R0策略升级，也不授权真
 语义来源时当前工程周期到此结束；后续立项应先明确可获得的标签/环境反馈，再选择Reward或
 英雄专用动作数据，不继续从同一批无真值视频制造新支线。
 
+下一周期的后羿数据只读审计已完成。149个MP4的文件/目录名无后羿、Houyi、射手或发育路线索；
+正式审计先按cohort过滤，仅打开103 train和23 dev容器元数据，英雄关键词仍为0，test容器与帧
+均为0。hero profile仍是`TEMPLATE_NOT_CONFIGURED`，owner attestation没有hero字段；152份summary
+只有PixelArena Stage A声明`hero=houyi`，完整真实session绑定为0。因此冻结
+`HOUYI_BOUND_REAL_DATA_NOT_AVAILABLE`，不从现有50GB录像做后羿专用训练。此前一次探索性元数据
+检查错误地在split过滤前打开全部149个容器头，包含23个test；未解码帧、命中0、未用于选择或
+调参，但作为边界偏差保留。下一步必须是episode级owner声明加不可变加载面板/英雄参考证据，
+且只适用于声明后的session；不能追认旧数据或用技能存在、射手外观替代身份。
+
 交付级全量检查最终为448项pytest、Ruff、strict mypy和项目安全全部通过。首次未显式绑定
 当前`src`时，共享环境导入了相邻仓库并在collection阶段报33个缺模块错误；未执行测试主体。
 Makefile统一入口现固定`PYTHONPATH=$(CURDIR)/src`，随后原命令通过。该修复只消除环境歧义，

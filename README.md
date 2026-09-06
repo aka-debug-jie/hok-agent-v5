@@ -95,6 +95,18 @@ and RL all explicitly false.
 `RUN_PYTHON` wrapper, preventing a neighbouring editable `hok_agent` installation from being
 collected accidentally.
 
+The next-cycle Houyi data audit is available through `movement-mvp --mode houyi-data-audit`.
+It opens container metadata only after filtering to train/dev, decodes no frames, and checks the
+cohort, hero profile and existing summaries for a complete real-session identity binding. The
+current result is `HOUYI_BOUND_REAL_DATA_NOT_AVAILABLE`: 103 train and 23 dev metadata records have
+zero hero keywords, the profile is an unconfigured template, and no real session binds Houyi with
+immutable identity evidence. The one `hero=houyi` summary belongs to PixelArena Stage A.
+
+An earlier exploratory metadata pass opened all 149 container headers, including 23 test headers,
+before split filtering. It decoded zero test frames, found zero hero hits and was not used for
+selection or tuning, but is recorded as a boundary deviation. The formal audit opens zero test
+containers. Existing video must not be relabeled as Houyi from visual resemblance alone.
+
 The next-cycle real-RGB observability preflight is also available through `movement-mvp`:
 
 ```bash
