@@ -5,6 +5,12 @@
 
 ## Current planning authority (2026-09-05)
 
+The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
+for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its
+focused tests may lazily import OpenCV for this run. No historical detector thresholds change;
+no Movement training, raw-video decoding, phone or test access is authorized. Houyi identity
+is not required for this generic localization experiment. Old outcomes remain immutable.
+
 `docs/ENGINEERING_CONVERGENCE_PLAN.md` governs future work ordering and resource budgets.
 Stages A/B passed, but the first Stage C simulator candidate failed: epoch 20 reached 15/24 with
 collision fraction 0.271. Random reached 18/24, so the frozen +8 comparison is infeasible on 24

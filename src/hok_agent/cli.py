@@ -77,6 +77,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-player-goal-continuity",
             "real-player-localization-audit-v2",
             "real-player-tracking-audit",
+            "real-player-flow-audit",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1556,6 +1557,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
+            elif args.mode == "real-player-flow-audit":
+                if args.session_root is None or args.prior_report is None:
+                    raise ValueError("flow audit requires --session-root and --prior-report")
+                from hok_agent.movement_real_rgb import run_player_flow_audit
+
+                result = run_player_flow_audit(
+                    args.config, args.prior_report, args.session_root, args.output_dir
+                )
             elif args.mode == "real-player-tracking-audit":
                 if args.session_root is None or args.prior_report is None:
                     raise ValueError(

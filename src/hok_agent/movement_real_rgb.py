@@ -13,6 +13,229 @@ import numpy as np
 
 REPORT_SCHEMA = "movement-real-rgb-observability-report-v1"
 
+FLOW_SETTINGS = {
+    "window": 15, "pyramid_level": 2, "max_corners": 20,
+    "corner_quality": 0.01, "corner_min_distance": 2, "patch_radius": 12,
+    "minimum_points": 4, "fb_error_pixels": 1.0, "step_pixels": 8.0,
+    "rejoin_pixels": 3.0, "maximum_gap_ms": 1000,
+}
+
+
+def _flow_step(
+    previous: np.ndarray, current: np.ndarray, points: np.ndarray,
+) -> tuple[np.ndarray | None, np.ndarray | None, str]:
+    import cv2
+
+    forward, valid, _ = cv2.calcOpticalFlowPyrLK(
+        previous, current, points, points.copy(), winSize=(15, 15), maxLevel=2
+    )
+    if forward is None:
+        return None, None, "forward_failed"
+    backward, reverse_valid, _ = cv2.calcOpticalFlowPyrLK(
+        current, previous, forward, forward.copy(), winSize=(15, 15), maxLevel=2
+    )
+    if backward is None:
+        return None, None, "backward_failed"
+    delta = (forward - points).reshape(-1, 2)
+    keep = (
+        (valid.ravel() == 1) & (reverse_valid.ravel() == 1)
+        & np.isfinite(delta).all(axis=1)
+        & (np.linalg.norm((backward - points).reshape(-1, 2), axis=1) <= 1)
+        & (np.linalg.norm(delta, axis=1) <= 8)
+    )
+    if int(keep.sum()) < 4:
+        return None, None, "insufficient_consistent_points"
+    return forward[keep], np.median(delta[keep], axis=0)[::-1], "ok"
+
+
+def bridge_player_gaps(
+    frames: np.ndarray, positions: list[tuple[float, float] | None], period_ms: int,
+) -> tuple[list[tuple[float, float] | None], list[dict[str, object]]]:
+    """Retrospective RGB-only interpolation; actions cannot enter this interface."""
+    import cv2
+
+    gray = [cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY) for frame in frames]
+    result = list(positions)
+    gaps: list[dict[str, object]] = []
+    for start in range(len(positions) - 1):
+        origin = positions[start]
+        if origin is None or positions[start + 1] is not None:
+            continue
+        end = start + 1
+        while end < len(positions) and positions[end] is None:
+            end += 1
+        reason = "unclosed_gap" if end == len(positions) else "gap_too_long"
+        accepted = False
+        if end < len(positions) and (end - start) * period_ms <= 1000:
+            y, x = origin
+            mask = np.zeros_like(gray[start])
+            cv2.circle(mask, (round(x), round(y)), 12, 255, -1)
+            mask[:16] = mask[-16:] = 0
+            mask[:, :16] = mask[:, -16:] = 0
+            points = cv2.goodFeaturesToTrack(
+                gray[start], maxCorners=20, qualityLevel=0.01, minDistance=2, mask=mask
+            )
+            proposed: list[tuple[float, float]] = []
+            center = np.asarray(origin, dtype=np.float64)
+            reason = "insufficient_initial_points"
+            if points is not None and len(points) >= 4:
+                for index in range(start + 1, end + 1):
+                    points, delta, reason = _flow_step(gray[index - 1], gray[index], points)
+                    if points is None or delta is None:
+                        break
+                    center += delta
+                    if not all(16 <= value < 112 for value in center):
+                        reason = "outside_interior"
+                        break
+                    proposed.append((float(center[0]), float(center[1])))
+                if len(proposed) == end - start:
+                    endpoint = cast(tuple[float, float], positions[end])
+                    accepted = math.dist(proposed[-1], endpoint) <= 3
+                    reason = "accepted" if accepted else "rejoin_mismatch"
+                    if accepted:
+                        result[start + 1 : end] = proposed[:-1]
+        gaps.append({"start": start, "end": end, "accepted": accepted, "reason": reason})
+    return result, gaps
+
+
+def _flow_track_stats(positions: list[tuple[float, float] | None]) -> dict[str, int]:
+    lengths: list[int] = []
+    run = 0
+    for point in [*positions, None]:
+        if point is None:
+            lengths.append(run)
+            run = 0
+        else:
+            run += 1
+    return {
+        "valid_frames": sum(lengths), "longest_run": max(lengths),
+        "continuous_frames": sum(n for n in lengths if n >= 2),
+        "nonoverlapping_windows16": sum(n // 16 for n in lengths),
+    }
+
+
+def _flow_response(
+    positions: list[tuple[float, float] | None], actions: np.ndarray, sent: np.ndarray,
+    lag: int,
+) -> dict[str, object]:
+    vectors = ((0, 0), (-1, 0), (-1, 1), (0, 1), (1, 1),
+               (1, 0), (1, -1), (0, -1), (-1, -1))
+    projections: list[float] = []
+    for i in range(len(positions) - lag):
+        if not sent[i] or actions[i] == 0 or any(p is None for p in positions[i:i + lag + 1]):
+            continue
+        if any(sent[j] and actions[j] != actions[i] for j in range(i + 1, i + lag + 1)):
+            continue
+        vector = np.asarray(vectors[int(actions[i])])
+        delta = np.asarray(positions[i + lag]) - np.asarray(positions[i])
+        projections.append(float(delta @ vector / np.linalg.norm(vector)))
+    total = int(np.count_nonzero(sent))
+    fraction = sum(p > 0 for p in projections) / len(projections) if projections else 0.0
+    median = float(np.median(projections)) if projections else None
+    return {
+        "all_sent_events": total, "valid_events": len(projections),
+        "valid_fraction_of_all_sent": len(projections) / total if total else 0.0,
+        "positive_fraction": fraction, "median_projection_pixels": median,
+        "passed": len(projections) >= 10 and fraction >= 0.75
+        and median is not None and median >= 1,
+    }
+
+
+def run_player_flow_audit(
+    contract_path: Path, prior_report_path: Path, session_root: Path, output_dir: Path,
+) -> dict[str, object]:
+    import cv2
+
+    cv2.setNumThreads(1)
+    cv2.setRNGSeed(0)
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    prior = _load_bound_json(prior_report_path, "report_sha256")
+    if (prior.get("contract_sha256") != contract["contract_sha256"]
+            or prior.get("status") != "PLAYER_CUE_PARTIAL_SESSION002_ONLY"):
+        raise ValueError("flow requires frozen localization v2 evidence")
+    if output_dir.exists():
+        raise ValueError("flow output already exists")
+    period = int(cast(int, contract["frame_period_ms"]))
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".player-flow-", dir=output_dir.parent))
+    sessions: list[dict[str, object]] = []
+    for declaration in cast(list[dict[str, object]], contract["sessions"]):
+        name = str(declaration["basename"])
+        directory = session_root / name
+        if _file_sha256(directory / "summary.json") != declaration["summary_sha256"]:
+            raise ValueError("flow source summary hash differs")
+        summary = _load_bound_json(directory / "summary.json", "summary_sha256")
+        fields = ("minimap_rgb", "scheduled_elapsed_ms", "movement_id", "movement_input_sent")
+        parts: dict[str, list[np.ndarray]] = {key: [] for key in fields}
+        for row in cast(list[dict[str, object]], summary["observation_shards"]):
+            basename = str(row["path"])
+            path = directory / "shards" / basename
+            if Path(basename).name != basename or path.is_symlink():
+                raise ValueError("invalid flow shard path")
+            if _file_sha256(path) != row["sha256"]:
+                raise ValueError("flow shard hash differs")
+            with np.load(path, allow_pickle=False) as shard:
+                for key in fields:
+                    parts[key].append(shard[key].copy())
+        arrays = {key: np.concatenate(value) for key, value in parts.items()}
+        if not np.all(np.diff(arrays["scheduled_elapsed_ms"]) == period):
+            raise ValueError("flow source sampling differs")
+        frames = arrays["minimap_rgb"]
+        _, detected = _filtered_player_positions(frames, contract, (112, 0, 128, 16))
+        direct = [p if p is not None and all(16 <= v < 112 for v in p) else None
+                  for p in detected]
+        bridged, gaps = bridge_player_gaps(frames, direct, period)
+        before, after = _flow_track_stats(direct), _flow_track_stats(bridged)
+        accepted = [g for g in gaps if g["accepted"]]
+        qa_indices: list[int] = []
+        selected = [accepted[int(i)] for i in np.linspace(0, len(accepted) - 1,
+                    min(12, len(accepted)))] if accepted else []
+        for gap in selected:
+            qa_indices.extend(range(int(cast(int, gap["start"])), int(cast(int, gap["end"])) + 1))
+        qa_name = f"{name}-gaps.png"
+        if qa_indices:
+            _write_tracking_qa(staging / qa_name, frames, frames, bridged, qa_indices)
+        gain = ((after["continuous_frames"] - before["continuous_frames"])
+                / before["continuous_frames"] if before["continuous_frames"] else 0.0)
+        response = _flow_response(bridged, arrays["movement_id"],
+                                  arrays["movement_input_sent"], 1000 // period)
+        sessions.append({
+            "session": name, "frames": len(frames), "before": before, "after": after,
+            "original_v2_detected_frames": sum(p is not None for p in detected),
+            "positions_yx": bridged,
+            "position_kind": ["direct" if a is not None else
+                              "retrospective_bridge" if b is not None else "unknown"
+                              for a, b in zip(direct, bridged, strict=True)],
+            "direct_coverage": before["valid_frames"] / len(frames),
+            "bridged_coverage": after["valid_frames"] / len(frames),
+            "continuous_frame_gain": gain, "accepted_gaps": len(accepted), "gaps": gaps,
+            "failure_counts": dict(Counter(str(g["reason"]) for g in gaps if not g["accepted"])),
+            "response": response, "qa_clips": len(selected),
+            "qa_file": qa_name if qa_indices else None,
+            "qa_sha256": _file_sha256(staging / qa_name) if qa_indices else None,
+            "quantitative_passed": gain >= 0.5 and len(accepted) >= 10 and response["passed"],
+        })
+    eligible = sum(cast(dict[str, int], s["after"])["nonoverlapping_windows16"] >= 20
+                   for s in sessions)
+    report: dict[str, object] = {
+        "schema_version": "player-flow-gap-audit-v1", "settings": FLOW_SETTINGS,
+        "opencv_version": cv2.__version__, "contract_sha256": contract["contract_sha256"],
+        "prior_report_file_sha256": _file_sha256(prior_report_path),
+        "source_sha256": _file_sha256(Path(__file__)), "sessions": sessions,
+        "status": "QUANTITATIVE_FAILED" if not any(s["quantitative_passed"] for s in sessions)
+        else "QA_REQUIRED", "sessions_with_20_windows": eligible,
+        "cross_session_planning_allowed": False, "qa_status": "PENDING",
+        "training_allowed": False, "real_time_localization": False,
+        "gpu_seconds": 0, "input_commands_sent": 0, "test_frames_opened": 0,
+        "window_policy": "nonoverlapping within contiguous runs; retrospective labels only",
+        "timing_basis": "scheduled_elapsed_ms; not measured action or capture latency",
+        "gap_policy": "rejoin deadline measured from last direct detection",
+    }
+    report["report_sha256"] = _object_sha256(report)
+    (staging / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    os.rename(staging, output_dir)
+    return report
+
 # One bounded appearance candidate, independent of the frozen v2 detector.
 PLAYER_TRACKING_SETTINGS = {
     "patch_radius": 7,

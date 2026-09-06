@@ -21,6 +21,62 @@ from hok_agent.movement_real_rgb import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_flow_gap_rejoin_and_session_reset() -> None:
+    from hok_agent.movement_real_rgb import bridge_player_gaps
+
+    rng = np.random.default_rng(0)
+    base = rng.integers(0, 256, (128, 128, 3), dtype=np.uint8)
+    frames = np.stack([np.roll(base, i, axis=1) for i in range(8)])
+    positions = [(64.0, 64.0), None, None, (64.0, 67.0)]
+    result, gaps = bridge_player_gaps(frames[:4], positions, 200)
+    assert gaps[0]["accepted"]
+    assert np.allclose(result[1:3], [(64, 65), (64, 66)], atol=0.3)
+    assert positions[1] is None  # no mutation of original detector evidence
+    missing, _ = bridge_player_gaps(frames[:4], [None] * 4, 200)
+    assert missing == [None] * 4
+    long = [(64.0, 64.0), *([None] * 6), (64.0, 71.0)]
+    assert bridge_player_gaps(frames, long, 200)[0] == long
+    mismatch = [(64.0, 64.0), None, None, (90.0, 90.0)]
+    assert bridge_player_gaps(frames[:4], mismatch, 200)[0] == mismatch
+    assert bridge_player_gaps(frames[:4], positions[:-1] + [None], 200)[0][-3:] == [None]*3
+
+
+def test_flow_rejects_backward_inconsistency(monkeypatch: pytest.MonkeyPatch) -> None:
+    import cv2
+
+    from hok_agent.movement_real_rgb import _flow_step
+
+    points = np.full((5, 1, 2), 50, dtype=np.float32)
+    calls = 0
+
+    def fake_lk(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return points + calls * 4, np.ones((5, 1), np.uint8), None
+
+    monkeypatch.setattr(cv2, "calcOpticalFlowPyrLK", fake_lk)
+    gray = np.zeros((128, 128), np.uint8)
+    kept, delta, reason = _flow_step(gray, gray, points)
+    assert kept is None and delta is None
+    assert reason == "insufficient_consistent_points"
+
+
+def test_flow_actions_only_enter_evaluation() -> None:
+    import inspect
+
+    from hok_agent.movement_real_rgb import _flow_response, bridge_player_gaps
+
+    assert list(inspect.signature(bridge_player_gaps).parameters) == [
+        "frames", "positions", "period_ms"
+    ]
+    points = [(64.0, float(32 + i)) for i in range(20)]
+    sent = np.ones(20, dtype=bool)
+    east = _flow_response(points, np.full(20, 3), sent, 5)
+    west = _flow_response(points, np.full(20, 7), sent, 5)
+    assert east["passed"] and not west["passed"]
+    assert east["valid_fraction_of_all_sent"] == 0.75
+
+
 def test_native_window_crops_before_resize_and_rejects_eof(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

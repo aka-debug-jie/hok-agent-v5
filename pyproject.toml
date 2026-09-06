@@ -30,6 +30,7 @@ vision = [
 ]
 shadow = ["av==15.1.0"]
 preingest = ["av==15.1.0"]
+flow-audit = ["numpy>=1.26,<3", "opencv-python==5.0.0.93", "Pillow>=10"]
 
 [project.scripts]
 hok-agent = "hok_agent.cli:main"

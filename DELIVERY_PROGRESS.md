@@ -423,14 +423,35 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: prepare a future-only Houyi episode binding without relabeling historical video
-CURRENT STATUS: HOUYI_BOUND_REAL_DATA_NOT_AVAILABLE; R1 offline package remains verified and unchanged
-BLOCKING FAILURE: no configured Houyi profile, owner/session hero binding or immutable loading-panel reference exists
-NEXT ACCEPTANCE: episode-scoped owner declaration plus identity reference captured before a future session; still no automatic input authorization
-COMMAND STATUS: formal metadata audit opened 103 train/23 dev containers, zero test containers/frames, zero hero hits; no training
+CURRENT GOAL: close the authorized short-gap optical-flow experiment
+CURRENT STATUS: PLAYER_FLOW_GAP_INSUFFICIENT; R1 package unchanged
+BLOCKING FAILURE: session002 gains 9.6% continuous frames and 9 gaps; sessions003/005 unsupported
+NEXT ACCEPTANCE: none in this batch; no retuning or Movement training
+COMMAND STATUS: 4455 existing frames; independent windows 8/0/0; GPU/input/test/raw decode zero
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Short-gap optical flow closure (2026-09-07)
+
+- One RGB-only Lucas–Kanade run completed under
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/player-flow-gap-v1`.
+  `report.json` preserves machine results; `qa-conclusion.json` closes QA and the final decision.
+- Interior initialization `[16,112)` on both axes yields 180 direct detections in 002 versus
+  208 original v2 detections. Nine accepted gaps add 15 retrospective frames; coverage rises
+  12.12%→13.13%, continuous frames 177→194 (+9.60%), longest run 33→37 and independent
+  16-frame windows 5→8. Sessions003/005 have no interior seeds and zero windows.
+- 002 has 12 valid response events out of 30 sends (40%), 11/12 positive projections and
+  median 1.88455 pixels. All six positions must exist and no conflicting intervening send is
+  allowed. Timing is scheduled sampling, not measured action latency.
+- All nine available gap clips were visually inspected: lower-map interior portrait, no fixed
+  top-right UI capture or obvious identity switch. This is not independent identity accuracy.
+  Fewer than the planned 12 clips exist; no clips were duplicated to fill the quota.
+- Final `PLAYER_FLOW_GAP_INSUFFICIENT`: gain <50%, gaps <10 and zero sessions reach 20 windows.
+  No training/retuning remains pending. Houyi identity is not the blocker for generic tracking.
+- Report file SHA-256: `f3da05c01d10fd1f42b430864495370d090667048a52d00e19cbf7a7cf0e8a5d`.
+  Validation: 31 focused tests, Ruff, strict mypy (70 sources), safety and diff checks passed.
+  GPU 0; artifacts about 1 MiB; raw decoding, test frames and phone input 0.
 
 The 2026-09-05 planning update makes Movement the only first-cycle learned component and retains
 Macro/Combat as explicit rule baselines. It replaces repeated architecture/failure freezes with

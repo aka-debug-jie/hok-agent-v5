@@ -15,6 +15,22 @@ runtime guard passes.
 
 ## Current development plan
 
+Latest continuation: `PLAYER_FLOW_GAP_INSUFFICIENT`. One offline optical-flow pass recovered
+15 frames across 9 short gaps in session002, but continuous frames increased only 9.6%;
+003/005 remain unsupported. No training was started. See the current progress ledger for evidence.
+The optional `flow-audit` dependency group records the installed OpenCV version. Reproduction:
+
+```bash
+python -m hok_agent movement-mvp --mode real-player-flow-audit \
+  --config configs/movement_real_player_localization_audit_v2.json \
+  --prior-report "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-player-localization-v2/report.json" \
+  --session-root "$HOK_LARGE_ROOT/datasets/operation-movement-teacher-v1" \
+  --output-dir "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/player-flow-gap-v1"
+```
+
+Existing outputs are not overwritten. This is retrospective trajectory evidence, not real-time
+localization; actions only enter evaluation. The completed batch has no parameter-search follow-up.
+
 The active roadmap is [Engineering convergence plan](docs/ENGINEERING_CONVERGENCE_PLAN.md).
 The next cycle targets a reproducible **offline** MVP: rule Macro/Combat, one goal-conditioned
 Movement learner, and the existing observation/execution/transition interfaces. Budget ceilings
