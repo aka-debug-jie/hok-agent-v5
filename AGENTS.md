@@ -413,6 +413,9 @@ result and device-authorization restrictions continue to apply.
   `hierarchical_e1c_anchor.py`, and focused tests. The E1 terminal modules may decode only their
   frozen train/dev offline samples; they cannot open video-test, a live capture source, or any
   input surface.
+  `movement_real_rgb.py` may decode only the two cohort-bound landscape train/dev sources
+  selected by `native-player-pilot`, crop before resizing, and persist derived offline QA windows.
+  It cannot decode test, connect a device, create action labels or train from these windows.
 - No annotation UI is an active V5/V6 surface. The T8 calibration picker may use Tk only to pick
   in-memory layout coordinates for the owner-authorized self-built test app; it never writes a
   screenshot or creates training labels. `movement_real_rgb.py` may use Pillow only to write

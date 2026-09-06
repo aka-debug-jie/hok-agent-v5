@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `EXISTING_LANDSCAPE_SOURCE_RECOVERABLE_QA_ONLY`: two existing landscape train/dev videos preserve full minimap margins; teacher crops remain unrecoverable | Native-resolution localization pilot on two landscape sources only; no training or navigation integration |
+| Engineering convergence | `NATIVE_PLAYER_CUE_PARTIAL_NOT_PROMOTED`: native 256px map windows work; green-ring continuity confirms dev 9/16, train 0/16 | Unknown under occlusion; identity and training-source coverage unresolved; no training or navigation integration |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: verify controlled-player identity in two existing native-resolution landscape sources
-CURRENT STATUS: EXISTING_LANDSCAPE_SOURCE_RECOVERABLE_QA_ONLY; failed learned model and R0 remain frozen
-BLOCKING FAILURE: full source ROI is available, but controlled-player identity and continuous localization are not established
-NEXT ACCEPTANCE: two bounded landscape windows, complete minimap margins, identity QA and unknown under occlusion
-COMMAND STATUS: source recovery inspection and nine time-point QA selections complete; zero model runs
+CURRENT GOAL: retain native-resolution evidence and separate visibility failures from identity uncertainty
+CURRENT STATUS: NATIVE_PLAYER_CUE_PARTIAL_NOT_PROMOTED; failed learned model and R0 remain frozen
+BLOCKING FAILURE: overlapping train portraits prevent confirmed tracking; dev has a partial green-ring cue, not independently verified identity
+NEXT ACCEPTANCE: use cached frames to separate map/background and unknown reasons; never fill occluded positions or repurpose dev as training
+COMMAND STATUS: native-player-pilot CLI implemented; 32 unique sampled frames; integer-time regression fixed; zero model runs
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1080,6 +1080,50 @@ expansion was introduced.
   `git diff --check`; no redundant test, model training or GPU run. Phone input and test decoding
   remain zero. Next: one short window per landscape source, native-resolution minimap with edge
   margin, controlled-player identity first, then continuity. Existing failed tracker stays frozen.
+
+### Native-resolution player-cue pilot (2026-09-06)
+
+- Implemented `movement-mvp --mode native-player-pilot`, lazy offline video loading, and a
+  reusable RGB-only green-ring candidate/continuity helper in the existing real-RGB module.
+  No model or new package dependency was added. PyAV is allowlisted here only for the two
+  selected cohort-bound landscape sources. Nonselected video entries are stat-enumerated, not
+  opened; source paths never enter the saved report. Existing source/owner/privacy bindings
+  are loaded before decoding.
+- Each source contributes 16 frames at nominal 200 ms from its 20-percent time point. Crop first,
+  then resize to 256x256; save map/main-view arrays, actual timestamps and native crop hashes.
+  The train window spans 175.304–178.304 s and dev spans 148.2785–151.2835 s. Maximum actual
+  sampling gaps are 212/214 ms, not a claim of exact 200 ms timestamps or absence of source loss.
+- Synthetic boundary testing caught floating-point target-time comparison skipping exactly
+  aligned frames. Fixed this with integer microseconds and verified EOF/portrait rejection.
+  One final materialization after that fix produced arrays identical to the initial real windows
+  in every saved field; both artifact versions are preserved. This was a sampling-code validation,
+  not another model run or threshold search.
+- The fixed green-ring heuristic uses RGB >= green 150, green-red >=30 and green-blue >=20,
+  radii 8–14 px and >=7/8 circumference hits after 3x3 dilation, with a non-green core. It is
+  uncalibrated. Initial global-unique confirmation retained dev 4/16 and train 0/16. Completing
+  the local association logic (unique candidate within 12 px when a prior point exists, without
+  color/shape threshold changes) retains a consecutive 9/16 dev frames and 0/16 train frames.
+  Missing or discontinuous candidates emit unknown; a distant candidate cannot immediately
+  replace a confirmed point. Green terrain still generates unconfirmed distractors.
+- Developer inspected both 16-frame minimap sheets and matching main-view sheets. Dev's nine
+  confirmed circles visually follow the green portrait. Train portraits overlap and obscure its
+  border; only one isolated raw ring candidate exists. This is a visible-cue diagnostic, not
+  independently measured identity accuracy, false-lock rate, action accuracy or generalization.
+  Hero identity is not bound to Houyi; no data is eligible for policy training.
+- Final artifacts: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/native-player-pilot-v2-integer-time`.
+  Report file/self SHA-256:
+  `c93974432616725923e9c2261993850c05c3ae878c3303b73de9305d6b205b9d` /
+  `81e35cb4e55f1bcd7101a61fcba291dcbb8fc05de92b3783f8396c55301a1de3`.
+  The executed final source hash matches the implementation. Initial `native-player-pilot-v1`
+  remains unchanged; both directories total 30,115,414 bytes. All model runs, GPU time and input
+  commands are zero; no test video, full-frame copy or action label was created.
+- Verification: 17 focused real-RGB/boundary tests; the five native/ring/CLI-related focused
+  selections reran after final integration; Ruff, strict mypy on 70 source files, project safety,
+  source/artifact hashes, v1/v2 array equality and `git diff --check`. No full historical suite.
+- This bounded pilot is closed as `NATIVE_PLAYER_CUE_PARTIAL_NOT_PROMOTED`. Preserve unknown,
+  do not lower detection thresholds to force the occluded train window through, and do not feed
+  the dev example back into training. Next inspect only the cached map/background separation and
+  failure reasons before deciding whether additional visible train-only footage is useful.
 
 ## Frozen Global Agent execution state
 

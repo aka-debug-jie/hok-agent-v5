@@ -76,6 +76,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-player-goal-continuity",
             "real-player-localization-audit-v2",
             "real-player-tracking-audit",
+            "native-player-pilot",
             "real-counterfactual-overfit32-materialize",
             "real-counterfactual-grouped-eval",
             "materialize-overfit32",
@@ -99,6 +100,9 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--goal-canvas-report", type=Path)
     movement_mvp.add_argument("--overfit-report", type=Path)
     movement_mvp.add_argument("--session-root", type=Path)
+    movement_mvp.add_argument("--source-root", type=Path)
+    movement_mvp.add_argument("--cohort-dir", type=Path)
+    movement_mvp.add_argument("--pre-ingest", type=Path)
     movement_mvp.add_argument("--dataset", type=Path)
     movement_mvp.add_argument("--dataset-root", type=Path)
     movement_mvp.add_argument("--checkpoint", type=Path, action="append", default=[])
@@ -1424,6 +1428,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.overfit_report,
                     args.output_dir,
                     device_name=args.device,
+                )
+            elif args.mode == "native-player-pilot":
+                if args.source_root is None or args.cohort_dir is None or args.pre_ingest is None:
+                    raise ValueError(
+                        "native-player-pilot requires --source-root, --cohort-dir and --pre-ingest"
+                    )
+                from hok_agent.movement_real_rgb import run_native_player_pilot
+
+                result = run_native_player_pilot(
+                    args.source_root, args.cohort_dir, args.pre_ingest, args.output_dir
                 )
             elif args.mode == "real-player-tracking-audit":
                 if args.session_root is None or args.prior_report is None:

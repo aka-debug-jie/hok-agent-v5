@@ -141,6 +141,7 @@ ALLOWED_VISION_PATHS = {
     Path("tests/test_hierarchical_p0_ssl_v2.py"),
 }
 ALLOWED_VIDEO_PATHS = {
+    Path("src/hok_agent/movement_real_rgb.py"),
     Path("src/hok_agent/shadow.py"),
     Path("src/hok_agent/capture.py"),
     Path("src/hok_agent/alignment.py"),

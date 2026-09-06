@@ -19,6 +19,140 @@ from hok_agent.movement_real_rgb import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_native_window_crops_before_resize_and_rejects_eof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+    from fractions import Fraction
+    from types import SimpleNamespace
+
+    from hok_agent.movement_real_rgb import _native_landscape_window
+
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"synthetic descriptor")
+    yy, xx = np.indices((180, 320))
+    rgb = np.stack([xx % 256, yy, np.zeros_like(xx)], axis=-1).astype(np.uint8)
+    stream = SimpleNamespace(
+        duration=5000, time_base=Fraction(1, 1000), width=320, height=180, metadata={}
+    )
+    frames = [SimpleNamespace(pts=1000 + i * 200, to_ndarray=lambda **_kw: rgb) for i in range(16)]
+
+    class Container:
+        streams = SimpleNamespace(video=[stream])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def seek(self, *args, **kwargs):
+            pass
+
+        def decode(self, requested):
+            assert requested is stream
+            return iter(frames)
+
+    monkeypatch.setitem(sys.modules, "av", SimpleNamespace(open=lambda *a, **kw: Container()))
+    result = _native_landscape_window(source)
+    assert result["minimap_rgb"].shape == (16, 256, 256, 3)
+    assert result["minimap_rgb"][0, 0, 0].tolist() == [8, 0, 0]
+    assert result["minimap_rgb"][0, -1, -1].tolist() == [68, 71, 0]
+    assert result["main_rgb"][0, 0, 0].tolist() == [96, 27, 0]
+    assert np.diff(result["timestamp_us"]).tolist() == [200000] * 15
+    frames[:] = frames[:3]
+    with pytest.raises(ValueError, match="incomplete"):
+        _native_landscape_window(source)
+    stream.width = 100
+    with pytest.raises(ValueError, match="landscape"):
+        _native_landscape_window(source)
+
+
+def test_ring_cue_requires_hollow_shape_and_rgb() -> None:
+    from hok_agent.movement_real_rgb import green_ring_candidates
+
+    rgb = np.zeros((256, 256, 3), dtype=np.uint8)
+    yy, xx = np.indices((256, 256))
+    d = np.hypot(yy - 100, xx - 100)
+    rgb[(d >= 9) & (d <= 11)] = (20, 220, 30)
+    peaks = green_ring_candidates(rgb)
+    assert len(peaks) == 1 and np.linalg.norm(np.asarray(peaks[0]) - [100, 100]) < 3
+    assert green_ring_candidates(np.zeros_like(rgb)) == []
+    assert green_ring_candidates(np.full_like(rgb, (20, 220, 30))) == []
+    with pytest.raises(ValueError, match="256x256"):
+        green_ring_candidates(rgb[:128])
+
+
+def test_ring_track_nearby_confirmation_missing_and_jump(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hok_agent import movement_real_rgb as module
+
+    candidates = iter(
+        [
+            [(100, 100)],
+            [(101, 101), (220, 220)],
+            [(102, 102), (221, 221)],
+            [],
+            [(103, 103)],
+            [(104, 104)],
+            [(200, 200)],
+            [(201, 201)],
+        ]
+    )
+    monkeypatch.setattr(module, "green_ring_candidates", lambda _frame: next(candidates))
+    p = module.green_ring_track(np.zeros((8, 256, 256, 3), dtype=np.uint8))
+    assert p == [None, (101, 101), (102, 102), None, None, (104, 104), None, (201, 201)]
+
+
+def test_native_pilot_opens_selected_sources_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    from hok_agent import movement_real_rgb as module
+    from hok_agent import pre_ingest, v5_data
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    paths = [raw / f"{i}.mp4" for i in range(3)]
+    for path in paths:
+        path.write_bytes(b"dummy")
+    ids = [pre_ingest._candidate(path, raw).candidate_id for path in paths]
+    monkeypatch.setattr(module, "NATIVE_PLAYER_SOURCES", {ids[0]: "train", ids[1]: "dev"})
+    monkeypatch.setattr(
+        v5_data,
+        "load_automatic_cohort",
+        lambda *_a: SimpleNamespace(
+            session_splits=dict(zip(ids, ["train", "dev", "test"], strict=True)),
+            cohort_sha256="0" * 64,
+        ),
+    )
+    decoded = []
+
+    def decode(path):
+        assert path != paths[2]
+        decoded.append(path)
+        return {
+            "minimap_rgb": np.zeros((16, 256, 256, 3), dtype=np.uint8),
+            "main_rgb": np.zeros((16, 256, 256, 3), dtype=np.uint8),
+            "timestamp_us": np.arange(16) * 200000,
+            "native_crop_sha256": np.asarray(["a" * 64] * 16, dtype="U64"),
+        }
+
+    monkeypatch.setattr(module, "_native_landscape_window", decode)
+    output = tmp_path / "out"
+    report = module.run_native_player_pilot(raw, tmp_path, tmp_path, output)
+    assert set(decoded) == set(paths[:2])
+    assert report["test_frames_decoded"] == report["model_runs"] == 0
+    assert report["action_labels_created"] is report["training_allowed"] is False
+    assert len(list(output.glob("*.npz"))) == 2
+    with pytest.raises(ValueError, match="already exists"):
+        module.run_native_player_pilot(raw, tmp_path, tmp_path, output)
+    assert set(decoded) == set(paths[:2])
+
+
 CONTRACT = ROOT / "configs" / "movement_real_rgb_preflight_v1.json"
 GOAL_CONTRACT = ROOT / "configs" / "movement_real_rgb_goal_canvas_v2.json"
 PLAYER_CONTRACT = ROOT / "configs" / "movement_real_player_cue_v1.json"

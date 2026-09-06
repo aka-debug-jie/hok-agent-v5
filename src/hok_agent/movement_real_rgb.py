@@ -24,6 +24,67 @@ PLAYER_TRACKING_SETTINGS = {
     "template_frames": 16,
 }
 
+NATIVE_PLAYER_SOURCES = {
+    "0667d97cdb3024f7c5d39d6e797bfe1d527cbd99c07e8e2d2e31cd6eb0ed0993": "train",
+    "c1121610049b451fb1e3f8d3c3695da15ff04f5391898d7b9a0de867b685c009": "dev",
+}
+
+
+def green_ring_candidates(frame: np.ndarray) -> list[tuple[int, int]]:
+    """Uncalibrated visual cue on a 256px native-cropped map, not player identity."""
+    if frame.shape != (256, 256, 3) or frame.dtype != np.uint8:
+        raise ValueError("ring cue requires a 256x256 uint8 RGB map")
+    rgb = frame.astype(np.int16)
+    red, green, blue = (rgb[..., i] for i in range(3))
+    mask = (green >= 150) & (green - red >= 30) & (green - blue >= 20)
+    padded = np.pad(mask, 1)
+    thick = np.zeros_like(mask)
+    core = np.zeros(mask.shape, dtype=np.int16)
+    for dy in range(3):
+        for dx in range(3):
+            shifted = padded[dy : dy + 256, dx : dx + 256]
+            thick |= shifted
+            core += shifted
+    scores = np.zeros(mask.shape, dtype=np.int16)
+    for radius in range(8, 15):
+        hits = np.zeros(mask.shape, dtype=np.int16)
+        border = np.pad(thick, 15)
+        for angle in np.arange(8) * math.pi / 4:
+            dy, dx = round(radius * math.sin(angle)), round(radius * math.cos(angle))
+            hits += border[15 + dy : 271 + dy, 15 + dx : 271 + dx]
+        scores = np.maximum(scores, hits)
+    scores[core >= 4] = 0  # green filled blobs are not hollow portrait borders
+    scores[:15] = scores[-15:] = 0
+    scores[:, :15] = scores[:, -15:] = 0
+    scores[:40, 224:] = 0  # team-strip UI outside the map, not a candidate player
+    ys, xs = np.where(scores >= 7)
+    ordered = sorted(zip(ys.tolist(), xs.tolist(), strict=True), key=lambda p: (-int(scores[p]), p))
+    peaks: list[tuple[int, int]] = []
+    for point in ordered:
+        if all(math.dist(point, other) > 20 for other in peaks):
+            peaks.append(point)
+    return peaks
+
+
+def green_ring_track(frames: np.ndarray) -> list[tuple[int, int] | None]:
+    """Only a unique observed ring can be confirmed; no extrapolation or identity claim."""
+    previous: tuple[int, int] | None = None
+    positions: list[tuple[int, int] | None] = []
+    for frame in frames:
+        candidates = green_ring_candidates(frame)
+        if previous is not None:
+            nearby = [point for point in candidates if math.dist(previous, point) <= 12]
+            if nearby:
+                candidates = nearby
+        selected = candidates[0] if len(candidates) == 1 else None
+        positions.append(
+            selected
+            if previous is not None and selected is not None and math.dist(previous, selected) <= 12
+            else None
+        )
+        previous = selected
+    return positions
+
 
 def _canonical(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
@@ -2301,6 +2362,170 @@ def run_real_player_tracking_audit(
         "model_runs": 0,
         "gpu_seconds": 0,
         "next_step": "inspect paired QA; no automatic navigation integration or training",
+    }
+    report["report_sha256"] = _object_sha256(report)
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return report
+
+
+def _native_landscape_window(path: Path) -> dict[str, np.ndarray]:
+    """A 3-second development window; crop before resizing, never decode audio."""
+    import av
+
+    from hok_agent import pre_ingest
+
+    descriptor, opened = pre_ingest._open_regular(path)
+    minimaps: list[np.ndarray] = []
+    main_views: list[np.ndarray] = []
+    times: list[int] = []
+    source_hashes: list[str] = []
+    with os.fdopen(descriptor, "rb") as handle, av.open(handle, mode="r") as container:
+        stream = container.streams.video[0]
+        if stream.duration is None or stream.time_base is None:
+            raise ValueError("native window requires video duration and time base")
+        if stream.width <= stream.height or pre_ingest._rotation(stream) != 0:
+            raise ValueError("native pilot accepts the two landscape sources only")
+        start = int(stream.duration * 0.2)
+        start_us = round(start * stream.time_base * 1_000_000)
+        container.seek(start, stream=stream, backward=True)
+        for frame in container.decode(stream):
+            if frame.pts is None:
+                raise ValueError("native frame has no timestamp")
+            timestamp_us = round(frame.pts * stream.time_base * 1_000_000)
+            if timestamp_us < start_us + len(times) * 200_000:
+                continue
+            rgb = frame.to_ndarray(format="rgb24")
+            height, width = rgb.shape[:2]
+            # Common landscape inspection geometry, including margins beyond the map border.
+            map_crop = rgb[: round(height * 0.4), round(width * 0.025) : round(width * 0.215)]
+            main_crop = rgb[
+                round(height * 0.15) : round(height * 0.85), round(width * 0.3) : round(width * 0.7)
+            ]
+            for crop, destination in ((map_crop, minimaps), (main_crop, main_views)):
+                yy = np.linspace(0, crop.shape[0] - 1, 256).astype(np.int64)
+                xx = np.linspace(0, crop.shape[1] - 1, 256).astype(np.int64)
+                destination.append(crop[yy[:, None], xx[None, :]].copy())
+            times.append(timestamp_us)
+            source_hashes.append(hashlib.sha256(map_crop.tobytes()).hexdigest())
+            if len(times) == 16:
+                break
+        pre_ingest._assert_unchanged(handle.fileno(), opened)
+    if len(times) != 16 or not np.all(np.diff(times) > 0):
+        raise ValueError("native window incomplete or non-monotonic")
+    return {
+        "minimap_rgb": np.stack(minimaps),
+        "main_rgb": np.stack(main_views),
+        "timestamp_us": np.asarray(times, dtype=np.int64),
+        "native_crop_sha256": np.asarray(source_hashes, dtype="U64"),
+    }
+
+
+def run_native_player_pilot(
+    source_root: Path,
+    cohort_dir: Path,
+    pre_ingest_path: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    """Materialize only the two identity-bound landscape development windows."""
+    from PIL import Image, ImageDraw
+
+    from hok_agent import pre_ingest
+    from hok_agent.v5_data import load_automatic_cohort
+
+    if output_dir.exists():
+        raise ValueError("native pilot output already exists")
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    if any(cohort.session_splits.get(key) != split for key, split in NATIVE_PLAYER_SOURCES.items()):
+        raise ValueError("native player source split binding differs")
+    sources: dict[str, Path] = {}
+    for path in pre_ingest._scan(source_root):
+        identity = pre_ingest._sha(
+            pre_ingest._canonical(
+                [
+                    "candidate-v2-file-atomic",
+                    path.relative_to(source_root).as_posix(),
+                    pre_ingest._stat_signature(path.stat()),
+                ]
+            )
+        )
+        if identity in NATIVE_PLAYER_SOURCES:
+            sources[identity] = path
+    if set(sources) != set(NATIVE_PLAYER_SOURCES):
+        raise ValueError("native player source identities unavailable")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    rows: list[dict[str, object]] = []
+    for identity, path in sorted(sources.items()):
+        if pre_ingest._candidate(path, source_root).candidate_id != identity:
+            raise ValueError("native source identity changed")
+        arrays = _native_landscape_window(path)
+        positions = green_ring_track(arrays["minimap_rgb"])
+        basename = identity[:8] + "-native-window.npz"
+        np.savez_compressed(
+            staging / basename,
+            minimap_rgb=arrays["minimap_rgb"],
+            main_rgb=arrays["main_rgb"],
+            timestamp_us=arrays["timestamp_us"],
+            native_crop_sha256=arrays["native_crop_sha256"],
+        )
+        sheet = Image.new("RGB", (1024, 4 * 276))
+        for index in range(16):
+            x, y = index % 4 * 256, index // 4 * 276
+            sheet.paste(Image.fromarray(arrays["minimap_rgb"][index]), (x, y + 20))
+            ImageDraw.Draw(sheet).text((x + 2, y + 2), str(index))
+            if positions[index] is not None:
+                py, px = cast(tuple[int, int], positions[index])
+                ImageDraw.Draw(sheet).ellipse(
+                    (x + px - 16, y + py + 4, x + px + 16, y + py + 36), outline="magenta", width=2
+                )
+        qa_name = identity[:8] + "-minimap-qa.png"
+        sheet.save(staging / qa_name)
+        main_name = identity[:8] + "-main-qa.png"
+        for index in range(16):
+            x, y = index % 4 * 256, index // 4 * 276
+            sheet.paste(Image.fromarray(arrays["main_rgb"][index]), (x, y + 20))
+        sheet.save(staging / main_name)
+        rows.append(
+            {
+                "session_hash": identity,
+                "split": NATIVE_PLAYER_SOURCES[identity],
+                "frames": 16,
+                "window_start_us": int(arrays["timestamp_us"][0]),
+                "window_end_us": int(arrays["timestamp_us"][-1]),
+                "maximum_sample_gap_us": int(np.diff(arrays["timestamp_us"]).max()),
+                "green_ring_candidate_counts": [
+                    len(green_ring_candidates(f)) for f in arrays["minimap_rgb"]
+                ],
+                "confirmed_green_ring_yx": positions,
+                "confirmed_frames": sum(p is not None for p in positions),
+                "artifacts": [
+                    {"basename": name, "sha256": _file_sha256(staging / name)}
+                    for name in (basename, qa_name, main_name)
+                ],
+            }
+        )
+    report: dict[str, object] = {
+        "status": "NATIVE_LANDSCAPE_WINDOWS_MATERIALIZED_QA_ONLY",
+        "cohort_sha256": cohort.cohort_sha256,
+        "implementation_sha256": _file_sha256(Path(__file__)),
+        "sessions": rows,
+        "start_fraction": 0.2,
+        "sampling_period_ms": 200,
+        "minimap_source_roi_xyxy_fraction": [0.025, 0.0, 0.215, 0.4],
+        "main_source_roi_xyxy_fraction": [0.3, 0.15, 0.7, 0.85],
+        "derived_rgb_size": 256,
+        "crop_before_resize": True,
+        "controlled_player_identity_verified": False,
+        "cue_scope": "green ring with local continuity; not calibrated player identity",
+        "training_allowed": False,
+        "action_labels_created": False,
+        "test_frames_decoded": 0,
+        "raw_full_frames_persisted": False,
+        "raw_source_locators_persisted": False,
+        "model_runs": 0,
+        "gpu_seconds": 0,
+        "input_commands_sent": 0,
     }
     report["report_sha256"] = _object_sha256(report)
     (staging / "report.json").write_bytes(_canonical(report) + b"\n")

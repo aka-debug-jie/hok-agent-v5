@@ -162,7 +162,15 @@ is deferred because the diagnostic rotation preview was upside down. No detector
 promoted. Next run only a bounded native-resolution localization pilot on the two landscape sources;
 do not require new recording, reopen test, or re-tune the failed appearance tracker.
 
-The diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
+The native-resolution pilot is now implemented as `movement-mvp --mode native-player-pilot`, with
+`--source-root`, `--cohort-dir`, `--pre-ingest` and `--output-dir`. It opens only the two selected
+cohort-bound landscape train/dev videos, crops the map before resizing to 256x256, and retains
+16 frames per source with integer-microsecond sampling. Main-view QA is separate from the map.
+The current green-ring cue confirms 9/16 dev frames and 0/16 train frames; overlapping portraits
+and background grass remain limitations. This is a partial visual cue, not verified player identity
+or an action label. There is no training, device input, or navigation integration.
+
+The older diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
 
 ```bash
 python -m hok_agent movement-mvp --mode real-player-tracking-audit \
