@@ -15,6 +15,13 @@ runtime guard passes.
 
 ## Current development plan
 
+The first joystick extractor is implemented as `movement-mvp --mode joystick-extraction
+--source-run <visibility-cache> --output-dir <new-directory>`. Train-only templates are frozen
+before dev extraction. It yields 56/120 train candidates but 0/120 dev candidates, so it is not
+transferable or training-ready. The next concrete issue is control-scale normalization and base
+background sensitivity. Existing dev results can guide disclosed regression work, not serve as
+an untouched benchmark again. Low-confidence detections remain unknown, never automatic STOP.
+
 The current joystick visibility pilot found readable translucent knob displacement in both sampled
 train/dev recordings. Six four-second native-crop windows are available for a bounded automatic
 extractor; this is visual feasibility only, with no action labels or policy training yet.

@@ -424,13 +424,39 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_FEEDBACK_VISUALLY_OBSERVABLE on two sampled train/dev sources
-BLOCKING FAILURE: automatic base/knob/active-state extraction and timing alignment remain unvalidated
-NEXT ACCEPTANCE: bounded extractor on cached windows; train-only calibration, unchanged dev; no policy training
-COMMAND STATUS: six four-second windows, 240 native crops, six QA sheets; GPU/input/test zero
+CURRENT STATUS: JOYSTICK_FIXED_SCALE_EXTRACTOR_NOT_TRANSFERABLE; visual feedback remains observable
+BLOCKING FAILURE: 56/120 train candidates, 0/120 dev; base background sensitivity and control-scale mismatch
+NEXT ACCEPTANCE: control-scale normalization on synthetic train transformations; reused dev is regression only
+COMMAND STATUS: six cached windows; no new decoding, GPU, policy training, input or test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick extraction v1 (2026-09-07)
+
+- Implemented `movement-mvp --mode joystick-extraction --source-run <visibility-cache>
+  --output-dir <new-external-directory>`. Reads cached RGB/PTS only. Base and knob are located
+  separately every frame; low-match, ambiguous, low-contrast and excessive-displacement rows
+  return unknown. STOP requires two consecutive visible centered observations within 12 pixels.
+- Train-only development: fixed f30/frame39 centered reference, automatically located by Hough;
+  97 aligned train base patches produce a median template. A grayscale single-reference trial
+  yielded 38 train candidates; a blue-excess alternative yielded 1 and was rejected. Median
+  aggregation yielded 56 and was selected before dev; no dev threshold adjustment occurred.
+- Frozen contract/template precede dev reads. Results: train f10/f30/f60 produce 1/26/29
+  candidates, total 56/120 (46.67%), including only one STOP. Dev is 0/120, all low-match unknown.
+  Six QA sheets show useful train knob detection but base drift/background sensitivity and
+  failed dev raw coordinates. Candidate coverage is not accuracy or tactical action supervision.
+- Read-only post-evaluation circle checks support a scale mismatch hypothesis: three train
+  radii 58.0/73.4/74.1 vs prominent dev 48.3/48.6/61.3 pixels. Circle types are not independently
+  paired, so scale is not established as the sole cause. No extractor changes followed dev.
+- Artifacts: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/joystick-extraction-v1`,
+  approximately 6.3 MiB. `qa-conclusion.json` closes the batch as
+  `JOYSTICK_FIXED_SCALE_EXTRACTOR_NOT_TRANSFERABLE`; no candidates are promoted to training.
+- Next bounded implementation should normalize control scale, first using synthetic transforms
+  of train crops. The inspected dev is now a regression set, not an untouched benchmark.
+  Historical movement failures and visibility evidence remain unchanged.
+- Validation: 35 focused tests, Ruff and strict mypy (70 sources) passed. Translation, ambiguity,
+  dynamic base offsets, STOP confirmation and reset after unknown have regression coverage.
 
 ### Joystick visibility pilot (2026-09-07)
 

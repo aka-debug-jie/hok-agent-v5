@@ -2994,6 +2994,207 @@ def run_joystick_visibility(
     return report
 
 
+JOYSTICK_EXTRACT_SETTINGS = {
+    "calibration_source": "0667d97c-f30.npz", "calibration_frame": 39,
+    "scale": 0.5, "base_radius": 94, "knob_radius": 28,
+    "base_min_score": 0.35, "knob_min_score": 0.65,
+    "minimum_peak_margin": 0.04, "minimum_contrast_ratio": 0.60,
+    "stop_radius_native_pixels": 12, "maximum_displacement_native_pixels": 200,
+    "stop_confirmation_frames": 2,
+    "base_template_aggregation": "median_aligned_train_patches",
+    "calibration_alignment_min_score": 0.15, "calibration_alignment_min_margin": 0.04,
+}
+
+
+def _joystick_signal(rgb: np.ndarray) -> np.ndarray:
+    import cv2
+
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    reduced = cv2.resize(gray, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+    return reduced - cv2.GaussianBlur(reduced, (0, 0), 2)
+
+
+def _joystick_match(
+    signal: np.ndarray, template: np.ndarray, mask: np.ndarray,
+) -> tuple[tuple[float, float], float, float, float]:
+    import cv2
+
+    scores = cv2.matchTemplate(signal, template, cv2.TM_CCOEFF_NORMED, mask=mask)
+    scores = np.nan_to_num(scores, nan=-1, posinf=-1, neginf=-1)
+    y, x = np.unravel_index(int(np.argmax(scores)), scores.shape)
+    best = float(scores[y, x])
+    other = scores.copy()
+    other[max(0, y - 12): y + 13, max(0, x - 12): x + 13] = -1
+    margin = best - float(other.max())
+    height, width = template.shape
+    patch = signal[y:y + height, x:x + width]
+    contrast = float(np.std(patch[mask > 0]) / max(float(np.std(template[mask > 0])), 1e-6))
+    return (float(x + width // 2), float(y + height // 2)), best, margin, contrast
+
+
+def calibrate_joystick_templates(rgb: np.ndarray) -> dict[str, np.ndarray]:
+    """Train-only development reference with visible centered knob; center found by Hough."""
+    import cv2
+
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1, 60,
+                               param1=80, param2=40, minRadius=40, maxRadius=85)
+    if circles is None or len(circles[0]) != 1:
+        raise ValueError("train calibration requires a unique knob circle")
+    x, y = np.rint(circles[0, 0, :2] * 0.5).astype(int)
+    signal = _joystick_signal(rgb)
+    base = signal[y - 94:y + 95, x - 94:x + 95].copy()
+    knob = signal[y - 28:y + 29, x - 28:x + 29].copy()
+    if base.shape != (189, 189) or knob.shape != (57, 57):
+        raise ValueError("calibration templates outside crop")
+    mask = np.zeros_like(base, dtype=np.uint8)
+    mask[5:41, 58:131] = 1
+    mask[148:184, 58:131] = 1
+    mask[58:131, 5:41] = 1
+    mask[58:131, 148:184] = 1
+    yy, xx = np.indices(knob.shape)
+    knob_mask = (((yy - 28)**2 + (xx - 28)**2) <= 26**2).astype(np.uint8)
+    return {"base": base, "knob": knob, "base_mask": mask, "knob_mask": knob_mask}
+
+
+def extract_joystick_sequence(
+    frames: np.ndarray, templates: dict[str, np.ndarray],
+) -> list[dict[str, object]]:
+    directions = ("E", "SE", "S", "SW", "W", "NW", "N", "NE")
+    rows: list[dict[str, object]] = []
+    centered = 0
+    for frame in frames:
+        signal = _joystick_signal(frame)
+        base, bs, bm, bc = _joystick_match(signal, templates["base"], templates["base_mask"])
+        knob, ks, km, kc = _joystick_match(signal, templates["knob"], templates["knob_mask"])
+        dx, dy = (knob[0] - base[0]) * 2, (knob[1] - base[1]) * 2
+        distance = math.hypot(dx, dy)
+        reason = "observed"
+        if bs < 0.35 or ks < 0.65:
+            reason = "low_match"
+        elif min(bm, km) < 0.04:
+            reason = "ambiguous_match"
+        elif min(bc, kc) < 0.60:
+            reason = "low_contrast_or_occluded"
+        elif distance > 200:
+            reason = "displacement_outside_range"
+        action = "unknown"
+        if reason == "observed":
+            if distance <= 12:
+                centered += 1
+                action = "STOP" if centered >= 2 else "unknown"
+                reason = "center_confirmed" if centered >= 2 else "center_confirming"
+            else:
+                centered = 0
+                action = directions[int(math.floor((math.atan2(dy, dx) + math.pi / 8)
+                                                   / (math.pi / 4))) % 8]
+        else:
+            centered = 0
+        rows.append({"base_xy": [v * 2 for v in base], "knob_xy": [v * 2 for v in knob],
+                     "offset_xy": [dx, dy], "candidate_action": action, "reason": reason,
+                     "base_score": bs, "knob_score": ks, "base_margin": bm, "knob_margin": km,
+                     "base_contrast_ratio": bc, "knob_contrast_ratio": kc,
+                     "confidence": min(max(bs, 0), max(ks, 0)),
+                     "confidence_calibrated": False})
+    return rows
+
+
+def run_joystick_extraction(source_run: Path, output_dir: Path) -> dict[str, object]:
+    import cv2
+    from PIL import Image, ImageDraw
+
+    cv2.setNumThreads(1)
+    source = _load_bound_json(source_run / "report.json", "report_sha256")
+    if source.get("schema_version") != "joystick-visibility-v1":
+        raise ValueError("extraction requires visibility cache")
+    windows = cast(list[dict[str, object]], source["windows"])
+    if output_dir.exists():
+        raise ValueError("joystick extraction output exists")
+    seed = next(w for w in windows if w["data"] == "0667d97c-f30.npz")
+    if seed["split"] != "train":
+        raise ValueError("calibration must be train")
+
+    def read_window(row: dict[str, object]) -> tuple[np.ndarray, np.ndarray]:
+        path = source_run / str(row["data"])
+        if path.name != row["data"] or path.is_symlink():
+            raise ValueError("invalid joystick cache path")
+        if _file_sha256(path) != row["data_sha256"]:
+            raise ValueError("joystick cache hash differs")
+        with np.load(path, allow_pickle=False) as arrays:
+            return arrays["rgb"].copy(), arrays["timestamp_us"].copy()
+
+    frames, _ = read_window(seed)
+    templates = calibrate_joystick_templates(frames[39])
+    patches: list[np.ndarray] = []
+    for window in windows:
+        if window["split"] != "train":
+            continue
+        frames, _ = read_window(window)
+        for frame in frames:
+            signal = _joystick_signal(frame)
+            center, score, margin, _ = _joystick_match(
+                signal, templates["base"], templates["base_mask"]
+            )
+            x, y = map(int, center)
+            if score >= 0.15 and margin >= 0.04:
+                patches.append(signal[y - 94:y + 95, x - 94:x + 95])
+    if len(patches) < 16:
+        raise ValueError("insufficient aligned train base patches")
+    templates["base"] = np.median(np.stack(patches), axis=0).astype(np.float32)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-extraction-", dir=output_dir.parent))
+    template_path = staging / "train-templates.npz"
+    np.savez_compressed(template_path, base=templates["base"], knob=templates["knob"],
+                        base_mask=templates["base_mask"], knob_mask=templates["knob_mask"])
+    # Freeze before reading any dev frame; no selection based on dev.
+    frozen: dict[str, object] = {"settings": JOYSTICK_EXTRACT_SETTINGS,
+                                "train_calibration_patches": len(patches),
+                                "template_sha256": _file_sha256(template_path),
+                                "source_report_sha256": source["report_sha256"],
+                                "implementation_sha256": _file_sha256(Path(__file__))}
+    frozen["contract_sha256"] = _object_sha256(frozen)
+    (staging / "contract.json").write_bytes(_canonical(frozen) + b"\n")
+    results: list[dict[str, object]] = []
+    for window in sorted(windows, key=lambda w: (w["split"] != "train", str(w["data"]))):
+        if window["split"] not in {"train", "dev"}:
+            raise ValueError("test window prohibited")
+        frames, times = read_window(window)
+        predictions = extract_joystick_sequence(frames, templates)
+        sheet = Image.new("RGB", (4 * 320, 3 * 240))
+        for ordinal, index in enumerate(np.linspace(0, len(frames) - 1, 12).astype(int)):
+            row = predictions[index]
+            image = Image.fromarray(frames[index])
+            draw = ImageDraw.Draw(image)
+            bx, by = cast(list[float], row["base_xy"])
+            kx, ky = cast(list[float], row["knob_xy"])
+            draw.ellipse((bx - 10, by - 10, bx + 10, by + 10), outline="yellow", width=3)
+            draw.ellipse((kx - 10, ky - 10, kx + 10, ky + 10), outline="magenta", width=3)
+            draw.line((bx, by, kx, ky), fill="yellow", width=3)
+            image.thumbnail((320, 210))
+            x, y = ordinal % 4 * 320, ordinal // 4 * 240
+            sheet.paste(image, (x, y + 28))
+            ImageDraw.Draw(sheet).text((x, y), f"{index} {row['candidate_action']} "
+                                      f"{row['reason']}", fill="white")
+        qa_name = Path(str(window["data"])).stem + "-extracted.png"
+        sheet.save(staging / qa_name)
+        results.append({"session": window["session"], "split": window["split"],
+                        "data": window["data"], "timestamp_us": times.tolist(),
+                        "predictions": predictions, "qa": qa_name,
+                        "counts": dict(Counter(str(r["candidate_action"]) for r in predictions)),
+                        "qa_sha256": _file_sha256(staging / qa_name)})
+    report: dict[str, object] = {
+        "schema_version": "joystick-extraction-v1", "contract_sha256": frozen["contract_sha256"],
+        "windows": results, "status": "QA_REQUIRED", "training_allowed": False,
+        "automatic_accuracy_verified": False, "candidate_labels_only": True,
+        "test_frames_opened": 0, "gpu_seconds": 0, "input_commands_sent": 0,
+        "timing": "visible UI state at frame PTS; not inferred preceding action or intention",
+    }
+    report["report_sha256"] = _object_sha256(report)
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return {k: v for k, v in report.items() if k != "windows"}
+
+
 def run_native_player_pilot(
     source_root: Path,
     cohort_dir: Path,

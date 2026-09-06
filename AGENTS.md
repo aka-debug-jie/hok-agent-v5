@@ -9,6 +9,9 @@ User-confirmed translucent joystick feedback authorizes a separate visibility pi
 two native-player train/dev sources, three fixed four-second windows each, lower-left native RGB.
 `movement_real_rgb.py` may decode these windows with existing PyAV and write offline Pillow QA.
 No action labels or training follow automatically; no test, mobile input or old detector retuning.
+The subsequent authorized extractor may use only the six cached joystick windows and OpenCV.
+Train-only templates are frozen before dev extraction; results remain candidate UI-state labels,
+not validated policy targets. No new raw-video decode, model, phone or test access is required.
 
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its

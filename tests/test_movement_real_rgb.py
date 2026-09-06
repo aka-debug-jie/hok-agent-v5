@@ -21,6 +21,46 @@ from hok_agent.movement_real_rgb import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_joystick_match_tracks_translation_and_rejects_blank() -> None:
+    from hok_agent.movement_real_rgb import _joystick_match
+
+    template = np.random.default_rng(7).normal(size=(25, 25)).astype(np.float32)
+    mask = np.ones(template.shape, dtype=np.uint8)
+    for x, y in ((20, 30), (70, 55)):
+        signal = np.zeros((110, 120), np.float32)
+        signal[y:y+25, x:x+25] = template
+        center, score, margin, contrast = _joystick_match(signal, template, mask)
+        assert center == (x + 12, y + 12)
+        assert score > 0.99 and margin > 0.5 and contrast > 0.99
+    _, score, _, contrast = _joystick_match(np.zeros((110, 120), np.float32), template, mask)
+    assert score < 0.35 and contrast == 0
+
+
+def test_joystick_stop_unknown_and_dynamic_base(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hok_agent import movement_real_rgb as m
+
+    # Base is moving; relative displacement, not screen position, determines direction.
+    pairs = [(10, 10, 30, 10, 1), (20, 20, 20, 20, 1), (30, 30, 30, 30, 1),
+             (40, 40, 40, 40, 0.1), (50, 50, 50, 50, 1)]
+    matches = iter(value for bx, by, kx, ky, contrast in pairs for value in (
+        ((bx, by), 0.9, 0.5, contrast), ((kx, ky), 0.9, 0.5, contrast)))
+    monkeypatch.setattr(m, "_joystick_match", lambda *_args: next(matches))
+    t = dict.fromkeys(("base", "knob", "base_mask", "knob_mask"), np.ones((3, 3)))
+    rows = m.extract_joystick_sequence(np.zeros((5, 128, 128, 3), np.uint8), t)
+    assert [r["candidate_action"] for r in rows] == ["E", "unknown", "STOP", "unknown", "unknown"]
+    assert rows[3]["reason"] == "low_contrast_or_occluded"
+    assert rows[4]["reason"] == "center_confirming"
+
+
+def test_joystick_ambiguous_peak_cannot_be_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hok_agent import movement_real_rgb as m
+
+    monkeypatch.setattr(m, "_joystick_match", lambda *_args: ((50, 50), 0.99, 0.01, 1))
+    t = dict.fromkeys(("base", "knob", "base_mask", "knob_mask"), np.ones((3, 3)))
+    rows = m.extract_joystick_sequence(np.zeros((3, 128, 128, 3), np.uint8), t)
+    assert all(r["candidate_action"] == "unknown" for r in rows)
+
+
 def test_flow_gap_rejoin_and_session_reset() -> None:
     from hok_agent.movement_real_rgb import bridge_player_gaps
 
