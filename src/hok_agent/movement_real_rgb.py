@@ -3032,6 +3032,42 @@ def _joystick_match(
     return (float(x + width // 2), float(y + height // 2)), best, margin, contrast
 
 
+JOYSTICK_MARKER_BOXES = ((5, 41, 58, 131), (148, 184, 58, 131),
+                         (58, 131, 5, 41), (58, 131, 148, 184))
+
+
+def _joystick_geometric_base(
+    signal: np.ndarray, template: np.ndarray,
+) -> tuple[tuple[float, float], float, float, float]:
+    """Require three of four independently normalized markers at a shared cross center."""
+    import cv2
+
+    height = signal.shape[0] - template.shape[0] + 1
+    width = signal.shape[1] - template.shape[1] + 1
+    maps = []
+    for y0, y1, x0, x1 in JOYSTICK_MARKER_BOXES:
+        marker = template[y0:y1, x0:x1]
+        response = cv2.matchTemplate(signal, marker, cv2.TM_CCOEFF_NORMED)
+        maps.append(np.nan_to_num(response[y0:y0 + height, x0:x0 + width],
+                                  nan=-1, posinf=-1, neginf=-1))
+    stacked = np.stack(maps)
+    # The third-best score requires three independent marker agreements, tolerating one occlusion.
+    scores = np.partition(stacked, 1, axis=0)[1]
+    y, x = np.unravel_index(int(np.argmax(scores)), scores.shape)
+    best = float(scores[y, x])
+    other = scores.copy()
+    other[max(0, y - 12):y + 13, max(0, x - 12):x + 13] = -1
+    selected = np.argsort(stacked[:, y, x])[-3:]
+    contrasts = []
+    for ordinal in selected:
+        y0, y1, x0, x1 = JOYSTICK_MARKER_BOXES[int(ordinal)]
+        contrast = np.std(signal[y + y0:y + y1, x + x0:x + x1]) / max(
+            float(np.std(template[y0:y1, x0:x1])), 1e-6
+        )
+        contrasts.append(float(contrast))
+    return (float(x + 94), float(y + 94)), best, best - float(other.max()), min(contrasts)
+
+
 def calibrate_joystick_templates(rgb: np.ndarray) -> dict[str, np.ndarray]:
     """Train-only development reference with visible centered knob; center found by Hough."""
     import cv2
@@ -3062,6 +3098,7 @@ JOYSTICK_SCALES = (0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 1.0, 1.1, 1.25)
 
 def extract_joystick_sequence(
     frames: np.ndarray, templates: dict[str, np.ndarray], *, normalize_scale: bool = False,
+    geometric_base: bool = False,
 ) -> list[dict[str, object]]:
     import cv2
 
@@ -3074,7 +3111,10 @@ def extract_joystick_sequence(
             normalized = cv2.resize(frame, None, fx=1 / scale, fy=1 / scale,
                                     interpolation=cv2.INTER_LINEAR) if scale != 1 else frame
             signal = _joystick_signal(normalized)
-            base, bs, bm, bc = _joystick_match(signal, templates["base"], templates["base_mask"])
+            base, bs, bm, bc = (
+                _joystick_geometric_base(signal, templates["base"]) if geometric_base else
+                _joystick_match(signal, templates["base"], templates["base_mask"])
+            )
             knob, ks, km, kc = _joystick_match(signal, templates["knob"], templates["knob_mask"])
             valid = (bs >= 0.35 and ks >= 0.65 and min(bm, km) >= 0.04
                      and min(bc, kc) >= 0.60 and math.dist(base, knob) * 2 <= 200)
@@ -3118,6 +3158,7 @@ def extract_joystick_sequence(
 
 def joystick_scale_regression(
     frames: np.ndarray, templates: dict[str, np.ndarray],
+    *, geometric_base: bool = False,
 ) -> dict[str, object]:
     """Geometric consistency on train transforms, not semantic label accuracy."""
     import cv2
@@ -3125,7 +3166,9 @@ def joystick_scale_regression(
     results: list[dict[str, object]] = []
     for index in (3, 17, 39):
         original = frames[index]
-        reference = extract_joystick_sequence(np.stack([original] * 2), templates)[-1]
+        reference = extract_joystick_sequence(
+            np.stack([original] * 2), templates, geometric_base=geometric_base
+        )[-1]
         for scale in (0.75, 1.0, 1.25):
             translation = (24 * scale, 16 * scale)
             matrix = np.asarray(
@@ -3136,7 +3179,7 @@ def joystick_scale_regression(
             transformed = cv2.warpAffine(original, matrix, canvas,
                                          borderValue=(64, 64, 64))
             row = extract_joystick_sequence(np.stack([transformed] * 2), templates,
-                                            normalize_scale=True)[-1]
+                                            normalize_scale=True, geometric_base=geometric_base)[-1]
             errors = [math.dist(cast(list[float], row[key]),
                                [v * scale + d for v, d in zip(
                                    cast(list[float], reference[key]), translation, strict=True)])
@@ -3155,11 +3198,13 @@ def joystick_scale_regression(
 
 def run_joystick_extraction(
     source_run: Path, output_dir: Path, *, normalize_scale: bool = False,
+    geometric_base: bool = False,
 ) -> dict[str, object]:
     import cv2
     from PIL import Image, ImageDraw
 
     cv2.setNumThreads(1)
+    normalize_scale = normalize_scale or geometric_base
     source = _load_bound_json(source_run / "report.json", "report_sha256")
     if source.get("schema_version") != "joystick-visibility-v1":
         raise ValueError("extraction requires visibility cache")
@@ -3206,6 +3251,8 @@ def run_joystick_extraction(
     frozen: dict[str, object] = {"settings": JOYSTICK_EXTRACT_SETTINGS,
                                 "scales": JOYSTICK_SCALES if normalize_scale else (1.0,),
                                 "normalize_scale": normalize_scale,
+                                "geometric_base": geometric_base,
+                                "marker_boxes": JOYSTICK_MARKER_BOXES if geometric_base else None,
                                 "dev_usage": "previously inspected regression set",
                                 "train_calibration_patches": len(patches),
                                 "template_sha256": _file_sha256(template_path),
@@ -3216,7 +3263,7 @@ def run_joystick_extraction(
     scale_check: dict[str, object] | None = None
     if normalize_scale:
         frames, _ = read_window(seed)
-        scale_check = joystick_scale_regression(frames, templates)
+        scale_check = joystick_scale_regression(frames, templates, geometric_base=geometric_base)
         (staging / "scale-regression.json").write_bytes(_canonical(scale_check) + b"\n")
         if not scale_check["passed"]:
             failure: dict[str, object] = {
@@ -3233,7 +3280,9 @@ def run_joystick_extraction(
         if window["split"] not in {"train", "dev"}:
             raise ValueError("test window prohibited")
         frames, times = read_window(window)
-        predictions = extract_joystick_sequence(frames, templates, normalize_scale=normalize_scale)
+        predictions = extract_joystick_sequence(
+            frames, templates, normalize_scale=normalize_scale, geometric_base=geometric_base
+        )
         sheet = Image.new("RGB", (4 * 320, 3 * 240))
         for ordinal, index in enumerate(np.linspace(0, len(frames) - 1, 12).astype(int)):
             row = predictions[index]
@@ -3258,6 +3307,7 @@ def run_joystick_extraction(
                         "qa_sha256": _file_sha256(staging / qa_name)})
     report: dict[str, object] = {
         "schema_version": (
+            "joystick-extraction-v3-geometry" if geometric_base else
             "joystick-extraction-v2-scale" if normalize_scale else "joystick-extraction-v1"
         ),
         "contract_sha256": frozen["contract_sha256"], "scale_regression": scale_check,

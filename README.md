@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+Latest: `JOYSTICK_GEOMETRY_CANDIDATES_PARTIAL`. `--geometric-base` on joystick extraction uses
+three-of-four directional markers and shared scale. Candidate coverage is train69/120, dev13/120;
+dev has five directions and no STOP, so policy training is still unready. The next step is bounded
+coverage checking on more existing train time windows with this extractor fixed.
+
 The joystick extractor now supports `--normalize-scale`. Nine synthetic train-transform checks
 pass; dev knob matching improves, but only 3/120 frames produce full direction candidates because
 base matching remains weak. Current state: `JOYSTICK_SCALE_REGRESSION_PASSED_BASE_CUE_LIMITED`.

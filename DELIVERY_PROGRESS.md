@@ -424,13 +424,33 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_SCALE_REGRESSION_PASSED_BASE_CUE_LIMITED
-BLOCKING FAILURE: base match is still sparse: 3/120 dev versus 72/120 knob matches
-NEXT ACCEPTANCE: base directional-marker geometry; train first, existing dev remains regression only
-COMMAND STATUS: 9/9 synthetic scale cases; train 56/120 unchanged; dev 3/120 candidates; no training/input
+CURRENT STATUS: JOYSTICK_GEOMETRY_CANDIDATES_PARTIAL
+BLOCKING FAILURE: dev candidate coverage 13/120, only five directions and no STOP support
+NEXT ACCEPTANCE: freeze extractor; bounded additional train-source windows for direction/STOP coverage
+COMMAND STATUS: train 69/120; dev 13/120; 9/9 scale cases; 40 focused tests; no training/input/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick geometric-base extraction (2026-09-07)
+
+- `--geometric-base` now enables shared-scale search plus four independently normalized directional
+  marker responses. A candidate center needs three markers at the expected cross geometry;
+  the third-best response is its score. One marker may be occluded, without reducing thresholds.
+- Train candidates improve 56→69/120. Reused dev improves 3→13/120: E2, SE4, NW2, W4, NE1;
+  no STOP, N, S or SW. Dev threshold support is knob76/base13, not localization accuracy.
+- All thirteen accepted dev frames were rendered and inspected in `accepted-dev-qa.png`:
+  no obvious center or gross direction mismatch. The QA is informal inspection, not manual labels
+  or independent accuracy. Unknown outputs remain non-training.
+- Artifacts: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/joystick-extraction-v3-geometry`;
+  final `qa-conclusion.json` status `JOYSTICK_GEOMETRY_CANDIDATES_PARTIAL`. Approximately 7.5 MiB.
+  Source/template/report hashes verified. No raw decoding, model, input or test access.
+- 9/9 synthetic scale cases and 40 focused tests passed, including single-marker occlusion,
+  two-marker rejection, incorrect marker geometry, joint scale/coordinate restoration and STOP.
+  Ruff and strict mypy (70 sources) passed.
+- Next action changes from detector tuning to bounded data coverage checks with this frozen
+  extractor on additional times from the existing train source. No new recordings, templates,
+  threshold search or policy training are requested; existing dev remains disclosed regression.
 
 ### Joystick scale normalization (2026-09-07)
 

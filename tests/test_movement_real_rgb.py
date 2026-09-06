@@ -21,6 +21,36 @@ from hok_agent.movement_real_rgb import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_joystick_geometry_survives_one_marker_occlusion_but_not_two() -> None:
+    from hok_agent.movement_real_rgb import JOYSTICK_MARKER_BOXES, _joystick_geometric_base
+
+    rng = np.random.default_rng(17)
+    template = rng.normal(size=(189, 189)).astype(np.float32)
+    for occluded in (0, 1, 2):
+        signal = rng.normal(size=(330, 350)).astype(np.float32)
+        x, y = 40, 55
+        signal[y:y+189, x:x+189] = template
+        for y0, y1, x0, x1 in JOYSTICK_MARKER_BOXES[:occluded]:
+            signal[y+y0:y+y1, x+x0:x+x1] = rng.normal(size=(y1-y0, x1-x0))
+        center, score, margin, contrast = _joystick_geometric_base(signal, template)
+        if occluded <= 1:
+            assert center == (134, 149)
+            assert score > 0.99 and margin > 0.5 and contrast > 0.99
+        else:
+            assert score < 0.35
+
+
+def test_joystick_geometry_rejects_wrong_marker_arrangement() -> None:
+    from hok_agent.movement_real_rgb import JOYSTICK_MARKER_BOXES, _joystick_geometric_base
+
+    rng = np.random.default_rng(23)
+    template = rng.normal(size=(189, 189)).astype(np.float32)
+    signal = rng.normal(size=(330, 350)).astype(np.float32)
+    for i, (y0, y1, x0, x1) in enumerate(JOYSTICK_MARKER_BOXES):
+        signal[20+y0+i*7:20+y1+i*7, 30+x0:30+x1] = template[y0:y1, x0:x1]
+    assert _joystick_geometric_base(signal, template)[1] < 0.35
+
+
 def test_joystick_match_tracks_translation_and_rejects_blank() -> None:
     from hok_agent.movement_real_rgb import _joystick_match
 
@@ -96,7 +126,7 @@ def test_joystick_failed_scale_regression_never_reads_dev(
     monkeypatch.setattr(m, "calibrate_joystick_templates", lambda *_args: templates)
     monkeypatch.setattr(m, "_joystick_signal", lambda *_args: np.ones((210, 210), np.float32))
     monkeypatch.setattr(m, "_joystick_match", lambda *_args: ((100, 100), 0.9, 0.5, 1))
-    monkeypatch.setattr(m, "joystick_scale_regression", lambda *_args: {"passed": False})
+    monkeypatch.setattr(m, "joystick_scale_regression", lambda *_args, **_kw: {"passed": False})
     output = tmp_path / "output"
     report = m.run_joystick_extraction(source, output, normalize_scale=True)
     assert report["status"] == "SYNTHETIC_SCALE_REGRESSION_FAILED"
