@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `NATIVE_DEATH_CUE_PREFLIGHT_DOMAIN_MISMATCH`: 12-session full scan shows mobile banner/health geometry does not transfer across video layouts | Keep zero-reward Event-to-Store baseline; no more weak Reward labels without a new semantic source |
+| Engineering convergence | `R1_ENGINEERING_OFFLINE_ZERO_REWARD`: R0 rule runtime, zero-reward Event replay and four failure boundaries packaged and verified | Cycle closed; no policy/Reward/mobile promotion without a new semantic source |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: freeze zero-reward Event-to-Store engineering baseline and stop unsupported Reward labeling
-CURRENT STATUS: NATIVE_DEATH_CUE_PREFLIGHT_DOMAIN_MISMATCH; no semantic death dataset or Reward
-BLOCKING FAILURE: mobile top-center and center-health geometry produces cross-layout UI false positives in all 12 raw-video sessions
-NEXT ACCEPTANCE: none in this lineage; a new semantic source is required before any death/tower/economy Reward work
-COMMAND STATUS: 652190 raw train/dev frames decoded once, 52868 sampled, QA rejected 11 paired automatic outputs; zero model/input/test
+CURRENT GOAL: preserve the verified R1 offline engineering package and end this cycle
+CURRENT STATUS: R1_ENGINEERING_OFFLINE_ZERO_REWARD; no learned Movement, semantic Reward or mobile promotion
+BLOCKING FAILURE: real RGB semantic labels remain unavailable; cross-layout death and weak-anchor routes are frozen failed
+NEXT ACCEPTANCE: new project cycle only, starting from an independently available semantic source or hero-bound data contract
+COMMAND STATUS: package-cycle create/verify passed; Makefile-bound full check passed 448 tests; 374 transitions, 385 frames, zero reward/input/checkpoints
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1468,6 +1468,41 @@ expansion was introduced.
   plus reports occupy about 13.7 MiB; no full-resolution frame or source locator is persisted.
 - Tests cover normalized frozen pixel counts, exact center crop geometry, fixed train/dev source
   selection, test exclusion and output immutability. GPU/model/input counts remain zero.
+
+### R1 offline engineering cycle package (2026-09-07)
+
+- Added `movement-mvp --mode package-cycle` and a read-only `--verify-only` path in the existing
+  delivery module. Creation requires an already verified R0 package, an intact Event replay and
+  exactly four distinct failure statuses. Existing R0 packaging remains unchanged.
+- The Event audit reopens SQLite read-only, validates every transition, observation chain, frame
+  bundle/view hash, event count, terminal placement, reward and training eligibility. SQLite is
+  copied through backup into DELETE journal mode; no WAL/SHM sidecar is required.
+- Four failure records are included without models or bulk QA media:
+  `WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED`,
+  `DEATH_BANNER_CONSENSUS_DATA_INSUFFICIENT`,
+  `NATIVE_DEATH_CUE_PREFLIGHT_INSUFFICIENT`, and
+  `NATIVE_DEATH_CUE_PREFLIGHT_DOMAIN_MISMATCH`. Their source file hashes and statuses are bound
+  by the package summary and outer manifest.
+- The real package contains R0's 90 transitions/100 frames and Event's 284 transitions/285 frames.
+  Event counts are DEATH 1, RESPAWN 1 and SELF_HP_DELTA 17. Total reward and input commands are
+  zero; Event training-eligible count is zero; promoted checkpoint is null. It contains 398 files
+  and 32,440,974 bytes.
+- A new process completed `package-cycle --verify-only` with identical results. Delivery grade is
+  `R1_ENGINEERING_OFFLINE_ZERO_REWARD`; deterministic Movement, mid-episode simulator recovery and
+  Event-to-Store are true, while learned Movement, semantic Reward, real-video policy, mobile
+  control and RL are false.
+- Package: `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/r1-offline-engineering-v1`.
+  Manifest SHA-256 `3f92db327ef964922e0bb1d5f8d56785d82a673fd242ac63095a262c860b5ad5`;
+  summary SHA-256 `e70c12a9ae41b3691da88cbb7486077fa820b8850552a2dadc154fff1b9aea46`.
+- Focused tests cover creation, nested verification, seven tamper locations, exact failure set,
+  no checkpoint/SQLite sidecars, output non-overwrite and read-only CLI behavior. This ends the
+  current engineering cycle; packaging is not a policy promotion.
+- Delivery verification: 18 focused package tests passed. The first full `make check` invocation
+  used a shared environment without this checkout's `src` on `PYTHONPATH` and failed collection
+  with 33 wrong-package import errors; no test body ran. `RUN_PYTHON` now binds
+  `PYTHONPATH=$(CURDIR)/src`. The exact Makefile command then passed Ruff, strict mypy, all 448
+  tests in 106.79 seconds and project safety (259 files, 131 Python, 66,837 lines, zero findings).
+  This is the final full check for this cycle; it is not repeated per evidence file.
 
 ## Frozen Global Agent execution state
 

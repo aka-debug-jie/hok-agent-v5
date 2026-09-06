@@ -22,7 +22,7 @@
 .PHONY: hierarchical-p1v2-movement-2d-smoke
 .PHONY: hierarchical-p1v2-movement-branch-smoke
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
-RUN_PYTHON = env -u LD_LIBRARY_PATH $(PYTHON)
+RUN_PYTHON = env -u LD_LIBRARY_PATH PYTHONPATH=$(CURDIR)/src $(PYTHON)
 WZRY_DATA_ROOT ?= $(CURDIR)/.local-data
 HOK_LARGE_ROOT ?= $(WZRY_DATA_ROOT)/hok-agent-v5
 HOK_DATASETS_ROOT ?= $(HOK_LARGE_ROOT)/datasets

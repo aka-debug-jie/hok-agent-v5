@@ -65,6 +65,7 @@ def _parser() -> argparse.ArgumentParser:
             "stage-a",
             "rule-batch",
             "package",
+            "package-cycle",
             "real-rgb-preflight",
             "real-rgb-goal-canvas",
             "goal-canvas-overfit32-materialize",
@@ -100,6 +101,8 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--step-budget", type=int)
     movement_mvp.add_argument("--source-run", type=Path)
     movement_mvp.add_argument("--control-run", type=Path)
+    movement_mvp.add_argument("--event-run", type=Path)
+    movement_mvp.add_argument("--failure-report", type=Path, action="append", default=[])
     movement_mvp.add_argument("--verify-only", action="store_true")
     movement_mvp.add_argument("--target-root", type=Path)
     movement_mvp.add_argument("--prior-report", type=Path)
@@ -1672,11 +1675,41 @@ def main(argv: Sequence[str] | None = None) -> int:
                 from hok_agent.movement_real_rgb import run_real_rgb_preflight
 
                 result = run_real_rgb_preflight(args.config, args.target_root, args.output_dir)
+            elif args.mode == "package-cycle":
+                from hok_agent.movement_delivery import (
+                    create_offline_cycle_package,
+                    verify_offline_cycle_package,
+                )
+
+                if args.verify_only:
+                    if (
+                        args.source_run is not None
+                        or args.event_run is not None
+                        or args.failure_report
+                    ):
+                        raise ValueError("package-cycle --verify-only accepts only --output-dir")
+                    result = verify_offline_cycle_package(args.output_dir)
+                else:
+                    if args.source_run is None or args.event_run is None:
+                        raise ValueError(
+                            "package-cycle creation requires --source-run and --event-run"
+                        )
+                    result = create_offline_cycle_package(
+                        args.source_run,
+                        args.event_run,
+                        args.failure_report,
+                        args.output_dir,
+                    )
             elif args.mode == "package":
                 from hok_agent.movement_delivery import create_r0_package, verify_r0_package
 
                 if args.verify_only:
-                    if args.source_run is not None or args.control_run is not None:
+                    if (
+                        args.source_run is not None
+                        or args.control_run is not None
+                        or args.event_run is not None
+                        or args.failure_report
+                    ):
                         raise ValueError("package --verify-only accepts only --output-dir")
                     result = verify_r0_package(args.output_dir)
                 else:

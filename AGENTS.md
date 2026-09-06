@@ -71,6 +71,10 @@ top-center cue repeatedly selects scoreboard/kill/persistent red UI, while cente
 is not cross-layout stable. Eleven paired automatic outputs are rejected by QA and one is unpaired.
 Do not repair thresholds, materialize death clips, train Reward, or branch to tower/economy weak
 labels without a new semantic source. Keep the zero-reward Event-to-Store baseline.
+The cycle is packaged and independently verified as `R1_ENGINEERING_OFFLINE_ZERO_REWARD`: nested
+R0 rule evidence, 284 non-training Event transitions, four frozen failure reports, zero reward,
+zero input and no checkpoint. Do not reopen this cycle. Future work requires a new semantic source
+or separately authorized hero-bound data contract; packaging is not policy promotion.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

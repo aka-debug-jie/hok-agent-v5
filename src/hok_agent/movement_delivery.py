@@ -6,6 +6,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -18,6 +19,14 @@ PACKAGE_SCHEMA = "movement-mvp-r0-package-v1"
 SUMMARY_SCHEMA = "movement-mvp-r0-delivery-summary-v1"
 RESOLVED_CONFIG_SCHEMA = "movement-mvp-r0-resolved-config-v1"
 MOVEMENT_ACTIONS = ("STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE")
+CYCLE_PACKAGE_SCHEMA = "offline-engineering-cycle-package-v1"
+CYCLE_SUMMARY_SCHEMA = "offline-engineering-cycle-summary-v1"
+FAILURE_EVIDENCE_NAMES = {
+    "WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED": "weak-anchor-relation-failed.json",
+    "DEATH_BANNER_CONSENSUS_DATA_INSUFFICIENT": "death-banner-consensus-insufficient.json",
+    "NATIVE_DEATH_CUE_PREFLIGHT_INSUFFICIENT": "native-death-preflight-machine.json",
+    "NATIVE_DEATH_CUE_PREFLIGHT_DOMAIN_MISMATCH": "native-death-preflight-qa.json",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,9 +133,11 @@ def _audit_runtime(database: Path, frame_dir: Path) -> RuntimeAudit:
         episode = episodes.setdefault(row["episode_id"], [])
         if row["step_id"] != len(episode):
             raise ValueError("R0 transition steps are not contiguous")
-        if episode and row["observation"]["observation_id"] != episode[-1]["next_observation"][
-            "observation_id"
-        ]:
+        if (
+            episode
+            and row["observation"]["observation_id"]
+            != episode[-1]["next_observation"]["observation_id"]
+        ):
             raise ValueError("R0 observation chain differs")
         if episode and episode[-1]["done"]:
             raise ValueError("R0 episode continues after terminal")
@@ -315,12 +326,8 @@ def create_r0_package(source_run: Path, control_run: Path, output_dir: Path) -> 
             "transition_content_sha256": source.audit.transition_sha256,
             "frame_view_manifest_sha256": source.audit.frame_view_sha256,
             "source_evidence": {
-                "interrupted_summary_file_sha256": _file_sha256(
-                    source.root / "batch-summary.json"
-                ),
-                "continuous_summary_file_sha256": _file_sha256(
-                    control.root / "batch-summary.json"
-                ),
+                "interrupted_summary_file_sha256": _file_sha256(source.root / "batch-summary.json"),
+                "continuous_summary_file_sha256": _file_sha256(control.root / "batch-summary.json"),
                 "run_contract_file_sha256": _file_sha256(source.root / "run-contract.json"),
             },
             "learning_evidence": {
@@ -386,9 +393,7 @@ def verify_r0_package(output_dir: Path) -> dict[str, object]:
             or _file_sha256(path) != row["sha256"]
         ):
             raise ValueError("R0 package file binding differs")
-    if sum(int(cast(int, row["bytes"])) for row in rows) != manifest.get(
-        "package_payload_bytes"
-    ):
+    if sum(int(cast(int, row["bytes"])) for row in rows) != manifest.get("package_payload_bytes"):
         raise ValueError("R0 package payload size differs")
     summary = _read_self_bound(output_dir / "summary.json", "summary_sha256")
     resolved = _read_json(output_dir / "resolved-config.json")
@@ -425,4 +430,309 @@ def verify_r0_package(output_dir: Path) -> dict[str, object]:
         "package_bytes": package_bytes,
         "offline_only": True,
         "promoted_checkpoint": None,
+    }
+
+
+def _audit_event_replay(root: Path) -> dict[str, object]:
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("event replay is not a regular directory")
+    report = _read_self_bound(root / "report.json", "report_sha256")
+    manifest = _read_self_bound(root / "frames-manifest.json", "manifest_sha256")
+    integrity, rows = _sqlite_rows(root / "replay.sqlite3")
+    if (
+        report.get("schema_version") != "observable-death-respawn-transition-replay-v1"
+        or report.get("status") != "DEATH_RESPAWN_EVENT_TRANSITION_REPLAY_PASSED"
+        or report.get("reward_allowed") is not False
+        or report.get("training_allowed") is not False
+        or report.get("promotion_allowed") is not False
+        or report.get("video_test_opened") is not False
+        or report.get("input_commands_sent") != 0
+        or integrity != "ok"
+        or len(rows) < 1
+    ):
+        raise ValueError("event replay admission fields differ")
+    episode_ids = {row["episode_id"] for row in rows}
+    validation = [validate_transition(row) for row in rows]
+    if (
+        len(episode_ids) != 1
+        or any(not result.valid or not result.causal_order_valid for result in validation)
+        or any(row["training_eligible"] for row in rows)
+        or any(row["reward"]["total"] != 0.0 for row in rows)
+        or any(row["reward"]["event_ids"] for row in rows)
+        or sum(row["done"] for row in rows) != 1
+        or not rows[-1]["done"]
+        or rows[-1]["terminal_reason"] != "VIDEO_EOF"
+        or any(row["step_id"] != index for index, row in enumerate(rows))
+    ):
+        raise ValueError("event replay transition chain differs")
+    for previous, current in zip(rows, rows[1:], strict=False):
+        if (
+            previous["next_observation"]["observation_id"]
+            != current["observation"]["observation_id"]
+        ):
+            raise ValueError("event replay observation chain differs")
+    event_counts = Counter(event["event_type"] for row in rows for event in row["events"])
+    reported_counts = cast(dict[str, int], report["event_counts"])
+    normalized_counts = {name: event_counts[name] for name in reported_counts}
+    if (
+        normalized_counts != reported_counts
+        or event_counts["DEATH"] < 1
+        or event_counts["RESPAWN"] < 1
+    ):
+        raise ValueError("event replay event counts differ")
+    manifest_rows = cast(list[dict[str, object]], manifest.get("frames"))
+    declared = {str(row["basename"]): row for row in manifest_rows}
+    frame_dir = root / "frames"
+    actual = {path.name for path in frame_dir.iterdir() if path.is_file()}
+    if (
+        len(declared) != len(manifest_rows)
+        or set(declared) != actual
+        or len(declared) != int(cast(int, report["frames"]))
+        or report.get("frame_manifest_sha256") != manifest.get("manifest_sha256")
+        or report.get("frame_manifest_file_sha256") != _file_sha256(root / "frames-manifest.json")
+    ):
+        raise ValueError("event replay frame manifest differs")
+    frame_records: dict[str, dict[str, object]] = {}
+    for transition in rows:
+        for name in ("observation", "next_observation"):
+            frame = cast(dict[str, object], transition[name])
+            identity = str(frame["observation_id"])
+            existing_frame = frame_records.setdefault(identity, frame)
+            if existing_frame != frame:
+                raise ValueError("event replay duplicate frame metadata differs")
+    for frame in frame_records.values():
+        basename = str(frame["frame_bundle_ref"])
+        path = frame_dir / basename
+        row = declared.get(basename)
+        if (
+            row is None
+            or Path(basename).name != basename
+            or path.is_symlink()
+            or _file_sha256(path) != row["sha256"]
+        ):
+            raise ValueError("event replay frame file differs")
+        with np.load(path, allow_pickle=False) as bundle:
+            if set(bundle.files) != {"main", "minimap", "hud"}:
+                raise ValueError("event replay frame fields differ")
+            hashes = {
+                name: hashlib.sha256(np.ascontiguousarray(bundle[name]).tobytes()).hexdigest()
+                for name in bundle.files
+            }
+        if hashes != frame["view_sha256"]:
+            raise ValueError("event replay frame view hash differs")
+    if (
+        report.get("transitions") != len(rows)
+        or report.get("training_eligible_transitions") != 0
+        or report.get("reward_total") != 0.0
+        or not all(cast(dict[str, bool], report["checks"]).values())
+    ):
+        raise ValueError("event replay report does not bind runtime")
+    return {
+        "report": report,
+        "report_file_sha256": _file_sha256(root / "report.json"),
+        "manifest_file_sha256": _file_sha256(root / "frames-manifest.json"),
+        "sqlite_integrity": integrity,
+        "transition_sha256": _object_sha256(rows),
+        "frames": len(declared),
+        "transitions": len(rows),
+        "event_counts": normalized_counts,
+    }
+
+
+def _load_failure_evidence(paths: list[Path]) -> list[dict[str, object]]:
+    if len(paths) != len(FAILURE_EVIDENCE_NAMES):
+        raise ValueError("cycle package requires exactly four failure reports")
+    rows: list[dict[str, object]] = []
+    statuses: set[str] = set()
+    for path in paths:
+        payload = _read_json(path)
+        status = str(payload.get("status", ""))
+        if status not in FAILURE_EVIDENCE_NAMES or status in statuses:
+            raise ValueError("cycle package failure status differs")
+        if "report_sha256" in payload:
+            supplied = str(payload["report_sha256"])
+            unsigned = {key: value for key, value in payload.items() if key != "report_sha256"}
+            if supplied != _object_sha256(unsigned):
+                raise ValueError("cycle package failure self hash differs")
+        encoded = json.dumps(payload, sort_keys=True)
+        if any(
+            value in encoded for value in ('"reward_allowed": true', '"training_allowed": true')
+        ):
+            raise ValueError("cycle package failure evidence grants a blocked capability")
+        rows.append(
+            {
+                "status": status,
+                "source": path,
+                "output_name": FAILURE_EVIDENCE_NAMES[status],
+                "sha256": _file_sha256(path),
+            }
+        )
+        statuses.add(status)
+    if statuses != set(FAILURE_EVIDENCE_NAMES):
+        raise ValueError("cycle package failure evidence is incomplete")
+    return sorted(rows, key=lambda row: str(row["output_name"]))
+
+
+def create_offline_cycle_package(
+    r0_package: Path,
+    event_run: Path,
+    failure_reports: list[Path],
+    output_dir: Path,
+) -> dict[str, object]:
+    r0 = verify_r0_package(r0_package)
+    event = _audit_event_replay(event_run)
+    failures = _load_failure_evidence(failure_reports)
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("cycle package output already exists")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        shutil.copytree(r0_package, staging / "r0")
+        event_dir = staging / "event"
+        event_dir.mkdir()
+        shutil.copytree(event_run / "frames", event_dir / "frames")
+        shutil.copyfile(event_run / "report.json", event_dir / "report.json")
+        shutil.copyfile(event_run / "frames-manifest.json", event_dir / "frames-manifest.json")
+        _backup_sqlite(event_run / "replay.sqlite3", event_dir / "replay.sqlite3")
+        evidence_dir = staging / "evidence"
+        evidence_dir.mkdir()
+        failure_summary: list[dict[str, object]] = []
+        for row in failures:
+            target = evidence_dir / str(row["output_name"])
+            shutil.copyfile(cast(Path, row["source"]), target)
+            _fsync_file(target)
+            failure_summary.append(
+                {
+                    "status": row["status"],
+                    "path": f"evidence/{target.name}",
+                    "sha256": row["sha256"],
+                }
+            )
+        summary: dict[str, object] = {
+            "schema_version": CYCLE_SUMMARY_SCHEMA,
+            "status": "PASSED",
+            "delivery_grade": "R1_ENGINEERING_OFFLINE_ZERO_REWARD",
+            "runtime_policy": "structured_simulator_rule",
+            "promoted_checkpoint": None,
+            "capabilities": {
+                "deterministic_movement": True,
+                "mid_episode_resume": True,
+                "event_to_transition_store": True,
+                "learned_movement": False,
+                "semantic_reward": False,
+                "real_video_policy": False,
+                "mobile_control": False,
+                "reinforcement_learning": False,
+            },
+            "r0": {
+                "manifest_file_sha256": r0["manifest_file_sha256"],
+                "transitions": r0["transitions"],
+                "frames": r0["frame_bundles"],
+                "reward_total": r0["reward_total"],
+            },
+            "event": {
+                "report_file_sha256": event["report_file_sha256"],
+                "manifest_file_sha256": event["manifest_file_sha256"],
+                "transition_sha256": event["transition_sha256"],
+                "transitions": event["transitions"],
+                "frames": event["frames"],
+                "event_counts": event["event_counts"],
+                "reward_total": 0.0,
+                "training_eligible_transitions": 0,
+            },
+            "failure_boundaries": failure_summary,
+            "input_commands_sent": 0,
+            "video_test_opened": False,
+        }
+        summary["summary_sha256"] = _object_sha256(summary)
+        _write_json(staging / "summary.json", summary)
+        files = _manifest_files(staging)
+        manifest: dict[str, object] = {
+            "schema_version": CYCLE_PACKAGE_SCHEMA,
+            "status": "COMPLETE",
+            "files": files,
+            "file_count": len(files),
+            "package_payload_bytes": sum(cast(int, row["bytes"]) for row in files),
+        }
+        manifest["manifest_sha256"] = _object_sha256(manifest)
+        _write_json(staging / "manifest.json", manifest)
+        os.replace(staging, output_dir)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return verify_offline_cycle_package(output_dir)
+
+
+def verify_offline_cycle_package(output_dir: Path) -> dict[str, object]:
+    if output_dir.is_symlink() or not output_dir.is_dir():
+        raise ValueError("cycle package is not a regular directory")
+    manifest_path = output_dir / "manifest.json"
+    manifest = _read_self_bound(manifest_path, "manifest_sha256")
+    rows = cast(list[dict[str, object]], manifest.get("files"))
+    declared = {str(row["path"]): row for row in rows}
+    actual = {
+        path.relative_to(output_dir).as_posix()
+        for path in output_dir.rglob("*")
+        if path.is_file() and path.name != "manifest.json"
+    }
+    if (
+        manifest.get("schema_version") != CYCLE_PACKAGE_SCHEMA
+        or manifest.get("status") != "COMPLETE"
+        or len(rows) != manifest.get("file_count")
+        or len(declared) != len(rows)
+        or actual != set(declared)
+        or any(path.is_symlink() for path in output_dir.rglob("*"))
+    ):
+        raise ValueError("cycle package manifest differs")
+    for relative, row in declared.items():
+        path = output_dir / relative
+        if (
+            Path(relative).is_absolute()
+            or ".." in Path(relative).parts
+            or path.stat().st_size != row["bytes"]
+            or _file_sha256(path) != row["sha256"]
+        ):
+            raise ValueError("cycle package file binding differs")
+    if sum(cast(int, row["bytes"]) for row in rows) != manifest.get("package_payload_bytes"):
+        raise ValueError("cycle package payload size differs")
+    summary = _read_self_bound(output_dir / "summary.json", "summary_sha256")
+    r0 = verify_r0_package(output_dir / "r0")
+    event = _audit_event_replay(output_dir / "event")
+    evidence_paths = sorted((output_dir / "evidence").glob("*.json"))
+    failures = _load_failure_evidence(evidence_paths)
+    expected_failure_rows = cast(list[dict[str, object]], summary["failure_boundaries"])
+    if (
+        summary.get("schema_version") != CYCLE_SUMMARY_SCHEMA
+        or summary.get("status") != "PASSED"
+        or summary.get("delivery_grade") != "R1_ENGINEERING_OFFLINE_ZERO_REWARD"
+        or summary.get("promoted_checkpoint") is not None
+        or summary.get("input_commands_sent") != 0
+        or summary.get("video_test_opened") is not False
+        or cast(dict[str, object], summary["r0"]).get("manifest_file_sha256")
+        != r0["manifest_file_sha256"]
+        or cast(dict[str, object], summary["event"]).get("transition_sha256")
+        != event["transition_sha256"]
+        or {str(row["status"]): row["sha256"] for row in expected_failure_rows}
+        != {str(row["status"]): row["sha256"] for row in failures}
+        or any(output_dir.rglob("*.safetensors"))
+        or any(output_dir.rglob("replay.sqlite3-*"))
+    ):
+        raise ValueError("cycle package summary differs")
+    package_bytes = sum(path.stat().st_size for path in output_dir.rglob("*") if path.is_file())
+    return {
+        "status": "PASSED",
+        "delivery_grade": "R1_ENGINEERING_OFFLINE_ZERO_REWARD",
+        "r0_transitions": r0["transitions"],
+        "event_transitions": event["transitions"],
+        "frames": cast(int, r0["frame_bundles"]) + cast(int, event["frames"]),
+        "event_counts": event["event_counts"],
+        "reward_total": 0.0,
+        "training_eligible_event_transitions": 0,
+        "failure_reports": len(failures),
+        "input_commands_sent": 0,
+        "promoted_checkpoint": None,
+        "manifest_file_sha256": _file_sha256(manifest_path),
+        "summary_file_sha256": _file_sha256(output_dir / "summary.json"),
+        "package_bytes": package_bytes,
+        "offline_only": True,
     }

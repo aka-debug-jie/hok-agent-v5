@@ -70,6 +70,31 @@ SQLite backup, 100 derived frame bundles and a final manifest. It contains no tr
 Its delivery grade is rule-only `R0_RULE_OFFLINE`; it does not establish learned navigation or
 real-video/mobile performance.
 
+The closed cycle is also available as one immutable offline engineering package. It nests the
+verified R0 package, the zero-reward death/respawn Event-to-Store replay, and four machine-readable
+failure boundaries. It contains no checkpoint and grants no new runtime capability.
+
+```bash
+python -m hok_agent movement-mvp --mode package-cycle \
+  --source-run "$MOVEMENT_EVIDENCE_ROOT/r0-delivery-v1" \
+  --event-run "$HOK_LARGE_ROOT/runs/hierarchical-event-e1/death-respawn-transition-replay-v1" \
+  --failure-report "$MOVEMENT_EVIDENCE_ROOT/native-anchor-relation-v2-render-repair/report.json" \
+  --failure-report "$HOK_LARGE_ROOT/audit/hierarchical-event-e1/death-banner-consensus-v1/report.json" \
+  --failure-report "$HOK_LARGE_ROOT/audit/hierarchical-event-e1/native-death-cue-preflight-v1/report.json" \
+  --failure-report "$HOK_LARGE_ROOT/audit/hierarchical-event-e1/native-death-cue-preflight-v1/qa-conclusion.json" \
+  --output-dir "$MOVEMENT_EVIDENCE_ROOT/r1-offline-engineering-v1"
+python -m hok_agent movement-mvp --mode package-cycle --verify-only \
+  --output-dir "$MOVEMENT_EVIDENCE_ROOT/r1-offline-engineering-v1"
+```
+
+Its delivery grade is `R1_ENGINEERING_OFFLINE_ZERO_REWARD`: deterministic Movement plus verified
+Event-to-Store plumbing, with learned Movement, semantic Reward, real-video policy, mobile control
+and RL all explicitly false.
+
+`make check` now always binds this checkout's absolute `src` directory through the shared
+`RUN_PYTHON` wrapper, preventing a neighbouring editable `hok_agent` installation from being
+collected accidentally.
+
 The next-cycle real-RGB observability preflight is also available through `movement-mvp`:
 
 ```bash

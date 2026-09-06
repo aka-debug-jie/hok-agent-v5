@@ -333,6 +333,19 @@ HP数值准确或Reward可用。下一步应从既有train/dev派生数据只读
 产生死亡标签。下一步项目应停止当前Reward感知扩展，保留零奖励Event-to-Store工程基线；
 若无新语义来源，不再尝试塔伤、经济等更难的伪标签支线。
 
+本轮现已按单入口交付收口为`R1_ENGINEERING_OFFLINE_ZERO_REWARD`。`package-cycle`嵌套复核过的
+R0规则包、零奖励死亡/复活Event-to-Store回放和四份关键失败边界；外层manifest逐文件绑定，
+Event SQLite通过只读backup且不含WAL/SHM，`verify-only`在新进程只读通过。最终包含R0 90条、
+Event 284条transition和385个帧bundle，总reward与输入命令均为0，Event训练资格为0，无模型
+checkpoint。该R1是工程能力整理，不是R0策略升级，也不授权真实视频策略或手机执行。没有新
+语义来源时当前工程周期到此结束；后续立项应先明确可获得的标签/环境反馈，再选择Reward或
+英雄专用动作数据，不继续从同一批无真值视频制造新支线。
+
+交付级全量检查最终为448项pytest、Ruff、strict mypy和项目安全全部通过。首次未显式绑定
+当前`src`时，共享环境导入了相邻仓库并在collection阶段报33个缺模块错误；未执行测试主体。
+Makefile统一入口现固定`PYTHONPATH=$(CURDIR)/src`，随后原命令通过。该修复只消除环境歧义，
+不改变任何模型、数据或运行证据。
+
 不再要求用户录制或标注。先在既有 train/dev 中抽取至多 12 个 session、每局 3 段短片，
 总计最多 36 段，跨旋转、尺度与场景检查。人工查看由开发者完成，仅做预处理 QA，不创建训练标签。
 旋转矩阵正确性需结合图像确认；“成功解码”不能当作方向正确的证据。
