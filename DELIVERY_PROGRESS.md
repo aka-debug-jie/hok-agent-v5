@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `REAL_COUNTERFACTUAL_MODEL_SHORTCUT_OR_NO_GENERALIZATION`: localization v2 exposes fixed-UI confusion; grouped full model fails accuracy and control-gain gates | Stop model tuning; repair player localization coverage only |
+| Engineering convergence | `PLAYER_LOCALIZATION_REPAIR_NOT_PROMOTED`: appearance tracking adds no multi-session coverage; previous grouped model remains failed | Inspect existing full-minimap recoverability; no training or navigation integration |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: repair automatic player localization coverage before any further learned Movement work
-CURRENT STATUS: REAL_COUNTERFACTUAL_MODEL_SHORTCUT_OR_NO_GENERALIZATION; R0 remains frozen
-BLOCKING FAILURE: sessions 003/005 have no usable player track; full model does not beat shortcut controls
-NEXT ACCEPTANCE: a new localization method must establish multi-session action-response evidence
-COMMAND STATUS: localization v2 plus one 15-run grouped batch complete; no checkpoint retained
+CURRENT GOAL: inspect complete-minimap recoverability in existing train/dev source views
+CURRENT STATUS: PLAYER_LOCALIZATION_REPAIR_NOT_PROMOTED; failed learned model and R0 remain frozen
+BLOCKING FAILURE: appearance tracking has no coverage gain; paired QA suggests fountain/edge visibility limitations
+NEXT ACCEPTANCE: establish whether existing source views retain the spawn corner; no new detector tuning
+COMMAND STATUS: one offline appearance candidate evaluated on 4455 frames; zero model runs
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1004,6 +1004,45 @@ expansion was introduced.
   files), project safety (259 files, 131 Python files, 62,893 Python lines, zero findings,
   four root Markdown files), contract/report self-hash checks and `git diff --check`. No full
   historical suite was rerun.
+
+### Bounded appearance tracking and paired QA (2026-09-06)
+
+- Added `movement-mvp --mode real-player-tracking-audit` in the existing offline module. It reuses
+  v2 source/hash bindings; no dependency, model, phone interface or separate protocol was added.
+- A 15x15 median template comes automatically from the first 16 interior v2 candidates in 002.
+  Candidate matching removes the red-pair requirement, retains the green component proposal and
+  fixed-UI exclusion, searches +/-3 pixels, and requires correlation >=0.70, distinct-peak margin
+  >=0.05, two consecutive matches and <=8 pixel inter-frame displacement. Missing/ambiguous
+  frames return unknown immediately; discontinuity requires confirmation again. Settings were
+  fixed before the single full scan, not adjusted after its result.
+- Results: 002 has 155/1485 tracked frames (0.1044), 21 acquisitions and a longest unknown stretch
+  of 1224 frames; 003/005 have zero tracked frames. No coverage improvement was demonstrated.
+  The 9 eligible 002 action-response events include 8 positive projections, median 2 pixels.
+  This check requires all six frames observed and no intervening different dispatched action,
+  unlike the earlier endpoint-only audit; event-count differences cannot isolate tracker effects.
+- Developer inspected all three paired QA sheets. 002's early matches align visually with the
+  moving portrait; later samples show the main view near the fountain and a missing/clipped
+  minimap portrait. 003 sampled main views remain at the fountain, with an edge-clipped portrait
+  in the initial minimap. 005 mostly shows the fountain too, despite other minimap markers moving.
+  Do not label those markers as the controlled player simply because they are green. These
+  observations do not establish framewise identity accuracy, death/respawn, or camera-follow state.
+- Machine report remains `PLAYER_APPEARANCE_TRACKING_DIAGNOSTIC_ONLY`; the engineering decision is
+  `PLAYER_LOCALIZATION_REPAIR_NOT_PROMOTED`. False-lock rate and reacquisition latency are unknown,
+  not zero. Do not integrate this candidate into navigation or create training labels from it.
+- Artifacts: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-player-appearance-tracking-v1`;
+  three paired sheets, one template PNG, one report; 2,170,046 bytes total. Report file SHA-256:
+  `17c0a7deb4dd1539a34d59af255121108b6a4f40c5be4113fc9a9e19d9b80f93`;
+  self hash `80281a2bb1b096418d1afb20b48774edea887ee32f84a3407d49488105f612ea`.
+  The executed implementation hash matches the source. All historical artifacts remain unchanged.
+- Verification: 13 focused real-RGB/boundary tests passed, including missing-frame abstention,
+  red-free tracking, distractor/UI rejection, ambiguous identities, jump/reacquisition, source
+  tampering, overwrite rejection, no checkpoint and lazy CLI dispatch. Ruff, strict mypy on 70
+  source files, project safety and `git diff --check` passed. No full historical pytest or GPU
+  diagnostic was run. Model runs, GPU time and device commands are all zero; engineering hours
+  were not precisely metered.
+- Continue only with a half-day-capped inspection of existing source ROI recoverability. If the
+  complete spawn corner exists, re-extract once and verify visually; otherwise retain the data
+  limitation. Do not demand new recording, fabricate off-ROI coordinates or repeat template tuning.
 
 ## Frozen Global Agent execution state
 

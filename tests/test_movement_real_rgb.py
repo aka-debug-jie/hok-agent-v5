@@ -26,9 +26,106 @@ CONTINUITY_CONTRACT = ROOT / "configs" / "movement_real_player_goal_continuity_v
 COUNTERFACTUAL_DATA_CONTRACT = (
     ROOT / "configs" / "movement_real_counterfactual_overfit32_data_v1.json"
 )
-LOCALIZATION_AUDIT_CONTRACT = (
-    ROOT / "configs" / "movement_real_player_localization_audit_v2.json"
-)
+LOCALIZATION_AUDIT_CONTRACT = ROOT / "configs" / "movement_real_player_localization_audit_v2.json"
+
+
+def test_appearance_tracks_without_red_and_abstains_then_reacquires() -> None:
+    from hok_agent.movement_real_rgb import _track_appearance
+
+    template = np.full((15, 15, 3), 30, dtype=np.uint8)
+    yy, xx = np.indices((15, 15))
+    distance = np.hypot(yy - 7, xx - 7)
+    template[(distance >= 5) & (distance <= 7)] = (30, 200, 50)
+    template[4:7, 5:10] = (80, 80, 130)
+    frames = np.full((8, 128, 128, 3), 30, dtype=np.uint8)
+    for i, frame in enumerate(frames):
+        frame[108:116, 18:26] = (30, 200, 50)  # green non-portrait distractor
+        frame[1:16, 111:126] = template  # identical but excluded fixed UI
+        if i != 3:
+            y, x = (50 + i, 60) if i < 5 else (85, 90)
+            frame[y - 7 : y + 8, x - 7 : x + 8] = template
+    positions, reasons, _ = _track_appearance(frames, template)
+    assert positions[0] is None and positions[1] == (51, 60)
+    assert positions[2] == (52, 60)
+    assert positions[3:6] == [None, None, None]
+    assert positions[6:] == [(85, 90), (85, 90)]
+    assert reasons[4] == reasons[5] == "confirming"
+
+
+def test_appearance_rejects_two_equal_portraits() -> None:
+    from hok_agent.movement_real_rgb import _track_appearance
+
+    template = np.zeros((15, 15, 3), dtype=np.uint8)
+    template[3:11, 3:11] = (20, 180, 40)
+    frame = np.zeros((128, 128, 3), dtype=np.uint8)
+    frame[30:45, 30:45] = template
+    frame[70:85, 70:85] = template
+    positions, reasons, _ = _track_appearance(np.stack([frame] * 3), template)
+    assert positions == [None] * 3
+    assert reasons == ["ambiguous"] * 3
+
+
+def test_tracking_cli_dispatch_is_lazy(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import sys
+
+    from hok_agent import cli, movement_real_rgb
+
+    before = set(sys.modules)
+    calls = []
+    monkeypatch.setattr(
+        movement_real_rgb,
+        "run_real_player_tracking_audit",
+        lambda *args: calls.append(args) or {"status": "DIAGNOSTIC_ONLY"},
+    )
+    assert (
+        cli.main(
+            [
+                "movement-mvp",
+                "--mode",
+                "real-player-tracking-audit",
+                "--config",
+                "source.json",
+                "--prior-report",
+                "prior.json",
+                "--session-root",
+                "sessions",
+                "--output-dir",
+                "out",
+            ]
+        )
+        == 0
+    )
+    assert calls == [(Path("source.json"), Path("prior.json"), Path("sessions"), Path("out"))]
+    assert json.loads(capsys.readouterr().out)["status"] == "DIAGNOSTIC_ONLY"
+    assert not any(
+        name.startswith(("torch", "av", "hok_agent.mobile_testbed", "hok_agent.movement_mvp_train"))
+        for name in set(sys.modules) - before
+    )
+
+
+def test_tracking_audit_bound_offline_source_no_checkpoint(tmp_path: Path) -> None:
+    from hok_agent.movement_real_rgb import run_real_player_tracking_audit
+
+    root, prior, contract = _localization_audit_inputs(tmp_path, response_events=True)
+    audit = tmp_path / "v2"
+    run_real_player_localization_audit_v2(contract, prior, root, audit)
+    output = tmp_path / "tracking"
+    report = run_real_player_tracking_audit(contract, audit / "report.json", root, output)
+    assert len(report["sessions"]) == 3
+    assert report["template_session"] == "teacher-session-002"
+    assert len(report["template_frame_indices"]) == 16
+    assert report["model_runs"] == report["input_commands_sent"] == 0
+    assert report["training_allowed"] is report["r2_allowed"] is False
+    assert report["false_lock_rate"] is None
+    assert {p.suffix for p in output.iterdir()} == {".json", ".png"}
+    with pytest.raises(ValueError, match="already exists"):
+        run_real_player_tracking_audit(contract, audit / "report.json", root, output)
+    shard = root / "teacher-session-002/shards/observations-0000.npz"
+    shard.write_bytes(b"corrupted")
+    with pytest.raises(ValueError, match="shard binding"):
+        run_real_player_tracking_audit(contract, audit / "report.json", root, tmp_path / "bad")
 
 
 def _dataset(tmp_path: Path, *, visible: bool) -> tuple[Path, Path]:
@@ -119,9 +216,7 @@ def _goal_contract(tmp_path: Path, target: Path) -> tuple[Path, Path]:
     return contract_path, prior_path
 
 
-def _localization_audit_inputs(
-    tmp_path: Path, *, response_events: bool
-) -> tuple[Path, Path, Path]:
+def _localization_audit_inputs(tmp_path: Path, *, response_events: bool) -> tuple[Path, Path, Path]:
     session_root = tmp_path / "localization-sessions"
     declarations = []
     for ordinal in range(3):
@@ -143,6 +238,7 @@ def _localization_audit_inputs(
         np.savez_compressed(
             shard,
             minimap_rgb=frames,
+            main_rgb=frames,
             scheduled_elapsed_ms=np.arange(len(frames), dtype=np.int64) * 200,
             movement_id=np.full(len(frames), 5, dtype=np.int8),
             movement_input_sent=sent,
@@ -206,13 +302,9 @@ def test_real_rgb_preflight_reads_only_selected_train_dev(tmp_path: Path) -> Non
 def test_localization_v2_excludes_fixed_ui_and_requires_action_response(
     tmp_path: Path,
 ) -> None:
-    session_root, prior, contract = _localization_audit_inputs(
-        tmp_path, response_events=True
-    )
+    session_root, prior, contract = _localization_audit_inputs(tmp_path, response_events=True)
     output = tmp_path / "localization-audit"
-    report = run_real_player_localization_audit_v2(
-        contract, prior, session_root, output
-    )
+    report = run_real_player_localization_audit_v2(contract, prior, session_root, output)
     assert report["status"] == "PLAYER_CUE_PARTIAL_SESSION002_ONLY"
     assert all(report["checks"].values())
     sessions = {row["session"]: row for row in report["sessions"]}
@@ -260,9 +352,7 @@ def test_real_rgb_preflight_detects_portrait_content_and_rejects_tampering(
     contract_values = json.loads(CONTRACT.read_text(encoding="utf-8"))
     frames = np.zeros((4, 128, 128, 3), dtype=np.uint8)
     frames[:, :, 35:93] = (30, 40, 30)
-    canonical, orientation, bounds = _canonical_content(
-        frames, contract_values["content_box"]
-    )
+    canonical, orientation, bounds = _canonical_content(frames, contract_values["content_box"])
     assert canonical.shape == frames.shape
     assert orientation == "counter_clockwise_90"
     assert bounds == (0, 35, 128, 93)
@@ -338,9 +428,7 @@ def test_real_player_cue_uses_existing_minimap_shards_without_labels(tmp_path: P
     contract["contract_sha256"] = _object_sha256(contract)
     contract_path = tmp_path / "player-contract.json"
     contract_path.write_text(json.dumps(contract), encoding="utf-8")
-    report = run_real_player_cue_preflight(
-        contract_path, session_root, tmp_path / "player-output"
-    )
+    report = run_real_player_cue_preflight(contract_path, session_root, tmp_path / "player-output")
     assert report["status"] == "REAL_PLAYER_CUE_PASSED"
     assert all(row["coverage"] == 1.0 for row in report["sessions"])
     assert all(row["single_candidate_fraction"] == 1.0 for row in report["sessions"])

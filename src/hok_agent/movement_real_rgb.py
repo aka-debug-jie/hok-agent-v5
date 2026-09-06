@@ -13,6 +13,17 @@ import numpy as np
 
 REPORT_SCHEMA = "movement-real-rgb-observability-report-v1"
 
+# One bounded appearance candidate, independent of the frozen v2 detector.
+PLAYER_TRACKING_SETTINGS = {
+    "patch_radius": 7,
+    "center_search_radius": 3,
+    "minimum_correlation": 0.70,
+    "minimum_distinct_peak_margin": 0.05,
+    "maximum_step_pixels": 8.0,
+    "confirmation_frames": 2,
+    "template_frames": 16,
+}
+
 
 def _canonical(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
@@ -57,9 +68,7 @@ def _content_bounds(frames: np.ndarray, config: dict[str, object]) -> tuple[int,
         rows = np.flatnonzero(mask.mean(axis=1) >= support)
         columns = np.flatnonzero(mask.mean(axis=0) >= support)
         if len(rows) and len(columns):
-            bounds.append(
-                (int(columns[0]), int(rows[0]), int(columns[-1] + 1), int(rows[-1] + 1))
-            )
+            bounds.append((int(columns[0]), int(rows[0]), int(columns[-1] + 1), int(rows[-1] + 1)))
     if not bounds:
         raise ValueError("selected session has no visible content")
     return cast(
@@ -116,8 +125,10 @@ def _detect(frame: np.ndarray, contract: dict[str, object]) -> dict[str, object]
     )
     player_y, player_x = np.where(player_mask)
     target_y, target_x = np.where(target_mask)
-    player_visible = int(cast(int, player["support_minimum"])) <= len(player_y) <= int(
-        cast(int, player["support_maximum"])
+    player_visible = (
+        int(cast(int, player["support_minimum"]))
+        <= len(player_y)
+        <= int(cast(int, player["support_maximum"]))
     )
     target_visible = bool(len(target_y))
     player_yx: tuple[float, float] | None = None
@@ -275,9 +286,7 @@ def run_real_rgb_preflight(
             segment_times = timestamps[
                 segment_index * segment_frames : (segment_index + 1) * segment_frames
             ]
-            if not np.all(
-                np.diff(segment_times) == int(cast(int, contract["frame_period_ms"]))
-            ):
+            if not np.all(np.diff(segment_times) == int(cast(int, contract["frame_period_ms"]))):
                 raise ValueError("selected segment sampling period differs")
             previous: dict[str, object] | None = None
             for timestamp, detection in zip(
@@ -338,8 +347,7 @@ def run_real_rgb_preflight(
     marker_jump_fraction = jump_count / jump_denominator if jump_denominator else 0.0
     gates = cast(dict[str, object], contract["gates"])
     checks = {
-        "content_boxes": len(session_results)
-        >= int(cast(int, gates["required_content_boxes"])),
+        "content_boxes": len(session_results) >= int(cast(int, gates["required_content_boxes"])),
         "overall_pair_coverage": overall_coverage
         >= float(cast(float, gates["minimum_overall_pair_coverage"])),
         "per_session_pair_coverage": all(
@@ -355,9 +363,7 @@ def run_real_rgb_preflight(
     report: dict[str, object] = {
         "schema_version": REPORT_SCHEMA,
         "status": (
-            "TARGET_CONDITION_CANDIDATE_SUPPORTED"
-            if passed
-            else "TARGET_CONDITION_NOT_OBSERVABLE"
+            "TARGET_CONDITION_CANDIDATE_SUPPORTED" if passed else "TARGET_CONDITION_NOT_OBSERVABLE"
         ),
         "contract_sha256": contract["contract_sha256"],
         "target_manifest_sha256": manifest["manifest_sha256"],
@@ -420,9 +426,7 @@ def _resize_minimap(frame: np.ndarray, crop: list[int]) -> np.ndarray:
     return np.ascontiguousarray(selected[rows[:, None], columns[None, :], :])
 
 
-def _mark_goal(
-    minimap: np.ndarray, goal_xy: list[float], marker: dict[str, object]
-) -> np.ndarray:
+def _mark_goal(minimap: np.ndarray, goal_xy: list[float], marker: dict[str, object]) -> np.ndarray:
     center_x = round(float(goal_xy[0]) * 127)
     center_y = round(float(goal_xy[1]) * 127)
     radius = int(cast(int, marker["radius"]))
@@ -563,8 +567,7 @@ def run_real_rgb_goal_canvas(
         )
     gates = cast(dict[str, object], contract["gates"])
     checks = {
-        "content_boxes": len(session_rows)
-        >= int(cast(int, gates["required_content_boxes"])),
+        "content_boxes": len(session_rows) >= int(cast(int, gates["required_content_boxes"])),
         "nonblack_minimap_crop": all(
             float(cast(float, row["minimum_nonblack_crop_fraction"]))
             >= float(cast(float, gates["minimum_nonblack_crop_fraction"]))
@@ -725,8 +728,7 @@ def _player_candidates(
     candidates = []
     for green_item in greens:
         distances = [
-            abs(green_item[1] - red_item[1]) + abs(green_item[2] - red_item[2])
-            for red_item in reds
+            abs(green_item[1] - red_item[1]) + abs(green_item[2] - red_item[2]) for red_item in reds
         ]
         if distances and min(distances) <= maximum:
             candidates.append((green_item[1], green_item[2], min(distances)))
@@ -1205,16 +1207,14 @@ def materialize_real_counterfactual_overfit32(
     contract = _load_bound_json(contract_path, "contract_sha256")
     report = _load_bound_json(continuity_report_path, "report_sha256")
     if (
-        contract.get("schema_version")
-        != "movement-real-counterfactual-overfit32-data-contract-v1"
+        contract.get("schema_version") != "movement-real-counterfactual-overfit32-data-contract-v1"
         or contract.get("test_allowed") is not False
         or contract.get("training_allowed") is not False
         or contract.get("r2_allowed") is not False
         or contract.get("device_input_allowed") is not False
         or report.get("status") != "REAL_PLAYER_GOAL_CONTINUITY_PASSED"
         or report.get("policy_training_allowed") is not False
-        or _file_sha256(continuity_report_path)
-        != contract.get("continuity_report_file_sha256")
+        or _file_sha256(continuity_report_path) != contract.get("continuity_report_file_sha256")
         or report.get("report_sha256") != contract.get("continuity_report_sha256")
     ):
         raise ValueError("real counterfactual data contract differs")
@@ -1319,9 +1319,7 @@ def materialize_real_counterfactual_overfit32(
     used_indices: dict[str, set[int]] = {
         basename: set() for basename, _frames, _times, _positions in sessions
     }
-    source_windows: list[
-        tuple[str, int, int, np.ndarray, np.ndarray, tuple[float, float]]
-    ] = []
+    source_windows: list[tuple[str, int, int, np.ndarray, np.ndarray, tuple[float, float]]] = []
     for basename, frames, timestamps, positions in sessions:
         for end in range(sequence_frames - 1, len(frames)):
             start = end - sequence_frames + 1
@@ -1363,9 +1361,7 @@ def materialize_real_counterfactual_overfit32(
     selected_windows: list[dict[str, object]] = []
     for sample_index, action in enumerate(sample_actions):
         source_window_id = sample_index % len(source_windows)
-        basename, start, end, source_clip, window_times, player = source_windows[
-            source_window_id
-        ]
+        basename, start, end, source_clip, window_times, player = source_windows[source_window_id]
         goal_yx = _counterfactual_goal(player, action, goal_distance, marker_radius)
         if goal_yx is None:
             raise ValueError("real counterfactual selected geometry differs")
@@ -1481,17 +1477,13 @@ def _filtered_player_positions(
     reset_after = int(
         cast(
             int,
-            cast(dict[str, object], cue_contract["components"])[
-                "reset_after_missing_frames"
-            ],
+            cast(dict[str, object], cue_contract["components"])["reset_after_missing_frames"],
         )
     )
     for frame in frames:
         raw = _player_candidates(frame, cue_contract)
         candidates_by_frame.append(raw)
-        candidates = [
-            item for item in raw if not (x0 <= item[1] < x1 and y0 <= item[0] < y1)
-        ]
+        candidates = [item for item in raw if not (x0 <= item[1] < x1 and y0 <= item[0] < y1)]
         if not candidates:
             positions.append(None)
             missing += 1
@@ -1503,9 +1495,7 @@ def _filtered_player_positions(
             if previous is None
             else min(
                 candidates,
-                key=lambda item: float(
-                    np.linalg.norm(np.asarray(item[:2]) - np.asarray(previous))
-                ),
+                key=lambda item: float(np.linalg.norm(np.asarray(item[:2]) - np.asarray(previous))),
             )
         )
         previous = (selected[0], selected[1])
@@ -1538,9 +1528,7 @@ def _write_localization_contact_sheet(
         if positions[index] is not None:
             y, x = cast(tuple[float, float], positions[index])
             draw.ellipse((x - 7, y - 7, x + 7, y + 7), outline=(0, 255, 255), width=2)
-        draw.text(
-            (2, 2), str(index), fill=(255, 255, 255), stroke_width=1, stroke_fill=(0, 0, 0)
-        )
+        draw.text((2, 2), str(index), fill=(255, 255, 255), stroke_width=1, stroke_fill=(0, 0, 0))
         image = image.resize((128 * scale, 128 * scale), Image.Resampling.NEAREST)
         canvas.paste(
             image,
@@ -1744,8 +1732,7 @@ def run_real_player_localization_audit_v2(
                 ]
             else:
                 qa_indices = [
-                    round(index * (len(frames) - 1) / (qa_count - 1))
-                    for index in range(qa_count)
+                    round(index * (len(frames) - 1) / (qa_count - 1)) for index in range(qa_count)
                 ]
             contact_name = f"{basename}-contact.png"
             _write_localization_contact_sheet(
@@ -1765,9 +1752,7 @@ def run_real_player_localization_audit_v2(
                 }
             )
             positive_fraction = (
-                sum(value > 0.0 for value in projections) / len(projections)
-                if projections
-                else 0.0
+                sum(value > 0.0 for value in projections) / len(projections) if projections else 0.0
             )
             median_projection = float(np.median(projections)) if projections else 0.0
             session_results.append(
@@ -1952,8 +1937,7 @@ def prepare_real_counterfactual_grouped_data(
             continue
         player = window_positions[-1]
         goals = [
-            _counterfactual_goal(player, action, goal_distance, marker_radius)
-            for action in actions
+            _counterfactual_goal(player, action, goal_distance, marker_radius) for action in actions
         ]
         if any(goal is None for goal in goals) or any(
             _goal_direction(player, cast(tuple[int, int], goal), stop_radius) != action
@@ -2039,3 +2023,286 @@ def prepare_real_counterfactual_grouped_data(
         "opened_shards": opened_shards,
     }
     return variants, labels_array, groups_array, metadata
+
+
+def _appearance_peaks(frame: np.ndarray, template: np.ndarray) -> list[tuple[float, float, float]]:
+    """RGB-only local template matching; score is correlation, not probability."""
+    rgb = frame.astype(np.int16)
+    red, green, blue = (rgb[..., index] for index in range(3))
+    components = _mask_components((green > 85) & (green - red > 18) & (green - blue > 10))
+    radius = int(PLAYER_TRACKING_SETTINGS["patch_radius"])
+    search = int(PLAYER_TRACKING_SETTINGS["center_search_radius"])
+    centers: set[tuple[int, int]] = set()
+    for size, y, x, height, width in components:
+        if not (20 <= size <= 140 and 7 <= height <= 24 and 7 <= width <= 24):
+            continue
+        for dy in range(-search, search + 1):
+            for dx in range(-search, search + 1):
+                cy, cx = round(y) + dy, round(x) + dx
+                if (
+                    radius <= cy < 128 - radius
+                    and radius <= cx < 128 - radius
+                    and not (112 <= cx < 128 and 0 <= cy < 16)
+                ):
+                    centers.add((cy, cx))
+    if not centers:
+        return []
+    ordered = sorted(centers)
+    patches = (
+        np.stack(
+            [frame[y - radius : y + radius + 1, x - radius : x + radius + 1] for y, x in ordered]
+        )
+        .astype(np.float32)
+        .reshape(len(ordered), -1)
+    )
+    reference = template.astype(np.float32).ravel()
+    reference -= reference.mean()
+    patches -= patches.mean(axis=1, keepdims=True)
+    denominator = np.linalg.norm(patches, axis=1) * np.linalg.norm(reference)
+    scores = np.sum(patches * reference, axis=1) / np.maximum(denominator, 1e-8)
+    peaks: list[tuple[float, float, float]] = []
+    for index in np.argsort(-scores, kind="stable"):
+        y, x = ordered[index]
+        if all(math.dist((y, x), peak[:2]) > 10 for peak in peaks):
+            peaks.append((float(y), float(x), float(scores[index])))
+    return peaks
+
+
+def _track_appearance(
+    frames: np.ndarray, template: np.ndarray
+) -> tuple[list[tuple[float, float] | None], list[str], list[float]]:
+    previous: tuple[float, float] | None = None
+    confirmations = 0
+    positions: list[tuple[float, float] | None] = []
+    reasons: list[str] = []
+    scores: list[float] = []
+    for frame in frames:
+        peaks = _appearance_peaks(frame, template)
+        scores.append(peaks[0][2] if peaks else 0.0)
+        reason = "no_candidate"
+        selected: tuple[float, float] | None = None
+        if peaks:
+            y, x, score = peaks[0]
+            if score < PLAYER_TRACKING_SETTINGS["minimum_correlation"]:
+                reason = "appearance_mismatch"
+            elif (
+                len(peaks) > 1
+                and score - peaks[1][2] < PLAYER_TRACKING_SETTINGS["minimum_distinct_peak_margin"]
+            ):
+                reason = "ambiguous"
+            else:
+                candidate = (y, x)
+                if (
+                    previous is None
+                    or math.dist(previous, candidate)
+                    > PLAYER_TRACKING_SETTINGS["maximum_step_pixels"]
+                ):
+                    confirmations = 1
+                else:
+                    confirmations += 1
+                previous = candidate
+                reason = "confirming"
+                if confirmations >= PLAYER_TRACKING_SETTINGS["confirmation_frames"]:
+                    selected = candidate
+                    reason = "tracked"
+        if reason not in {"tracked", "confirming"}:
+            previous = None
+            confirmations = 0
+        positions.append(selected)
+        reasons.append(reason)
+    return positions, reasons, scores
+
+
+def _write_tracking_qa(
+    path: Path,
+    main: np.ndarray,
+    frames: np.ndarray,
+    positions: list[tuple[float, float] | None],
+    indices: list[int],
+) -> None:
+    from PIL import Image, ImageDraw
+
+    canvas = Image.new("RGB", (768, math.ceil(len(indices) / 3) * 148))
+    for ordinal, index in enumerate(indices):
+        tile = Image.new("RGB", (256, 148))
+        tile.paste(Image.fromarray(main[index]), (0, 20))
+        tile.paste(Image.fromarray(frames[index]), (128, 20))
+        draw = ImageDraw.Draw(tile)
+        draw.text((0, 2), f"{index}: {'tracked' if positions[index] else 'unknown'}")
+        if positions[index] is not None:
+            y, x = cast(tuple[float, float], positions[index])
+            draw.ellipse((128 + x - 9, 20 + y - 9, 128 + x + 9, 20 + y + 9), outline="magenta")
+        canvas.paste(tile, (ordinal % 3 * 256, ordinal // 3 * 148))
+    canvas.save(path, format="PNG")
+
+
+def run_real_player_tracking_audit(
+    contract_path: Path,
+    prior_report_path: Path,
+    session_root: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    """One offline appearance candidate. Never promotes or supplies action labels."""
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    prior = _load_bound_json(prior_report_path, "report_sha256")
+    if (
+        contract.get("schema_version") != "movement-real-player-localization-audit-v2"
+        or prior.get("contract_sha256") != contract["contract_sha256"]
+        or prior.get("status") != "PLAYER_CUE_PARTIAL_SESSION002_ONLY"
+    ):
+        raise ValueError("tracking requires the completed localization v2 source binding")
+    if output_dir.exists():
+        raise ValueError("tracking output already exists")
+    sessions: list[dict[str, object]] = []
+    template: np.ndarray | None = None
+    template_indices: list[int] = []
+    opened: list[dict[str, object]] = []
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    for declaration in cast(list[dict[str, object]], contract["sessions"]):
+        name = str(declaration["basename"])
+        if name not in {"teacher-session-002", "teacher-session-003", "teacher-session-005"}:
+            raise ValueError("tracking session outside existing offline scope")
+        directory = session_root / name
+        summary_path = directory / "summary.json"
+        if _file_sha256(summary_path) != declaration["summary_sha256"]:
+            raise ValueError("tracking summary binding differs")
+        summary = _load_bound_json(summary_path, "summary_sha256")
+        fields = ("main_rgb", "minimap_rgb", "movement_id", "movement_input_sent")
+        parts: dict[str, list[np.ndarray]] = {key: [] for key in fields}
+        for shard_row in cast(list[dict[str, object]], summary["observation_shards"]):
+            basename = str(shard_row["path"])
+            shard_path = directory / "shards" / basename
+            if (
+                Path(basename).name != basename
+                or shard_path.is_symlink()
+                or _file_sha256(shard_path) != shard_row["sha256"]
+            ):
+                raise ValueError("tracking shard binding differs")
+            with np.load(shard_path, allow_pickle=False) as shard:
+                for key in fields:
+                    parts[key].append(shard[key].copy())
+            opened.append({"session": name, "basename": basename, "sha256": shard_row["sha256"]})
+        arrays = {key: np.concatenate(value) for key, value in parts.items()}
+        frames = arrays["minimap_rgb"]
+        if template is None:
+            if name != "teacher-session-002":
+                raise ValueError("appearance template must originate in session002")
+            _, old = _filtered_player_positions(frames, contract, (112, 0, 128, 16))
+            radius = int(PLAYER_TRACKING_SETTINGS["patch_radius"])
+            template_indices = [
+                index
+                for index, position in enumerate(old)
+                if position is not None and all(16 <= value < 112 for value in position)
+            ][: int(PLAYER_TRACKING_SETTINGS["template_frames"])]
+            if len(template_indices) != PLAYER_TRACKING_SETTINGS["template_frames"]:
+                raise ValueError("insufficient source template evidence")
+            crops = []
+            for index in template_indices:
+                y, x = map(round, cast(tuple[float, float], old[index]))
+                crops.append(
+                    frames[index, y - radius : y + radius + 1, x - radius : x + radius + 1]
+                )
+            template = np.median(np.stack(crops), axis=0).astype(np.uint8)
+            from PIL import Image
+
+            Image.fromarray(template).save(staging / "appearance-template.png")
+        positions, reasons, scores = _track_appearance(frames, template)
+        valid = [i for i, p in enumerate(positions) if p is not None]
+        jumps = [
+            math.dist(
+                cast(tuple[float, float], positions[i - 1]),
+                cast(tuple[float, float], positions[i]),
+            )
+            for i in valid
+            if i and positions[i - 1] is not None
+        ]
+        spans: list[dict[str, int]] = []
+        start: int | None = None
+        for i in range(len(positions) + 1):
+            if i < len(positions) and positions[i] is None:
+                if start is None:
+                    start = i
+            elif start is not None:
+                spans.append({"start": start, "frames": i - start})
+                start = None
+        # Historical compass order, not the Movement head order. Actions never enter tracking.
+        vectors = ((0, 0), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1))
+        responses: list[float] = []
+        for i in range(len(frames) - 5):
+            action = int(arrays["movement_id"][i])
+            if not arrays["movement_input_sent"][i] or action == 0:
+                continue
+            if any(p is None for p in positions[i : i + 6]):
+                continue
+            if any(
+                arrays["movement_input_sent"][j] and arrays["movement_id"][j] != action
+                for j in range(i + 1, i + 6)
+            ):
+                continue
+            delta = np.asarray(positions[i + 5]) - np.asarray(positions[i])
+            vector = np.asarray(vectors[action])
+            responses.append(float(delta @ vector / np.linalg.norm(vector)))
+        indices = list(map(int, np.linspace(0, len(frames) - 1, 12)))
+        if valid:
+            indices.extend(valid[int(i)] for i in np.linspace(0, len(valid) - 1, 6))
+        indices = sorted(set(indices))
+        qa_name = f"{name}-paired-qa.png"
+        _write_tracking_qa(staging / qa_name, arrays["main_rgb"], frames, positions, indices)
+        sessions.append(
+            {
+                "session": name,
+                "frames": len(frames),
+                "tracked_frames": len(valid),
+                "coverage": len(valid) / len(frames),
+                "unknown_reasons": dict(Counter(reasons)),
+                "unknown_spans": spans,
+                "maximum_unknown_frames": max((s["frames"] for s in spans), default=0),
+                "adjacent_jump_p95": float(np.percentile(jumps, 95)) if jumps else None,
+                "acquisitions": sum(i == 0 or positions[i - 1] is None for i in valid),
+                "response_events": len(responses),
+                "positive_response_fraction": sum(p > 0 for p in responses) / len(responses)
+                if responses
+                else None,
+                "median_projection_pixels": float(np.median(responses)) if responses else None,
+                "positions_yx": positions,
+                "correlation_scores": scores,
+                "qa": {
+                    "basename": qa_name,
+                    "indices": indices,
+                    "sha256": _file_sha256(staging / qa_name),
+                },
+            }
+        )
+    report: dict[str, object] = {
+        "schema_version": "movement-real-player-appearance-tracking-v1",
+        "status": "PLAYER_APPEARANCE_TRACKING_DIAGNOSTIC_ONLY",
+        "source_contract_sha256": contract["contract_sha256"],
+        "prior_report_sha256": prior["report_sha256"],
+        "implementation_sha256": _file_sha256(Path(__file__)),
+        "settings": PLAYER_TRACKING_SETTINGS,
+        "template_session": "teacher-session-002",
+        "template_frame_indices": template_indices,
+        "template_sha256": _file_sha256(staging / "appearance-template.png"),
+        "sessions": sessions,
+        "opened_shards": opened,
+        "response_note": (
+            "scheduled 1000ms endpoints, all six positions observed, "
+            "no intervening different dispatched action; not ground truth"
+        ),
+        "semantic_accuracy_verified": False,
+        "false_lock_rate": None,
+        "reacquisition_latency_verified": False,
+        "training_allowed": False,
+        "r2_allowed": False,
+        "test_opened": False,
+        "device_input_allowed": False,
+        "input_commands_sent": 0,
+        "model_runs": 0,
+        "gpu_seconds": 0,
+        "next_step": "inspect paired QA; no automatic navigation integration or training",
+    }
+    report["report_sha256"] = _object_sha256(report)
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return report

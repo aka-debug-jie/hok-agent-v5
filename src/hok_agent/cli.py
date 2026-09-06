@@ -75,6 +75,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-player-cue",
             "real-player-goal-continuity",
             "real-player-localization-audit-v2",
+            "real-player-tracking-audit",
             "real-counterfactual-overfit32-materialize",
             "real-counterfactual-grouped-eval",
             "materialize-overfit32",
@@ -1424,6 +1425,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.output_dir,
                     device_name=args.device,
                 )
+            elif args.mode == "real-player-tracking-audit":
+                if args.session_root is None or args.prior_report is None:
+                    raise ValueError(
+                        "real-player-tracking-audit requires --session-root and --prior-report"
+                    )
+                from hok_agent.movement_real_rgb import run_real_player_tracking_audit
+
+                result = run_real_player_tracking_audit(
+                    args.config, args.prior_report, args.session_root, args.output_dir
+                )
             elif args.mode == "real-player-localization-audit-v2":
                 if args.session_root is None or args.prior_report is None:
                     raise ValueError(
@@ -1554,9 +1565,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raise ValueError("real-rgb-preflight requires --target-root")
                 from hok_agent.movement_real_rgb import run_real_rgb_preflight
 
-                result = run_real_rgb_preflight(
-                    args.config, args.target_root, args.output_dir
-                )
+                result = run_real_rgb_preflight(args.config, args.target_root, args.output_dir)
             elif args.mode == "package":
                 from hok_agent.movement_delivery import create_r0_package, verify_r0_package
 
@@ -1567,9 +1576,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 else:
                     if args.source_run is None or args.control_run is None:
                         raise ValueError("package creation requires --source-run and --control-run")
-                    result = create_r0_package(
-                        args.source_run, args.control_run, args.output_dir
-                    )
+                    result = create_r0_package(args.source_run, args.control_run, args.output_dir)
             elif args.mode == "stage-a":
                 from hok_agent.movement_mvp import run_stage_a
 

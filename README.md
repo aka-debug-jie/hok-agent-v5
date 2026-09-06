@@ -149,7 +149,29 @@ five-group evaluation confirms the limitation: full accuracy is 0.7778, versus 0
 player masked and 0.6667 from the target ring alone; its control gains miss the frozen 0.15 gate.
 The route is frozen as shortcut/no-generalization evidence, with no promoted checkpoint.
 
-The two frozen entrypoints are:
+The bounded appearance tracker also failed to expand coverage: it tracks 155/1485 frames in 002
+and none in 003/005. It is not a replacement for v2 and is not connected to navigation. Paired
+main/minimap QA shows a fountain/edge observability problem in the sampled scenes; a moving green
+marker elsewhere is not sufficient player identity. Next inspect whether existing train/dev source
+views retain the complete minimap, especially its spawn corner, before changing detection again.
+No new recording, model training, or phone access is required for that inspection.
+
+The diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
+
+```bash
+python -m hok_agent movement-mvp --mode real-player-tracking-audit \
+  --config configs/movement_real_player_localization_audit_v2.json \
+  --prior-report "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-player-localization-v2/report.json" \
+  --session-root "$HOK_LARGE_ROOT/datasets/operation-movement-teacher-v1" \
+  --output-dir "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/real-player-appearance-tracking-v1"
+```
+
+It emits an automatically extracted appearance template, paired QA sheets, and a self-hashed
+diagnostic report. Correlation is not confidence calibrated against identity labels; missing
+detections emit `unknown`, never extrapolated player positions. False-lock rate and reacquisition
+latency remain unverified. The completed local run must not be rerun to tune its threshold.
+
+The earlier frozen entrypoints are:
 
 ```bash
 python -m hok_agent movement-mvp --mode real-player-localization-audit-v2 \
