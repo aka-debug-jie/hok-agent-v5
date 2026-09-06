@@ -81,6 +81,7 @@ def _parser() -> argparse.ArgumentParser:
             "native-anchor-cohort-repair",
             "native-anchor-counterfactual-audit",
             "native-anchor-counterfactual-materialize",
+            "native-anchor-relation-train",
             "real-counterfactual-overfit32-materialize",
             "real-counterfactual-grouped-eval",
             "materialize-overfit32",
@@ -1435,6 +1436,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.overfit_report,
                     args.output_dir,
                     device_name=args.device,
+                )
+            elif args.mode == "native-anchor-relation-train":
+                if args.dataset is None or args.prior_report is None:
+                    raise ValueError(
+                        "native-anchor-relation-train requires --dataset and --prior-report"
+                    )
+                from hok_agent.movement_mvp_train import run_native_anchor_relation_diagnostic
+
+                result = run_native_anchor_relation_diagnostic(
+                    args.dataset,
+                    args.prior_report,
+                    args.output_dir,
+                    device_name=args.device,
+                    repair_report_path=args.repair_report,
                 )
             elif args.mode == "native-anchor-counterfactual-materialize":
                 if args.prior_report is None or args.source_run is None or args.repair_run is None:

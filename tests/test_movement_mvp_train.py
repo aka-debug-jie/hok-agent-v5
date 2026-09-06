@@ -135,9 +135,7 @@ def test_two_stage_training_freezes_localizer_before_action_update() -> None:
         lr=0.001,
         weight_decay=0.0,
     )
-    loss, gradient = _action_step(
-        model, clips, torch.tensor([1, 2]), action_optimizer
-    )
+    loss, gradient = _action_step(model, clips, torch.tensor([1, 2]), action_optimizer)
     assert math.isfinite(loss) and gradient > 0.0
     assert torch.equal(frozen, model.attention.weight)
     assert not torch.equal(project, model.project[0].weight)
@@ -464,3 +462,143 @@ def test_mismatched_checkpoint_is_reference_only_never_promoted(
     assert all(report["gate_results"].values())
     assert report["reference_only"] is True
     assert report["passed"] is False
+
+
+def test_native_relation_variants_are_deterministic_and_source_preserving(tmp_path: Path) -> None:
+    from hok_agent.movement_mvp_train import _native_relation_variants
+
+    source = np.zeros((2, 16, 256, 256, 3), dtype=np.uint8)
+    yy, xx = np.indices((256, 256))
+    ring = (np.hypot(yy - 100, xx - 110) >= 9) & (np.hypot(yy - 100, xx - 110) <= 11)
+    for group in source:
+        for frame in group:
+            frame[ring] = (20, 220, 30)
+    targets = np.asarray(
+        [
+            [100, 110],
+            [76, 110],
+            [124, 110],
+            [100, 86],
+            [100, 134],
+            [76, 86],
+            [76, 134],
+            [124, 86],
+            [124, 134],
+        ],
+        dtype=np.int16,
+    )
+    dataset = tmp_path / "dataset.npz"
+    np.savez_compressed(
+        dataset,
+        source_clips=source,
+        split=np.asarray(["train", "dev"]),
+        anchor_yx=np.asarray([[100, 110], [100, 110]], dtype=np.int16),
+        sample_group_index=np.repeat(np.arange(2), 9),
+        sample_label=np.tile(np.arange(9), 2),
+        sample_target_yx=np.tile(targets, (2, 1)),
+    )
+    before = hashlib.sha256(dataset.read_bytes()).hexdigest()
+    variants, labels, splits, metadata = _native_relation_variants(dataset)
+    assert hashlib.sha256(dataset.read_bytes()).hexdigest() == before
+    assert {name: value.shape for name, value in variants.items()} == {
+        "full": (18, 16, 128, 128, 3),
+        "anchor_masked": (18, 16, 128, 128, 3),
+        "goal_only": (18, 16, 128, 128, 3),
+    }
+    assert labels.tolist() == list(range(9)) * 2
+    assert splits.tolist() == ["train"] * 9 + ["dev"] * 9
+    assert len(set(metadata["variant_sha256"].values())) == 3
+    repaired, repaired_labels, repaired_splits, repaired_metadata = _native_relation_variants(
+        dataset, render_after_resize=True
+    )
+    assert repaired_labels.tolist() == labels.tolist()
+    assert repaired_splits.tolist() == splits.tolist()
+    assert repaired_metadata["render_order"] == "resize_128_then_mark_radius7"
+    assert (
+        np.any(repaired["full"][1] != repaired["full"][0], axis=-1).sum()
+        > np.any(variants["full"][1] != variants["full"][0], axis=-1).sum()
+    )
+    assert hashlib.sha256(dataset.read_bytes()).hexdigest() == before
+
+
+def test_native_relation_runner_passes_controls_and_stops_after_overfit_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hok_agent import movement_mvp_train as module
+
+    dataset = tmp_path / "dataset.npz"
+    np.savez_compressed(dataset, placeholder=np.asarray([1]))
+    data_report = {
+        "schema_version": "native-weak-anchor-counterfactual-dataset-v1",
+        "status": "WEAK_ANCHOR_COUNTERFACTUAL_DATASET_READY",
+        "relation_diagnostic_training_allowed": True,
+        "movement_policy_training_allowed": False,
+        "dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
+    }
+    data_report["report_sha256"] = _object_sha256(data_report)
+    report_path = tmp_path / "data-report.json"
+    report_path.write_text(json.dumps(data_report))
+    variants = {
+        name: np.zeros((18, 16, 128, 128, 3), dtype=np.uint8)
+        for name in ("full", "anchor_masked", "goal_only")
+    }
+    labels = np.tile(np.arange(9), 2)
+    splits = np.asarray(["train"] * 9 + ["dev"] * 9)
+    monkeypatch.setattr(
+        module, "_native_relation_variants", lambda _path, **_kwargs: (variants, labels, splits, {})
+    )
+    calls: list[int] = []
+
+    def trained(
+        *_args: object, **_kwargs: object
+    ) -> tuple[TaskSpecificMovement, dict[str, object]]:
+        index = len(calls)
+        calls.append(index)
+        accuracy = [1.0, 0.9, 0.5, 0.4][index]
+        return TaskSpecificMovement(), {
+            "accuracy": accuracy,
+            "macro_f1": accuracy,
+            "recall": {action: accuracy for action in MOVEMENT_ACTIONS},
+            "cross_entropy": 0.01,
+            "first_update_loss": 2.0,
+            "first_update_gradient_norm": 1.0,
+            "first_update_parameter_changed": True,
+            "final_update_loss": 0.01,
+        }
+
+    monkeypatch.setattr(module, "_train_native_relation_variant", trained)
+    report = module.run_native_anchor_relation_diagnostic(
+        dataset, report_path, tmp_path / "passed", device_name="cpu"
+    )
+    assert report["status"] == "WEAK_ANCHOR_RELATION_SIGNAL_PASSED"
+    assert report["model_runs"] == 4 and all(report["checks"].values())
+    assert report["checkpoint_saved"] is report["movement_policy_training_allowed"] is False
+    assert list((tmp_path / "passed").iterdir()) == [tmp_path / "passed" / "report.json"]
+
+    monkeypatch.setattr(
+        module,
+        "_train_native_relation_variant",
+        lambda *_args, **_kwargs: (
+            TaskSpecificMovement(),
+            {"accuracy": 0.5, "cross_entropy": 1.0},
+        ),
+    )
+    failed = module.run_native_anchor_relation_diagnostic(
+        dataset, report_path, tmp_path / "failed", device_name="cpu"
+    )
+    assert failed["status"] == "WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED"
+    assert failed["model_runs"] == 1 and failed["results"] == {}
+    assert failed["checks"]["overfit36"] is False
+
+    calls.clear()
+    monkeypatch.setattr(module, "_train_native_relation_variant", trained)
+    repaired = module.run_native_anchor_relation_diagnostic(
+        dataset,
+        report_path,
+        tmp_path / "repaired",
+        device_name="cpu",
+        repair_report_path=tmp_path / "failed" / "report.json",
+    )
+    assert repaired["status"] == "WEAK_ANCHOR_RELATION_SIGNAL_PASSED"
+    assert repaired["repair_of_report_sha256"] == failed["report_sha256"]
+    assert repaired["model_runs"] == 4

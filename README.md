@@ -213,6 +213,13 @@ rendered deterministically after copying at training time, then nearest-sampled 
 Train/dev remain 72/81 rows with all nine classes at 17 total each. This dataset permits one
 seed-0 relation diagnostic with full, anchor-masked and goal-only inputs; it is not deployable BC.
 
+That diagnostic is now closed failed. The initial render drew radius 7 at 256px before resizing and
+failed overfit36 at 0.111 accuracy / 2.203 cross-entropy. One explicit render-order repair resized
+first and drew radius 7 at model resolution; overfit36 then passed at 1.0 / 0.00647. Formal
+session-isolated dev nevertheless collapsed to one class: full, anchor-masked and goal-only each
+reached only 0.111 accuracy and 0.0222 macro-F1. No checkpoint was saved. Do not add updates, models,
+samples or threshold changes to this weak-anchor relation route.
+
 The older diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
 
 ```bash

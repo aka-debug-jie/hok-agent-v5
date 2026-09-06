@@ -97,9 +97,7 @@ class RelationalMovement(nn.Module):
         relation = coordinates[:, 0] - coordinates[:, 1]
         confidence = attention.max(dim=-1).values
         pooled = features.mean(dim=(2, 3))
-        frame_features = torch.cat(
-            (pooled, coordinates.flatten(1), relation, confidence), dim=-1
-        )
+        frame_features = torch.cat((pooled, coordinates.flatten(1), relation, confidence), dim=-1)
         encoded = self.project(frame_features).reshape(batch, sequence, 64)
         _output, hidden = self.temporal(encoded)
         return (
@@ -219,8 +217,7 @@ def run_overfit32(
     if attempts_used >= attempt_limit:
         raise ValueError("stage B diagnostic attempt limit is exhausted")
     real_counterfactual = (
-        raw.get("schema_version")
-        == "movement-real-counterfactual-overfit32-train-contract-v1"
+        raw.get("schema_version") == "movement-real-counterfactual-overfit32-train-contract-v1"
     )
     if real_counterfactual:
         unsigned = {key: value for key, value in raw.items() if key != "contract_sha256"}
@@ -408,9 +405,7 @@ def run_overfit32(
         "passed": passed,
         "next_stage_allowed": passed and not real_counterfactual,
         "real_counterfactual_diagnostic": real_counterfactual,
-        "source_window_generalization_verified": False
-        if real_counterfactual
-        else None,
+        "source_window_generalization_verified": False if real_counterfactual else None,
         "formal_training_allowed": False if real_counterfactual else None,
         "diagnostic_attempt_limit": attempt_limit,
         "diagnostic_attempts_used_before_run": attempts_used,
@@ -438,9 +433,7 @@ def _classification_metrics(
         precision = true_positive / actual_support if actual_support else 0.0
         recalls.append(recall)
         f1_values.append(
-            2.0 * precision * recall / (precision + recall)
-            if precision + recall
-            else 0.0
+            2.0 * precision * recall / (precision + recall) if precision + recall else 0.0
         )
     return {
         "accuracy": float(np.mean(predicted == labels)),
@@ -549,8 +542,7 @@ def run_real_counterfactual_grouped_eval(
         or raw.get("folds") != 5
         or raw.get("expected_model_runs") != 15
         or raw.get("checkpoints_persisted") != 0
-        or cast(dict[str, object], raw["training"]).get("model")
-        != "task_specific_groupnorm_gru"
+        or cast(dict[str, object], raw["training"]).get("model") != "task_specific_groupnorm_gru"
     ):
         raise ValueError("real grouped evaluation contract differs")
     localization = _load_bound_json(localization_report_path, "report_sha256")
@@ -559,8 +551,7 @@ def run_real_counterfactual_grouped_eval(
         localization.get("status") != "PLAYER_CUE_PARTIAL_SESSION002_ONLY"
         or localization.get("semantic_identity_scope")
         != "session002_partial_action_response_supported"
-        or _file_sha256(localization_report_path)
-        != raw.get("localization_report_file_sha256")
+        or _file_sha256(localization_report_path) != raw.get("localization_report_file_sha256")
         or localization.get("report_sha256") != raw.get("localization_report_sha256")
         or _file_sha256(old_dataset_path) != raw.get("old_dataset_sha256")
         or _file_sha256(old_data_report_path) != raw.get("old_data_report_file_sha256")
@@ -578,9 +569,7 @@ def run_real_counterfactual_grouped_eval(
 
     with np.load(old_dataset_path, allow_pickle=False) as old_dataset:
         old_clips = old_dataset["rgb_sequence"]
-        old_unique_clips = len(
-            {hashlib.sha256(clip.tobytes()).hexdigest() for clip in old_clips}
-        )
+        old_unique_clips = len({hashlib.sha256(clip.tobytes()).hexdigest() for clip in old_clips})
         old_unique_windows = len(np.unique(old_dataset["end_timestamp_ms"]))
     old_duplicates = len(old_clips) - old_unique_clips
     expected_old = cast(dict[str, object], raw["old_dataset_expected"])
@@ -686,9 +675,7 @@ def run_real_counterfactual_grouped_eval(
         "model_runs": len(fold_rows),
         "expected_model_runs": raw["expected_model_runs"],
         "elapsed_seconds": elapsed,
-        "peak_cuda_bytes": torch.cuda.max_memory_allocated(device)
-        if device.type == "cuda"
-        else 0,
+        "peak_cuda_bytes": torch.cuda.max_memory_allocated(device) if device.type == "cuda" else 0,
         "checkpoints_persisted": 0,
         "source_window_generalization_verified": passed,
         "session_generalization_verified": False,
@@ -715,6 +702,281 @@ def run_real_counterfactual_grouped_eval(
                 path.unlink()
             staging.rmdir()
         raise
+    return report
+
+
+def _native_relation_variants(
+    dataset_path: Path,
+    *,
+    render_after_resize: bool = False,
+) -> tuple[dict[str, np.ndarray], np.ndarray, np.ndarray, dict[str, object]]:
+    from hok_agent.movement_real_rgb import _mask_player_patch, mark_pixel_goal
+
+    with np.load(dataset_path, allow_pickle=False) as arrays:
+        source = arrays["source_clips"].copy()
+        group_split = arrays["split"].copy()
+        anchors = arrays["anchor_yx"].copy()
+        sample_group = arrays["sample_group_index"].astype(np.int64)
+        labels = arrays["sample_label"].astype(np.int64)
+        targets = arrays["sample_target_yx"].copy()
+    if (
+        source.ndim != 5
+        or source.shape[1:] != (16, 256, 256, 3)
+        or source.dtype != np.uint8
+        or group_split.shape != (len(source),)
+        or anchors.shape != (len(source), 2)
+        or sample_group.shape != labels.shape
+        or targets.shape != (len(labels), 2)
+        or np.any(sample_group < 0)
+        or np.any(sample_group >= len(source))
+    ):
+        raise ValueError("native relation dataset arrays differ")
+    variant_rows: dict[str, list[np.ndarray]] = {
+        "full": [],
+        "anchor_masked": [],
+        "goal_only": [],
+    }
+    for group_index, target in zip(sample_group, targets, strict=True):
+        clip = source[group_index]
+        anchor = (int(anchors[group_index, 0]), int(anchors[group_index, 1]))
+        goal = (int(target[0]), int(target[1]))
+        if render_after_resize:
+            resized = np.ascontiguousarray(clip[:, ::2, ::2])
+            small_anchor = (round(anchor[0] / 2), round(anchor[1] / 2))
+            small_goal = (round(goal[0] / 2), round(goal[1] / 2))
+            masked = np.stack([_mask_player_patch(frame, small_anchor, 9) for frame in resized])
+            neutral = np.full_like(resized, 32)
+            bases = (("full", resized), ("anchor_masked", masked), ("goal_only", neutral))
+            for name, base in bases:
+                variant_rows[name].append(
+                    np.stack([mark_pixel_goal(frame, small_goal) for frame in base])
+                )
+        else:
+            masked = np.stack([_mask_player_patch(frame, anchor, 18) for frame in clip])
+            neutral = np.full_like(clip, 32)
+            bases = (("full", clip), ("anchor_masked", masked), ("goal_only", neutral))
+            for name, base in bases:
+                marked = np.stack([mark_pixel_goal(frame, goal) for frame in base])
+                variant_rows[name].append(np.ascontiguousarray(marked[:, ::2, ::2]))
+    variants = {name: np.stack(rows) for name, rows in variant_rows.items()}
+    sample_split = group_split[sample_group]
+    metadata: dict[str, object] = {
+        "source_sha256_before": hashlib.sha256(source.tobytes()).hexdigest(),
+        "variant_sha256": {
+            name: hashlib.sha256(value.tobytes()).hexdigest() for name, value in variants.items()
+        },
+        "samples": len(labels),
+        "groups": len(source),
+        "render_order": (
+            "resize_128_then_mark_radius7"
+            if render_after_resize
+            else "mark_radius7_at_256_then_resize_128"
+        ),
+    }
+    return variants, labels, sample_split, metadata
+
+
+def _train_native_relation_variant(
+    clips: np.ndarray,
+    labels: np.ndarray,
+    train_indices: np.ndarray,
+    dev_indices: np.ndarray,
+    device: torch.device,
+    *,
+    updates: int,
+) -> tuple[TaskSpecificMovement, dict[str, object]]:
+    torch.manual_seed(0)
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(0)
+    model = TaskSpecificMovement().to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.0)
+    generator = torch.Generator().manual_seed(0)
+    order = torch.empty(0, dtype=torch.int64)
+    offset = 0
+    first_before = [parameter.detach().cpu().clone() for parameter in model.parameters()]
+    first_loss = 0.0
+    first_gradient = 0.0
+    losses: list[float] = []
+    clip_tensor = torch.from_numpy(clips)
+    label_tensor = torch.from_numpy(labels)
+    started = time.monotonic()
+    for update in range(updates):
+        if offset + 8 > len(order):
+            order = torch.from_numpy(train_indices)[
+                torch.randperm(len(train_indices), generator=generator)
+            ]
+            offset = 0
+        selected = order[offset : offset + 8]
+        offset += len(selected)
+        loss, gradient = train_step(
+            model,
+            _batch(clip_tensor[selected], device),
+            label_tensor[selected].to(device),
+            optimizer,
+        )
+        losses.append(loss)
+        if update == 0:
+            first_loss, first_gradient = loss, gradient
+    first_changed = any(
+        not torch.equal(before, parameter.detach().cpu())
+        for before, parameter in zip(first_before, model.parameters(), strict=True)
+    )
+    model.eval()
+    with torch.no_grad():
+        logits = model(_batch(clip_tensor[dev_indices], device)).cpu()
+    predicted = logits.argmax(1).numpy()
+    metrics = _classification_metrics(predicted, labels[dev_indices], len(MOVEMENT_ACTIONS))
+    metrics["cross_entropy"] = float(
+        nn.functional.cross_entropy(logits, label_tensor[dev_indices]).item()
+    )
+    metrics.update(
+        {
+            "updates": updates,
+            "train_samples": len(train_indices),
+            "dev_samples": len(dev_indices),
+            "first_update_loss": first_loss,
+            "first_update_gradient_norm": first_gradient,
+            "first_update_parameter_changed": first_changed,
+            "final_update_loss": losses[-1],
+            "elapsed_seconds": time.monotonic() - started,
+        }
+    )
+    return model, metrics
+
+
+def run_native_anchor_relation_diagnostic(
+    dataset_path: Path,
+    dataset_report_path: Path,
+    output_dir: Path,
+    *,
+    device_name: str,
+    repair_report_path: Path | None = None,
+    updates: int = 400,
+    overfit_updates: int = 400,
+) -> dict[str, object]:
+    from hok_agent.movement_real_rgb import _file_sha256, _load_bound_json, _object_sha256
+
+    if output_dir.exists():
+        raise ValueError("native anchor relation output already exists")
+    dataset_report = _load_bound_json(dataset_report_path, "report_sha256")
+    if (
+        dataset_report.get("schema_version") != "native-weak-anchor-counterfactual-dataset-v1"
+        or dataset_report.get("status") != "WEAK_ANCHOR_COUNTERFACTUAL_DATASET_READY"
+        or dataset_report.get("relation_diagnostic_training_allowed") is not True
+        or dataset_report.get("movement_policy_training_allowed") is not False
+        or dataset_report.get("dataset_sha256") != _file_sha256(dataset_path)
+        or updates != 400
+        or overfit_updates != 400
+    ):
+        raise ValueError("native anchor relation training contract differs")
+    repair: dict[str, object] | None = None
+    if repair_report_path is not None:
+        repair = _load_bound_json(repair_report_path, "report_sha256")
+        repair_checks = cast(dict[str, object], repair.get("checks"))
+        if (
+            repair.get("schema_version") != "native-weak-anchor-relation-diagnostic-v1"
+            or repair.get("status") != "WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED"
+            or repair.get("dataset_sha256") != _file_sha256(dataset_path)
+            or repair.get("model_runs") != 1
+            or repair.get("results") != {}
+            or repair_checks.get("overfit36") is not False
+        ):
+            raise ValueError("native anchor relation repair evidence differs")
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA is unavailable for native anchor relation diagnostic")
+    variants, labels, splits, variant_metadata = _native_relation_variants(
+        dataset_path, render_after_resize=repair is not None
+    )
+    train_indices = np.flatnonzero(splits == "train")
+    dev_indices = np.flatnonzero(splits == "dev")
+    overfit_groups = np.unique(train_indices // len(MOVEMENT_ACTIONS))[:4]
+    overfit_indices = np.flatnonzero(
+        np.isin(np.arange(len(labels)) // len(MOVEMENT_ACTIONS), overfit_groups)
+    )
+    _overfit_model, overfit = _train_native_relation_variant(
+        variants["full"],
+        labels,
+        overfit_indices,
+        overfit_indices,
+        device,
+        updates=overfit_updates,
+    )
+    overfit_passed = bool(
+        cast(float, overfit["accuracy"]) >= 0.95 and cast(float, overfit["cross_entropy"]) <= 0.05
+    )
+    results: dict[str, dict[str, object]] = {}
+    if overfit_passed:
+        for name in ("full", "anchor_masked", "goal_only"):
+            _model, result = _train_native_relation_variant(
+                variants[name], labels, train_indices, dev_indices, device, updates=updates
+            )
+            results[name] = result
+    full = results.get("full", {})
+    masked = results.get("anchor_masked", {})
+    goal = results.get("goal_only", {})
+    update_evidence = [overfit, *results.values()]
+    checks = {
+        "overfit36": overfit_passed,
+        "first_update_evidence": all(
+            row.get("first_update_parameter_changed") is True
+            and math.isfinite(cast(float, row["first_update_loss"]))
+            and cast(float, row["first_update_loss"]) > 0
+            and math.isfinite(cast(float, row["first_update_gradient_norm"]))
+            and cast(float, row["first_update_gradient_norm"]) > 0
+            for row in update_evidence
+        ),
+        "full_accuracy": bool(full) and cast(float, full["accuracy"]) >= 0.80,
+        "full_macro_f1": bool(full) and cast(float, full["macro_f1"]) >= 0.80,
+        "full_per_class_recall": bool(full)
+        and min(cast(dict[str, float], full["recall"]).values()) >= 0.60,
+        "full_over_anchor_masked": bool(full and masked)
+        and cast(float, full["accuracy"]) - cast(float, masked["accuracy"]) >= 0.15,
+        "full_over_goal_only": bool(full and goal)
+        and cast(float, full["accuracy"]) - cast(float, goal["accuracy"]) >= 0.15,
+    }
+    passed = all(checks.values())
+    report: dict[str, object] = {
+        "schema_version": "native-weak-anchor-relation-diagnostic-v1",
+        "status": "WEAK_ANCHOR_RELATION_SIGNAL_PASSED"
+        if passed
+        else "WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED",
+        "dataset_report_sha256": dataset_report["report_sha256"],
+        "dataset_report_file_sha256": _file_sha256(dataset_report_path),
+        "dataset_sha256": _file_sha256(dataset_path),
+        "repair_of_report_file_sha256": (
+            _file_sha256(repair_report_path) if repair_report_path is not None else None
+        ),
+        "repair_of_report_sha256": repair["report_sha256"] if repair is not None else None,
+        "implementation_sha256": _sha256(Path(__file__)),
+        "architecture": "TaskSpecificMovement-GroupNorm-GRU-686281",
+        "seed": 0,
+        "optimizer": "AdamW",
+        "learning_rate": 1e-3,
+        "weight_decay": 0.0,
+        "batch_size": 8,
+        "updates": updates,
+        "overfit_updates": overfit_updates,
+        "overfit36": overfit,
+        "results": results,
+        "checks": checks,
+        "variant_metadata": variant_metadata,
+        "model_runs": 1 + len(results),
+        "checkpoint_saved": False,
+        "relation_signal_only": True,
+        "movement_policy_training_allowed": False,
+        "controlled_player_identity_verified": False,
+        "executed_action_labels_used": False,
+        "test_frames_read": 0,
+        "video_frames_decoded": 0,
+        "input_commands_sent": 0,
+        "device": device.type,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.mkdir(parents=True)
+    (output_dir / "report.json").write_bytes(
+        json.dumps(report, sort_keys=True, separators=(",", ":"), allow_nan=False).encode() + b"\n"
+    )
     return report
 
 
@@ -786,9 +1048,7 @@ def _evaluate_localized(
     cell_accuracy = float((predicted_cells == targets).float().mean())
     target_x, target_y = targets % grid_size, targets // grid_size
     predicted_x, predicted_y = predicted_cells % grid_size, predicted_cells // grid_size
-    cell_error = torch.maximum(
-        torch.abs(predicted_x - target_x), torch.abs(predicted_y - target_y)
-    )
+    cell_error = torch.maximum(torch.abs(predicted_x - target_x), torch.abs(predicted_y - target_y))
     predicted_pixels = (predicted_coordinates + 1.0) * 63.5
     slot_error = torch.linalg.vector_norm(predicted_pixels - coordinates_device, dim=-1)
     return {
@@ -1125,11 +1385,10 @@ def run_two_stage_overfit32(
         if schema == "movement-goal-canvas-two-stage-contract-v2"
         else "minimum_slot_cell_accuracy"
     )
-    localization_passed = (
-        float(cast(float, localization_evaluation[accuracy_name]))
-        >= float(cast(float, localization[minimum_accuracy_name]))
-        and float(cast(float, localization_evaluation["mean_slot_error_pixels"]))
-        <= float(cast(float, localization["maximum_slot_error_pixels"]))
+    localization_passed = float(cast(float, localization_evaluation[accuracy_name])) >= float(
+        cast(float, localization[minimum_accuracy_name])
+    ) and float(cast(float, localization_evaluation["mean_slot_error_pixels"])) <= float(
+        cast(float, localization["maximum_slot_error_pixels"])
     )
     frozen_before = {
         name: value.detach().clone()
@@ -1230,8 +1489,7 @@ def run_two_stage_overfit32(
             "first": action_first,
             "final": action_final,
             "evaluation": {
-                key: evaluation[key]
-                for key in ("action_accuracy", "action_loss", "action_recall")
+                key: evaluation[key] for key in ("action_accuracy", "action_loss", "action_recall")
             },
             "frozen_localizer_unchanged": frozen_unchanged,
             "passed": action_passed,
@@ -1733,9 +1991,10 @@ def evaluate_stage_c_dev(
     stage = cast(dict[str, object], raw["stage_c"])
     manifest = load_stage_c_manifest(dataset_root)
     architecture = str(stage.get("architecture", "task-specific"))
-    if architecture == "relational" and raw.get("trajectory_manifest_sha256") != manifest[
-        "manifest_sha256"
-    ]:
+    if (
+        architecture == "relational"
+        and raw.get("trajectory_manifest_sha256") != manifest["manifest_sha256"]
+    ):
         raise ValueError("relational dev manifest binding differs")
     scenarios = tuple(
         row for row in cast(list[dict[str, object]], manifest["episodes"]) if row["split"] == "dev"

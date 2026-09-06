@@ -2152,12 +2152,15 @@ def run_real_player_localization_audit_v2(
 def _mask_player_patch(
     frame: np.ndarray, player_yx: tuple[float, float], radius: int
 ) -> np.ndarray:
+    if frame.ndim != 3 or frame.shape[0] != frame.shape[1] or frame.shape[2] != 3:
+        raise ValueError("player mask requires square RGB")
+    size = frame.shape[0]
     center_y, center_x = map(round, player_yx)
-    y0, y1 = max(0, center_y - radius), min(128, center_y + radius + 1)
-    x0, x1 = max(0, center_x - radius), min(128, center_x + radius + 1)
+    y0, y1 = max(0, center_y - radius), min(size, center_y + radius + 1)
+    x0, x1 = max(0, center_x - radius), min(size, center_x + radius + 1)
     outer = radius + 4
-    outer_y0, outer_y1 = max(0, center_y - outer), min(128, center_y + outer + 1)
-    outer_x0, outer_x1 = max(0, center_x - outer), min(128, center_x + outer + 1)
+    outer_y0, outer_y1 = max(0, center_y - outer), min(size, center_y + outer + 1)
+    outer_x0, outer_x1 = max(0, center_x - outer), min(size, center_x + outer + 1)
     surround = frame[outer_y0:outer_y1, outer_x0:outer_x1].copy()
     inner_y0, inner_y1 = y0 - outer_y0, y1 - outer_y0
     inner_x0, inner_x1 = x0 - outer_x0, x1 - outer_x0

@@ -44,6 +44,13 @@ full mean accuracy was 0.7778 and exceeded player-masked/goal-only controls by o
 Freeze the result as `REAL_COUNTERFACTUAL_MODEL_SHORTCUT_OR_NO_GENERALIZATION`; do not tune this
 model path. The next work may only repair automatic player localization coverage. Formal training,
 R2 and device input remain closed.
+That bounded continuation is now closed: native-resolution weak-anchor coverage passed after one
+four-dev-session expansion, but the session-isolated relation diagnostic failed. Its sole render
+repair changed only target rendering order, passed overfit36 at 1.0/0.00647, then full,
+anchor-masked and goal-only each collapsed to dev accuracy 0.1111 / macro-F1 0.0222. Freeze as
+`WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED`; no further anchor detector, epochs, model, samples,
+checkpoint or Movement training. A new cycle must choose a separately observable target; R0 rule
+Movement remains the engineering baseline and phone/test/RL remain closed.
 Movement is the only first-cycle learned component;
 Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
 hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.

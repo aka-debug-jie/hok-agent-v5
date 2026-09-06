@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `WEAK_ANCHOR_COUNTERFACTUAL_DATASET_READY`: 17 deduplicated source groups index 153 balanced relation rows | One seed-0 full/masked/goal-only diagnostic; not action BC or deployable Movement |
+| Engineering convergence | `WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED`: render repair passes overfit36, but all three formal dev variants collapse at 0.111 accuracy | Stop weak-anchor model tuning; retain deterministic rule Movement and choose a new observable-data cycle |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: run one seed-0 weak-anchor relation diagnostic with two shortcut controls
-CURRENT STATUS: WEAK_ANCHOR_COUNTERFACTUAL_DATASET_READY; identity/policy promotion remain false
-BLOCKING FAILURE: data is ready but cross-session visual relation learning has not been demonstrated
-NEXT ACCEPTANCE: overfit sanity then full dev accuracy/F1/recall and >=0.15 gains over anchor-masked and goal-only
-COMMAND STATUS: 17 deduplicated source clips plus 153-row index ready; no model or checkpoint yet
+CURRENT GOAL: freeze the failed weak-anchor relation lineage and retain the deterministic R0 baseline
+CURRENT STATUS: WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED; no learned Movement checkpoint
+BLOCKING FAILURE: repaired overfit passes, but full/masked/goal-only all collapse to 0.111 dev accuracy
+NEXT ACCEPTANCE: new project cycle only; prioritize independently observable Event/Reward or hero-bound data, not more weak-anchor tuning
+COMMAND STATUS: initial run plus sole render repair complete; four v2 model runs; no checkpoint
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1320,6 +1320,40 @@ expansion was introduced.
   Two files occupy 33,839,002 bytes.
 - This opens one relation diagnostic only. Executed-action labels, identity verification,
   Movement policy training, test/video decode, model runs, GPU and device input remain zero.
+
+### Weak-anchor relation diagnostic closure (2026-09-06)
+
+- Added `native-anchor-relation-train` using the existing 686,281-parameter GroupNorm+GRU,
+  fresh seed 0, AdamW `lr=1e-3`, batch 8 and 400 updates. It first trains/evaluates the same
+  36 samples from four train groups. Formal full/anchor-masked/goal-only models run only after
+  overfit reaches accuracy 0.95 and cross-entropy 0.05. Every model records first-update loss,
+  gradient and parameter-change evidence. No checkpoint is ever written by this diagnostic.
+- Initial rendering drew radius 7 on the 256px source and then nearest-sampled to 128. Labels are
+  balanced, all 153 clips per variant are unique, and each non-STOP target changes 512 spatial
+  pixels across 16 frames versus the STOP clip; nevertheless overfit36 stayed at accuracy 0.1111,
+  cross-entropy 2.2029 and predicted only W. Formal models were correctly skipped.
+- The sole repair changes only rendering order: resize source/masked/neutral RGB to 128 first,
+  then draw the same radius-7 target at the halved indexed coordinate. Dataset, split, detector,
+  model, optimizer, updates and gates are unchanged. It is explicitly bound to the initial failed
+  report and cannot run as an unbound fallback.
+- Repaired overfit36 passes at accuracy/macro-F1 1.0 and cross-entropy 0.00647. Formal session-
+  isolated evaluation then fails: full, anchor-masked and goal-only each have accuracy 0.1111,
+  macro-F1 0.0222 and predict only SW; full control gains are both zero. First-update evidence
+  passes for all four v2 models. This distinguishes local memorization from cross-session signal.
+- Frozen status: `WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED`. No checkpoint exists. Do not add
+  updates, architecture variants, windows, more weak labels, alternate ring thresholds or another
+  localization feature to this lineage. It establishes neither action BC nor navigation.
+- Initial run report file/self SHA-256:
+  `909c31f8ddad8dcde7cfcd44ab32cd9dbc3f6558dbdc69debf5180370ac898a8` /
+  `1e150ab4872d45ac49a7d82a17785a0ea1cbf87c10d2410dca448513b226af1e`.
+  Repair report file/self SHA-256:
+  `cea872c9320d4d50d99419d3cade48da4f683828b5322cb800f8d0a4bab994ca` /
+  `323e487414ca540463b5a936439ca409d8905d4fad727fad3dcecac4c86ef58a`.
+  Reported training-loop wall time is about 5.0 seconds initial plus 19.9 seconds repaired; variant
+  generation and process overhead are not GPU-metered. Five total model runs, zero input/test/video.
+- Focused tests cover source-preserving variant generation, render-order difference, overfit-stop,
+  repair binding, control gates and no-checkpoint output. Affected real-RGB/training/boundary tests,
+  Ruff, strict mypy, project safety and `git diff --check` passed.
 
 ## Frozen Global Agent execution state
 
