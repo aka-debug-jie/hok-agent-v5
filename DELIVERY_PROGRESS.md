@@ -21,7 +21,7 @@ restrictions below are not a queue of new work. Frozen experiment outcomes remai
 
 | Route | Current result | Promotion boundary |
 |---|---|---|
-| Engineering convergence | `PLAYER_LOCALIZATION_REPAIR_NOT_PROMOTED`: appearance tracking adds no multi-session coverage; previous grouped model remains failed | Inspect existing full-minimap recoverability; no training or navigation integration |
+| Engineering convergence | `EXISTING_LANDSCAPE_SOURCE_RECOVERABLE_QA_ONLY`: two existing landscape train/dev videos preserve full minimap margins; teacher crops remain unrecoverable | Native-resolution localization pilot on two landscape sources only; no training or navigation integration |
 | Hierarchical Policy v0 | Historical `P1V2_MOVEMENT_BRANCH_FAILED`: full dev F1 1.0, but repaired overfit32 was 0.938 with loss 0.170 | No checkpoint; static-direction result is not action-driven navigation evidence |
 | Global Agent v1 | `SHADOW_ROI_REPAIR_COMPLETED_DIVERSITY_NOT_DEMONSTRATED`: v1 and local-ROI v1.1 both passed runtime | Challenge 2/6 blocks all input; constant candidate output blocks 10m Shadow |
 | Global challenge curriculum | `FROZEN_NON_PROMOTED`: v1 reached canonical 4/6 but parameter holdout only 12/24, stuck rose 4.99%→6.41%, and tower damage fell 12.0→11.85; conservative v2 returned to 2/6 and still regressed episodes | Both candidates rejected; no further curriculum weighting, frozen Dagger remains selected |
@@ -422,11 +422,11 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: inspect complete-minimap recoverability in existing train/dev source views
-CURRENT STATUS: PLAYER_LOCALIZATION_REPAIR_NOT_PROMOTED; failed learned model and R0 remain frozen
-BLOCKING FAILURE: appearance tracking has no coverage gain; paired QA suggests fountain/edge visibility limitations
-NEXT ACCEPTANCE: establish whether existing source views retain the spawn corner; no new detector tuning
-COMMAND STATUS: one offline appearance candidate evaluated on 4455 frames; zero model runs
+CURRENT GOAL: verify controlled-player identity in two existing native-resolution landscape sources
+CURRENT STATUS: EXISTING_LANDSCAPE_SOURCE_RECOVERABLE_QA_ONLY; failed learned model and R0 remain frozen
+BLOCKING FAILURE: full source ROI is available, but controlled-player identity and continuous localization are not established
+NEXT ACCEPTANCE: two bounded landscape windows, complete minimap margins, identity QA and unknown under occlusion
+COMMAND STATUS: source recovery inspection and nine time-point QA selections complete; zero model runs
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
@@ -1043,6 +1043,43 @@ expansion was introduced.
 - Continue only with a half-day-capped inspection of existing source ROI recoverability. If the
   complete spawn corner exists, re-extract once and verify visually; otherwise retain the data
   limitation. Do not demand new recording, fabricate off-ROI coordinates or repeat template tuning.
+
+### Existing-source minimap recoverability inspection (2026-09-06)
+
+- Checked the three teacher session directories, source summaries, hash-matched private ROI
+  configuration and `_observation_roi_frame` implementation. The ROI hash matches all three:
+  `a9a17abc8927050327390a43525b24c43b91987948c44e1f916d9b760379e809`.
+  Only four 128x128 derived views are saved; configured per-ROI `output_size` does not override
+  the sampling function's default 128. Other saved views do not cover the missing lower-left
+  minimap region. No same-session full frame is present in these bound session directories.
+  This is not a whole-disk proof that no independently recorded copy exists.
+- Checked one hash-verified target shard for each of the three previously selected train/dev
+  sessions (768 cached rows). Their whole-frame cache is also only 128x128; enlarging that cache
+  cannot restore native minimap detail. No test shard was opened.
+- Loaded the existing cohort/owner/privacy/pre-ingest bindings and matched all three selected
+  raw source identities in memory. Only selected train/dev video files were opened; other file
+  entries were stat-enumerated to resolve identities. Raw source paths were not persisted.
+- Raw stream sizes: `0667d97c` train is 2400x1080; `c1121610` dev is 2340x1080;
+  `03f37224` train is 1080x2408 with frame display-matrix rotation. This is source availability,
+  not proof that these recordings have the same hero, layout or gameplay as the teacher sessions.
+- Nine time-point selections (20/50/80 percent in each source) generated three derived corner
+  QA sheets. Both landscape sources visibly retain the map and lower-edge margin; the dev middle
+  sample is obscured by the shop and must remain unknown. The portrait sheet is rejected: the
+  applied rotation sign produces an upside-down HUD. Keep that diagnostic evidence, defer this
+  source, and do not change historical rotation/teacher pipelines or spend another batch on it.
+  Three preliminary previews were also decoded. Keyframe preroll is recorded for the nine final
+  selections, not for preliminary previews; do not describe this as only nine decoded frames.
+- Conclusion: `EXISTING_LANDSCAPE_SOURCE_RECOVERABLE_QA_ONLY`. Original teacher missing pixels are
+  unrecoverable from their crops; the two landscape sources are alternative data. No player
+  accuracy, tactical label, hero identity, navigation result or promoted checkpoint is claimed.
+- Evidence: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/minimap-source-recoverability-v1`.
+  Report SHA-256 `04046ae8bb928d63cb37c2b2e38b9a575a05fbc89b237c1178daa0d0dd139132`.
+  Source identities, decoded PTS, display geometry, derived RGB hashes, QA image hashes and
+  rejected portrait preview are retained without raw source locators or full-frame copies.
+- Only documentation changed in the repository. Verification uses JSON/hash/QA checks and
+  `git diff --check`; no redundant test, model training or GPU run. Phone input and test decoding
+  remain zero. Next: one short window per landscape source, native-resolution minimap with edge
+  margin, controlled-player identity first, then continuity. Existing failed tracker stays frozen.
 
 ## Frozen Global Agent execution state
 

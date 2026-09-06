@@ -154,7 +154,13 @@ and none in 003/005. It is not a replacement for v2 and is not connected to navi
 main/minimap QA shows a fountain/edge observability problem in the sampled scenes; a moving green
 marker elsewhere is not sufficient player identity. Next inspect whether existing train/dev source
 views retain the complete minimap, especially its spawn corner, before changing detection again.
-No new recording, model training, or phone access is required for that inspection.
+That inspection is now complete: the three teacher sessions cannot restore missing pixels from
+their four saved crops. Two existing, identity-matched landscape train/dev source videos retain
+the full minimap and lower-edge margin at native resolution. Use those as alternative data, not as
+reconstructions of the teacher sessions. One shop-obscured sample is unusable; the portrait source
+is deferred because the diagnostic rotation preview was upside down. No detector or model is
+promoted. Next run only a bounded native-resolution localization pilot on the two landscape sources;
+do not require new recording, reopen test, or re-tune the failed appearance tracker.
 
 The diagnostic entrypoint uses the existing v2 source bindings (new output directory required):
 
