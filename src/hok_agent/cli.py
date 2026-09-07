@@ -80,6 +80,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-player-flow-audit",
             "joystick-visibility",
             "joystick-extraction",
+            "joystick-coverage",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1561,6 +1562,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
+            elif args.mode == "joystick-coverage":
+                if (args.source_root is None or args.cohort_dir is None
+                        or args.pre_ingest is None or args.source_run is None):
+                    raise ValueError("coverage requires source/cohort/pre-ingest and source-run")
+                from hok_agent.movement_real_rgb import run_joystick_coverage
+
+                result = run_joystick_coverage(
+                    args.source_root, args.cohort_dir, args.pre_ingest,
+                    args.source_run, args.output_dir,
+                )
             elif args.mode == "joystick-extraction":
                 if args.source_run is None:
                     raise ValueError("joystick extraction requires --source-run")

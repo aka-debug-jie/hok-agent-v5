@@ -424,13 +424,37 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_GEOMETRY_CANDIDATES_PARTIAL
-BLOCKING FAILURE: dev candidate coverage 13/120, only five directions and no STOP support
-NEXT ACCEPTANCE: freeze extractor; bounded additional train-source windows for direction/STOP coverage
-COMMAND STATUS: train 69/120; dev 13/120; 9/9 scale cases; 40 focused tests; no training/input/test
+CURRENT STATUS: JOYSTICK_TRAIN_NINE_CLASS_CANDIDATE_COVERAGE
+BLOCKING FAILURE: STOP scene eligibility and causal target timing unverified; one train session only
+NEXT ACCEPTANCE: resolve scene/timing eligibility on existing evidence before policy sample materialization
+COMMAND STATUS: 12 new train windows, 480 frames, 177 candidates; all nine classes; no training/input/dev/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Frozen-extractor train coverage (2026-09-07)
+
+- Added `joystick-coverage`, using the exact v3 contract/template and an AST-plus-settings
+  fingerprint. Twelve new fixed four-second windows from the same train source contain 480
+  native-crop observations at nominal 10Hz. No calibration, dev/test decode or policy training.
+- 177/480 candidates (36.875%); unknown303. Counts: STOP62, N35, S12, W8, E14, NW14,
+  NE17, SW6, SE9. All nine classes occur. STOP spans 13 runs in 8 windows; other classes
+  span 4–19 runs and 3–6 windows. Runs/windows are correlated within one original recording.
+- All twelve QA sheets reviewed. STOP40 comes from dimmed f50/f70/f80/f90 windows where
+  scene eligibility is unresolved; these are not verified intentional stopping decisions. The
+  remaining STOP22 includes visible recenter/release sequences, still candidate evidence only.
+- First scan completed but JSON serialization failed on NumPy QA indices. One Python-int
+  conversion fixed it; the same scan was repeated with all twelve QA images byte-identical.
+  Failed staging `.joystick-coverage-h0euv5d2` is preserved with a failure note. No parameter change.
+- Result: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/joystick-train-coverage-v1`;
+  final status `JOYSTICK_TRAIN_NINE_CLASS_CANDIDATE_COVERAGE`. Report file SHA-256
+  `b21b41276009181d5e8a8d065aee655c60a430db25c4f238cc66acf3ce1cc891`.
+  Completed output about14.3MiB; native RGB not duplicated; failed output retained separately.
+- Next: separate UI-state candidates from scene-eligible action targets and resolve timing on
+  existing evidence. Do not tune templates or treat single-session coverage as training readiness.
+- Validation: 42 focused tests passed before the serialization fix; three coverage tests including
+  the new end-to-end JSON/no-calibration regression passed afterward. Ruff, strict mypy, safety,
+  report/contract/template fingerprints and QA hashes passed.
 
 ### Joystick geometric-base extraction (2026-09-07)
 

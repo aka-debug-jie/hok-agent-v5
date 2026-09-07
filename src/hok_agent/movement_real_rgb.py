@@ -2839,6 +2839,163 @@ def run_real_player_tracking_audit(
     return report
 
 
+JOYSTICK_COVERAGE_FRACTIONS = (0.05, 0.15, 0.2, 0.25, 0.35, 0.4,
+                              0.45, 0.5, 0.65, 0.7, 0.8, 0.9)
+JOYSTICK_V3_FINGERPRINT = "8063ac69f592096358c8ba9ea9bcf04f260b295e5e5ab61d51a60ef4d2a5dbb9"
+
+
+def joystick_extractor_fingerprint() -> str:
+    import ast
+
+    names = {"_joystick_signal", "_joystick_match", "_joystick_geometric_base",
+             "extract_joystick_sequence"}
+    tree = ast.parse(Path(__file__).read_text())
+    return _object_sha256({
+        "functions": [ast.dump(n, include_attributes=False) for n in tree.body
+                      if isinstance(n, ast.FunctionDef) and n.name in names],
+        "settings": JOYSTICK_EXTRACT_SETTINGS, "scales": JOYSTICK_SCALES,
+        "marker_boxes": JOYSTICK_MARKER_BOXES,
+    })
+
+
+def joystick_coverage_summary(windows: list[dict[str, object]]) -> dict[str, object]:
+    actions = ("STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE")
+    counts = dict.fromkeys(actions, 0)
+    supports = dict.fromkeys(actions, 0)
+    runs = dict.fromkeys(actions, 0)
+    known = total = 0
+    for window in windows:
+        seen: set[str] = set()
+        previous = "unknown"
+        for row in cast(list[dict[str, object]], window["predictions"]):
+            action = str(row["candidate_action"])
+            total += 1
+            if action in counts:
+                counts[action] += 1
+                known += 1
+                seen.add(action)
+                if previous != action:
+                    runs[action] += 1
+            previous = action
+        for action in seen:
+            supports[action] += 1
+    return {"total_frames": total, "known_frames": known, "unknown_frames": total - known,
+            "coverage": known / total if total else 0,
+            "class_frames": counts, "class_windows": supports, "class_runs": runs,
+            "missing_classes": [a for a in actions if not counts[a]],
+            "all_nine_classes_observed": all(counts.values()),
+            "training_allowed": False,
+            "interpretation": "correlated UI candidates, not independent examples or accuracy"}
+
+
+def run_joystick_coverage(
+    source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
+    extractor_run: Path, output_dir: Path,
+) -> dict[str, object]:
+    import cv2
+    from PIL import Image, ImageDraw
+
+    from hok_agent import pre_ingest
+    from hok_agent.v5_data import load_automatic_cohort
+
+    cv2.setNumThreads(1)
+    if output_dir.exists():
+        raise ValueError("coverage output exists")
+    frozen = _load_bound_json(extractor_run / "contract.json", "contract_sha256")
+    prior = _load_bound_json(extractor_run / "report.json", "report_sha256")
+    if (frozen["contract_sha256"] !=
+            "f687f5423235e918fe37728793d24f0ea73a33936fc46344429d38ad91ec7c7c"
+            or prior.get("contract_sha256") != frozen["contract_sha256"]
+            or joystick_extractor_fingerprint() != JOYSTICK_V3_FINGERPRINT):
+        raise ValueError("coverage requires the frozen v3 extractor")
+    template_path = extractor_run / "train-templates.npz"
+    if _file_sha256(template_path) != frozen["template_sha256"]:
+        raise ValueError("frozen template hash differs")
+    with np.load(template_path, allow_pickle=False) as arrays:
+        templates = {key: arrays[key].copy() for key in arrays.files}
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    identity = next(k for k, v in NATIVE_PLAYER_SOURCES.items() if v == "train")
+    if cohort.session_splits.get(identity) != "train":
+        raise ValueError("coverage source must be train")
+    selected: Path | None = None
+    for path in pre_ingest._scan(source_root):
+        key = pre_ingest._sha(pre_ingest._canonical([
+            "candidate-v2-file-atomic", path.relative_to(source_root).as_posix(),
+            pre_ingest._stat_signature(path.stat()),
+        ]))
+        if key == identity:
+            selected = path
+            break
+    if selected is None or pre_ingest._candidate(selected, source_root).candidate_id != identity:
+        raise ValueError("coverage source unavailable")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-coverage-", dir=output_dir.parent))
+    contract: dict[str, object] = {
+        "extractor_contract_sha256": frozen["contract_sha256"],
+        "extractor_fingerprint": JOYSTICK_V3_FINGERPRINT,
+        "template_sha256": frozen["template_sha256"],
+        "pre_ingest_sha256": _file_sha256(pre_ingest_path),
+        "session": identity, "split": "train", "fractions": JOYSTICK_COVERAGE_FRACTIONS,
+        "frames_per_window": 40, "sample_period_us": 100000,
+        "training_allowed": False, "dev_frames_opened": 0, "test_frames_opened": 0,
+    }
+    contract["contract_sha256"] = _object_sha256(contract)
+    (staging / "contract.json").write_bytes(_canonical(contract) + b"\n")
+    windows: list[dict[str, object]] = []
+    previous_end = -1
+    for fraction in JOYSTICK_COVERAGE_FRACTIONS:
+        arrays = _joystick_window(selected, fraction)
+        frames, times = arrays["rgb"], arrays["timestamp_us"]
+        if times[0] <= previous_end:
+            raise ValueError("coverage windows overlap")
+        previous_end = int(times[-1])
+        predictions = extract_joystick_sequence(frames, templates,
+                                                normalize_scale=True, geometric_base=True)
+        # Retain QA only, not another full native-RGB cache.
+        indices = list(map(int, np.linspace(0, len(frames) - 1, 12)))
+        seen: set[str] = set()
+        for i, prediction in enumerate(predictions):
+            action = str(prediction["candidate_action"])
+            if action != "unknown" and action not in seen:
+                indices.append(i)
+                seen.add(action)
+        indices = sorted(set(indices))
+        sheet = Image.new("RGB", (4*320, math.ceil(len(indices)/4)*240))
+        for ordinal, index in enumerate(indices):
+            row = predictions[index]
+            image = Image.fromarray(frames[index])
+            draw = ImageDraw.Draw(image)
+            bx, by = cast(list[float], row["base_xy"])
+            kx, ky = cast(list[float], row["knob_xy"])
+            draw.ellipse((bx-10, by-10, bx+10, by+10), outline="yellow", width=3)
+            draw.ellipse((kx-10, ky-10, kx+10, ky+10), outline="magenta", width=3)
+            draw.line((bx, by, kx, ky), fill="yellow", width=3)
+            image.thumbnail((320, 210))
+            x, y = ordinal % 4*320, ordinal // 4*240
+            sheet.paste(image, (x, y+26))
+            ImageDraw.Draw(sheet).text((x, y), f"{index} {row['candidate_action']} "
+                                      f"{times[index]/1e6:.2f}s", fill="white")
+        qa_name = f"f{round(fraction*100):02d}-qa.png"
+        sheet.save(staging / qa_name)
+        windows.append({"fraction": fraction, "timestamp_us": times.tolist(),
+                        "predictions": predictions, "qa": qa_name, "qa_indices": indices,
+                        "qa_sha256": _file_sha256(staging / qa_name),
+                        "frame_sha256": [hashlib.sha256(f.tobytes()).hexdigest() for f in frames]})
+    summary = joystick_coverage_summary(windows)
+    report: dict[str, object] = {
+        "schema_version": "joystick-train-coverage-v1",
+        "contract_sha256": contract["contract_sha256"],
+        "status": "QA_REQUIRED", "summary": summary, "windows": windows,
+        "gpu_seconds": 0, "input_commands_sent": 0, "dev_frames_opened": 0,
+        "test_frames_opened": 0, "training_allowed": False,
+        "native_cache_written": False, "qa_policy": "uniform plus first occurrence of each class",
+    }
+    report["report_sha256"] = _object_sha256(report)
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return {k: v for k, v in report.items() if k != "windows"}
+
+
 def _native_landscape_window(path: Path, *, start_fraction: float = 0.2) -> dict[str, np.ndarray]:
     """A 3-second development window; crop before resizing, never decode audio."""
     import av

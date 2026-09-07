@@ -12,6 +12,9 @@ No action labels or training follow automatically; no test, mobile input or old 
 The subsequent authorized extractor may use only the six cached joystick windows and OpenCV.
 Train-only templates are frozen before dev extraction; results remain candidate UI-state labels,
 not validated policy targets. No new raw-video decode, model, phone or test access is required.
+The authorized coverage continuation freezes geometric extractor v3 and samples twelve additional
+four-second windows from the same existing train video only. No calibration or model training;
+no dev/test decoding. Native RGB stays in memory; only candidate records/hashes and QA persist.
 
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its

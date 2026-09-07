@@ -21,6 +21,77 @@ from hok_agent.movement_real_rgb import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_joystick_coverage_counts_runs_and_windows_not_held_frame_duplicates() -> None:
+    from hok_agent.movement_real_rgb import joystick_coverage_summary
+
+    windows = [{"predictions": [{"candidate_action": a} for a in actions]} for actions in (
+        ["STOP"] * 8 + ["unknown", "STOP", "E", "E"], ["STOP", "unknown", "N"]
+    )]
+    result = joystick_coverage_summary(windows)
+    assert result["class_frames"]["STOP"] == 10
+    assert result["class_runs"]["STOP"] == 3
+    assert result["class_windows"]["STOP"] == 2
+    assert result["known_frames"] == 13 and result["unknown_frames"] == 2
+    assert not result["all_nine_classes_observed"] and not result["training_allowed"]
+    assert joystick_coverage_summary([])["coverage"] == 0
+
+
+def test_joystick_coverage_extractor_fingerprint_is_frozen(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hok_agent import movement_real_rgb as m
+
+    assert m.joystick_extractor_fingerprint() == m.JOYSTICK_V3_FINGERPRINT
+    monkeypatch.setattr(m, "JOYSTICK_SCALES", (1.0,))
+    assert m.joystick_extractor_fingerprint() != m.JOYSTICK_V3_FINGERPRINT
+
+
+def test_joystick_coverage_writes_json_and_never_calibrates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from hok_agent import movement_real_rgb as m
+    from hok_agent import pre_ingest, v5_data
+
+    identity = next(k for k, v in m.NATIVE_PLAYER_SOURCES.items() if v == "train")
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"fake source")
+    extractor = tmp_path / "extractor"
+    extractor.mkdir()
+    template = extractor / "train-templates.npz"
+    np.savez_compressed(template, base=np.ones((2, 2)))
+    frozen = {
+        "contract_sha256": "f687f5423235e918fe37728793d24f0ea73a33936fc46344429d38ad91ec7c7c",
+        "template_sha256": hashlib.sha256(template.read_bytes()).hexdigest(),
+    }
+    monkeypatch.setattr(m, "_load_bound_json", lambda *_args: frozen)
+    monkeypatch.setattr(v5_data, "load_automatic_cohort", lambda *_args:
+                        SimpleNamespace(session_splits={identity: "train"}))
+    monkeypatch.setattr(pre_ingest, "_scan", lambda *_args: [source])
+    monkeypatch.setattr(pre_ingest, "_sha", lambda *_args: identity)
+    monkeypatch.setattr(pre_ingest, "_candidate", lambda *_args:
+                        SimpleNamespace(candidate_id=identity))
+    monkeypatch.setattr(m, "JOYSTICK_COVERAGE_FRACTIONS", (0.05,))
+    monkeypatch.setattr(m, "_joystick_window", lambda *_args: {
+        "rgb": np.zeros((40, 32, 32, 3), np.uint8), "timestamp_us": np.arange(40)*100000,
+    })
+    monkeypatch.setattr(m, "extract_joystick_sequence", lambda *_args, **_kw: [
+        {"candidate_action": "STOP", "base_xy": [16.0, 16.0], "knob_xy": [16.0, 16.0]}
+        for _ in range(40)
+    ])
+
+    def forbidden(*_args):
+        pytest.fail("coverage cannot calibrate")
+
+    monkeypatch.setattr(m, "calibrate_joystick_templates", forbidden)
+    output = tmp_path / "output"
+    m.run_joystick_coverage(tmp_path, tmp_path, source, extractor, output)
+    report = json.loads((output / "report.json").read_text())
+    assert report["summary"]["class_frames"]["STOP"] == 40
+    assert report["summary"]["class_runs"]["STOP"] == 1
+    assert all(type(i) is int for i in report["windows"][0]["qa_indices"])
+    assert not report["native_cache_written"]
+
+
 def test_joystick_geometry_survives_one_marker_occlusion_but_not_two() -> None:
     from hok_agent.movement_real_rgb import JOYSTICK_MARKER_BOXES, _joystick_geometric_base
 

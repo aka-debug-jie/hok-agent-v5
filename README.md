@@ -15,6 +15,18 @@ runtime guard passes.
 
 ## Current development plan
 
+The fixed-extractor coverage check now observes all nine candidate classes: 177/480 frames
+from twelve new train time windows. This is single-recording UI-state coverage, not training
+readiness. Of 62 STOP candidates, 40 occur in dimmed late windows with unresolved scene context.
+The next work is scene eligibility and frame/action timing, while keeping the extractor fixed.
+
+`movement-mvp --mode joystick-coverage` checks twelve additional four-second windows from the
+same train recording. Supply `--source-root`, `--cohort-dir`, `--pre-ingest`,
+`--source-run <joystick-extraction-v3-geometry>` and a new `--output-dir`. It binds the frozen
+v3 templates and extractor fingerprint; it cannot recalibrate. Reports distinguish class frames,
+class runs and supporting windows. Only candidate records and QA are persisted; no new native
+frame cache, model, dev/test decoding or policy-training dataset is produced.
+
 Latest: `JOYSTICK_GEOMETRY_CANDIDATES_PARTIAL`. `--geometric-base` on joystick extraction uses
 three-of-four directional markers and shared scale. Candidate coverage is train69/120, dev13/120;
 dev has five directions and no STOP, so policy training is still unready. The next step is bounded
