@@ -424,13 +424,34 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_TRAIN_NINE_CLASS_CANDIDATE_COVERAGE
-BLOCKING FAILURE: STOP scene eligibility and causal target timing unverified; one train session only
-NEXT ACCEPTANCE: resolve scene/timing eligibility on existing evidence before policy sample materialization
-COMMAND STATUS: 12 new train windows, 480 frames, 177 candidates; all nine classes; no training/input/dev/test
+CURRENT STATUS: JOYSTICK_CAUSAL_CANDIDATES_INSUFFICIENT_STOP_AND_SESSION_SUPPORT
+BLOCKING FAILURE: only four explicit release STOP events and one source recording
+NEXT ACCEPTANCE: bounded frozen-extractor transfer audit on additional existing train sources
+COMMAND STATUS: all 8 directions have stable runs; causal PTS gap 96-114ms; no samples/training/input/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick causal eligibility (2026-09-07)
+
+- Added JSON-only `joystick-eligibility`; it reads the completed coverage report and writes no
+  RGB, training sample or model. Direction evidence requires runs of at least two consecutive
+  equal candidates. All eight directions pass, but support is thin: stable runs N8, S1, W1, E2,
+  NW3, NE3, SW1, SE1; stable frames total54.
+- STOP is accepted only as a run onset with a visible direction within the preceding 500ms.
+  This rejects prolonged center/dim periods. Four release events remain versus the fixed minimum8:
+  N at409ms, NW at194ms, and S at211/307ms. Thus STOP support fails.
+- Future causal alignment is now explicit: the Actor RGB window must end at the preceding PTS;
+  the joystick target belongs to the current PTS. Observed gaps are 96–114ms. Direction targets
+  use the current and following candidate for retrospective stability confirmation; the following
+  frame is label construction evidence and cannot enter Actor input.
+- Final status `JOYSTICK_CAUSAL_CANDIDATES_INSUFFICIENT_STOP_AND_SESSION_SUPPORT` at
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/joystick-training-eligibility-v1`.
+  No policy samples materialized. One recording cannot establish cross-session support.
+- Next bounded work is transfer of the unchanged v3 extractor to additional existing train
+  sources. Long centered/dim runs cannot be added as STOP. No detector tuning or training.
+- Validation: 45 focused tests, Ruff, strict mypy (70 sources), safety and diff checks passed.
+  The eligibility report is about2KiB; GPU/input/raw decode/dev/test all zero.
 
 ### Frozen-extractor train coverage (2026-09-07)
 

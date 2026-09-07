@@ -2888,6 +2888,99 @@ def joystick_coverage_summary(windows: list[dict[str, object]]) -> dict[str, obj
             "interpretation": "correlated UI candidates, not independent examples or accuracy"}
 
 
+def joystick_training_eligibility(
+    windows: list[dict[str, object]], *, minimum_run_frames: int = 2,
+    release_lookback_ms: int = 500,
+) -> dict[str, object]:
+    """Count causal candidates without materializing RGB policy samples."""
+    directions = ("N", "S", "W", "E", "NW", "NE", "SW", "SE")
+    stable_frames = dict.fromkeys(directions, 0)
+    stable_runs = dict.fromkeys(directions, 0)
+    releases: list[dict[str, object]] = []
+    for window in windows:
+        predictions = cast(list[dict[str, object]], window["predictions"])
+        actions = [str(row["candidate_action"]) for row in predictions]
+        times = list(map(int, cast(list[int], window["timestamp_us"])))
+        start = 0
+        while start < len(actions):
+            end = start + 1
+            while end < len(actions) and actions[end] == actions[start]:
+                end += 1
+            action = actions[start]
+            if action in stable_frames and end - start >= minimum_run_frames:
+                stable_frames[action] += end - start
+                stable_runs[action] += 1
+            start = end
+        for index, action in enumerate(actions):
+            if action != "STOP" or (index and actions[index - 1] == "STOP"):
+                continue
+            previous = next(
+                (earlier for earlier in range(index - 1, -1, -1)
+                 if times[index] - times[earlier] <= release_lookback_ms * 1000
+                 and actions[earlier] in directions),
+                None,
+            )
+            if previous is not None:
+                releases.append({
+                    "fraction": window["fraction"], "frame_index": index,
+                    "label_timestamp_us": times[index],
+                    "input_end_timestamp_us": times[index - 1],
+                    "actual_input_label_gap_us": times[index] - times[index - 1],
+                    "previous_direction": actions[previous],
+                    "previous_direction_age_ms": (times[index] - times[previous]) / 1000,
+                })
+    all_directions = all(stable_runs.values())
+    enough_stop = len(releases) >= 8
+    return {
+        "stable_direction_frames": stable_frames, "stable_direction_runs": stable_runs,
+        "minimum_run_frames": minimum_run_frames, "release_stop_events": releases,
+        "release_stop_count": len(releases), "release_lookback_ms": release_lookback_ms,
+        "all_directions_have_stable_run": all_directions,
+        "minimum_release_stop_events": 8, "stop_support_passed": enough_stop,
+        "single_session_only": True, "cross_session_support": False,
+        "causal_policy": (
+            "Actor RGB ends at the previous sampled PTS; joystick target is the current PTS. "
+            "Stable direction labels require the current and next UI candidates to agree."
+        ),
+        "retrospective_confirmation": True,
+        "sample_materialization_allowed": all_directions and enough_stop and False,
+        "training_allowed": False,
+    }
+
+
+def run_joystick_eligibility(source_run: Path, output_dir: Path) -> dict[str, object]:
+    source = _load_bound_json(source_run / "report.json", "report_sha256")
+    contract = _load_bound_json(source_run / "contract.json", "contract_sha256")
+    if (source.get("schema_version") != "joystick-train-coverage-v1"
+            or source.get("contract_sha256") != contract["contract_sha256"]
+            or source.get("dev_frames_opened") != 0
+            or source.get("test_frames_opened") != 0):
+        raise ValueError("eligibility requires frozen train coverage")
+    if output_dir.exists():
+        raise ValueError("eligibility output exists")
+    result = joystick_training_eligibility(cast(list[dict[str, object]], source["windows"]))
+    report: dict[str, object] = {
+        "schema_version": "joystick-training-eligibility-v1",
+        "source_report_sha256": source["report_sha256"],
+        "source_report_file_sha256": _file_sha256(source_run / "report.json"),
+        "source_contract_sha256": contract["contract_sha256"],
+        "eligibility": result,
+        "status": (
+            "JOYSTICK_CAUSAL_CANDIDATES_INSUFFICIENT_STOP_AND_SESSION_SUPPORT"
+            if not result["sample_materialization_allowed"] else "READY_TO_MATERIALIZE"
+        ),
+        "policy_samples_written": 0, "training_allowed": False,
+        "input_commands_sent": 0, "gpu_seconds": 0,
+        "raw_video_decodes": 0, "dev_frames_opened": 0, "test_frames_opened": 0,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-eligibility-", dir=output_dir.parent))
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return report
+
+
 def run_joystick_coverage(
     source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
     extractor_run: Path, output_dir: Path,

@@ -15,6 +15,9 @@ not validated policy targets. No new raw-video decode, model, phone or test acce
 The authorized coverage continuation freezes geometric extractor v3 and samples twelve additional
 four-second windows from the same existing train video only. No calibration or model training;
 no dev/test decoding. Native RGB stays in memory; only candidate records/hashes and QA persist.
+The eligibility continuation may read only the completed coverage JSON. It may count stable
+direction runs, explicit direction-to-center release events and PTS gaps, but writes no policy
+RGB/sample/model. The current frame is the target; Actor input must end at the preceding PTS.
 
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its

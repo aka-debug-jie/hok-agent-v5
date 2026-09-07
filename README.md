@@ -15,6 +15,12 @@ runtime guard passes.
 
 ## Current development plan
 
+`joystick-eligibility` now separates stable direction runs from explicit direction-to-center
+release events. All eight directions have a two-frame run, but only four release STOP events exist
+and all data comes from one recording. Future Actor input must end one sampled frame before the
+joystick target (96–114ms in current evidence); the following frame may confirm a label but cannot
+enter Actor input. No policy samples or model are produced.
+
 The fixed-extractor coverage check now observes all nine candidate classes: 177/480 frames
 from twelve new train time windows. This is single-recording UI-state coverage, not training
 readiness. Of 62 STOP candidates, 40 occur in dimmed late windows with unresolved scene context.

@@ -36,6 +36,37 @@ def test_joystick_coverage_counts_runs_and_windows_not_held_frame_duplicates() -
     assert joystick_coverage_summary([])["coverage"] == 0
 
 
+def test_joystick_eligibility_requires_stable_directions_and_explicit_release() -> None:
+    from hok_agent.movement_real_rgb import joystick_training_eligibility
+
+    directions = ("N", "S", "W", "E", "NW", "NE", "SW", "SE")
+    actions = [action for direction in directions for action in (direction, direction, "unknown")]
+    actions.extend(["N", "unknown", "STOP", "STOP"])
+    window = {
+        "fraction": 0.2, "timestamp_us": [i * 100_000 for i in range(len(actions))],
+        "predictions": [{"candidate_action": action} for action in actions],
+    }
+    result = joystick_training_eligibility([window])
+    assert result["all_directions_have_stable_run"]
+    assert all(result["stable_direction_runs"][action] == 1 for action in directions)
+    assert result["release_stop_count"] == 1
+    assert result["release_stop_events"][0]["actual_input_label_gap_us"] == 100_000
+    assert not result["stop_support_passed"] and not result["sample_materialization_allowed"]
+
+
+def test_joystick_eligibility_rejects_center_without_recent_direction() -> None:
+    from hok_agent.movement_real_rgb import joystick_training_eligibility
+
+    actions = ["N", "N", *(["unknown"] * 6), "STOP", "STOP"]
+    result = joystick_training_eligibility([{
+        "fraction": 0.9, "timestamp_us": [i * 100_000 for i in range(len(actions))],
+        "predictions": [{"candidate_action": action} for action in actions],
+    }])
+    assert result["release_stop_count"] == 0
+    assert result["stable_direction_frames"]["N"] == 2
+    assert not result["training_allowed"]
+
+
 def test_joystick_coverage_extractor_fingerprint_is_frozen(monkeypatch: pytest.MonkeyPatch) -> None:
     from hok_agent import movement_real_rgb as m
 
