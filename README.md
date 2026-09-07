@@ -15,6 +15,12 @@ runtime guard passes.
 
 ## Current development plan
 
+The final bounded train expansion now supplies automatic weak-label support across eight sources:
+all directions appear in at least three sources and eight explicit release STOP events exist.
+Status is `JOYSTICK_8_TRAIN_SOURCE_WEAK_LABEL_SUPPORT_PASSED`. This unlocks only a small causal
+dataset build; policy training and semantic-accuracy claims remain closed. Actor windows must end
+before the joystick target and exclude the lower-left joystick pixels.
+
 Frozen-extractor transfer across four additional train recordings is partial: all four contain
 candidates (mean34.17%, minimum14.17%), but E/SW/SE have stable support in only one source and
 only two explicit release STOP events exist. `joystick-transfer` writes QA/hashes/candidates only;

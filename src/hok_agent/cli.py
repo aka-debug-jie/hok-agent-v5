@@ -83,6 +83,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-coverage",
             "joystick-eligibility",
             "joystick-transfer",
+            "joystick-transfer-final",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1564,13 +1565,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
-            elif args.mode == "joystick-transfer":
+            elif args.mode in {"joystick-transfer", "joystick-transfer-final"}:
                 if (args.source_root is None or args.cohort_dir is None
                         or args.pre_ingest is None or args.source_run is None):
                     raise ValueError("transfer requires source/cohort/pre-ingest and source-run")
-                from hok_agent.movement_real_rgb import run_joystick_transfer
+                from hok_agent.movement_real_rgb import (
+                    run_joystick_final_transfer,
+                    run_joystick_transfer,
+                )
 
-                result = run_joystick_transfer(
+                runner = (
+                    run_joystick_final_transfer
+                    if args.mode == "joystick-transfer-final"
+                    else run_joystick_transfer
+                )
+                result = runner(
                     args.source_root, args.cohort_dir, args.pre_ingest,
                     args.source_run, args.output_dir,
                 )

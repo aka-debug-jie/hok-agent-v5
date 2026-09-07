@@ -2848,6 +2848,12 @@ JOYSTICK_TRANSFER_SOURCES = (
     "0c60062fdde6ed50e0bf2fe231fda206535b90911d2f74e6f0f171a54e486c6c",
 )
 JOYSTICK_TRANSFER_FRACTIONS = (0.2, 0.5, 0.8)
+JOYSTICK_FINAL_TRANSFER_SOURCES = (
+    "0e34a785656d464bd946559e9a7ac9602ef2ffcd0e7a9c6d8ba265f37261de24",
+    "109a2a343dd37d406f987cc22a4c4c876e59a4e93e9f4127bf5ba06107bd91d7",
+    "12214351b55ac24beffe2c52b77464e009120a3a3cc69fc7cb17adcfe1f87e39",
+)
+JOYSTICK_FINAL_TRANSFER_FRACTIONS = (0.1, 0.3, 0.5, 0.7, 0.9)
 JOYSTICK_V3_FINGERPRINT = "8063ac69f592096358c8ba9ea9bcf04f260b295e5e5ab61d51a60ef4d2a5dbb9"
 
 
@@ -3017,9 +3023,10 @@ def joystick_transfer_summary(sessions: list[dict[str, object]]) -> dict[str, ob
     }
 
 
-def run_joystick_transfer(
+def _run_joystick_transfer(
     source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
     extractor_run: Path, output_dir: Path,
+    *, source_ids: tuple[str, ...], fractions: tuple[float, ...], schema_version: str,
 ) -> dict[str, object]:
     import cv2
     from PIL import Image, ImageDraw
@@ -3044,7 +3051,7 @@ def run_joystick_transfer(
         templates = {key: arrays[key].copy() for key in arrays.files}
     cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
     if any(cohort.session_splits.get(identity) != "train"
-           for identity in JOYSTICK_TRANSFER_SOURCES):
+           for identity in source_ids):
         raise ValueError("transfer sources must all be train")
     sources: dict[str, Path] = {}
     for path in pre_ingest._scan(source_root):
@@ -3052,9 +3059,9 @@ def run_joystick_transfer(
             "candidate-v2-file-atomic", path.relative_to(source_root).as_posix(),
             pre_ingest._stat_signature(path.stat()),
         ]))
-        if identity in JOYSTICK_TRANSFER_SOURCES:
+        if identity in source_ids:
             sources[identity] = path
-    if set(sources) != set(JOYSTICK_TRANSFER_SOURCES):
+    if set(sources) != set(source_ids):
         raise ValueError("transfer sources unavailable")
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".joystick-transfer-", dir=output_dir.parent))
@@ -3062,8 +3069,8 @@ def run_joystick_transfer(
         "extractor_contract_sha256": frozen["contract_sha256"],
         "extractor_fingerprint": JOYSTICK_V3_FINGERPRINT,
         "template_sha256": frozen["template_sha256"],
-        "sources": JOYSTICK_TRANSFER_SOURCES, "split": "train",
-        "fractions": JOYSTICK_TRANSFER_FRACTIONS, "frames_per_window": 40,
+        "sources": source_ids, "split": "train",
+        "fractions": fractions, "frames_per_window": 40,
         "sample_period_us": 100000, "training_allowed": False,
         "dev_frames_opened": 0, "test_frames_opened": 0,
     }
@@ -3076,7 +3083,7 @@ def run_joystick_transfer(
         windows: list[dict[str, object]] = []
         qa_items: list[tuple[Image.Image, str]] = []
         previous_end = -1
-        for fraction in JOYSTICK_TRANSFER_FRACTIONS:
+        for fraction in fractions:
             arrays = _joystick_window(path, fraction)
             frames, times = arrays["rgb"], arrays["timestamp_us"]
             if times[0] <= previous_end:
@@ -3102,7 +3109,7 @@ def run_joystick_transfer(
                 "predictions": predictions,
                 "frame_sha256": [hashlib.sha256(frame.tobytes()).hexdigest() for frame in frames],
             })
-        sheet = Image.new("RGB", (4*320, 3*240))
+        sheet = Image.new("RGB", (4*320, math.ceil(len(qa_items)/4)*240))
         for ordinal, (image, label) in enumerate(qa_items):
             x, y = ordinal % 4*320, ordinal // 4*240
             sheet.paste(image, (x, y+26))
@@ -3117,7 +3124,7 @@ def run_joystick_transfer(
         })
     summary = joystick_transfer_summary(session_rows)
     report: dict[str, object] = {
-        "schema_version": "joystick-cross-train-transfer-v1",
+        "schema_version": schema_version,
         "contract_sha256": contract["contract_sha256"], "sessions": session_rows,
         "summary": summary, "status": "QA_REQUIRED", "training_allowed": False,
         "native_cache_written": False, "gpu_seconds": 0, "input_commands_sent": 0,
@@ -3127,6 +3134,29 @@ def run_joystick_transfer(
     (staging / "report.json").write_bytes(_canonical(report) + b"\n")
     staging.rename(output_dir)
     return {k: v for k, v in report.items() if k != "sessions"}
+
+
+def run_joystick_transfer(
+    source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
+    extractor_run: Path, output_dir: Path,
+) -> dict[str, object]:
+    return _run_joystick_transfer(
+        source_root, cohort_dir, pre_ingest_path, extractor_run, output_dir,
+        source_ids=JOYSTICK_TRANSFER_SOURCES, fractions=JOYSTICK_TRANSFER_FRACTIONS,
+        schema_version="joystick-cross-train-transfer-v1",
+    )
+
+
+def run_joystick_final_transfer(
+    source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
+    extractor_run: Path, output_dir: Path,
+) -> dict[str, object]:
+    return _run_joystick_transfer(
+        source_root, cohort_dir, pre_ingest_path, extractor_run, output_dir,
+        source_ids=JOYSTICK_FINAL_TRANSFER_SOURCES,
+        fractions=JOYSTICK_FINAL_TRANSFER_FRACTIONS,
+        schema_version="joystick-final-train-transfer-v1",
+    )
 
 
 def run_joystick_coverage(

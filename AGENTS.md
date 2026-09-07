@@ -21,6 +21,12 @@ RGB/sample/model. The current frame is the target; Actor input must end at the p
 The cross-train transfer audit may open only four predeclared train identities, at 20/50/80%,
 using the frozen v3 template/fingerprint. It persists QA, hashes and candidates, not native RGB.
 No dev/test source, threshold change, calibration, policy sample or training is authorized.
+The final bounded expansion may open only the three remaining predeclared train identities at
+10/30/50/70/90%. It uses the same frozen extractor and then closes train-source expansion.
+That expansion passed minimum automatic weak-label support across eight train sources. The next
+step may materialize only a small diagnostic dataset: stable two-frame directions plus explicit
+release STOP, with 16 Actor frames ending before the label and joystick pixels excluded. It may
+not train or promote a model until the materialized dataset passes causal/hash/split validation.
 
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its

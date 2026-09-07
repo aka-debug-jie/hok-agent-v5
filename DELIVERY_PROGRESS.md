@@ -424,13 +424,36 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_CROSS_TRAIN_TRANSFER_PARTIAL
-BLOCKING FAILURE: E/SW/SE stable in only one extra session; two release STOP events; no semantic accuracy
-NEXT ACCEPTANCE: optional larger predeclared train-only scan with unchanged extractor, or retain rule baseline
-COMMAND STATUS: 4/4 sources have candidates; mean 34.17%, min 14.17%; no samples/training/dev/test/input
+CURRENT STATUS: JOYSTICK_8_TRAIN_SOURCE_WEAK_LABEL_SUPPORT_PASSED
+BLOCKING FAILURE: diagnostic RGB dataset not materialized or causally validated; semantic accuracy remains unknown
+NEXT ACCEPTANCE: small hash-bound dataset; stable directions/release STOP only; joystick excluded from Actor input
+COMMAND STATUS: 8 train sources, 1560 frames, 557 candidates; direction support 3-7 sources; STOP releases 8
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Final train-source joystick expansion (2026-09-07)
+
+- The last bounded expansion used the three remaining predeclared train identities and fixed
+  10/30/50/70/90% windows: 600 frames, no calibration/dev/test. Per-source candidate coverage is
+  28.0%, 36.5%, 43.5%. Three QA sheets (60 displayed frames) were reviewed without an obvious
+  gross control mismatch; this remains automatic weak-label evidence, not semantic accuracy.
+- Combined immutable evidence now covers all eight selected train sources: 1560 frames, 557
+  candidates (35.71%). Stable direction runs/frames are N29/108, S18/65, W6/18, E7/19,
+  NW8/24, NE14/48, SW4/12, SE4/9. Supporting sources are N7, S6, W4, E4, NW5, NE7, SW4, SE3.
+  There are exactly eight explicit direction-to-center release STOP events.
+- `cohort-conclusion.json` binds the four input reports and freezes status
+  `JOYSTICK_8_TRAIN_SOURCE_WEAK_LABEL_SUPPORT_PASSED`. Train-source expansion is closed.
+  This permits only diagnostic dataset materialization from stable directions and release STOP.
+- Materialization must use a 16-frame RGB Actor window ending at the preceding PTS, exclude the
+  lower-left joystick region, preserve source groups/hashes, and retain automatic-label limits.
+  Policy training, checkpoint promotion and semantic-accuracy claims remain closed until that
+  dataset passes mechanical causal/split validation.
+- Final expansion report file SHA-256:
+  `496efcd3ef2394156ea81d9b8e294afbaf6880e22c08cb9ac1908b340aa26943`;
+  artifacts about5.2MiB. No native cache/model/input/dev/test; GPU0.
+- Validation: 46 focused tests, Ruff and strict mypy passed before execution. Final project safety,
+  diff checks and evidence hashes passed. No further train-source scan is pending.
 
 ### Cross-train joystick transfer (2026-09-07)
 
