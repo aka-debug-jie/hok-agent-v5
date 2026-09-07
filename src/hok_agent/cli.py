@@ -86,6 +86,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-transfer-final",
             "joystick-materialize32",
             "joystick-overfit32",
+            "joystick-materialize-pilot",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1566,6 +1567,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.pre_ingest,
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
+                    )
+            elif args.mode == "joystick-materialize-pilot":
+                from hok_agent.movement_real_rgb import run_joystick_materialize_pilot
+
+                if args.verify_only:
+                    result = run_joystick_materialize_pilot(
+                        Path(), Path(), Path(), Path(), Path(), args.output_dir, verify_only=True
+                    )
+                else:
+                    if (args.source_root is None or args.cohort_dir is None
+                            or args.pre_ingest is None or args.source_run is None
+                            or args.overfit_report is None):
+                        raise ValueError("grouped pilot requires sources and overfit report")
+                    result = run_joystick_materialize_pilot(
+                        args.source_root, args.cohort_dir, args.pre_ingest,
+                        args.source_run, args.overfit_report, args.output_dir,
                     )
             elif args.mode == "joystick-overfit32":
                 if args.dataset is None:

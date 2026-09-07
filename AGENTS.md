@@ -33,6 +33,12 @@ training, generalization, semantic accuracy or checkpoint promotion; no architec
 That single diagnostic passed and is consumed. Its checkpoint remains diagnostic-only. The next
 step may materialize one fixed six-train/two-internal-dev source-grouped pilot from the existing
 frozen candidate reports. It cannot load the diagnostic checkpoint or open video-dev/test.
+The grouped pilot split is fixed: dev identities `0e34a785...` and `12214351...`, with the other
+six train-cohort identities retained for pilot training. Materialization takes one stable-run
+onset per direction plus release STOP; it stores masked causal Actor RGB and no source paths.
+That 73-train/25-dev dataset is mechanically validated with all nine classes and zero source
+overlap. A separately contracted fresh-init grouped pilot may run next with class-balanced train
+sampling. It must report macro-F1 and every recall; no overfit checkpoint reuse or promotion.
 
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its

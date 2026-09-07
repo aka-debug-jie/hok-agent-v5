@@ -15,6 +15,12 @@ runtime guard passes.
 
 ## Current development plan
 
+The grouped weak-label pilot dataset is ready: 73 samples from six train sources and 25 samples
+from two internal-dev sources, all nine classes in both, source overlap0, joystick masked and all
+98 clips unique. The internal dev comes from the train cohort; original video-dev/test stay closed.
+The next model must fresh-init and use class-balanced training. Dev macro-F1 and every recall are
+required because STOP/SW/W each have only one dev example.
+
 The single real-RGB joystick `overfit32` diagnostic passed at accuracy1.0/loss0.005445 with all
 nine recalls1.0 on RTX4090. It uses the existing 686,281-parameter GroupNorm+GRU and proves only
 that the 32 masked causal weak-label clips can be memorized. Its checkpoint is diagnostic-only.

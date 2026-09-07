@@ -153,6 +153,74 @@ def test_joystick_actor_mask_and_dataset_validator(tmp_path: Path) -> None:
         m.validate_joystick_overfit32(tmp_path)
 
 
+def _grouped_pilot_synthetic_sessions() -> list[dict[str, object]]:
+    from hok_agent.movement_real_rgb import JOYSTICK_PILOT_DEV_SOURCES
+
+    train = {
+        "0667": ({"N": 8, "S": 1, "W": 1, "E": 2, "NW": 3, "NE": 3,
+                  "SW": 1, "SE": 1}, 4),
+        "06c5": ({"W": 2, "SE": 1}, 1),
+        "0856": ({"N": 2, "NE": 1, "NW": 1, "S": 3}, 0),
+        "0a84": ({"E": 1, "N": 2, "NE": 1, "S": 7, "SW": 1, "W": 2}, 0),
+        "0c60": ({"N": 4, "NE": 4, "NW": 1}, 1),
+        "109a": ({"E": 2, "N": 6, "NE": 1, "S": 3, "SW": 1}, 1),
+    }
+    dev_ids = sorted(JOYSTICK_PILOT_DEV_SOURCES)
+    specs = [(name, *value) for name, value in train.items()] + [
+        (dev_ids[0], {"E": 2, "N": 1, "NE": 1, "NW": 1, "S": 1, "SE": 2}, 0),
+        (dev_ids[1], {"N": 6, "NE": 3, "NW": 2, "S": 3, "SW": 1, "W": 1}, 1),
+    ]
+    sessions = []
+    for source, runs, stops in specs:
+        actions = []
+        for action, count in runs.items():
+            for _ in range(count):
+                actions.extend((action, action, "unknown"))
+        for _ in range(stops):
+            actions.extend(("N", "unknown", "STOP", "STOP", "unknown"))
+        sessions.append({"session": source, "windows": [{
+            "fraction": 0.2, "timestamp_us": [i * 100_000 for i in range(len(actions))],
+            "predictions": [{"candidate_action": action} for action in actions],
+        }]})
+    return sessions
+
+
+def test_joystick_grouped_pilot_selection_and_validation(tmp_path: Path) -> None:
+    from hok_agent import movement_real_rgb as m
+
+    selected = m.select_joystick_grouped_pilot(_grouped_pilot_synthetic_sessions())
+    assert len(selected["train"]) == 73 and len(selected["dev"]) == 25
+    assert not ({row["source_id"] for row in selected["train"]}
+                & {row["source_id"] for row in selected["dev"]})
+    arrays = {}
+    offset = 0
+    for split, rows in selected.items():
+        count = len(rows)
+        clips = np.zeros((count, 16, 128, 128, 3), np.uint8)
+        for index in range(count):
+            clips[index, 0, 0, 0, 0] = offset + index
+        arrays[f"{split}_rgb"] = clips
+        arrays[f"{split}_label"] = np.asarray(
+            [m.JOYSTICK_ACTIONS.index(str(row["action"])) for row in rows], np.int64
+        )
+        arrays[f"{split}_input_timestamp_us"] = np.tile(
+            np.arange(16, dtype=np.int64) * 100_000, (count, 1)
+        )
+        arrays[f"{split}_label_timestamp_us"] = np.full(count, 1_600_000, np.int64)
+        arrays[f"{split}_source_id"] = np.asarray(
+            [row["source_id"] for row in rows], dtype="U64"
+        )
+        offset += count
+    dataset = tmp_path / "joystick-grouped-pilot.npz"
+    np.savez_compressed(dataset, **arrays)
+    manifest = {"dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest()}
+    manifest["manifest_sha256"] = m._object_sha256(manifest)
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+    result = m.validate_joystick_grouped_pilot(tmp_path)
+    assert result["source_overlap"] == 0 and result["unique_actor_clips"] == 98
+    assert result["pilot_training_allowed"] and not result["formal_training_allowed"]
+
+
 def test_joystick_coverage_extractor_fingerprint_is_frozen(monkeypatch: pytest.MonkeyPatch) -> None:
     from hok_agent import movement_real_rgb as m
 

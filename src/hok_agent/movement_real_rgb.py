@@ -3148,6 +3148,10 @@ def run_joystick_transfer(
 
 
 JOYSTICK_ACTIONS = ("STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE")
+JOYSTICK_PILOT_DEV_SOURCES = {
+    "0e34a785656d464bd946559e9a7ac9602ef2ffcd0e7a9c6d8ba265f37261de24",
+    "12214351b55ac24beffe2c52b77464e009120a3a3cc69fc7cb17adcfe1f87e39",
+}
 
 
 def select_joystick_overfit32(
@@ -3210,6 +3214,62 @@ def select_joystick_overfit32(
     if len({(row["source_id"], row["label_timestamp_us"]) for row in selected}) != 32:
         raise ValueError("overfit32 labels are not unique")
     return selected
+
+
+def select_joystick_grouped_pilot(
+    sessions: list[dict[str, object]],
+) -> dict[str, list[dict[str, object]]]:
+    result: dict[str, list[dict[str, object]]] = {"train": [], "dev": []}
+    for session in sessions:
+        source_id = str(session["session"])
+        split = "dev" if source_id in JOYSTICK_PILOT_DEV_SOURCES else "train"
+        windows = cast(list[dict[str, object]], session["windows"])
+        for window in windows:
+            predictions = cast(list[dict[str, object]], window["predictions"])
+            times = list(map(int, cast(list[int], window["timestamp_us"])))
+            start = 0
+            while start < len(predictions):
+                action = str(predictions[start]["candidate_action"])
+                end = start + 1
+                while (end < len(predictions)
+                       and predictions[end]["candidate_action"] == action):
+                    end += 1
+                if action in JOYSTICK_ACTIONS[1:] and end - start >= 2:
+                    result[split].append({
+                        "source_id": source_id, "action": action,
+                        "label_timestamp_us": times[start],
+                        "confirmation_timestamp_us": times[start + 1],
+                        "source_fraction": window["fraction"],
+                        "source_frame_index": start,
+                        "label_rule": "stable_run_onset_two_equal_candidates",
+                    })
+                start = end
+        eligibility = joystick_training_eligibility(windows)
+        for event in cast(list[dict[str, object]], eligibility["release_stop_events"]):
+            result[split].append({
+                "source_id": source_id, "action": "STOP",
+                "label_timestamp_us": event["label_timestamp_us"],
+                "confirmation_timestamp_us": None,
+                "source_fraction": event["fraction"],
+                "source_frame_index": event["frame_index"],
+                "previous_direction": event["previous_direction"],
+                "previous_direction_age_ms": event["previous_direction_age_ms"],
+                "label_rule": "direction_to_center_release_within_500ms",
+            })
+    for split, rows in result.items():
+        rows.sort(key=lambda row: (str(row["source_id"]), cast(int, row["label_timestamp_us"])))
+        counts = Counter(str(row["action"]) for row in rows)
+        if set(counts) != set(JOYSTICK_ACTIONS):
+            raise ValueError(f"{split} pilot split lacks a class")
+        if len({(row["source_id"], row["label_timestamp_us"]) for row in rows}) != len(rows):
+            raise ValueError(f"{split} pilot labels are not unique")
+    train_sources = {str(row["source_id"]) for row in result["train"]}
+    dev_sources = {str(row["source_id"]) for row in result["dev"]}
+    if (train_sources & dev_sources or dev_sources != JOYSTICK_PILOT_DEV_SOURCES
+            or len(train_sources) != 6 or len(result["train"]) != 73
+            or len(result["dev"]) != 25):
+        raise ValueError("pilot source grouping or sample counts differ")
+    return result
 
 
 def _masked_actor_frame(rgb: np.ndarray) -> np.ndarray:
@@ -3307,6 +3367,157 @@ def validate_joystick_overfit32(output_dir: Path) -> dict[str, object]:
     return {"status": "JOYSTICK_OVERFIT32_DATASET_VALIDATED", "samples": 32,
             "class_counts": counts, "causal": True, "joystick_pixels_zero": True,
             "training_allowed": False}
+
+
+def validate_joystick_grouped_pilot(output_dir: Path) -> dict[str, object]:
+    manifest = _load_bound_json(output_dir / "manifest.json", "manifest_sha256")
+    dataset_path = output_dir / "joystick-grouped-pilot.npz"
+    if dataset_path.is_symlink() or _file_sha256(dataset_path) != manifest["dataset_sha256"]:
+        raise ValueError("grouped joystick dataset hash differs")
+    summaries: dict[str, object] = {}
+    source_sets: dict[str, set[str]] = {}
+    all_hashes: list[str] = []
+    with np.load(dataset_path, allow_pickle=False) as data:
+        for split, expected in (("train", 73), ("dev", 25)):
+            clips = data[f"{split}_rgb"]
+            labels = data[f"{split}_label"]
+            times = data[f"{split}_input_timestamp_us"]
+            targets = data[f"{split}_label_timestamp_us"]
+            sources = data[f"{split}_source_id"]
+            if (clips.shape != (expected, 16, 128, 128, 3) or clips.dtype != np.uint8
+                    or labels.shape != (expected,) or times.shape != (expected, 16)
+                    or targets.shape != (expected,) or sources.shape != (expected,)):
+                raise ValueError(f"{split} grouped arrays differ")
+            if not np.all(np.diff(times, axis=1) > 0) or not np.all(times[:, -1] < targets):
+                raise ValueError(f"{split} grouped timing is not causal")
+            if np.any(clips[:, :, round(128 * 0.45):, :round(128 * 0.35)]):
+                raise ValueError(f"{split} grouped Actor input contains joystick pixels")
+            counts = dict(Counter(JOYSTICK_ACTIONS[int(label)] for label in labels))
+            if set(counts) != set(JOYSTICK_ACTIONS):
+                raise ValueError(f"{split} grouped labels lack a class")
+            source_sets[split] = set(map(str, sources.tolist()))
+            all_hashes.extend(hashlib.sha256(clip.tobytes()).hexdigest() for clip in clips)
+            summaries[split] = {"samples": expected, "classes": counts,
+                                "sources": len(source_sets[split])}
+    if (source_sets["train"] & source_sets["dev"] or len(source_sets["train"]) != 6
+            or source_sets["dev"] != JOYSTICK_PILOT_DEV_SOURCES
+            or len(set(all_hashes)) != 98):
+        raise ValueError("grouped source isolation or clip uniqueness differs")
+    return {"status": "JOYSTICK_GROUPED_PILOT_DATASET_VALIDATED", "splits": summaries,
+            "source_overlap": 0, "unique_actor_clips": 98, "causal": True,
+            "joystick_pixels_zero": True, "pilot_training_allowed": True,
+            "formal_training_allowed": False}
+
+
+def run_joystick_materialize_pilot(
+    source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
+    final_run: Path, overfit_report_path: Path, output_dir: Path,
+    *, verify_only: bool = False,
+) -> dict[str, object]:
+    if verify_only:
+        return validate_joystick_grouped_pilot(output_dir)
+    if output_dir.exists():
+        raise ValueError("grouped joystick output exists")
+    overfit = _load_bound_json(overfit_report_path, "report_sha256")
+    if (overfit.get("schema_version") != "joystick-overfit32-report-v1"
+            or overfit.get("passed") is not True
+            or overfit.get("checkpoint_promotion_allowed") is not False
+            or overfit.get("generalization_verified") is not False):
+        raise ValueError("grouped pilot requires passed diagnostic overfit")
+    conclusion_path = final_run / "cohort-conclusion.json"
+    conclusion = cast(dict[str, object], json.loads(conclusion_path.read_text()))
+    sessions, report_hashes = _joystick_dataset_sessions(final_run.parent)
+    if (conclusion.get("status") != "JOYSTICK_8_TRAIN_SOURCE_WEAK_LABEL_SUPPORT_PASSED"
+            or report_hashes != conclusion["bound_report_file_sha256"]):
+        raise ValueError("grouped pilot source bindings differ")
+    selected = select_joystick_grouped_pilot(sessions)
+    from hok_agent import pre_ingest
+    from hok_agent.v5_data import load_automatic_cohort
+
+    source_ids = {str(row["source_id"]) for rows in selected.values() for row in rows}
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    if any(cohort.session_splits.get(source_id) != "train" for source_id in source_ids):
+        raise ValueError("grouped pilot may use cohort train sources only")
+    sources: dict[str, Path] = {}
+    for path in pre_ingest._scan(source_root):
+        identity = pre_ingest._sha(pre_ingest._canonical([
+            "candidate-v2-file-atomic", path.relative_to(source_root).as_posix(),
+            pre_ingest._stat_signature(path.stat()),
+        ]))
+        if identity in source_ids:
+            sources[identity] = path
+    if set(sources) != source_ids:
+        raise ValueError("grouped source videos unavailable")
+    arrays: dict[str, np.ndarray] = {}
+    manifest_rows: dict[str, list[dict[str, object]]] = {}
+    for split in ("train", "dev"):
+        clips: list[np.ndarray] = []
+        times: list[np.ndarray] = []
+        rows: list[dict[str, object]] = []
+        for index, selection in enumerate(selected[split]):
+            source_id = str(selection["source_id"])
+            path = sources[source_id]
+            if pre_ingest._candidate(path, source_root).candidate_id != source_id:
+                raise ValueError("grouped source identity changed")
+            label_us = cast(int, selection["label_timestamp_us"])
+            clip, timestamps = _actor_window_before_label(path, label_us)
+            rows.append({
+                **selection, "sample_id": f"{split}-{index:03d}",
+                "label_id": JOYSTICK_ACTIONS.index(str(selection["action"])),
+                "input_start_timestamp_us": int(timestamps[0]),
+                "input_end_timestamp_us": int(timestamps[-1]),
+                "actual_input_label_gap_us": label_us - int(timestamps[-1]),
+                "rgb_sha256": hashlib.sha256(clip.tobytes()).hexdigest(),
+            })
+            clips.append(clip)
+            times.append(timestamps)
+        arrays[f"{split}_rgb"] = np.stack(clips)
+        arrays[f"{split}_label"] = np.asarray(
+            [row["label_id"] for row in rows], dtype=np.int64
+        )
+        arrays[f"{split}_input_timestamp_us"] = np.stack(times)
+        arrays[f"{split}_label_timestamp_us"] = np.asarray(
+            [row["label_timestamp_us"] for row in rows], dtype=np.int64
+        )
+        arrays[f"{split}_source_id"] = np.asarray(
+            [row["source_id"] for row in rows], dtype="U64"
+        )
+        manifest_rows[split] = rows
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-grouped-pilot-", dir=output_dir.parent))
+    dataset_path = staging / "joystick-grouped-pilot.npz"
+    np.savez_compressed(
+        dataset_path,
+        train_rgb=arrays["train_rgb"], train_label=arrays["train_label"],
+        train_input_timestamp_us=arrays["train_input_timestamp_us"],
+        train_label_timestamp_us=arrays["train_label_timestamp_us"],
+        train_source_id=arrays["train_source_id"],
+        dev_rgb=arrays["dev_rgb"], dev_label=arrays["dev_label"],
+        dev_input_timestamp_us=arrays["dev_input_timestamp_us"],
+        dev_label_timestamp_us=arrays["dev_label_timestamp_us"],
+        dev_source_id=arrays["dev_source_id"],
+    )
+    manifest: dict[str, object] = {
+        "schema_version": "joystick-grouped-pilot-dataset-v1",
+        "dataset": dataset_path.name, "dataset_sha256": _file_sha256(dataset_path),
+        "action_order": JOYSTICK_ACTIONS, "train_sources": 6, "dev_sources": 2,
+        "dev_source_ids": sorted(JOYSTICK_PILOT_DEV_SOURCES), "samples": manifest_rows,
+        "input_shape": [16, 128, 128, 3], "input_dtype": "uint8_rgb",
+        "source_report_file_sha256": report_hashes,
+        "cohort_conclusion_file_sha256": _file_sha256(conclusion_path),
+        "overfit_report_file_sha256": _file_sha256(overfit_report_path),
+        "split_policy": (
+            "fixed source groups; one sample per stable direction run plus release STOP"
+        ),
+        "semantic_accuracy_verified": False, "pilot_training_allowed": True,
+        "formal_training_allowed": False, "checkpoint_promotion_allowed": False,
+        "video_dev_opened": False, "video_test_opened": False,
+        "input_commands_sent": 0, "gpu_seconds": 0,
+    }
+    manifest["manifest_sha256"] = _object_sha256(manifest)
+    (staging / "manifest.json").write_bytes(_canonical(manifest) + b"\n")
+    staging.rename(output_dir)
+    return validate_joystick_grouped_pilot(output_dir)
 
 
 def run_joystick_materialize32(

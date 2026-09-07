@@ -2,6 +2,12 @@
 
 ## 当前接续：从真实摇杆反馈生成监督
 
+固定分组数据已通过：6个来源训练73样本，2个来源内部开发25样本；两个 split 九类齐全、
+来源交叉为0、98个 clip 唯一，输入提前标签95–100ms且摇杆区域为零。内部 dev 来自原
+train cohort，并非未触碰的 video-dev/test；STOP/SW/W 各仅1例，因此后续必须报告
+macro-F1和逐类 recall。下一步只运行一次 fresh-init、类别平衡采样的现有 GroupNorm+GRU
+pilot，不加载 overfit32 权重；任何结果均不直接推广 checkpoint 或宣称语义准确率。
+
 唯一一次真实 RGB overfit32 已通过：现有 GroupNorm+GRU、seed0、200 updates 在 RTX4090
 达到 accuracy1.0、loss0.005445、九类 recall1.0，首步梯度和参数更新正常。该结果只证明
 32个遮罩因果 clip 能被记忆；诊断权重不得用于正式初始化，唯一尝试已消耗。

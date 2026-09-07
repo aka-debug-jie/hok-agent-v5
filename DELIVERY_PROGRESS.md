@@ -424,13 +424,34 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_REAL_RGB_OVERFIT32_PASSED
-BLOCKING FAILURE: source-grouped generalization untested; semantic accuracy remains unknown
-NEXT ACCEPTANCE: fixed 6-train/2-internal-dev weak-label pilot dataset; no video-dev/test
-COMMAND STATUS: accuracy1.0/loss0.005445/all recalls1.0; diagnostic checkpoint only; attempt consumed
+CURRENT STATUS: JOYSTICK_GROUPED_PILOT_DATASET_VALIDATED
+BLOCKING FAILURE: grouped weak-label generalization untested; dev rare classes have support1
+NEXT ACCEPTANCE: one fresh-init class-balanced grouped pilot; report macro-F1 and all recalls
+COMMAND STATUS: train73/6 sources; dev25/2 sources; 9 classes each; overlap0; no model/input/video-dev/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick grouped pilot dataset (2026-09-07)
+
+- Added `joystick-materialize-pilot` with fixed source groups. Internal dev uses train-cohort
+  identities `0e34a785...` and `12214351...`; the six others are pilot train. Neither internal-dev
+  source supplied the original joystick template. Original video-dev/test remain unopened.
+- One sample is taken at each stable two-frame direction-run onset plus each explicit release STOP.
+  Result: train73 and internal-dev25. Both contain all nine classes. Train counts are STOP7, N22,
+  S14, W5, E5, NW5, NE10, SW3, SE2; dev counts STOP1, N7, S4, W1, E2, NW3, NE4, SW1, SE2.
+- Every clip is 16×128×128 RGB ending before its target. Gaps are train95–100ms/dev96–99ms;
+  joystick pixels are zero. Train/dev source overlap0; all98 clip hashes unique. No source paths.
+- Output `$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/joystick-grouped-pilot-v1`.
+  Dataset SHA-256 `a28fe2fc49849b056b25902574523808e979d591ce826dc361c3113dee40ee0a`;
+  manifest file/self `cd8d3bf74473c8e6729b08b6048ff3e3f707210968ff4602ae09b3f9f3d6ae90` /
+  `80c3392bb3681f9eb0e28fa3c6b44234989ac4bea617a7b7d2c9ddb1d24591f9`.
+  Compressed dataset53.4MiB; independent verify-only passed.
+- Status `JOYSTICK_GROUPED_PILOT_DATASET_VALIDATED`. One fresh-init class-balanced grouped pilot
+  may run next. It cannot load the overfit32 checkpoint. Because dev STOP/SW/W support is one,
+  report macro-F1 and every recall; no promotion or semantic-accuracy claim.
+- No GPU/model/input/video-dev/test in this step. Focused tests, Ruff, strict mypy, project safety
+  and diff checks are required before the local commit.
 
 ### Joystick real-RGB overfit32 diagnostic (2026-09-07)
 
