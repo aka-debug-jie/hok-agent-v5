@@ -15,6 +15,12 @@ runtime guard passes.
 
 ## Current development plan
 
+The first grouped joystick pilot failed cross-source generalization: train accuracy1.0, but
+internal-dev accuracy0.16 and macro-F10.0974, below even the majority baseline in accuracy.
+Six classes have zero recall. The attempt and checkpoint are frozen; the same dataset/model is
+not retried. The next useful step is more frozen-extractor evidence from additional existing
+train videos, with coverage checked before any new model run.
+
 The grouped weak-label pilot dataset is ready: 73 samples from six train sources and 25 samples
 from two internal-dev sources, all nine classes in both, source overlap0, joystick masked and all
 98 clips unique. The internal dev comes from the train cohort; original video-dev/test stay closed.

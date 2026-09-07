@@ -16,7 +16,7 @@ import torch
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from torch.utils.data import DataLoader, Dataset, TensorDataset, WeightedRandomSampler
 
 from hok_agent.hierarchical_p1v2_movement_branch import MovementBranch
 from hok_agent.movement_mvp import (
@@ -555,6 +555,243 @@ def run_joystick_overfit32(
         "attempt_limit": 1, "attempts_used": 1,
         "full_training_called": False, "input_commands_sent": 0,
         "dev_frames_opened": 0, "test_frames_opened": 0,
+    }
+    report["report_sha256"] = _canonical_sha256(report)
+    (staging / "report.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    staging.rename(output_dir)
+    return report
+
+
+def _joystick_pilot_metrics(
+    model: TaskSpecificMovement, clips: torch.Tensor, labels: torch.Tensor,
+    sources: np.ndarray, device: torch.device, batch_size: int,
+) -> dict[str, object]:
+    model.eval()
+    logits = []
+    with torch.no_grad():
+        for start in range(0, len(clips), batch_size):
+            logits.append(model(_batch(clips[start:start + batch_size], device)).cpu())
+    scores = torch.cat(logits)
+    predicted = scores.argmax(1).numpy()
+    expected = labels.numpy()
+    metrics = _classification_metrics(predicted, expected, len(MOVEMENT_ACTIONS))
+    metrics["loss"] = float(nn.functional.cross_entropy(scores, labels))
+    metrics["support"] = dict(zip(
+        MOVEMENT_ACTIONS, np.bincount(expected, minlength=len(MOVEMENT_ACTIONS)).tolist(),
+        strict=True,
+    ))
+    metrics["nonzero_recalls"] = sum(
+        float(value) > 0 for value in cast(dict[str, float], metrics["recall"]).values()
+    )
+    metrics["source_accuracy"] = {
+        source: float(np.mean(predicted[sources == source] == expected[sources == source]))
+        for source in sorted(set(map(str, sources.tolist())))
+    }
+    return metrics
+
+
+def run_joystick_grouped_pilot(
+    config_path: Path, dataset_dir: Path, output_dir: Path, *, device_name: str,
+) -> dict[str, object]:
+    from hok_agent.movement_real_rgb import validate_joystick_grouped_pilot
+
+    config = cast(dict[str, object], json.loads(config_path.read_text(encoding="utf-8")))
+    unsigned = {key: value for key, value in config.items() if key != "contract_sha256"}
+    training = cast(dict[str, object], config["training"])
+    gates = cast(dict[str, object], config["gates"])
+    expected_training = {
+        "architecture": "task_specific_groupnorm_gru_686281", "optimizer": "AdamW",
+        "learning_rate": 0.001, "weight_decay": 0.0, "batch_size": 8, "epochs": 30,
+        "evaluation_epochs": [5, 10, 15, 20, 25, 30],
+        "sampling": "class_balanced_replacement", "samples_per_epoch": 73,
+        "precision": "fp32",
+        "selection": "highest_dev_macro_f1_then_lower_loss_then_earlier_epoch",
+    }
+    expected_gates = {
+        "minimum_train_accuracy": 0.85, "minimum_dev_accuracy": 0.32,
+        "minimum_dev_macro_f1": 0.35, "minimum_nonzero_dev_recalls": 5,
+        "minimum_gain_over_majority_macro_f1": 0.20,
+        "minimum_each_dev_source_accuracy": 0.20,
+    }
+    dataset_path = dataset_dir / "joystick-grouped-pilot.npz"
+    manifest_path = dataset_dir / "manifest.json"
+    conclusion_path = dataset_dir / "conclusion.json"
+    conclusion = cast(dict[str, object], json.loads(conclusion_path.read_text()))
+    if (
+        config.get("schema_version") != "joystick-grouped-pilot-train-contract-v1"
+        or config.get("contract_sha256") != _canonical_sha256(unsigned)
+        or config.get("dataset_sha256") != _sha256(dataset_path)
+        or config.get("manifest_file_sha256") != _sha256(manifest_path)
+        or config.get("conclusion_file_sha256") != _sha256(conclusion_path)
+        or config.get("action_order") != list(MOVEMENT_ACTIONS)
+        or training != expected_training or gates != expected_gates
+        or config.get("attempt_limit") != 1
+        or config.get("fresh_initialization") is not True
+        or config.get("overfit_checkpoint_allowed") is not False
+        or config.get("formal_training_allowed") is not False
+        or config.get("checkpoint_promotion_allowed") is not False
+        or config.get("video_dev_allowed") is not False
+        or config.get("video_test_allowed") is not False
+        or config.get("device_input_allowed") is not False
+        or conclusion.get("pilot_training_allowed") is not True
+        or conclusion.get("checkpoint_promotion_allowed") is not False
+    ):
+        raise ValueError("joystick grouped pilot contract differs")
+    validate_joystick_grouped_pilot(dataset_dir)
+    if output_dir.exists():
+        raise ValueError("joystick grouped pilot output exists")
+    with np.load(dataset_path, allow_pickle=False) as data:
+        train_clips = torch.from_numpy(data["train_rgb"].copy())
+        train_labels = torch.from_numpy(data["train_label"].astype(np.int64))
+        train_sources = data["train_source_id"].copy()
+        dev_clips = torch.from_numpy(data["dev_rgb"].copy())
+        dev_labels = torch.from_numpy(data["dev_label"].astype(np.int64))
+        dev_sources = data["dev_source_id"].copy()
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA is unavailable")
+    seed = cast(int, config["seed"])
+    torch.manual_seed(seed)
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(seed)
+        torch.cuda.reset_peak_memory_stats(device)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    model = TaskSpecificMovement().to(device)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=cast(float, training["learning_rate"]),
+        weight_decay=cast(float, training["weight_decay"]),
+    )
+    counts = torch.bincount(train_labels, minlength=len(MOVEMENT_ACTIONS))
+    sampler = WeightedRandomSampler(
+        1.0 / counts[train_labels].double(), num_samples=cast(int, training["samples_per_epoch"]),
+        replacement=True, generator=torch.Generator().manual_seed(seed),
+    )
+    loader = DataLoader(
+        TensorDataset(train_clips, train_labels), batch_size=cast(int, training["batch_size"]),
+        sampler=sampler, num_workers=0, generator=torch.Generator().manual_seed(seed),
+    )
+    initial_hash = hashlib.sha256(b"".join(
+        value.detach().cpu().numpy().tobytes() for value in model.state_dict().values()
+    )).hexdigest()
+    first_before = [parameter.detach().clone() for parameter in model.parameters()]
+    first_update: dict[str, object] | None = None
+    history: list[dict[str, object]] = []
+    best_state: dict[str, torch.Tensor] | None = None
+    best_key = (-math.inf, -math.inf, -math.inf)
+    best_epoch = 0
+    sampled_counts = torch.zeros(len(MOVEMENT_ACTIONS), dtype=torch.int64)
+    started = time.monotonic()
+    evaluation_epochs = set(cast(list[int], training["evaluation_epochs"]))
+    for epoch in range(1, cast(int, training["epochs"]) + 1):
+        losses: list[float] = []
+        for clips, labels in loader:
+            sampled_counts += torch.bincount(labels, minlength=len(MOVEMENT_ACTIONS))
+            loss, gradient = train_step(
+                model, _batch(clips, device), labels.to(device), optimizer
+            )
+            losses.append(loss)
+            if first_update is None:
+                first_update = {
+                    "loss": loss, "gradient_norm": gradient,
+                    "parameter_changed": any(
+                        not torch.equal(before, parameter.detach())
+                        for before, parameter in zip(first_before, model.parameters(), strict=True)
+                    ),
+                    "finite": math.isfinite(loss) and math.isfinite(gradient) and gradient > 0,
+                }
+        if epoch in evaluation_epochs:
+            train_metrics = _joystick_pilot_metrics(
+                model, train_clips, train_labels, train_sources, device,
+                cast(int, training["batch_size"]),
+            )
+            dev_metrics = _joystick_pilot_metrics(
+                model, dev_clips, dev_labels, dev_sources, device,
+                cast(int, training["batch_size"]),
+            )
+            history.append({"epoch": epoch, "mean_train_update_loss": float(np.mean(losses)),
+                            "train": train_metrics, "dev": dev_metrics})
+            key = (cast(float, dev_metrics["macro_f1"]),
+                   -cast(float, dev_metrics["loss"]), -float(epoch))
+            if key > best_key:
+                best_key, best_epoch = key, epoch
+                best_state = {
+                    name: value.detach().cpu().clone() for name, value in model.state_dict().items()
+                }
+    if first_update is None or best_state is None:
+        raise ValueError("joystick grouped pilot performed no updates or evaluation")
+    model.load_state_dict(best_state)
+    train_metrics = _joystick_pilot_metrics(
+        model, train_clips, train_labels, train_sources, device,
+        cast(int, training["batch_size"]),
+    )
+    dev_metrics = _joystick_pilot_metrics(
+        model, dev_clips, dev_labels, dev_sources, device,
+        cast(int, training["batch_size"]),
+    )
+    majority = int(torch.bincount(train_labels).argmax())
+    majority_metrics = _classification_metrics(
+        np.full(len(dev_labels), majority), dev_labels.numpy(), len(MOVEMENT_ACTIONS)
+    )
+    source_accuracy = cast(dict[str, float], dev_metrics["source_accuracy"])
+    gate_results = {
+        "train_accuracy": cast(float, train_metrics["accuracy"])
+        >= cast(float, gates["minimum_train_accuracy"]),
+        "dev_accuracy": cast(float, dev_metrics["accuracy"])
+        >= cast(float, gates["minimum_dev_accuracy"]),
+        "dev_macro_f1": cast(float, dev_metrics["macro_f1"])
+        >= cast(float, gates["minimum_dev_macro_f1"]),
+        "nonzero_dev_recalls": cast(int, dev_metrics["nonzero_recalls"])
+        >= cast(int, gates["minimum_nonzero_dev_recalls"]),
+        "majority_gain": cast(float, dev_metrics["macro_f1"])
+        - cast(float, majority_metrics["macro_f1"])
+        >= cast(float, gates["minimum_gain_over_majority_macro_f1"]),
+        "each_dev_source_accuracy": min(source_accuracy.values())
+        >= cast(float, gates["minimum_each_dev_source_accuracy"]),
+        "first_update": bool(first_update["finite"] and first_update["parameter_changed"]),
+    }
+    passed = all(gate_results.values())
+    elapsed = time.monotonic() - started
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-grouped-pilot-", dir=output_dir.parent))
+    checkpoint = staging / "best-internal-dev.safetensors"
+    save_file(
+        best_state, checkpoint,
+        metadata={"purpose": "grouped_pilot_only", "dataset_sha256": _sha256(dataset_path),
+                  "contract_sha256": cast(str, config["contract_sha256"]),
+                  "fresh_initialization": "true", "overfit_checkpoint_loaded": "false",
+                  "best_epoch": str(best_epoch)},
+    )
+    report: dict[str, object] = {
+        "schema_version": "joystick-grouped-pilot-report-v1",
+        "status": "PASSED" if passed else "FAILED", "passed": passed,
+        "contract_sha256": config["contract_sha256"],
+        "config_file_sha256": _sha256(config_path), "dataset_sha256": _sha256(dataset_path),
+        "manifest_file_sha256": _sha256(manifest_path),
+        "checkpoint_sha256": _sha256(checkpoint), "checkpoint_promotion_allowed": False,
+        "formal_training_allowed": False, "next_stage_allowed": False,
+        "semantic_accuracy_verified": False,
+        "generalization_scope": "two internal train-cohort sources",
+        "architecture": "TaskSpecificMovement-GroupNorm-GRU-686281",
+        "total_parameters": sum(parameter.numel() for parameter in model.parameters()),
+        "fresh_initialization": True, "initial_state_sha256": initial_hash,
+        "overfit_checkpoint_loaded": False, "seed": seed, "device": str(device),
+        "epochs": training["epochs"], "best_epoch": best_epoch,
+        "sampled_train_label_counts": dict(zip(
+            MOVEMENT_ACTIONS, sampled_counts.tolist(), strict=True
+        )),
+        "first_update": first_update, "history": history,
+        "best_train": train_metrics, "best_dev": dev_metrics,
+        "majority_baseline": {"predicted_action": MOVEMENT_ACTIONS[majority], **majority_metrics},
+        "gate_results": gate_results, "gates": gates,
+        "elapsed_seconds": elapsed,
+        "gpu_peak_allocated_bytes": (
+            int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else 0
+        ),
+        "attempt_limit": 1, "attempts_used": 1, "input_commands_sent": 0,
+        "video_dev_opened": False, "video_test_opened": False,
     }
     report["report_sha256"] = _canonical_sha256(report)
     (staging / "report.json").write_text(

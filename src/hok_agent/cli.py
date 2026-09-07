@@ -87,6 +87,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-materialize32",
             "joystick-overfit32",
             "joystick-materialize-pilot",
+            "joystick-train-pilot",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1568,6 +1569,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
+            elif args.mode == "joystick-train-pilot":
+                if args.dataset is None:
+                    raise ValueError("joystick train pilot requires --dataset")
+                from hok_agent.movement_mvp_train import run_joystick_grouped_pilot
+
+                result = run_joystick_grouped_pilot(
+                    args.config, args.dataset, args.output_dir, device_name=args.device
+                )
             elif args.mode == "joystick-materialize-pilot":
                 from hok_agent.movement_real_rgb import run_joystick_materialize_pilot
 

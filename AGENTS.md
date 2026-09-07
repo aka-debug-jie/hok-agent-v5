@@ -39,6 +39,10 @@ onset per direction plus release STOP; it stores masked causal Actor RGB and no 
 That 73-train/25-dev dataset is mechanically validated with all nine classes and zero source
 overlap. A separately contracted fresh-init grouped pilot may run next with class-balanced train
 sampling. It must report macro-F1 and every recall; no overfit checkpoint reuse or promotion.
+The single grouped pilot is now frozen failed: train accuracy 1.0 but internal-dev accuracy 0.16
+and macro-F1 0.0974. Do not rerun/tune this dataset or architecture. A continuation may only
+scale frozen-extractor evidence on a predeclared set of additional existing train videos before
+another model contract; original video-dev/test, phone and diagnostic checkpoints remain closed.
 
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its

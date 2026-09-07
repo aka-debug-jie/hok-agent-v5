@@ -424,13 +424,36 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_GROUPED_PILOT_DATASET_VALIDATED
-BLOCKING FAILURE: grouped weak-label generalization untested; dev rare classes have support1
-NEXT ACCEPTANCE: one fresh-init class-balanced grouped pilot; report macro-F1 and all recalls
-COMMAND STATUS: train73/6 sources; dev25/2 sources; 9 classes each; overlap0; no model/input/video-dev/test
+CURRENT STATUS: JOYSTICK_GROUPED_PILOT_FAILED_NO_GENERALIZATION
+BLOCKING FAILURE: train1.0 vs dev accuracy0.16/macro-F1 0.0974; only three nonzero recalls
+NEXT ACCEPTANCE: frozen-extractor coverage on predeclared additional existing train sources; no model retry
+COMMAND STATUS: one attempt consumed; grouped checkpoint diagnostic-only; no input/video-dev/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick grouped pilot result (2026-09-07)
+
+- Added a single hash-bound grouped pilot: fresh seed0 task-specific GroupNorm+GRU, class-balanced
+  replacement sampling, AdamW lr1e-3, batch8, FP32, 30 epochs. Internal dev is checked at six
+  fixed epochs and selected by macro-F1, loss, then earlier epoch. No overfit checkpoint loaded.
+- Best epoch30 memorizes train at accuracy1.0. Internal-dev accuracy0.16, macro-F1 0.09735 and
+  loss3.07256. Only N/S/NW recall are nonzero (0.286/0.25/0.333); the other six are zero.
+  Source accuracy is 0.0 and0.2353. Majority-N baseline is accuracy0.28/macro-F1 0.04861.
+- Only train-accuracy and first-update gates pass. Dev accuracy/F1, nonzero recalls, majority gain
+  and each-source accuracy fail. Earlier checkpoints do not change the conclusion: dev accuracy
+  stays0.12–0.20 and macro-F10.051–0.089 through epochs5–25.
+- Status `JOYSTICK_GROUPED_PILOT_FAILED_NO_GENERALIZATION`. It does not isolate data volume,
+  automatic-label noise, source appearance shift or stochastic human action as the cause.
+  Same-data retry, architecture tuning, formal training and checkpoint promotion are closed.
+- Report: `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/joystick-grouped-pilot-seed0-v1`.
+  Report file/self `2d9d917df08255cad30d90a8d3cb9e141610289724b4c5a8615e3c333669282b` /
+  `f39403b7efd4cdbcf4b7712437d9c2aec9a61d6ba344daf16725ca4a8a982102`;
+  diagnostic checkpoint `4a23c54732c89ecd9cbb96df43094dc674c62ed7b8933c50e92b66d82106d1b5`.
+- Runtime4.662s on RTX4090, peak312,573,440 bytes. First update loss2.22262, gradient4.51475,
+  parameter change and finite checks pass. No device input or video-dev/test.
+- Next work can only enlarge frozen-extractor evidence on a predeclared subset of existing train
+  videos, checking coverage/support before another model contract. Do not tune the current pilot.
 
 ### Joystick grouped pilot dataset (2026-09-07)
 
