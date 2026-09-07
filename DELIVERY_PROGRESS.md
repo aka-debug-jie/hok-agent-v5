@@ -424,13 +424,36 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_8_TRAIN_SOURCE_WEAK_LABEL_SUPPORT_PASSED
-BLOCKING FAILURE: diagnostic RGB dataset not materialized or causally validated; semantic accuracy remains unknown
-NEXT ACCEPTANCE: small hash-bound dataset; stable directions/release STOP only; joystick excluded from Actor input
-COMMAND STATUS: 8 train sources, 1560 frames, 557 candidates; direction support 3-7 sources; STOP releases 8
+CURRENT STATUS: JOYSTICK_OVERFIT32_DATASET_VALIDATED
+BLOCKING FAILURE: weak-label RGB learnability is untested; semantic accuracy remains unknown
+NEXT ACCEPTANCE: one fresh-init GroupNorm+GRU diagnostic overfit; no formal training or promotion
+COMMAND STATUS: 32 causal samples, 8 source groups, joystick masked; verify-only passed; no model/input/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick causal overfit32 dataset (2026-09-07)
+
+- Added `joystick-materialize32`. It binds the final cohort conclusion and all four source reports,
+  selects eight release STOP events plus three stable two-frame runs per direction from different
+  source groups, then resolves the eight anonymous train identities without persisting paths.
+- Each sample decodes exactly sixteen 10Hz RGB targets before the label PTS. The lower-left 35%
+  width × bottom55% height is zeroed before resize and again at 128×128. The current joystick frame
+  and next-frame label confirmation are absent from Actor input. Actual last-input-to-label gaps
+  are 96–99ms; all 32 clip hashes are unique.
+- Dataset shape is `[32,16,128,128,3]` uint8. Class counts: STOP8; each direction3. All direction
+  classes use three different source groups; the overall dataset covers eight sources. This source
+  balance is diagnostic, not a formal split or generalization estimate.
+- Output: `$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/joystick-overfit32-v1`.
+  Dataset SHA-256 `a05279e3353cf306e3dfade5d391d2ce8792381cd0eb5a4fca9b4fe487c90155`;
+  manifest file/self `73d90323922a0d87421e57ce1f3d3c50ea1b8824bf9f1c276af93410b1f368bb` /
+  `540704c0bf68704e3e84e10883c0724b493eae57210cf6058de968a238493114`.
+  Dataset is17.4MiB. Independent verify-only passes class, causality, mask, shape and hash checks.
+- Status `JOYSTICK_OVERFIT32_DATASET_VALIDATED`. One existing task-specific GroupNorm+GRU
+  fresh-init diagnostic overfit is permitted next. It may test memorization only; no formal
+  training, policy promotion or semantic-accuracy claim.
+- No model/GPU/input/dev/test. Source RGB is stored only in masked 128×128 diagnostic clips.
+  48 focused tests, Ruff, strict mypy, project safety and diff checks pass.
 
 ### Final train-source joystick expansion (2026-09-07)
 

@@ -15,6 +15,12 @@ runtime guard passes.
 
 ## Current development plan
 
+The first real-RGB joystick-supervised diagnostic dataset is now mechanically valid: 32 causal
+samples, eight source groups, STOP8 plus three per direction, with the joystick region zeroed.
+`joystick-materialize32` creates it and `--verify-only` checks hashes, shape, class balance,
+timestamps and masking. This allows one fresh-init overfit diagnostic only; it is not formal
+training or evidence of policy generalization.
+
 The final bounded train expansion now supplies automatic weak-label support across eight sources:
 all directions appear in at least three sources and eight explicit release STOP events exist.
 Status is `JOYSTICK_8_TRAIN_SOURCE_WEAK_LABEL_SUPPORT_PASSED`. This unlocks only a small causal

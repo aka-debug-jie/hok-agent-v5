@@ -3147,6 +3147,252 @@ def run_joystick_transfer(
     )
 
 
+JOYSTICK_ACTIONS = ("STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE")
+
+
+def select_joystick_overfit32(
+    sessions: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    selected: list[dict[str, object]] = []
+    for action in JOYSTICK_ACTIONS[1:]:
+        candidates: list[dict[str, object]] = []
+        for session in sessions:
+            for window in cast(list[dict[str, object]], session["windows"]):
+                predictions = cast(list[dict[str, object]], window["predictions"])
+                times = list(map(int, cast(list[int], window["timestamp_us"])))
+                start = 0
+                while start < len(predictions):
+                    current = str(predictions[start]["candidate_action"])
+                    end = start + 1
+                    while (end < len(predictions)
+                           and predictions[end]["candidate_action"] == current):
+                        end += 1
+                    if current == action and end - start >= 2:
+                        candidates.append({
+                            "source_id": session["session"], "action": action,
+                            "label_timestamp_us": times[start],
+                            "confirmation_timestamp_us": times[start + 1],
+                            "source_fraction": window["fraction"], "source_frame_index": start,
+                            "label_rule": "two_equal_direction_candidates",
+                        })
+                        break
+                    start = end
+        by_source = {str(row["source_id"]): row for row in candidates}
+        if len(by_source) < 3:
+            raise ValueError(f"insufficient source support for {action}")
+        selected.extend(by_source[key] for key in sorted(by_source)[:3])
+    releases: list[dict[str, object]] = []
+    for session in sessions:
+        result = joystick_training_eligibility(
+            cast(list[dict[str, object]], session["windows"])
+        )
+        for event in cast(list[dict[str, object]], result["release_stop_events"]):
+            releases.append({
+                "source_id": session["session"], "action": "STOP",
+                "label_timestamp_us": event["label_timestamp_us"],
+                "confirmation_timestamp_us": None,
+                "source_fraction": event["fraction"],
+                "source_frame_index": event["frame_index"],
+                "previous_direction": event["previous_direction"],
+                "previous_direction_age_ms": event["previous_direction_age_ms"],
+                "label_rule": "direction_to_center_release_within_500ms",
+            })
+    releases.sort(
+        key=lambda row: (str(row["source_id"]), cast(int, row["label_timestamp_us"]))
+    )
+    if len(releases) != 8:
+        raise ValueError("overfit32 requires exactly eight release STOP events")
+    selected.extend(releases)
+    counts = Counter(str(row["action"]) for row in selected)
+    expected = {"STOP": 8, **dict.fromkeys(JOYSTICK_ACTIONS[1:], 3)}
+    if len(selected) != 32 or dict(counts) != expected:
+        raise ValueError("overfit32 selection differs")
+    if len({(row["source_id"], row["label_timestamp_us"]) for row in selected}) != 32:
+        raise ValueError("overfit32 labels are not unique")
+    return selected
+
+
+def _masked_actor_frame(rgb: np.ndarray) -> np.ndarray:
+    import cv2
+
+    if rgb.ndim != 3 or rgb.shape[2] != 3 or rgb.dtype != np.uint8:
+        raise ValueError("actor frame must be uint8 RGB")
+    masked = rgb.copy()
+    masked[round(rgb.shape[0] * 0.45):, :round(rgb.shape[1] * 0.35)] = 0
+    resized = cv2.resize(masked, (128, 128), interpolation=cv2.INTER_AREA)
+    resized[round(128 * 0.45):, :round(128 * 0.35)] = 0
+    return resized
+
+
+def _actor_window_before_label(path: Path, label_us: int) -> tuple[np.ndarray, np.ndarray]:
+    import av
+
+    from hok_agent import pre_ingest
+
+    targets = [label_us - offset * 100_000 for offset in range(16, 0, -1)]
+    if targets[0] < 0:
+        raise ValueError("label lacks sixteen causal frames")
+    descriptor, opened = pre_ingest._open_regular(path)
+    frames: list[np.ndarray] = []
+    times: list[int] = []
+    with os.fdopen(descriptor, "rb") as handle, av.open(handle, mode="r") as container:
+        stream = container.streams.video[0]
+        if (stream.time_base is None or stream.width <= stream.height
+                or pre_ingest._rotation(stream) != 0):
+            raise ValueError("actor window requires unrotated landscape video")
+        seek_us = max(0, targets[0] - 500_000)
+        container.seek(int(seek_us / float(stream.time_base) / 1_000_000),
+                       stream=stream, backward=True)
+        target_index = 0
+        for frame in container.decode(stream):
+            if frame.pts is None:
+                raise ValueError("actor frame lacks PTS")
+            timestamp = round(frame.pts * stream.time_base * 1_000_000)
+            if timestamp >= label_us:
+                break
+            while target_index < len(targets) and timestamp >= targets[target_index]:
+                if times and timestamp == times[-1]:
+                    raise ValueError("one decoded frame satisfies multiple actor targets")
+                frames.append(_masked_actor_frame(frame.to_ndarray(format="rgb24")))
+                times.append(timestamp)
+                target_index += 1
+            if target_index == len(targets):
+                break
+        pre_ingest._assert_unchanged(handle.fileno(), opened)
+    if (len(frames) != 16 or len(set(times)) != 16 or times[-1] >= label_us
+            or not np.all(np.diff(times) > 0)):
+        raise ValueError("incomplete causal actor window")
+    return np.stack(frames), np.asarray(times, dtype=np.int64)
+
+
+def _joystick_dataset_sessions(root: Path) -> tuple[list[dict[str, object]], dict[str, str]]:
+    files = {
+        "single_source_coverage": root / "joystick-train-coverage-v1" / "report.json",
+        "single_source_eligibility": root / "joystick-training-eligibility-v1" / "report.json",
+        "four_source_transfer": root / "joystick-cross-train-transfer-v1" / "report.json",
+        "three_source_final_transfer": root / "joystick-final-train-transfer-v1" / "report.json",
+    }
+    reports = {key: _load_bound_json(path, "report_sha256") for key, path in files.items()}
+    source_id = next(key for key, split in NATIVE_PLAYER_SOURCES.items() if split == "train")
+    coverage = reports["single_source_coverage"]
+    sessions = [{"session": source_id, "windows": coverage["windows"]}]
+    sessions.extend(cast(list[dict[str, object]], reports["four_source_transfer"]["sessions"]))
+    sessions.extend(
+        cast(list[dict[str, object]], reports["three_source_final_transfer"]["sessions"])
+    )
+    if len(sessions) != 8 or len({row["session"] for row in sessions}) != 8:
+        raise ValueError("dataset requires eight unique source sessions")
+    return sessions, {key: _file_sha256(path) for key, path in files.items()}
+
+
+def validate_joystick_overfit32(output_dir: Path) -> dict[str, object]:
+    manifest = _load_bound_json(output_dir / "manifest.json", "manifest_sha256")
+    dataset_path = output_dir / "joystick-overfit32.npz"
+    if dataset_path.is_symlink() or _file_sha256(dataset_path) != manifest["dataset_sha256"]:
+        raise ValueError("joystick dataset hash differs")
+    with np.load(dataset_path, allow_pickle=False) as data:
+        clips, labels, times, targets = (
+            data["rgb"], data["label"], data["input_timestamp_us"], data["label_timestamp_us"]
+        )
+    if (clips.shape != (32, 16, 128, 128, 3) or clips.dtype != np.uint8
+            or labels.shape != (32,) or times.shape != (32, 16) or targets.shape != (32,)):
+        raise ValueError("joystick dataset arrays differ")
+    if not np.all(np.diff(times, axis=1) > 0) or not np.all(times[:, -1] < targets):
+        raise ValueError("joystick dataset is not causal")
+    if np.any(clips[:, :, round(128 * 0.45):, :round(128 * 0.35)]):
+        raise ValueError("joystick pixels remain in Actor input")
+    counts = dict(Counter(JOYSTICK_ACTIONS[int(label)] for label in labels))
+    if counts != {"STOP": 8, **dict.fromkeys(JOYSTICK_ACTIONS[1:], 3)}:
+        raise ValueError("joystick dataset class balance differs")
+    return {"status": "JOYSTICK_OVERFIT32_DATASET_VALIDATED", "samples": 32,
+            "class_counts": counts, "causal": True, "joystick_pixels_zero": True,
+            "training_allowed": False}
+
+
+def run_joystick_materialize32(
+    source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
+    final_run: Path, output_dir: Path, *, verify_only: bool = False,
+) -> dict[str, object]:
+    if verify_only:
+        return validate_joystick_overfit32(output_dir)
+    if output_dir.exists():
+        raise ValueError("joystick dataset output exists")
+    conclusion_path = final_run / "cohort-conclusion.json"
+    conclusion = cast(dict[str, object], json.loads(conclusion_path.read_text()))
+    if (conclusion.get("status") != "JOYSTICK_8_TRAIN_SOURCE_WEAK_LABEL_SUPPORT_PASSED"
+            or conclusion.get("diagnostic_dataset_materialization_allowed") is not True):
+        raise ValueError("cohort conclusion does not allow diagnostic materialization")
+    sessions, report_hashes = _joystick_dataset_sessions(final_run.parent)
+    if report_hashes != conclusion["bound_report_file_sha256"]:
+        raise ValueError("cohort report bindings differ")
+    selected = select_joystick_overfit32(sessions)
+    from hok_agent import pre_ingest
+    from hok_agent.v5_data import load_automatic_cohort
+
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    source_ids = {str(row["source_id"]) for row in selected}
+    if any(cohort.session_splits.get(source_id) != "train" for source_id in source_ids):
+        raise ValueError("dataset sources must all be train")
+    sources: dict[str, Path] = {}
+    for path in pre_ingest._scan(source_root):
+        identity = pre_ingest._sha(pre_ingest._canonical([
+            "candidate-v2-file-atomic", path.relative_to(source_root).as_posix(),
+            pre_ingest._stat_signature(path.stat()),
+        ]))
+        if identity in source_ids:
+            sources[identity] = path
+    if set(sources) != source_ids:
+        raise ValueError("dataset source videos unavailable")
+    clips: list[np.ndarray] = []
+    times: list[np.ndarray] = []
+    rows: list[dict[str, object]] = []
+    for index, selection in enumerate(selected):
+        source_id = str(selection["source_id"])
+        path = sources[source_id]
+        if pre_ingest._candidate(path, source_root).candidate_id != source_id:
+            raise ValueError("dataset source identity changed")
+        label_us = cast(int, selection["label_timestamp_us"])
+        clip, timestamps = _actor_window_before_label(path, label_us)
+        clip_hash = hashlib.sha256(clip.tobytes()).hexdigest()
+        row = {**selection, "sample_id": f"joystick32-{index:02d}",
+               "label_id": JOYSTICK_ACTIONS.index(str(selection["action"])),
+               "input_start_timestamp_us": int(timestamps[0]),
+               "input_end_timestamp_us": int(timestamps[-1]),
+               "actual_input_label_gap_us": label_us - int(timestamps[-1]),
+               "rgb_sha256": clip_hash}
+        clips.append(clip)
+        times.append(timestamps)
+        rows.append(row)
+    if len({row["rgb_sha256"] for row in rows}) != 32:
+        raise ValueError("joystick Actor clips are duplicated")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-overfit32-", dir=output_dir.parent))
+    dataset_path = staging / "joystick-overfit32.npz"
+    np.savez_compressed(
+        dataset_path, rgb=np.stack(clips),
+        label=np.asarray([row["label_id"] for row in rows], dtype=np.int64),
+        input_timestamp_us=np.stack(times),
+        label_timestamp_us=np.asarray([row["label_timestamp_us"] for row in rows], dtype=np.int64),
+    )
+    manifest: dict[str, object] = {
+        "schema_version": "joystick-overfit32-dataset-v1",
+        "dataset": dataset_path.name, "dataset_sha256": _file_sha256(dataset_path),
+        "samples": rows, "action_order": JOYSTICK_ACTIONS,
+        "class_counts": {"STOP": 8, **dict.fromkeys(JOYSTICK_ACTIONS[1:], 3)},
+        "input_shape": [16, 128, 128, 3], "input_dtype": "uint8_rgb",
+        "input_policy": "16 frames before label PTS; lower-left 35% x bottom 55% zeroed",
+        "source_report_file_sha256": report_hashes,
+        "cohort_conclusion_file_sha256": _file_sha256(conclusion_path),
+        "semantic_accuracy_verified": False, "training_allowed": False,
+        "dev_frames_opened": 0, "test_frames_opened": 0,
+        "input_commands_sent": 0, "gpu_seconds": 0,
+    }
+    manifest["manifest_sha256"] = _object_sha256(manifest)
+    (staging / "manifest.json").write_bytes(_canonical(manifest) + b"\n")
+    staging.rename(output_dir)
+    return validate_joystick_overfit32(output_dir)
+
+
 def run_joystick_final_transfer(
     source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
     extractor_run: Path, output_dir: Path,

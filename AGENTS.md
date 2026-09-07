@@ -27,6 +27,9 @@ That expansion passed minimum automatic weak-label support across eight train so
 step may materialize only a small diagnostic dataset: stable two-frame directions plus explicit
 release STOP, with 16 Actor frames ending before the label and joystick pixels excluded. It may
 not train or promote a model until the materialized dataset passes causal/hash/split validation.
+The resulting 32-sample dataset has passed those mechanical validations. One fresh-init diagnostic
+overfit is allowed with the existing task-specific GroupNorm+GRU only. It cannot count as formal
+training, generalization, semantic accuracy or checkpoint promotion; no architecture/threshold loop.
 
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its

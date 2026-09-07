@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -89,6 +90,67 @@ def test_joystick_transfer_counts_sessions_not_frames() -> None:
     assert result["release_stop_events"] == 6
     assert result["mean_candidate_coverage"] == 0.25
     assert not result["all_directions_have_two_sessions"] and not result["training_allowed"]
+
+
+def test_joystick_overfit32_selection_is_balanced_grouped_and_causal() -> None:
+    from hok_agent.movement_real_rgb import JOYSTICK_ACTIONS, select_joystick_overfit32
+
+    sessions = []
+    for source in range(8):
+        actions = []
+        for direction in JOYSTICK_ACTIONS[1:]:
+            actions.extend((direction, direction, "unknown"))
+        # One explicit release event per source.
+        actions.extend(("N", "unknown", "STOP", "STOP"))
+        sessions.append({
+            "session": f"source-{source}",
+            "windows": [{
+                "fraction": 0.2,
+                "timestamp_us": [i * 100_000 for i in range(len(actions))],
+                "predictions": [{"candidate_action": action} for action in actions],
+            }],
+        })
+    selected = select_joystick_overfit32(sessions)
+    assert Counter(row["action"] for row in selected) == {
+        "STOP": 8, **dict.fromkeys(JOYSTICK_ACTIONS[1:], 3)
+    }
+    for action in JOYSTICK_ACTIONS[1:]:
+        assert len({row["source_id"] for row in selected if row["action"] == action}) == 3
+    assert all(row["confirmation_timestamp_us"] > row["label_timestamp_us"]
+               for row in selected if row["action"] != "STOP")
+    assert len({(row["source_id"], row["label_timestamp_us"]) for row in selected}) == 32
+
+
+def test_joystick_actor_mask_and_dataset_validator(tmp_path: Path) -> None:
+    from hok_agent import movement_real_rgb as m
+
+    rgb = np.full((200, 300, 3), 255, np.uint8)
+    masked = m._masked_actor_frame(rgb)
+    assert masked.shape == (128, 128, 3)
+    assert not masked[round(128 * 0.45):, :round(128 * 0.35)].any()
+    assert masked[:50, 50:].all()
+
+    labels = np.asarray([0] * 8 + [i for i in range(1, 9) for _ in range(3)])
+    clips = np.zeros((32, 16, 128, 128, 3), np.uint8)
+    times = np.tile(np.arange(16, dtype=np.int64) * 100_000, (32, 1))
+    targets = np.full(32, 1_600_000, np.int64)
+    dataset = tmp_path / "joystick-overfit32.npz"
+    np.savez_compressed(dataset, rgb=clips, label=labels,
+                        input_timestamp_us=times, label_timestamp_us=targets)
+    manifest = {"dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest()}
+    manifest["manifest_sha256"] = m._object_sha256(manifest)
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+    assert m.validate_joystick_overfit32(tmp_path)["causal"]
+    targets[0] = times[0, -1]
+    np.savez_compressed(dataset, rgb=clips, label=labels,
+                        input_timestamp_us=times, label_timestamp_us=targets)
+    manifest["dataset_sha256"] = hashlib.sha256(dataset.read_bytes()).hexdigest()
+    manifest["manifest_sha256"] = m._object_sha256(
+        {key: value for key, value in manifest.items() if key != "manifest_sha256"}
+    )
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="not causal"):
+        m.validate_joystick_overfit32(tmp_path)
 
 
 def test_joystick_coverage_extractor_fingerprint_is_frozen(monkeypatch: pytest.MonkeyPatch) -> None:
