@@ -417,6 +417,153 @@ def run_overfit32(
     return report
 
 
+def run_joystick_overfit32(
+    config_path: Path, dataset_dir: Path, output_dir: Path, *, device_name: str,
+) -> dict[str, object]:
+    from hok_agent.movement_real_rgb import validate_joystick_overfit32
+
+    config = cast(dict[str, object], json.loads(config_path.read_text(encoding="utf-8")))
+    unsigned = {key: value for key, value in config.items() if key != "contract_sha256"}
+    training = cast(dict[str, object], config["training"])
+    dataset_path = dataset_dir / "joystick-overfit32.npz"
+    manifest_path = dataset_dir / "manifest.json"
+    conclusion_path = dataset_dir / "conclusion.json"
+    conclusion = cast(dict[str, object], json.loads(conclusion_path.read_text(encoding="utf-8")))
+    expected_training = {
+        "architecture": "task_specific_groupnorm_gru_686281",
+        "optimizer": "AdamW", "learning_rate": 0.001, "weight_decay": 0.0,
+        "batch_size": 8, "maximum_updates": 200, "precision": "fp32",
+        "minimum_eval_accuracy": 0.95, "maximum_eval_loss": 0.05,
+    }
+    if (
+        config.get("schema_version") != "joystick-overfit32-train-contract-v1"
+        or config.get("contract_sha256") != _canonical_sha256(unsigned)
+        or config.get("dataset_sha256") != _sha256(dataset_path)
+        or config.get("manifest_file_sha256") != _sha256(manifest_path)
+        or config.get("conclusion_file_sha256") != _sha256(conclusion_path)
+        or config.get("action_order") != list(MOVEMENT_ACTIONS)
+        or training != expected_training
+        or config.get("attempt_limit") != 1
+        or config.get("diagnostic_only") is not True
+        or config.get("formal_training_allowed") is not False
+        or config.get("checkpoint_promotion_allowed") is not False
+        or config.get("dev_allowed") is not False
+        or config.get("test_allowed") is not False
+        or config.get("device_input_allowed") is not False
+        or conclusion.get("diagnostic_overfit_allowed") is not True
+        or conclusion.get("formal_training_allowed") is not False
+    ):
+        raise ValueError("joystick overfit32 contract differs")
+    validate_joystick_overfit32(dataset_dir)
+    if output_dir.exists():
+        raise ValueError("joystick overfit32 output exists")
+    with np.load(dataset_path, allow_pickle=False) as data:
+        clips = torch.from_numpy(data["rgb"].copy())
+        labels = torch.from_numpy(data["label"].astype(np.int64))
+    if clips.shape != (32, 16, 128, 128, 3) or labels.shape != (32,):
+        raise ValueError("joystick overfit32 arrays differ")
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA is unavailable")
+    seed = cast(int, config["seed"])
+    torch.manual_seed(seed)
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(seed)
+        torch.cuda.reset_peak_memory_stats(device)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    model = TaskSpecificMovement().to(device)
+    parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
+    optimizer = torch.optim.AdamW(
+        parameters, lr=cast(float, training["learning_rate"]),
+        weight_decay=cast(float, training["weight_decay"]),
+    )
+    batch_size = cast(int, training["batch_size"])
+    maximum_updates = cast(int, training["maximum_updates"])
+    generator = torch.Generator().manual_seed(seed)
+    first_before = [parameter.detach().clone() for parameter in parameters]
+    first_loss = math.nan
+    first_gradient = math.nan
+    first_changed = False
+    losses: list[float] = []
+    gradients: list[float] = []
+    started = time.monotonic()
+    for update in range(maximum_updates):
+        if update % (len(clips) // batch_size) == 0:
+            order = torch.randperm(len(clips), generator=generator)
+        offset = update % (len(clips) // batch_size) * batch_size
+        selected = order[offset:offset + batch_size]
+        loss, gradient = train_step(
+            model, _batch(clips[selected], device), labels[selected].to(device), optimizer
+        )
+        losses.append(loss)
+        gradients.append(gradient)
+        if update == 0:
+            first_loss, first_gradient = loss, gradient
+            first_changed = any(
+                not torch.equal(before, parameter.detach())
+                for before, parameter in zip(first_before, parameters, strict=True)
+            )
+    elapsed = time.monotonic() - started
+    accuracy, loss, recalls = _evaluate(
+        model, clips, labels, device, batch_size,
+        training_mode=False, freeze_batch_norm=False,
+    )
+    minimum_accuracy = cast(float, training["minimum_eval_accuracy"])
+    maximum_loss = cast(float, training["maximum_eval_loss"])
+    passed = (
+        first_changed and math.isfinite(first_loss) and first_gradient > 0
+        and accuracy >= minimum_accuracy and loss <= maximum_loss and min(recalls) > 0
+    )
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-overfit32-", dir=output_dir.parent))
+    checkpoint = staging / "diagnostic-last.safetensors"
+    save_file(
+        {key: value.detach().cpu() for key, value in model.state_dict().items()}, checkpoint,
+        metadata={"purpose": "diagnostic_only", "dataset_sha256": _sha256(dataset_path),
+                  "contract_sha256": cast(str, config["contract_sha256"]),
+                  "architecture": "task-specific"},
+    )
+    report: dict[str, object] = {
+        "schema_version": "joystick-overfit32-report-v1",
+        "status": "PASSED" if passed else "FAILED", "passed": passed,
+        "contract_sha256": config["contract_sha256"],
+        "config_file_sha256": _sha256(config_path),
+        "dataset_sha256": _sha256(dataset_path),
+        "manifest_file_sha256": _sha256(manifest_path),
+        "checkpoint_sha256": _sha256(checkpoint),
+        "diagnostic_checkpoint_only": True, "checkpoint_promotion_allowed": False,
+        "formal_training_allowed": False, "next_stage_allowed": False,
+        "semantic_accuracy_verified": False, "generalization_verified": False,
+        "architecture": "TaskSpecificMovement-GroupNorm-GRU-686281",
+        "total_parameters": sum(parameter.numel() for parameter in model.parameters()),
+        "trainable_parameters": sum(parameter.numel() for parameter in parameters),
+        "device": str(device), "precision": "fp32", "seed": seed,
+        "updates": maximum_updates, "batch_size": batch_size,
+        "elapsed_seconds": elapsed,
+        "gpu_peak_allocated_bytes": (
+            int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else 0
+        ),
+        "first_update_loss": first_loss, "first_update_gradient_norm": first_gradient,
+        "first_update_parameter_changed": first_changed,
+        "first_update_finite": math.isfinite(first_loss) and math.isfinite(first_gradient),
+        "initial_loss": losses[0], "final_update_loss": losses[-1],
+        "maximum_gradient_norm": max(gradients),
+        "eval_accuracy": accuracy, "eval_loss": loss,
+        "eval_recall": dict(zip(MOVEMENT_ACTIONS, recalls, strict=True)),
+        "minimum_eval_accuracy": minimum_accuracy, "maximum_eval_loss": maximum_loss,
+        "attempt_limit": 1, "attempts_used": 1,
+        "full_training_called": False, "input_commands_sent": 0,
+        "dev_frames_opened": 0, "test_frames_opened": 0,
+    }
+    report["report_sha256"] = _canonical_sha256(report)
+    (staging / "report.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    staging.rename(output_dir)
+    return report
+
+
 def _classification_metrics(
     predicted: np.ndarray, labels: np.ndarray, classes: int
 ) -> dict[str, object]:

@@ -1,0 +1,28 @@
+{
+  "schema_version": "joystick-overfit32-train-contract-v1",
+  "contract_sha256": "2016d31d8be8abd3cba55cf8528c361592b9e926c2f45fcff585b7328d5ed84b",
+  "dataset_sha256": "a05279e3353cf306e3dfade5d391d2ce8792381cd0eb5a4fca9b4fe487c90155",
+  "manifest_file_sha256": "73d90323922a0d87421e57ce1f3d3c50ea1b8824bf9f1c276af93410b1f368bb",
+  "conclusion_file_sha256": "5d13282cc71e7ead33522fbf28d963099b6fa26c58e224e138424211c57b00a4",
+  "action_order": ["STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE"],
+  "seed": 0,
+  "training": {
+    "architecture": "task_specific_groupnorm_gru_686281",
+    "optimizer": "AdamW",
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "batch_size": 8,
+    "maximum_updates": 200,
+    "precision": "fp32",
+    "minimum_eval_accuracy": 0.95,
+    "maximum_eval_loss": 0.05
+  },
+  "attempt_limit": 1,
+  "diagnostic_only": true,
+  "formal_training_allowed": false,
+  "checkpoint_promotion_allowed": false,
+  "semantic_accuracy_verified": false,
+  "dev_allowed": false,
+  "test_allowed": false,
+  "device_input_allowed": false
+}

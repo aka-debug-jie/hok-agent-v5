@@ -85,6 +85,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-transfer",
             "joystick-transfer-final",
             "joystick-materialize32",
+            "joystick-overfit32",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1566,6 +1567,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
+            elif args.mode == "joystick-overfit32":
+                if args.dataset is None:
+                    raise ValueError("joystick overfit32 requires --dataset")
+                from hok_agent.movement_mvp_train import run_joystick_overfit32
+
+                result = run_joystick_overfit32(
+                    args.config, args.dataset, args.output_dir, device_name=args.device
+                )
             elif args.mode == "joystick-materialize32":
                 from hok_agent.movement_real_rgb import run_joystick_materialize32
 

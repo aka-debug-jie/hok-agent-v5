@@ -424,13 +424,33 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_OVERFIT32_DATASET_VALIDATED
-BLOCKING FAILURE: weak-label RGB learnability is untested; semantic accuracy remains unknown
-NEXT ACCEPTANCE: one fresh-init GroupNorm+GRU diagnostic overfit; no formal training or promotion
-COMMAND STATUS: 32 causal samples, 8 source groups, joystick masked; verify-only passed; no model/input/test
+CURRENT STATUS: JOYSTICK_REAL_RGB_OVERFIT32_PASSED
+BLOCKING FAILURE: source-grouped generalization untested; semantic accuracy remains unknown
+NEXT ACCEPTANCE: fixed 6-train/2-internal-dev weak-label pilot dataset; no video-dev/test
+COMMAND STATUS: accuracy1.0/loss0.005445/all recalls1.0; diagnostic checkpoint only; attempt consumed
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick real-RGB overfit32 diagnostic (2026-09-07)
+
+- Added a separate hash-bound contract and `joystick-overfit32` runner. It accepts only the
+  validated joystick dataset, task-specific 686,281-parameter GroupNorm+GRU, seed0, AdamW,
+  lr1e-3, batch8, FP32 and 200 updates. Attempt limit is one; no architecture fallback.
+- RTX4090 run passed: eval accuracy1.0, cross-entropy0.00544488 and every class recall1.0 against
+  gates0.95/0.05. First update loss2.22312, gradient norm6.75958 and parameter change all valid.
+  Runtime2.273s; peak allocated GPU memory312,573,440 bytes.
+- Diagnostic checkpoint metadata binds dataset and contract. Checkpoint SHA-256
+  `b759921e9faf8176965d68ac9786f4fd1b8e2d04e047ac1bf3d9d1272221019f`;
+  report file/self `f5bcdb36ed99c0de69cbc2f425ca9dc8f069aa4b38d2aefbc8e49a55da441542` /
+  `98109db213f084127c36585e919efeaffc6a715537518d864b8a3ccffc986ed1`.
+- Status `JOYSTICK_REAL_RGB_OVERFIT32_PASSED`. It proves memorization and the real-RGB training
+  path only. Generalization, semantic action accuracy and gameplay performance remain unverified.
+  The checkpoint cannot initialize or enter formal training; the sole attempt is consumed.
+- Next: materialize one fixed six-train/two-internal-dev grouped pilot from existing frozen
+  candidate windows. Any pilot model must initialize fresh at seed0. No video-dev/test access.
+- Validation includes contract self-hash, fail-closed unbound-data test, checkpoint metadata/
+  parameter count and the actual CUDA gate. Full focused checks are recorded below.
 
 ### Joystick causal overfit32 dataset (2026-09-07)
 

@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The single real-RGB joystick `overfit32` diagnostic passed at accuracy1.0/loss0.005445 with all
+nine recalls1.0 on RTX4090. It uses the existing 686,281-parameter GroupNorm+GRU and proves only
+that the 32 masked causal weak-label clips can be memorized. Its checkpoint is diagnostic-only.
+Next is a fixed six-train/two-internal-dev grouped dataset; no video-dev/test or checkpoint reuse.
+
 The first real-RGB joystick-supervised diagnostic dataset is now mechanically valid: 32 causal
 samples, eight source groups, STOP8 plus three per direction, with the joystick region zeroed.
 `joystick-materialize32` creates it and `--verify-only` checks hashes, shape, class balance,
