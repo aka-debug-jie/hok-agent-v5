@@ -18,6 +18,9 @@ no dev/test decoding. Native RGB stays in memory; only candidate records/hashes 
 The eligibility continuation may read only the completed coverage JSON. It may count stable
 direction runs, explicit direction-to-center release events and PTS gaps, but writes no policy
 RGB/sample/model. The current frame is the target; Actor input must end at the preceding PTS.
+The cross-train transfer audit may open only four predeclared train identities, at 20/50/80%,
+using the frozen v3 template/fingerprint. It persists QA, hashes and candidates, not native RGB.
+No dev/test source, threshold change, calibration, policy sample or training is authorized.
 
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its

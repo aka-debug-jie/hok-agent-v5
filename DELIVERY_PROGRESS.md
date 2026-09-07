@@ -424,13 +424,33 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_CAUSAL_CANDIDATES_INSUFFICIENT_STOP_AND_SESSION_SUPPORT
-BLOCKING FAILURE: only four explicit release STOP events and one source recording
-NEXT ACCEPTANCE: bounded frozen-extractor transfer audit on additional existing train sources
-COMMAND STATUS: all 8 directions have stable runs; causal PTS gap 96-114ms; no samples/training/input/test
+CURRENT STATUS: JOYSTICK_CROSS_TRAIN_TRANSFER_PARTIAL
+BLOCKING FAILURE: E/SW/SE stable in only one extra session; two release STOP events; no semantic accuracy
+NEXT ACCEPTANCE: optional larger predeclared train-only scan with unchanged extractor, or retain rule baseline
+COMMAND STATUS: 4/4 sources have candidates; mean 34.17%, min 14.17%; no samples/training/dev/test/input
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Cross-train joystick transfer (2026-09-07)
+
+- Added `joystick-transfer` with four predeclared additional train identities and fixed 20/50/80%
+  four-second windows. The exact v3 contract, template and AST/settings fingerprint are required.
+  It cannot calibrate, tune thresholds, open dev/test or write native RGB/policy samples.
+- All four sources yield candidates. Per-source coverage: 14.17%, 44.17%, 53.33%, 25.00%;
+  mean34.17%. Stable direction support across sources: N3, S2, W2, E1, NW2, NE3, SW1, SE1.
+  Only two explicit direction-to-center release STOP events occur. Cross-source gate fails.
+- Four QA sheets (48 uniformly sampled frames) were reviewed. Displayed accepted examples generally
+  align with the visible floating control; unknown examples may show remote raw matches but emit no
+  candidate. This is bounded visual consistency, not independent frame-level semantic accuracy.
+- Result: `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/joystick-cross-train-transfer-v1`,
+  status `JOYSTICK_CROSS_TRAIN_TRANSFER_PARTIAL`, about4.3MiB. Report file SHA-256:
+  `fdbf619fb4b67bd9fd328baa88c01ab66e2140e82d5361b2fd92cd652ddd0398`.
+- No policy dataset or model. A larger existing-train scan is useful only with unchanged extractor
+  and predeclared sources/times; it would improve support counts, not establish semantic accuracy.
+  The deterministic Movement baseline remains deployable engineering evidence.
+- Validation: 46 focused tests, Ruff and strict mypy (70 sources) passed. Source splits were checked
+  before decoding; GPU/input/dev/test all zero. Native RGB remained memory-only.
 
 ### Joystick causal eligibility (2026-09-07)
 

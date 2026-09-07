@@ -67,6 +67,30 @@ def test_joystick_eligibility_rejects_center_without_recent_direction() -> None:
     assert not result["training_allowed"]
 
 
+def test_joystick_transfer_counts_sessions_not_frames() -> None:
+    from hok_agent.movement_real_rgb import joystick_transfer_summary
+
+    def session(coverage: float, supported: tuple[str, ...], stops: int) -> dict[str, object]:
+        runs = dict.fromkeys(("N", "S", "W", "E", "NW", "NE", "SW", "SE"), 0)
+        for action in supported:
+            runs[action] = 10
+        return {
+            "coverage": {"coverage": coverage},
+            "eligibility": {"stable_direction_runs": runs, "release_stop_count": stops},
+        }
+
+    result = joystick_transfer_summary([
+        session(0.5, ("N", "E"), 3), session(0.25, ("N", "W"), 2),
+        session(0, (), 0), session(0.25, ("E",), 1),
+    ])
+    assert result["sessions"] == 4 and result["sessions_with_any_candidate"] == 3
+    assert result["direction_supporting_sessions"]["N"] == 2
+    assert result["direction_supporting_sessions"]["E"] == 2
+    assert result["release_stop_events"] == 6
+    assert result["mean_candidate_coverage"] == 0.25
+    assert not result["all_directions_have_two_sessions"] and not result["training_allowed"]
+
+
 def test_joystick_coverage_extractor_fingerprint_is_frozen(monkeypatch: pytest.MonkeyPatch) -> None:
     from hok_agent import movement_real_rgb as m
 

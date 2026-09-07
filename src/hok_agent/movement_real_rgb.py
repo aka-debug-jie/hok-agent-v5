@@ -2841,6 +2841,13 @@ def run_real_player_tracking_audit(
 
 JOYSTICK_COVERAGE_FRACTIONS = (0.05, 0.15, 0.2, 0.25, 0.35, 0.4,
                               0.45, 0.5, 0.65, 0.7, 0.8, 0.9)
+JOYSTICK_TRANSFER_SOURCES = (
+    "06c5a8e67a7a19a59e4b13bdae9dafeaa2b07a0168e41406d58e5209ed0e2b4a",
+    "08565f01b75fb400394b35d33cd2bab8a94298f082e127115edc27f0b073b46b",
+    "0a84c341d16222bb3424e95cbb5d51797eecbea8b528417cd02d569ae9a360cc",
+    "0c60062fdde6ed50e0bf2fe231fda206535b90911d2f74e6f0f171a54e486c6c",
+)
+JOYSTICK_TRANSFER_FRACTIONS = (0.2, 0.5, 0.8)
 JOYSTICK_V3_FINGERPRINT = "8063ac69f592096358c8ba9ea9bcf04f260b295e5e5ab61d51a60ef4d2a5dbb9"
 
 
@@ -2979,6 +2986,147 @@ def run_joystick_eligibility(source_run: Path, output_dir: Path) -> dict[str, ob
     (staging / "report.json").write_bytes(_canonical(report) + b"\n")
     staging.rename(output_dir)
     return report
+
+
+def joystick_transfer_summary(sessions: list[dict[str, object]]) -> dict[str, object]:
+    directions = ("N", "S", "W", "E", "NW", "NE", "SW", "SE")
+    direction_sessions = {
+        action: sum(
+            cast(dict[str, int], cast(dict[str, object], row["eligibility"])
+                 ["stable_direction_runs"])[action] > 0
+            for row in sessions
+        )
+        for action in directions
+    }
+    session_coverage = [cast(float, cast(dict[str, object], row["coverage"])["coverage"])
+                        for row in sessions]
+    return {
+        "sessions": len(sessions), "direction_supporting_sessions": direction_sessions,
+        "release_stop_events": sum(
+            cast(int, cast(dict[str, object], row["eligibility"])["release_stop_count"])
+            for row in sessions
+        ),
+        "sessions_with_any_candidate": sum(value > 0 for value in session_coverage),
+        "mean_candidate_coverage": sum(session_coverage) / len(session_coverage),
+        "minimum_candidate_coverage": min(session_coverage),
+        "all_directions_have_two_sessions": all(
+            value >= 2 for value in direction_sessions.values()
+        ),
+        "training_allowed": False,
+        "interpretation": "fixed-extractor transfer candidates; not semantic accuracy",
+    }
+
+
+def run_joystick_transfer(
+    source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
+    extractor_run: Path, output_dir: Path,
+) -> dict[str, object]:
+    import cv2
+    from PIL import Image, ImageDraw
+
+    from hok_agent import pre_ingest
+    from hok_agent.v5_data import load_automatic_cohort
+
+    cv2.setNumThreads(1)
+    if output_dir.exists():
+        raise ValueError("transfer output exists")
+    frozen = _load_bound_json(extractor_run / "contract.json", "contract_sha256")
+    prior = _load_bound_json(extractor_run / "report.json", "report_sha256")
+    if (frozen["contract_sha256"] !=
+            "f687f5423235e918fe37728793d24f0ea73a33936fc46344429d38ad91ec7c7c"
+            or prior.get("contract_sha256") != frozen["contract_sha256"]
+            or joystick_extractor_fingerprint() != JOYSTICK_V3_FINGERPRINT):
+        raise ValueError("transfer requires frozen v3 extractor")
+    template_path = extractor_run / "train-templates.npz"
+    if _file_sha256(template_path) != frozen["template_sha256"]:
+        raise ValueError("transfer template differs")
+    with np.load(template_path, allow_pickle=False) as arrays:
+        templates = {key: arrays[key].copy() for key in arrays.files}
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    if any(cohort.session_splits.get(identity) != "train"
+           for identity in JOYSTICK_TRANSFER_SOURCES):
+        raise ValueError("transfer sources must all be train")
+    sources: dict[str, Path] = {}
+    for path in pre_ingest._scan(source_root):
+        identity = pre_ingest._sha(pre_ingest._canonical([
+            "candidate-v2-file-atomic", path.relative_to(source_root).as_posix(),
+            pre_ingest._stat_signature(path.stat()),
+        ]))
+        if identity in JOYSTICK_TRANSFER_SOURCES:
+            sources[identity] = path
+    if set(sources) != set(JOYSTICK_TRANSFER_SOURCES):
+        raise ValueError("transfer sources unavailable")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-transfer-", dir=output_dir.parent))
+    contract: dict[str, object] = {
+        "extractor_contract_sha256": frozen["contract_sha256"],
+        "extractor_fingerprint": JOYSTICK_V3_FINGERPRINT,
+        "template_sha256": frozen["template_sha256"],
+        "sources": JOYSTICK_TRANSFER_SOURCES, "split": "train",
+        "fractions": JOYSTICK_TRANSFER_FRACTIONS, "frames_per_window": 40,
+        "sample_period_us": 100000, "training_allowed": False,
+        "dev_frames_opened": 0, "test_frames_opened": 0,
+    }
+    contract["contract_sha256"] = _object_sha256(contract)
+    (staging / "contract.json").write_bytes(_canonical(contract) + b"\n")
+    session_rows: list[dict[str, object]] = []
+    for identity, path in sorted(sources.items()):
+        if pre_ingest._candidate(path, source_root).candidate_id != identity:
+            raise ValueError("transfer source identity changed")
+        windows: list[dict[str, object]] = []
+        qa_items: list[tuple[Image.Image, str]] = []
+        previous_end = -1
+        for fraction in JOYSTICK_TRANSFER_FRACTIONS:
+            arrays = _joystick_window(path, fraction)
+            frames, times = arrays["rgb"], arrays["timestamp_us"]
+            if times[0] <= previous_end:
+                raise ValueError("transfer windows overlap")
+            previous_end = int(times[-1])
+            predictions = extract_joystick_sequence(
+                frames, templates, normalize_scale=True, geometric_base=True
+            )
+            indices = list(map(int, np.linspace(0, len(frames) - 1, 4)))
+            for index in indices:
+                row = predictions[index]
+                image = Image.fromarray(frames[index])
+                draw = ImageDraw.Draw(image)
+                bx, by = cast(list[float], row["base_xy"])
+                kx, ky = cast(list[float], row["knob_xy"])
+                draw.ellipse((bx-10, by-10, bx+10, by+10), outline="yellow", width=3)
+                draw.ellipse((kx-10, ky-10, kx+10, ky+10), outline="magenta", width=3)
+                draw.line((bx, by, kx, ky), fill="yellow", width=3)
+                image.thumbnail((320, 210))
+                qa_items.append((image, f"f{fraction:.1f}:{index} {row['candidate_action']}"))
+            windows.append({
+                "fraction": fraction, "timestamp_us": times.tolist(),
+                "predictions": predictions,
+                "frame_sha256": [hashlib.sha256(frame.tobytes()).hexdigest() for frame in frames],
+            })
+        sheet = Image.new("RGB", (4*320, 3*240))
+        for ordinal, (image, label) in enumerate(qa_items):
+            x, y = ordinal % 4*320, ordinal // 4*240
+            sheet.paste(image, (x, y+26))
+            ImageDraw.Draw(sheet).text((x, y), label, fill="white")
+        qa_name = f"{identity[:8]}-qa.png"
+        sheet.save(staging / qa_name)
+        session_rows.append({
+            "session": identity, "split": "train", "windows": windows,
+            "coverage": joystick_coverage_summary(windows),
+            "eligibility": joystick_training_eligibility(windows),
+            "qa": qa_name, "qa_sha256": _file_sha256(staging / qa_name),
+        })
+    summary = joystick_transfer_summary(session_rows)
+    report: dict[str, object] = {
+        "schema_version": "joystick-cross-train-transfer-v1",
+        "contract_sha256": contract["contract_sha256"], "sessions": session_rows,
+        "summary": summary, "status": "QA_REQUIRED", "training_allowed": False,
+        "native_cache_written": False, "gpu_seconds": 0, "input_commands_sent": 0,
+        "dev_frames_opened": 0, "test_frames_opened": 0,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return {k: v for k, v in report.items() if k != "sessions"}
 
 
 def run_joystick_coverage(

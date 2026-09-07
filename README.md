@@ -15,6 +15,12 @@ runtime guard passes.
 
 ## Current development plan
 
+Frozen-extractor transfer across four additional train recordings is partial: all four contain
+candidates (mean34.17%, minimum14.17%), but E/SW/SE have stable support in only one source and
+only two explicit release STOP events exist. `joystick-transfer` writes QA/hashes/candidates only;
+no policy samples. More existing train data can improve support counts but cannot by itself prove
+semantic accuracy.
+
 `joystick-eligibility` now separates stable direction runs from explicit direction-to-center
 release events. All eight directions have a two-frame run, but only four release STOP events exist
 and all data comes from one recording. Future Actor input must end one sampled frame before the
