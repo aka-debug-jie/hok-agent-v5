@@ -97,6 +97,12 @@ parameter last-frame control. One attempt per model; simulator integration only.
 Both models passed; the 587080-parameter last-frame checkpoint is selected for simulator-only
 integration. The next step may load only that exact checkpoint in an offline multi-waypoint replay.
 Policy invocation/KEEP/STOP ownership must match the change-only contract; no real RGB or input.
+The replay is fixed to10 episodes, four two-cell waypoints and three steps per waypoint:
+model change, executor KEEP, Router STOP. It must load only the selected checkpoint and reach
+all40 waypoints with40/40 predictions,40 KEEP and40 STOP. No transition to real RGB.
+The formal route preflight failed20/40 with E/W at0/10 each and executed zero arena steps.
+Do not retry this checkpoint or change routes. One simulator-data correction may vary E/W across
+rows2/3/4 and create a position-held-out dev split; materialize/validate before training.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.

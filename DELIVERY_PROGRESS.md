@@ -424,13 +424,32 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: SIMULATOR_CHANGE_POLICY_PASSED_LAST_FRAME_SELECTED
-BLOCKING FAILURE: selected checkpoint not integrated in multi-waypoint offline replay; real goal rendering unverified
-NEXT ACCEPTANCE: offline change-event inference + deterministic KEEP/STOP over complete waypoint episodes
-COMMAND STATUS: both dev accuracy/F1 1.0; selected587080 params/epoch5; simulator-only, no input/test
+CURRENT STATUS: CHANGE_REPLAY_FAILED_POSITION_SHORTCUT
+BLOCKING FAILURE: route preflight20/40; E/W0/10 due training row coupling; formal arena steps0
+NEXT ACCEPTANCE: corrected simulator data with E/W across y2/3/4 and position-held-out dev; no training
+COMMAND STATUS: selected checkpoint rejected; no route/checkpoint retry, device input or video test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Multi-waypoint change replay failure (2026-09-08)
+
+- Added a hash-bound 10-episode replay with three four-waypoint routes. Each waypoint contract is
+  model change, executor KEEP, then Router STOP. It loads only the selected last-frame checkpoint.
+- The first implementation applied a wrong prediction before completing route validation and raised
+  `illegal blue action` without a report. The sole execution-order repair moved all40 model calls
+  into a fail-closed preflight. Checkpoint, route geometry and thresholds did not change.
+- Formal preflight is20/40 and executes zero arena steps. N/S/NW/NE/SW/SE are20/20 combined;
+  W is0/10 and E0/10. E/W at row2 or4 are predicted as N/S/NE. Thus no KEEP/STOP episode runs.
+- Root cause is dataset construction: E/W training and simulator dev examples always place the
+  player on row3, while the new routes request E/W on rows2/4. Prior dev1.0 therefore demonstrates
+  within-generator fit, not player-position generalization.
+- Status `CHANGE_REPLAY_FAILED_POSITION_SHORTCUT`; report file/self
+  `43fa89e115830e79a87110c34f2a66f0a154b39ac714c0212d36a899ca1defbf` /
+  `59db9569ecc8dd1e01bc77151b789292cc9e99b9e3dada2ca91f35b09412d924`.
+  Same checkpoint/route retry and simulator integration are closed. No device input/video-dev/test.
+- Next: one simulator-data correction only—cover E/W at rows2/3/4 and create a position-held-out
+  dev split. Materialize and validate before any new model run; other direction geometry stays fixed.
 
 ### Simulator change-policy comparison (2026-09-08)
 

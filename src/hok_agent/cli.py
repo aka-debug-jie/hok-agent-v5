@@ -96,6 +96,7 @@ def _parser() -> argparse.ArgumentParser:
             "change-contract",
             "change-materialize",
             "change-train",
+            "change-replay",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1577,6 +1578,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
+            elif args.mode == "change-replay":
+                if args.prior_report is None or len(args.checkpoint) != 1:
+                    raise ValueError("change-replay requires prior-report and one checkpoint")
+                from hok_agent.movement_mvp_train import run_change_policy_replay
+
+                result = run_change_policy_replay(
+                    args.config, args.prior_report, args.checkpoint[0], args.output_dir,
+                    device_name=args.device,
+                )
             elif args.mode == "change-train":
                 if args.dataset is None:
                     raise ValueError("change-train requires --dataset")

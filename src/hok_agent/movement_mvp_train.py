@@ -22,13 +22,14 @@ from hok_agent.hierarchical_p1v2_movement_branch import MovementBranch
 from hok_agent.movement_mvp import (
     MOVEMENT_ACTIONS,
     StageAMovement,
+    _movement_command,
     mark_visible_target,
     rgb_geometry_movement,
     rule_movement_in_range,
     stage_c_arena,
     to_arena_action,
 )
-from hok_agent.rich_arena import wait_action
+from hok_agent.rich_arena import ArenaConfig, RichPixelArena, wait_action
 from hok_agent.rich_renderer import render
 
 
@@ -1090,6 +1091,227 @@ def run_change_policy_pilot(
         "video_dev_opened": False, "video_test_opened": False,
     }
     report["report_sha256"] = _canonical_sha256(report)
+    (staging / "report.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    staging.rename(output_dir)
+    return report
+
+
+def run_change_policy_replay(
+    config_path: Path, pilot_report_path: Path, checkpoint_path: Path,
+    output_dir: Path, *, device_name: str,
+) -> dict[str, object]:
+    from hok_agent.movement_goal_canvas import (
+        CHANGE_MODEL_ACTIONS,
+        goal_canvas_geometry_movement,
+        render_goal_minimap,
+    )
+
+    config = cast(dict[str, object], json.loads(config_path.read_text()))
+    unsigned = {key: value for key, value in config.items() if key != "contract_sha256"}
+    pilot = cast(dict[str, object], json.loads(pilot_report_path.read_text()))
+    pilot_unsigned = {key: value for key, value in pilot.items() if key != "report_sha256"}
+    expected_routes = [
+        {"start": [5, 2], "goals": [[7, 2], [9, 4], [7, 4], [5, 2]]},
+        {"start": [9, 2], "goals": [[7, 2], [5, 4], [7, 4], [9, 2]]},
+        {"start": [7, 4], "goals": [[7, 2], [9, 2], [9, 4], [7, 4]]},
+    ]
+    if (
+        config.get("schema_version") != "movement-change-replay-contract-v1"
+        or config.get("contract_sha256") != _canonical_sha256(unsigned)
+        or config.get("pilot_report_file_sha256") != _sha256(pilot_report_path)
+        or config.get("selected_checkpoint_sha256") != _sha256(checkpoint_path)
+        or config.get("selected_model") != "task_specific_last_frame_587080"
+        or config.get("action_order") != list(CHANGE_MODEL_ACTIONS)
+        or config.get("episodes") != 10 or config.get("waypoints_per_episode") != 4
+        or config.get("steps_per_waypoint") != 3 or config.get("step_duration_ms") != 100
+        or config.get("routes") != expected_routes
+        or config.get("expected_model_invocations") != 40
+        or config.get("expected_keep_steps") != 40
+        or config.get("expected_router_stops") != 40
+        or config.get("persistence_owner") != "deterministic_executor"
+        or config.get("stop_owner") != "deterministic_router"
+        or config.get("training_allowed") is not False
+        or config.get("device_input_allowed") is not False
+        or config.get("video_dev_allowed") is not False
+        or config.get("video_test_allowed") is not False
+        or pilot.get("report_sha256") != _canonical_sha256(pilot_unsigned)
+        or pilot.get("status") != "PASSED"
+        or pilot.get("selected_model") != "task_specific_last_frame_587080"
+        or cast(dict[str, str], pilot["checkpoint_sha256"])
+        ["task_specific_last_frame_587080"] != _sha256(checkpoint_path)
+        or pilot.get("simulator_integration_allowed") is not True
+        or pilot.get("checkpoint_real_deployment_allowed") is not False
+    ):
+        raise ValueError("change policy replay contract differs")
+    if output_dir.exists():
+        raise ValueError("change policy replay output exists")
+    with safe_open(checkpoint_path, framework="pt", device="cpu") as handle:
+        metadata = handle.metadata()
+        if (metadata.get("selected") != "true"
+                or metadata.get("model") != "task_specific_last_frame_587080"
+                or metadata.get("purpose") != "simulator_change_pilot"):
+            raise ValueError("change replay checkpoint metadata differs")
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA is unavailable")
+    model = TaskSpecificLastFrame(8).to(device)
+    model.load_state_dict(load_file(checkpoint_path, device="cpu"), strict=True)
+    model.eval()
+    marker = cast(dict[str, object], config["marker"])
+    routes = cast(list[dict[str, object]], config["routes"])
+    episode_rows: list[dict[str, object]] = []
+    invocation_correct = keep_steps = router_stops = 0
+    direction_counts = dict.fromkeys(CHANGE_MODEL_ACTIONS, 0)
+    confidences: list[float] = []
+    started = time.monotonic()
+
+    def infer_change(
+        position: tuple[int, int], old_goal: tuple[int, int], goal: tuple[int, int], seed: int,
+    ) -> tuple[StageAMovement, StageAMovement, float, str]:
+        frames = [render_goal_minimap(position, old_goal, seed + i, marker) for i in range(15)]
+        frames.append(render_goal_minimap(position, goal, seed + 15, marker))
+        clip = np.stack(frames)[None]
+        expected = goal_canvas_geometry_movement(clip[0, -1])
+        if expected not in CHANGE_MODEL_ACTIONS:
+            raise ValueError("change replay waypoint does not require a direction")
+        with torch.no_grad():
+            logits = model(_batch(torch.from_numpy(clip), device))[0]
+            probability = torch.softmax(logits, dim=0)
+        predicted = CHANGE_MODEL_ACTIONS[int(logits.argmax())]
+        clip_hash = hashlib.sha256(clip.tobytes()).hexdigest()
+        return expected, predicted, float(probability.max()), clip_hash
+
+    preflight: list[dict[str, object]] = []
+    for episode in range(10):
+        route = routes[episode % len(routes)]
+        position = cast(tuple[int, int], tuple(map(int, cast(list[int], route["start"]))))
+        old_goal = position
+        for version, raw_goal in enumerate(cast(list[list[int]], route["goals"]), start=1):
+            goal = cast(tuple[int, int], tuple(map(int, raw_goal)))
+            seed = 300_000 + episode * 1000 + version * 20
+            expected, predicted, confidence, clip_hash = infer_change(
+                position, old_goal, goal, seed
+            )
+            preflight.append({"episode": episode, "goal_version": version,
+                              "position": list(position), "goal": list(goal),
+                              "expected": expected, "predicted": predicted,
+                              "confidence": confidence, "rgb_sha256": clip_hash,
+                              "correct": expected == predicted})
+            position, old_goal = goal, goal
+    preflight_correct = sum(bool(row["correct"]) for row in preflight)
+    if preflight_correct != 40:
+        failure_report: dict[str, object] = {
+            "schema_version": "movement-change-replay-report-v1",
+            "status": "FAILED", "passed": False,
+            "failure": "ROUTE_PARAMETER_GENERALIZATION_FAILED_PRECHECK",
+            "contract_sha256": config["contract_sha256"],
+            "pilot_report_file_sha256": _sha256(pilot_report_path),
+            "checkpoint_sha256": _sha256(checkpoint_path),
+            "selected_model": "task_specific_last_frame_587080", "device": str(device),
+            "route_preflight": preflight, "preflight_correct": preflight_correct,
+            "preflight_total": 40, "arena_steps_executed": 0,
+            "episodes_passed": 0, "model_invocations": 40,
+            "simulator_integration_allowed": False,
+            "real_rgb_generalization_verified": False, "device_input_allowed": False,
+            "input_commands_sent": 0, "video_dev_opened": False, "video_test_opened": False,
+        }
+        failure_report["report_sha256"] = _canonical_sha256(failure_report)
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
+        staging = Path(tempfile.mkdtemp(prefix=".movement-change-replay-", dir=output_dir.parent))
+        (staging / "report.json").write_text(
+            json.dumps(failure_report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        staging.rename(output_dir)
+        return failure_report
+    for episode in range(10):
+        route = routes[episode % len(routes)]
+        start = cast(tuple[int, int], tuple(map(int, cast(list[int], route["start"]))))
+        goals = [cast(tuple[int, int], tuple(map(int, row)))
+                 for row in cast(list[list[int]], route["goals"])]
+        arena = RichPixelArena(ArenaConfig(
+            max_ticks=64, blue_start=start, red_start=(13, 3), tower_damage=0,
+            minion_damage=0, minion_spawn_every_ticks=1000,
+        ))
+        arena.reset(200_000 + episode)
+        previous: StageAMovement = "STOP"
+        old_goal = start
+        steps: list[dict[str, object]] = []
+        for version, goal in enumerate(goals, start=1):
+            raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+            position = (raw["x"], raw["y"])
+            if position != old_goal:
+                raise ValueError("change replay segment does not start at prior goal")
+            seed = 300_000 + episode * 1000 + version * 20
+            expected, predicted, confidence, _clip_hash = infer_change(
+                position, old_goal, goal, seed
+            )
+            confidences.append(confidence)
+            command = _movement_command(previous, predicted)
+            before = position
+            arena.step(to_arena_action(predicted), wait_action())
+            after_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+            after = (after_raw["x"], after_raw["y"])
+            steps.append({"kind": "MODEL_CHANGE", "goal_version": version,
+                          "position_before": list(before), "position_after": list(after),
+                          "goal": list(goal), "expected": expected, "predicted": predicted,
+                          "confidence": confidence, "executor_command": command})
+            invocation_correct += int(predicted == expected)
+            direction_counts[predicted] += 1
+            previous = predicted
+            raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+            before = (raw["x"], raw["y"])
+            command = _movement_command(previous, previous)
+            arena.step(to_arena_action(previous), wait_action())
+            after_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+            after = (after_raw["x"], after_raw["y"])
+            steps.append({"kind": "EXECUTOR_KEEP", "goal_version": version,
+                          "position_before": list(before), "position_after": list(after),
+                          "goal": list(goal), "applied": previous, "executor_command": command})
+            keep_steps += int(command == "KEEP")
+            if after != goal:
+                raise ValueError("change replay persistence did not reach waypoint")
+            command = _movement_command(previous, "STOP")
+            arena.step(wait_action(), wait_action())
+            stopped_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+            stopped = (stopped_raw["x"], stopped_raw["y"])
+            steps.append({"kind": "ROUTER_STOP", "goal_version": version,
+                          "position_before": list(after), "position_after": list(stopped),
+                          "goal": list(goal), "applied": "STOP", "executor_command": command})
+            router_stops += int(command == "UP" and stopped == goal)
+            previous = "STOP"
+            old_goal = goal
+        episode_rows.append({"episode_id": f"change-replay-{episode:02d}",
+                             "route_id": episode % len(routes), "steps": steps,
+                             "completed_waypoints": len(goals),
+                             "success": len(steps) == 12 and old_goal == goals[-1]})
+    passed = (
+        invocation_correct == 40 and keep_steps == 40 and router_stops == 40
+        and all(row["success"] for row in episode_rows)
+        and all(direction_counts.values())
+    )
+    report: dict[str, object] = {
+        "schema_version": "movement-change-replay-report-v1",
+        "status": "PASSED" if passed else "FAILED", "passed": passed,
+        "contract_sha256": config["contract_sha256"],
+        "pilot_report_file_sha256": _sha256(pilot_report_path),
+        "checkpoint_sha256": _sha256(checkpoint_path),
+        "selected_model": "task_specific_last_frame_587080", "device": str(device),
+        "episodes": episode_rows,
+        "episodes_passed": sum(bool(row["success"]) for row in episode_rows),
+        "model_invocations": 40, "model_invocation_correct": invocation_correct,
+        "executor_keep_steps": keep_steps, "router_stop_steps": router_stops,
+        "direction_counts": direction_counts, "minimum_confidence": min(confidences),
+        "elapsed_seconds": time.monotonic() - started,
+        "model_called_on_keep": False, "model_outputs_stop": False,
+        "simulator_only": True, "real_rgb_generalization_verified": False,
+        "device_input_allowed": False, "input_commands_sent": 0,
+        "video_dev_opened": False, "video_test_opened": False,
+    }
+    report["report_sha256"] = _canonical_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".movement-change-replay-", dir=output_dir.parent))
     (staging / "report.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

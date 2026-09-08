@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The selected simulator checkpoint failed multi-waypoint preflight20/40 and executed zero formal
+arena steps. E/W are0/10 because the dataset placed every E/W example on row3; routes at rows2/4
+expose a position shortcut. The checkpoint is rejected. The next step changes simulator data only:
+cover E/W on rows2/3/4 and use position-held-out dev before any retraining.
+
 The simulator change-policy comparison passes. GRU and last-frame models both reach train/dev
 accuracy and macro-F11.0 with all recalls1.0. The predeclared simplicity rule selects the587,080
 parameter last-frame checkpoint; GRU adds99,072 parameters without performance gain. This model

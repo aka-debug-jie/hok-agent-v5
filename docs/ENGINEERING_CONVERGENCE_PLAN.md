@@ -2,6 +2,11 @@
 
 ## 当前接续：从真实摇杆反馈生成监督
 
+多waypoint回放在正式预检失败20/40，arena step保持0。N/S和四个斜向全部正确，E/W均为
+0/10：原数据把E/W与玩家固定在y=3绑定，模拟dev也复用了该模式；新路线在y=2/4时暴露
+位置捷径。当前checkpoint与路线重试关闭。下一步只修模拟数据覆盖，让E/W分别出现在
+y=2/3/4，并以位置分组构造held-out dev；先物化和验证，不调整模型、阈值或真实接口。
+
 change-policy模拟对照通过：GRU与last-frame均达到train/dev accuracy1.0、macro-F11.0、八类
 recall1.0。按预先简化规则选择587080参数last-frame，较GRU少99072参数且无需时序状态；
 最佳epoch5。该checkpoint仅允许模拟集成。下一步离线运行多waypoint episode：仅Macro目标

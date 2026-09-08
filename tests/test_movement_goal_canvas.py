@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "configs" / "movement_goal_canvas_overfit32_v1.json"
 STAGE_C_CONTRACT = ROOT / "configs" / "movement_goal_canvas_stage_c_v1.json"
 LOCALIZED_CONTRACT = ROOT / "configs" / "movement_goal_canvas_localized_v1.json"
+CHANGE_REPLAY_CONTRACT = ROOT / "configs" / "movement_change_replay_v1.json"
 
 
 def test_change_only_route_separates_policy_persistence_and_stop() -> None:
@@ -54,6 +55,25 @@ def test_change_event_samples_are_balanced_grouped_and_goal_conditioned() -> Non
     assert all(not np.array_equal(clip[-2], clip[-1]) for clip in clips)
     assert all(row["old_direction"] != row["target_direction"] for row in rows)
     assert not any(row["target_direction"] == "STOP" for row in rows)
+
+
+def test_change_replay_routes_are_two_cell_segments_and_cover_all_directions() -> None:
+    from hok_agent.movement_mvp import MOVEMENT_ACTIONS, rule_movement
+
+    contract = json.loads(CHANGE_REPLAY_CONTRACT.read_text())
+    supplied = contract.pop("contract_sha256")
+    assert supplied == _object_sha256(contract)
+    directions = []
+    for route in contract["routes"]:
+        position = tuple(route["start"])
+        for raw_goal in route["goals"]:
+            goal = tuple(raw_goal)
+            directions.append(rule_movement(position, goal))
+            assert max(abs(goal[0] - position[0]), abs(goal[1] - position[1])) == 2
+            position = goal
+    assert set(directions) == set(MOVEMENT_ACTIONS[1:])
+    assert contract["expected_model_invocations"] == 40
+    assert contract["expected_keep_steps"] == contract["expected_router_stops"] == 40
 
 
 def _inputs(tmp_path: Path) -> tuple[Path, Path]:
