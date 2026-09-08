@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The new change-only Movement contract passes. A model may emit only eight directions and is called
+only when a Macro goal version changes or recovery requests reconsideration. The executor owns
+`KEEP`; Router owns goal-reached/unknown/terminal `STOP`. The next step is a fresh simulator-only
+change-event dataset with an observable hollow Macro goal ring, before any new training.
+
 Direction persistence is now solved deterministically: previous-direction prediction is exact on
 all203 train and80 dev continuation targets, and the existing executor maps every same-direction
 request to `KEEP`. Learned continuation is therefore closed. Future Movement learning should only

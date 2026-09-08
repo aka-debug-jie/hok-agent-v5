@@ -424,13 +424,30 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: DETERMINISTIC_DIRECTION_PERSISTENCE_EXACT
-BLOCKING FAILURE: no observable target for learned direction change; persistence itself is solved
-NEXT ACCEPTANCE: change-only Movement contract conditioned on a separately observable Macro goal
-COMMAND STATUS: persistence203/203 train,80/80 dev; all executor commands KEEP; no model/input/test
+CURRENT STATUS: CHANGE_ONLY_MOVEMENT_CONTRACT_PASSED
+BLOCKING FAILURE: change-event RGB dataset and learned goal-conditioned policy do not exist
+NEXT ACCEPTANCE: new simulator-only change-event dataset with hollow Macro goal ring; no training
+COMMAND STATUS: 8 change/8 persist/8 same-direction/3 Router STOP cases; no model/input/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Change-only Movement contract (2026-09-08)
+
+- Added a hash-bound change-only contract on the existing synthetic hollow-goal-ring canvas.
+  The model vocabulary is N/S/W/E/NW/NE/SW/SE; previous action is execution state, never Actor input.
+- The model is invoked only for Macro goal-version change, stuck recovery or respawn reset.
+  Eight opposite-direction change cases produce the expected target and executor `MOVE`.
+  Eight same-direction goal-change cases invoke the policy but resolve to executor `KEEP`.
+- Eight steady cases skip the model and use deterministic `KEEP`. Goal reached, unknown goal and
+  terminal cases skip the model and produce Router `STOP`/executor `UP`. Model never outputs STOP.
+- Status `CHANGE_ONLY_MOVEMENT_CONTRACT_PASSED`; report file SHA-256
+  `d21028844ad9cd4ee2fbd5fbff5a17810d7e288e596ef0e066a67975851de528`.
+  The report binds the exact persistence evidence and both Movement source files.
+- No model, training, GPU, phone, video-dev or video-test. This defines responsibility only; it
+  does not establish learned direction changes or gameplay quality.
+- Next: materialize a separately versioned simulator change-event dataset using the same eight
+  direction targets and observable goal ring. No failed checkpoint reuse.
 
 ### Deterministic direction persistence (2026-09-08)
 

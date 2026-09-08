@@ -82,6 +82,9 @@ load a checkpoint, choose a new direction or claim gameplay performance.
 That audit passed exactly on203/80 samples and all eight executor mappings return `KEEP`.
 Learned continuation and its checkpoints are now closed. Future Movement learning must target
 direction change conditioned on a separately observable Macro goal; persistence remains deterministic.
+The next contract may reuse synthetic hollow-goal-ring RGB only. The model vocabulary is eight
+directions and invocation occurs only on Macro goal-version change, stuck recovery or respawn
+reset. Executor owns persistence; Router owns STOP/unknown/terminal. No training or phone input.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.

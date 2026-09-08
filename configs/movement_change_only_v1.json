@@ -1,0 +1,20 @@
+{
+  "schema_version": "movement-change-only-contract-v1",
+  "contract_sha256": "fb6e4eecda1039ee51c501ceedbddc32a3453ef02da2f6da56ac476d2c5af5bd",
+  "persistence_report_file_sha256": "8ff2a3e2c54be71ac8f3e8c19c5211e69ee62572ff135969bb4aefbcbcee7fc3",
+  "step_duration_ms": 100,
+  "model_action_order": ["N", "S", "W", "E", "NW", "NE", "SW", "SE"],
+  "model_invocation_events": ["macro_goal_version_changed", "stuck_recovery", "death_respawn_reset"],
+  "persistence_owner": "deterministic_executor",
+  "stop_owner": "deterministic_router",
+  "actor_input": "16_frame_rgb_with_hollow_macro_goal_ring",
+  "previous_action_is_actor_input": false,
+  "unknown_goal_action": "STOP",
+  "goal_reached_action": "STOP",
+  "terminal_action": "STOP",
+  "model_training_allowed": false,
+  "checkpoint_promotion_allowed": false,
+  "device_input_allowed": false,
+  "video_dev_allowed": false,
+  "video_test_allowed": false
+}

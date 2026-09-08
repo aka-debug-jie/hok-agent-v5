@@ -93,6 +93,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-continuation-audit",
             "joystick-materialize-continuation",
             "joystick-persistence-audit",
+            "change-contract",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1574,6 +1575,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
+            elif args.mode == "change-contract":
+                if args.prior_report is None:
+                    raise ValueError("change-contract requires --prior-report")
+                from hok_agent.movement_goal_canvas import run_change_only_contract
+
+                result = run_change_only_contract(
+                    args.config, args.prior_report, args.output_dir
+                )
             elif args.mode == "joystick-persistence-audit":
                 if args.dataset is None or args.source_run is None:
                     raise ValueError("persistence audit requires dataset and source-run")

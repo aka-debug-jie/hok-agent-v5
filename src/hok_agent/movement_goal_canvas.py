@@ -13,6 +13,7 @@ import numpy as np
 from hok_agent.movement_mvp import (
     MOVEMENT_ACTIONS,
     StageAMovement,
+    _movement_command,
     rule_movement_in_range,
     stage_c_arena,
     stage_c_scenarios,
@@ -88,6 +89,128 @@ def goal_canvas_geometry_movement(frame: np.ndarray) -> StageAMovement:
     delta_x = round((float(goal_x.mean()) - float(player_x.mean())) / (104 / 14))
     delta_y = round((float(goal_y.mean()) - float(player_y.mean())) / 32)
     return rule_movement_in_range((0, 0), (delta_x, delta_y))
+
+
+CHANGE_MODEL_ACTIONS = MOVEMENT_ACTIONS[1:]
+CHANGE_EVENTS = ("macro_goal_version_changed", "stuck_recovery", "death_respawn_reset")
+
+
+def change_only_route(
+    previous_action: StageAMovement,
+    goal_frame: np.ndarray | None,
+    event: str,
+    *,
+    terminal: bool = False,
+) -> dict[str, object]:
+    """Apply a geometry teacher only at change events; runtime models replace that teacher."""
+    if terminal:
+        return {"model_invoked": False, "model_target": None, "applied_action": "STOP",
+                "executor_command": _movement_command(previous_action, "STOP"),
+                "owner": "deterministic_router", "reason": "terminal"}
+    if goal_frame is None:
+        return {"model_invoked": False, "model_target": None, "applied_action": "STOP",
+                "executor_command": _movement_command(previous_action, "STOP"),
+                "owner": "deterministic_router", "reason": "unknown_goal"}
+    desired = goal_canvas_geometry_movement(goal_frame)
+    if desired == "STOP":
+        return {"model_invoked": False, "model_target": None, "applied_action": "STOP",
+                "executor_command": _movement_command(previous_action, "STOP"),
+                "owner": "deterministic_router", "reason": "goal_reached"}
+    if event not in CHANGE_EVENTS:
+        return {"model_invoked": False, "model_target": None,
+                "applied_action": previous_action,
+                "executor_command": _movement_command(previous_action, previous_action),
+                "owner": "deterministic_executor", "reason": "persist"}
+    return {"model_invoked": True, "model_target": desired, "applied_action": desired,
+            "executor_command": _movement_command(previous_action, desired),
+            "owner": "change_policy", "reason": event}
+
+
+def run_change_only_contract(
+    contract_path: Path, persistence_report_path: Path, output_dir: Path,
+) -> dict[str, object]:
+    contract = _load_bound(contract_path, "contract_sha256")
+    persistence = _load_bound(persistence_report_path, "report_sha256")
+    expected = {
+        "schema_version": "movement-change-only-contract-v1",
+        "persistence_report_file_sha256": _file_sha256(persistence_report_path),
+        "step_duration_ms": 100,
+        "model_action_order": list(CHANGE_MODEL_ACTIONS),
+        "model_invocation_events": list(CHANGE_EVENTS),
+        "persistence_owner": "deterministic_executor",
+        "stop_owner": "deterministic_router",
+        "actor_input": "16_frame_rgb_with_hollow_macro_goal_ring",
+        "previous_action_is_actor_input": False,
+        "unknown_goal_action": "STOP", "goal_reached_action": "STOP",
+        "terminal_action": "STOP", "model_training_allowed": False,
+        "checkpoint_promotion_allowed": False, "device_input_allowed": False,
+        "video_dev_allowed": False, "video_test_allowed": False,
+    }
+    unsigned = {key: value for key, value in contract.items() if key != "contract_sha256"}
+    if (unsigned != expected
+            or persistence.get("status") != "DETERMINISTIC_DIRECTION_PERSISTENCE_EXACT"):
+        raise ValueError("change-only contract differs")
+    if output_dir.exists():
+        raise ValueError("change-only output exists")
+    marker = {"radius": 7, "thickness": 2, "rgb": [245, 225, 45]}
+    direction_positions: dict[StageAMovement, tuple[tuple[int, int], tuple[int, int]]] = {
+        "N": ((7, 4), (7, 2)), "S": ((7, 2), (7, 4)),
+        "W": ((8, 3), (6, 3)), "E": ((6, 3), (8, 3)),
+        "NW": ((8, 4), (6, 2)), "NE": ((6, 4), (8, 2)),
+        "SW": ((8, 2), (6, 4)), "SE": ((6, 2), (8, 4)),
+    }
+    opposite: dict[StageAMovement, StageAMovement] = {
+        "N": "S", "S": "N", "W": "E", "E": "W",
+        "NW": "SE", "NE": "SW", "SW": "NE", "SE": "NW",
+    }
+    changes: list[dict[str, object]] = []
+    keeps: list[dict[str, object]] = []
+    same_direction_changes: list[dict[str, object]] = []
+    for index, action in enumerate(CHANGE_MODEL_ACTIONS):
+        position, goal = direction_positions[action]
+        frame = render_goal_minimap(position, goal, 900 + index, marker)
+        change = change_only_route(opposite[action], frame, "macro_goal_version_changed")
+        keep = change_only_route(action, frame, "none")
+        same = change_only_route(action, frame, "macro_goal_version_changed")
+        if (change["model_target"] != action or change["executor_command"] != "MOVE"
+                or keep["applied_action"] != action or keep["executor_command"] != "KEEP"
+                or same["model_target"] != action or same["executor_command"] != "KEEP"):
+            raise ValueError("change-only direction case differs")
+        frame_hash = hashlib.sha256(frame.tobytes()).hexdigest()
+        changes.append({"expected": action, "frame_sha256": frame_hash, **change})
+        keeps.append({"expected": action, "frame_sha256": frame_hash, **keep})
+        same_direction_changes.append({"expected": action, "frame_sha256": frame_hash, **same})
+    reached = render_goal_minimap((7, 3), (7, 3), 999, marker)
+    stops = {
+        "goal_reached": change_only_route("E", reached, "macro_goal_version_changed"),
+        "unknown_goal": change_only_route("E", None, "macro_goal_version_changed"),
+        "terminal": change_only_route("E", reached, "none", terminal=True),
+    }
+    if any(row["applied_action"] != "STOP" or row["model_invoked"]
+           for row in stops.values()):
+        raise ValueError("change-only stop ownership differs")
+    report: dict[str, object] = {
+        "schema_version": "movement-change-only-contract-report-v1",
+        "contract_sha256": contract["contract_sha256"],
+        "persistence_report_file_sha256": _file_sha256(persistence_report_path),
+        "movement_goal_canvas_source_sha256": _file_sha256(Path(__file__)),
+        "movement_runtime_source_sha256": _file_sha256(Path(__file__).with_name("movement_mvp.py")),
+        "status": "CHANGE_ONLY_MOVEMENT_CONTRACT_PASSED",
+        "model_action_order": list(CHANGE_MODEL_ACTIONS),
+        "change_cases": changes, "persist_cases": keeps,
+        "same_direction_goal_change_cases": same_direction_changes, "stop_cases": stops,
+        "model_invocation_count": len(changes) + len(same_direction_changes),
+        "persistence_count": len(keeps), "router_stop_count": len(stops),
+        "model_outputs_stop": False, "previous_action_is_actor_input": False,
+        "model_runs": 0, "training_allowed": False, "checkpoint_allowed": False,
+        "input_commands_sent": 0, "video_dev_opened": False, "video_test_opened": False,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".movement-change-only-", dir=output_dir.parent))
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return report
 
 
 def _warmup(position: tuple[int, int], goal: tuple[int, int]) -> tuple[str, str]:

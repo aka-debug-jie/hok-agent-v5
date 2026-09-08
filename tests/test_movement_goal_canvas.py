@@ -8,7 +8,9 @@ import numpy as np
 import pytest
 
 from hok_agent.movement_goal_canvas import (
+    CHANGE_MODEL_ACTIONS,
     _object_sha256,
+    change_only_route,
     materialize_goal_canvas_overfit32,
     materialize_goal_canvas_trajectories,
     materialize_localized_overfit32,
@@ -20,6 +22,26 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "configs" / "movement_goal_canvas_overfit32_v1.json"
 STAGE_C_CONTRACT = ROOT / "configs" / "movement_goal_canvas_stage_c_v1.json"
 LOCALIZED_CONTRACT = ROOT / "configs" / "movement_goal_canvas_localized_v1.json"
+
+
+def test_change_only_route_separates_policy_persistence_and_stop() -> None:
+    marker = {"radius": 7, "thickness": 2, "rgb": [245, 225, 45]}
+    east = render_goal_minimap((6, 3), (8, 3), 1, marker)
+    reached = render_goal_minimap((7, 3), (7, 3), 2, marker)
+    changed = change_only_route("W", east, "macro_goal_version_changed")
+    same = change_only_route("E", east, "macro_goal_version_changed")
+    persisted = change_only_route("E", east, "none")
+    assert changed["model_target"] == "E" and changed["executor_command"] == "MOVE"
+    assert same["model_target"] == "E" and same["executor_command"] == "KEEP"
+    assert not persisted["model_invoked"] and persisted["executor_command"] == "KEEP"
+    for stopped in (
+        change_only_route("E", reached, "macro_goal_version_changed"),
+        change_only_route("E", None, "macro_goal_version_changed"),
+        change_only_route("E", east, "none", terminal=True),
+    ):
+        assert not stopped["model_invoked"] and stopped["applied_action"] == "STOP"
+        assert stopped["owner"] == "deterministic_router"
+    assert "STOP" not in CHANGE_MODEL_ACTIONS and len(CHANGE_MODEL_ACTIONS) == 8
 
 
 def _inputs(tmp_path: Path) -> tuple[Path, Path]:

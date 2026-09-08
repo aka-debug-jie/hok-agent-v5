@@ -2,6 +2,12 @@
 
 ## 当前接续：从真实摇杆反馈生成监督
 
+change-only 合同已通过：模型只在Macro目标版本变化、卡住恢复或复活重置时调用，只输出
+八方向；previous_action不进入Actor。稳态由执行器KEEP，目标到达/未知/终局由Router STOP。
+8个方向变化、8个稳态、8个同方向新目标和3个STOP边界均通过。下一步使用现有目标环
+画布生成独立simulator change-event数据集，先验证目标与标签因果关系，不训练模型、
+不复用任何失败checkpoint，也不将模拟结果描述成真实游戏转向能力。
+
 零参数 persistence 基线在冻结延续数据上达到 train203/203、dev80/80，八方向 recall1.0；
 现有执行器对 previous=current 的八方向全部输出 KEEP，并已有 previous_action 保存/恢复。
 这只证明动作保持，无新转向能力。由此关闭 learned continuation：持续移动由执行器状态
