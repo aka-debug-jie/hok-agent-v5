@@ -424,13 +424,34 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_DIRECTION_CONTINUATION_SUPPORT_PASSED
-BLOCKING FAILURE: eight-direction continuation RGB dataset not materialized; semantics limited to continuation
-NEXT ACCEPTANCE: causal masked 203-train/80-dev dataset; STOP excluded and Router-owned
-COMMAND STATUS: JSON audit only; all direction gates pass; no RGB decode/model/input/video-dev/test
+CURRENT STATUS: JOYSTICK_CONTINUATION_DATASET_VALIDATED
+BLOCKING FAILURE: eight-direction continuation generalization untested; dev W/SW support1/2
+NEXT ACCEPTANCE: one fresh-init 8-head continuation pilot; existing encoder/GRU, new head; Router STOP
+COMMAND STATUS: train203/16 sources; dev80/5; overlap0; 283 clips; no model/input/video-dev/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick continuation dataset (2026-09-08)
+
+- Added `joystick-materialize-continuation`. It binds the continuation audit and all five source
+  reports, then selects every third-or-later equal direction candidate. STOP is absent from both
+  arrays and manifest. Source paths and original-resolution RGB are not persisted.
+- Fixed split produces train203 from16 sources and dev80 from5. Counts train
+  N87/S40/W9/E18/NW14/NE15/SW7/SE13; dev N21/S17/W1/E8/NW5/NE21/SW2/SE5.
+  Both contain all eight directions; W/SW remain rare and must be reported individually.
+- Each sample contains16 masked 128×128 RGB frames ending before the target. Input-label gaps are
+  train81–100ms and dev82.756–99.933ms. Source overlap0; all283 clip hashes unique; joystick region zero.
+- Output `$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/joystick-continuation-v1`.
+  Dataset SHA-256 `a6b4d566f5ae873e4d74fb35fcccb99e114941d934cbabd37aa0d4422b26f85a`;
+  manifest file/self `797f77c8b54cef49119a631e07e0ac59f487ea7a4b2a8c064147cd8c5b36a75e` /
+  `1c43637833d8163199add19afdfee426cec9141fb37e3891b89e5023669b10d4`.
+  Compressed dataset153.4MiB; independent verify-only passed.
+- Status `JOYSTICK_CONTINUATION_DATASET_VALIDATED`. One fresh-init eight-class pilot may reuse
+  the existing spatial encoder/GRU architecture with a new eight-output head and balanced sampling.
+  No checkpoint reuse. Router retains STOP. Capability is continuation only.
+- No GPU/model/input/video-dev/test. Focused tests, Ruff, strict mypy, project safety and diff checks
+  are required before commit.
 
 ### Joystick continuation target audit (2026-09-08)
 

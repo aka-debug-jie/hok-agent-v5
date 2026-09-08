@@ -3268,6 +3268,7 @@ def run_joystick_transfer(
 
 
 JOYSTICK_ACTIONS = ("STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE")
+JOYSTICK_CONTINUATION_ACTIONS = JOYSTICK_ACTIONS[1:]
 JOYSTICK_PILOT_DEV_SOURCES = {
     "0e34a785656d464bd946559e9a7ac9602ef2ffcd0e7a9c6d8ba265f37261de24",
     "12214351b55ac24beffe2c52b77464e009120a3a3cc69fc7cb17adcfe1f87e39",
@@ -3402,6 +3403,50 @@ def select_joystick_grouped_pilot(
     return result
 
 
+def select_joystick_continuation(
+    sessions: list[dict[str, object]],
+) -> dict[str, list[dict[str, object]]]:
+    result: dict[str, list[dict[str, object]]] = {"train": [], "dev": []}
+    for session in sessions:
+        source_id = str(session["session"])
+        split = "dev" if source_id in JOYSTICK_SCALE21_DEV_SOURCES else "train"
+        for window in cast(list[dict[str, object]], session["windows"]):
+            predictions = cast(list[dict[str, object]], window["predictions"])
+            times = list(map(int, cast(list[int], window["timestamp_us"])))
+            start = 0
+            while start < len(predictions):
+                action = str(predictions[start]["candidate_action"])
+                end = start + 1
+                while (end < len(predictions)
+                       and predictions[end]["candidate_action"] == action):
+                    end += 1
+                if action in JOYSTICK_CONTINUATION_ACTIONS and end - start >= 3:
+                    for index in range(start + 2, end):
+                        result[split].append({
+                            "source_id": source_id, "action": action,
+                            "label_timestamp_us": times[index],
+                            "prior_same_direction_timestamp_us": [
+                                times[index - 2], times[index - 1]
+                            ],
+                            "source_fraction": window["fraction"],
+                            "source_frame_index": index,
+                            "label_rule": "third_or_later_equal_direction_candidate",
+                        })
+                start = end
+    for split, expected in (("train", 203), ("dev", 80)):
+        rows = result[split]
+        rows.sort(key=lambda row: (str(row["source_id"]), cast(int, row["label_timestamp_us"])))
+        counts = Counter(str(row["action"]) for row in rows)
+        if len(rows) != expected or set(counts) != set(JOYSTICK_CONTINUATION_ACTIONS):
+            raise ValueError(f"{split} continuation counts differ")
+        if len({(row["source_id"], row["label_timestamp_us"]) for row in rows}) != len(rows):
+            raise ValueError(f"{split} continuation labels are not unique")
+    if ({str(row["source_id"]) for row in result["train"]}
+            & {str(row["source_id"]) for row in result["dev"]}):
+        raise ValueError("continuation source groups overlap")
+    return result
+
+
 def _masked_actor_frame(rgb: np.ndarray) -> np.ndarray:
     import cv2
 
@@ -3518,6 +3563,7 @@ def validate_joystick_overfit32(output_dir: Path) -> dict[str, object]:
 def _validate_joystick_grouped_dataset(
     output_dir: Path, *, dataset_name: str, expected_samples: tuple[int, int],
     expected_sources: tuple[int, int], dev_sources: set[str], status: str,
+    action_order: tuple[str, ...] = JOYSTICK_ACTIONS,
 ) -> dict[str, object]:
     manifest = _load_bound_json(output_dir / "manifest.json", "manifest_sha256")
     dataset_path = output_dir / dataset_name
@@ -3541,8 +3587,8 @@ def _validate_joystick_grouped_dataset(
                 raise ValueError(f"{split} grouped timing is not causal")
             if np.any(clips[:, :, round(128 * 0.45):, :round(128 * 0.35)]):
                 raise ValueError(f"{split} grouped Actor input contains joystick pixels")
-            counts = dict(Counter(JOYSTICK_ACTIONS[int(label)] for label in labels))
-            if set(counts) != set(JOYSTICK_ACTIONS):
+            counts = dict(Counter(action_order[int(label)] for label in labels))
+            if set(counts) != set(action_order):
                 raise ValueError(f"{split} grouped labels lack a class")
             source_sets[split] = set(map(str, sources.tolist()))
             all_hashes.extend(hashlib.sha256(clip.tobytes()).hexdigest() for clip in clips)
@@ -3575,6 +3621,123 @@ def validate_joystick_scale21_dataset(output_dir: Path) -> dict[str, object]:
         dev_sources=JOYSTICK_SCALE21_DEV_SOURCES,
         status="JOYSTICK_SCALE21_GROUPED_DATASET_VALIDATED",
     )
+
+
+def validate_joystick_continuation_dataset(output_dir: Path) -> dict[str, object]:
+    return _validate_joystick_grouped_dataset(
+        output_dir, dataset_name="joystick-continuation-grouped.npz",
+        expected_samples=(203, 80), expected_sources=(16, 5),
+        dev_sources=JOYSTICK_SCALE21_DEV_SOURCES,
+        status="JOYSTICK_CONTINUATION_DATASET_VALIDATED",
+        action_order=JOYSTICK_CONTINUATION_ACTIONS,
+    )
+
+
+def run_joystick_materialize_continuation(
+    source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
+    audit_run: Path, output_dir: Path, *, verify_only: bool = False,
+) -> dict[str, object]:
+    if verify_only:
+        return validate_joystick_continuation_dataset(output_dir)
+    if output_dir.exists():
+        raise ValueError("continuation dataset output exists")
+    audit = _load_bound_json(audit_run / "report.json", "report_sha256")
+    if (audit.get("schema_version") != "joystick-continuation-support-audit-v1"
+            or audit.get("status") != "JOYSTICK_DIRECTION_CONTINUATION_SUPPORT_PASSED"
+            or audit.get("dataset_materialization_allowed") is not True
+            or audit.get("learned_action_space") != list(JOYSTICK_CONTINUATION_ACTIONS)
+            or audit.get("stop_owner") != "deterministic_router"):
+        raise ValueError("continuation audit does not allow materialization")
+    scale_run = audit_run.parent / "joystick-scale24-audit-v2-landscape-subset"
+    sessions, report_hashes = _joystick_scale21_sessions(audit_run.parent, scale_run)
+    if report_hashes != audit["source_report_file_sha256"]:
+        raise ValueError("continuation source report bindings differ")
+    selected = select_joystick_continuation(sessions)
+    from hok_agent import pre_ingest
+    from hok_agent.v5_data import load_automatic_cohort
+
+    source_ids = {str(row["source_id"]) for rows in selected.values() for row in rows}
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    if any(cohort.session_splits.get(source_id) != "train" for source_id in source_ids):
+        raise ValueError("continuation sources must all be cohort train")
+    sources: dict[str, Path] = {}
+    for path in pre_ingest._scan(source_root):
+        identity = pre_ingest._sha(pre_ingest._canonical([
+            "candidate-v2-file-atomic", path.relative_to(source_root).as_posix(),
+            pre_ingest._stat_signature(path.stat()),
+        ]))
+        if identity in source_ids:
+            sources[identity] = path
+    if set(sources) != source_ids:
+        raise ValueError("continuation source videos unavailable")
+    arrays: dict[str, np.ndarray] = {}
+    manifest_rows: dict[str, list[dict[str, object]]] = {}
+    for split in ("train", "dev"):
+        clips: list[np.ndarray] = []
+        timestamps: list[np.ndarray] = []
+        rows: list[dict[str, object]] = []
+        for index, selection in enumerate(selected[split]):
+            source_id = str(selection["source_id"])
+            path = sources[source_id]
+            if pre_ingest._candidate(path, source_root).candidate_id != source_id:
+                raise ValueError("continuation source identity changed")
+            label_us = cast(int, selection["label_timestamp_us"])
+            clip, times = _actor_window_before_label(path, label_us)
+            rows.append({
+                **selection, "sample_id": f"{split}-{index:03d}",
+                "label_id": JOYSTICK_CONTINUATION_ACTIONS.index(str(selection["action"])),
+                "input_start_timestamp_us": int(times[0]),
+                "input_end_timestamp_us": int(times[-1]),
+                "actual_input_label_gap_us": label_us - int(times[-1]),
+                "rgb_sha256": hashlib.sha256(clip.tobytes()).hexdigest(),
+            })
+            clips.append(clip)
+            timestamps.append(times)
+        arrays[f"{split}_rgb"] = np.stack(clips)
+        arrays[f"{split}_label"] = np.asarray(
+            [row["label_id"] for row in rows], dtype=np.int64
+        )
+        arrays[f"{split}_input_timestamp_us"] = np.stack(timestamps)
+        arrays[f"{split}_label_timestamp_us"] = np.asarray(
+            [row["label_timestamp_us"] for row in rows], dtype=np.int64
+        )
+        arrays[f"{split}_source_id"] = np.asarray(
+            [row["source_id"] for row in rows], dtype="U64"
+        )
+        manifest_rows[split] = rows
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-continuation-", dir=output_dir.parent))
+    dataset_path = staging / "joystick-continuation-grouped.npz"
+    np.savez_compressed(
+        dataset_path,
+        train_rgb=arrays["train_rgb"], train_label=arrays["train_label"],
+        train_input_timestamp_us=arrays["train_input_timestamp_us"],
+        train_label_timestamp_us=arrays["train_label_timestamp_us"],
+        train_source_id=arrays["train_source_id"],
+        dev_rgb=arrays["dev_rgb"], dev_label=arrays["dev_label"],
+        dev_input_timestamp_us=arrays["dev_input_timestamp_us"],
+        dev_label_timestamp_us=arrays["dev_label_timestamp_us"],
+        dev_source_id=arrays["dev_source_id"],
+    )
+    manifest: dict[str, object] = {
+        "schema_version": "joystick-continuation-dataset-v1",
+        "dataset": dataset_path.name, "dataset_sha256": _file_sha256(dataset_path),
+        "action_order": JOYSTICK_CONTINUATION_ACTIONS,
+        "train_sources": 16, "dev_sources": 5,
+        "dev_source_ids": sorted(JOYSTICK_SCALE21_DEV_SOURCES),
+        "samples": manifest_rows, "input_shape": [16, 128, 128, 3],
+        "input_dtype": "uint8_rgb", "source_report_file_sha256": report_hashes,
+        "continuation_audit_file_sha256": _file_sha256(audit_run / "report.json"),
+        "target_rule": "third or later equal direction; two prior same-direction candidates",
+        "stop_owner": "deterministic_router", "semantic_accuracy_verified": False,
+        "continuation_training_allowed": True, "formal_training_allowed": False,
+        "checkpoint_promotion_allowed": False, "video_dev_opened": False,
+        "video_test_opened": False, "input_commands_sent": 0, "gpu_seconds": 0,
+    }
+    manifest["manifest_sha256"] = _object_sha256(manifest)
+    (staging / "manifest.json").write_bytes(_canonical(manifest) + b"\n")
+    staging.rename(output_dir)
+    return validate_joystick_continuation_dataset(output_dir)
 
 
 def run_joystick_materialize_pilot(

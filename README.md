@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The eight-direction continuation dataset is now valid: train203/16 sources, internal-dev80/5,
+source overlap0 and283 unique masked causal clips. It contains no STOP; deterministic Router owns
+stopping. One fresh-init continuation pilot may use the existing spatial encoder/GRU with a new
+eight-output head. Its scope is maintaining established motion, not choosing a new tactical turn.
+
 The onset-versus-continuation audit now passes an eight-direction continuation target: 203 train
 and80 internal-dev samples have two preceding same-direction UI frames. STOP is removed from the
 learned action space and remains deterministic Router behavior because centered-screen semantics

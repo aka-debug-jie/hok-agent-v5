@@ -99,6 +99,36 @@ def test_joystick_continuation_requires_two_prior_frames_and_excludes_stop() -> 
     assert not result["learned_stop_allowed"] and not result["training_allowed"]
 
 
+def test_joystick_continuation_selection_uses_only_third_and_later_frames() -> None:
+    from hok_agent.movement_real_rgb import (
+        JOYSTICK_CONTINUATION_ACTIONS,
+        JOYSTICK_SCALE21_DEV_SOURCES,
+        select_joystick_continuation,
+    )
+
+    train_counts = (87, 40, 9, 18, 14, 15, 7, 13)
+    dev_counts = (21, 17, 1, 8, 5, 21, 2, 5)
+    sessions = []
+    for source_id, counts in (
+        ("train-source", train_counts), (sorted(JOYSTICK_SCALE21_DEV_SOURCES)[0], dev_counts)
+    ):
+        actions = []
+        for action, count in zip(JOYSTICK_CONTINUATION_ACTIONS, counts, strict=True):
+            actions.extend([action] * (count + 2))
+            actions.append("unknown")
+        sessions.append({"session": source_id, "windows": [{
+            "fraction": 0.2, "timestamp_us": [i * 100_000 for i in range(len(actions))],
+            "predictions": [{"candidate_action": action} for action in actions],
+        }]})
+    selected = select_joystick_continuation(sessions)
+    assert len(selected["train"]) == 203 and len(selected["dev"]) == 80
+    assert not any(row["action"] == "STOP" for rows in selected.values() for row in rows)
+    assert all(
+        max(row["prior_same_direction_timestamp_us"]) < row["label_timestamp_us"]
+        for rows in selected.values() for row in rows
+    )
+
+
 def test_joystick_transfer_counts_sessions_not_frames() -> None:
     from hok_agent.movement_real_rgb import joystick_transfer_summary
 

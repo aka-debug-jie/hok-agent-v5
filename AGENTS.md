@@ -65,6 +65,11 @@ deterministic Router action because centered-screen semantics are unresolved. Au
 That audit passed with 203 train/80 dev direction-continuation targets. The next step may
 materialize these frozen indices as an eight-direction dataset with the same 16/5 source split.
 It may not include STOP, change the extractor, train a model or open original video-dev/test.
+Materialization must bind the audit and five candidate reports, preserve the fixed16/5 sources,
+write 203/80 masked causal clips with action order `N,S,W,E,NW,NE,SW,SE`, and verify all hashes.
+That dataset is now validated with283 unique clips. One fresh-init continuation pilot may reuse
+the existing spatial encoder/GRU architecture with a newly initialized eight-output head and
+class-balanced sampling. No prior weights; deterministic Router retains STOP.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.

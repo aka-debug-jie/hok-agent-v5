@@ -91,6 +91,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-materialize-scale21",
             "joystick-train-pilot",
             "joystick-continuation-audit",
+            "joystick-materialize-continuation",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1571,6 +1572,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.pre_ingest,
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
+                    )
+            elif args.mode == "joystick-materialize-continuation":
+                from hok_agent.movement_real_rgb import run_joystick_materialize_continuation
+
+                if args.verify_only:
+                    result = run_joystick_materialize_continuation(
+                        Path(), Path(), Path(), Path(), args.output_dir, verify_only=True
+                    )
+                else:
+                    if (args.source_root is None or args.cohort_dir is None
+                            or args.pre_ingest is None or args.source_run is None):
+                        raise ValueError("continuation materialize requires source/cohort/audit")
+                    result = run_joystick_materialize_continuation(
+                        args.source_root, args.cohort_dir, args.pre_ingest,
+                        args.source_run, args.output_dir,
                     )
             elif args.mode == "joystick-continuation-audit":
                 if args.source_run is None or args.overfit_report is None:
