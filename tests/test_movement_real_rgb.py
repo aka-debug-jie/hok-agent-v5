@@ -95,6 +95,8 @@ def test_joystick_transfer_counts_sessions_not_frames() -> None:
 def test_joystick_scale24_contract_is_fixed_train_only_and_disjoint() -> None:
     from hok_agent.movement_real_rgb import (
         JOYSTICK_FINAL_TRANSFER_SOURCES,
+        JOYSTICK_PILOT_DEV_SOURCES,
+        JOYSTICK_SCALE21_DEV_SOURCES,
         JOYSTICK_TRANSFER_SOURCES,
         NATIVE_PLAYER_SOURCES,
         _load_bound_json,
@@ -112,6 +114,8 @@ def test_joystick_scale24_contract_is_fixed_train_only_and_disjoint() -> None:
     assert config["split"] == "train" and config["extractor_frozen"] is True
     assert config["model_training_allowed"] is False
     assert config["video_dev_allowed"] is False and config["video_test_allowed"] is False
+    added_dev = JOYSTICK_SCALE21_DEV_SOURCES - JOYSTICK_PILOT_DEV_SOURCES
+    assert added_dev <= set(sources)
 
 
 def test_joystick_overfit32_selection_is_balanced_grouped_and_causal() -> None:

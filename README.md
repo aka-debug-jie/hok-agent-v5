@@ -15,6 +15,12 @@ runtime guard passes.
 
 ## Current development plan
 
+The larger grouped dataset is now valid: 201 samples from16 train sources and48 from5 internal-dev
+sources, all nine classes, zero source overlap and249 unique masked causal clips. The dev groups
+were chosen by prior membership plus sorted anonymous hash positions, not action labels. One
+fresh-init scale21 pilot may now reuse the previous model/training contract exactly; failed
+checkpoints and original video-dev/test remain closed.
+
 The frozen extractor now covers 21 train sources after a fixed scale audit. A strict 24-source
 run exposed 11 portrait inputs; the sole repair mechanically retained the 13 landscape sources
 without replacements. Aggregate evidence is 4,160 frames, 1,210 candidates and 27 release STOP

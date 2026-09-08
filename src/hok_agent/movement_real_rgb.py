@@ -3156,6 +3156,12 @@ JOYSTICK_PILOT_DEV_SOURCES = {
     "0e34a785656d464bd946559e9a7ac9602ef2ffcd0e7a9c6d8ba265f37261de24",
     "12214351b55ac24beffe2c52b77464e009120a3a3cc69fc7cb17adcfe1f87e39",
 }
+JOYSTICK_SCALE21_DEV_SOURCES = {
+    *JOYSTICK_PILOT_DEV_SOURCES,
+    "1720186328476967e418016d404814eab4186d6f806c8ff77eb4cbb149c6dab1",
+    "3927aa0891e9712e9122db7dae2832a71332d9744da78b404cbc75bdb97e55d2",
+    "493cf58d4f09b0dd0e0e0b25c1a58eaa141874ef4a51b010e6ac3d64a85b1417",
+}
 
 
 def select_joystick_overfit32(
@@ -3221,12 +3227,15 @@ def select_joystick_overfit32(
 
 
 def select_joystick_grouped_pilot(
-    sessions: list[dict[str, object]],
+    sessions: list[dict[str, object]], *,
+    dev_sources: set[str] | None = None,
+    expected_samples: tuple[int, int] = (73, 25),
 ) -> dict[str, list[dict[str, object]]]:
+    selected_dev = JOYSTICK_PILOT_DEV_SOURCES if dev_sources is None else dev_sources
     result: dict[str, list[dict[str, object]]] = {"train": [], "dev": []}
     for session in sessions:
         source_id = str(session["session"])
-        split = "dev" if source_id in JOYSTICK_PILOT_DEV_SOURCES else "train"
+        split = "dev" if source_id in selected_dev else "train"
         windows = cast(list[dict[str, object]], session["windows"])
         for window in windows:
             predictions = cast(list[dict[str, object]], window["predictions"])
@@ -3269,9 +3278,10 @@ def select_joystick_grouped_pilot(
             raise ValueError(f"{split} pilot labels are not unique")
     train_sources = {str(row["source_id"]) for row in result["train"]}
     dev_sources = {str(row["source_id"]) for row in result["dev"]}
-    if (train_sources & dev_sources or dev_sources != JOYSTICK_PILOT_DEV_SOURCES
-            or len(train_sources) != 6 or len(result["train"]) != 73
-            or len(result["dev"]) != 25):
+    if (train_sources & dev_sources or dev_sources != selected_dev
+            or len(train_sources) != len(sessions) - len(selected_dev)
+            or len(result["train"]) != expected_samples[0]
+            or len(result["dev"]) != expected_samples[1]):
         raise ValueError("pilot source grouping or sample counts differ")
     return result
 
@@ -3349,6 +3359,22 @@ def _joystick_dataset_sessions(root: Path) -> tuple[list[dict[str, object]], dic
     return sessions, {key: _file_sha256(path) for key, path in files.items()}
 
 
+def _joystick_scale21_sessions(
+    root: Path, scale_run: Path,
+) -> tuple[list[dict[str, object]], dict[str, str]]:
+    sessions, hashes = _joystick_dataset_sessions(root)
+    scale_path = scale_run / "report.json"
+    scale = _load_bound_json(scale_path, "report_sha256")
+    if (scale.get("schema_version") != "joystick-scale24-audit-v2-landscape-subset"
+            or scale.get("dev_frames_opened") != 0 or scale.get("test_frames_opened") != 0):
+        raise ValueError("scale21 dataset requires completed train-only scale audit")
+    sessions.extend(cast(list[dict[str, object]], scale["sessions"]))
+    hashes["scale24_landscape_subset"] = _file_sha256(scale_path)
+    if len(sessions) != 21 or len({row["session"] for row in sessions}) != 21:
+        raise ValueError("scale21 dataset requires 21 unique sessions")
+    return sessions, hashes
+
+
 def validate_joystick_overfit32(output_dir: Path) -> dict[str, object]:
     manifest = _load_bound_json(output_dir / "manifest.json", "manifest_sha256")
     dataset_path = output_dir / "joystick-overfit32.npz"
@@ -3373,16 +3399,19 @@ def validate_joystick_overfit32(output_dir: Path) -> dict[str, object]:
             "training_allowed": False}
 
 
-def validate_joystick_grouped_pilot(output_dir: Path) -> dict[str, object]:
+def _validate_joystick_grouped_dataset(
+    output_dir: Path, *, dataset_name: str, expected_samples: tuple[int, int],
+    expected_sources: tuple[int, int], dev_sources: set[str], status: str,
+) -> dict[str, object]:
     manifest = _load_bound_json(output_dir / "manifest.json", "manifest_sha256")
-    dataset_path = output_dir / "joystick-grouped-pilot.npz"
+    dataset_path = output_dir / dataset_name
     if dataset_path.is_symlink() or _file_sha256(dataset_path) != manifest["dataset_sha256"]:
         raise ValueError("grouped joystick dataset hash differs")
     summaries: dict[str, object] = {}
     source_sets: dict[str, set[str]] = {}
     all_hashes: list[str] = []
     with np.load(dataset_path, allow_pickle=False) as data:
-        for split, expected in (("train", 73), ("dev", 25)):
+        for split, expected in zip(("train", "dev"), expected_samples, strict=True):
             clips = data[f"{split}_rgb"]
             labels = data[f"{split}_label"]
             times = data[f"{split}_input_timestamp_us"]
@@ -3403,38 +3432,78 @@ def validate_joystick_grouped_pilot(output_dir: Path) -> dict[str, object]:
             all_hashes.extend(hashlib.sha256(clip.tobytes()).hexdigest() for clip in clips)
             summaries[split] = {"samples": expected, "classes": counts,
                                 "sources": len(source_sets[split])}
-    if (source_sets["train"] & source_sets["dev"] or len(source_sets["train"]) != 6
-            or source_sets["dev"] != JOYSTICK_PILOT_DEV_SOURCES
-            or len(set(all_hashes)) != 98):
+    if (source_sets["train"] & source_sets["dev"]
+            or len(source_sets["train"]) != expected_sources[0]
+            or source_sets["dev"] != dev_sources
+            or len(set(all_hashes)) != sum(expected_samples)):
         raise ValueError("grouped source isolation or clip uniqueness differs")
-    return {"status": "JOYSTICK_GROUPED_PILOT_DATASET_VALIDATED", "splits": summaries,
-            "source_overlap": 0, "unique_actor_clips": 98, "causal": True,
+    return {"status": status, "splits": summaries,
+            "source_overlap": 0, "unique_actor_clips": sum(expected_samples), "causal": True,
             "joystick_pixels_zero": True, "pilot_training_allowed": True,
             "formal_training_allowed": False}
+
+
+def validate_joystick_grouped_pilot(output_dir: Path) -> dict[str, object]:
+    return _validate_joystick_grouped_dataset(
+        output_dir, dataset_name="joystick-grouped-pilot.npz",
+        expected_samples=(73, 25), expected_sources=(6, 2),
+        dev_sources=JOYSTICK_PILOT_DEV_SOURCES,
+        status="JOYSTICK_GROUPED_PILOT_DATASET_VALIDATED",
+    )
+
+
+def validate_joystick_scale21_dataset(output_dir: Path) -> dict[str, object]:
+    return _validate_joystick_grouped_dataset(
+        output_dir, dataset_name="joystick-scale21-grouped.npz",
+        expected_samples=(201, 48), expected_sources=(16, 5),
+        dev_sources=JOYSTICK_SCALE21_DEV_SOURCES,
+        status="JOYSTICK_SCALE21_GROUPED_DATASET_VALIDATED",
+    )
 
 
 def run_joystick_materialize_pilot(
     source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
     final_run: Path, overfit_report_path: Path, output_dir: Path,
-    *, verify_only: bool = False,
+    *, verify_only: bool = False, scale21: bool = False,
 ) -> dict[str, object]:
     if verify_only:
-        return validate_joystick_grouped_pilot(output_dir)
+        return (
+            validate_joystick_scale21_dataset(output_dir)
+            if scale21 else validate_joystick_grouped_pilot(output_dir)
+        )
     if output_dir.exists():
         raise ValueError("grouped joystick output exists")
     overfit = _load_bound_json(overfit_report_path, "report_sha256")
-    if (overfit.get("schema_version") != "joystick-overfit32-report-v1"
-            or overfit.get("passed") is not True
-            or overfit.get("checkpoint_promotion_allowed") is not False
-            or overfit.get("generalization_verified") is not False):
+    if scale21:
+        if (overfit.get("schema_version") != "joystick-grouped-pilot-report-v1"
+                or overfit.get("passed") is not False
+                or overfit.get("checkpoint_promotion_allowed") is not False
+                or overfit.get("next_stage_allowed") is not False):
+            raise ValueError("scale21 dataset requires frozen failed grouped pilot")
+    elif (overfit.get("schema_version") != "joystick-overfit32-report-v1"
+          or overfit.get("passed") is not True
+          or overfit.get("checkpoint_promotion_allowed") is not False
+          or overfit.get("generalization_verified") is not False):
         raise ValueError("grouped pilot requires passed diagnostic overfit")
-    conclusion_path = final_run / "cohort-conclusion.json"
+    conclusion_path = final_run / (
+        "conclusion.json" if scale21 else "cohort-conclusion.json"
+    )
     conclusion = cast(dict[str, object], json.loads(conclusion_path.read_text()))
-    sessions, report_hashes = _joystick_dataset_sessions(final_run.parent)
-    if (conclusion.get("status") != "JOYSTICK_8_TRAIN_SOURCE_WEAK_LABEL_SUPPORT_PASSED"
-            or report_hashes != conclusion["bound_report_file_sha256"]):
-        raise ValueError("grouped pilot source bindings differ")
-    selected = select_joystick_grouped_pilot(sessions)
+    if scale21:
+        sessions, report_hashes = _joystick_scale21_sessions(final_run.parent, final_run)
+        if (conclusion.get("status") != "JOYSTICK_SCALE24_LANDSCAPE_SUBSET_PASSED"
+                or conclusion.get("dataset_materialization_allowed") is not True):
+            raise ValueError("scale21 conclusion does not permit materialization")
+        selected = select_joystick_grouped_pilot(
+            sessions, dev_sources=JOYSTICK_SCALE21_DEV_SOURCES,
+            expected_samples=(201, 48),
+        )
+    else:
+        sessions, report_hashes = _joystick_dataset_sessions(final_run.parent)
+        if (conclusion.get("status") != "JOYSTICK_8_TRAIN_SOURCE_WEAK_LABEL_SUPPORT_PASSED"
+                or report_hashes != conclusion["bound_report_file_sha256"]):
+            raise ValueError("grouped pilot source bindings differ")
+        selected = select_joystick_grouped_pilot(sessions)
     from hok_agent import pre_ingest
     from hok_agent.v5_data import load_automatic_cohort
 
@@ -3489,7 +3558,8 @@ def run_joystick_materialize_pilot(
         manifest_rows[split] = rows
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".joystick-grouped-pilot-", dir=output_dir.parent))
-    dataset_path = staging / "joystick-grouped-pilot.npz"
+    dataset_name = "joystick-scale21-grouped.npz" if scale21 else "joystick-grouped-pilot.npz"
+    dataset_path = staging / dataset_name
     np.savez_compressed(
         dataset_path,
         train_rgb=arrays["train_rgb"], train_label=arrays["train_label"],
@@ -3502,10 +3572,18 @@ def run_joystick_materialize_pilot(
         dev_source_id=arrays["dev_source_id"],
     )
     manifest: dict[str, object] = {
-        "schema_version": "joystick-grouped-pilot-dataset-v1",
+        "schema_version": (
+            "joystick-scale21-grouped-dataset-v1"
+            if scale21 else "joystick-grouped-pilot-dataset-v1"
+        ),
         "dataset": dataset_path.name, "dataset_sha256": _file_sha256(dataset_path),
-        "action_order": JOYSTICK_ACTIONS, "train_sources": 6, "dev_sources": 2,
-        "dev_source_ids": sorted(JOYSTICK_PILOT_DEV_SOURCES), "samples": manifest_rows,
+        "action_order": JOYSTICK_ACTIONS,
+        "train_sources": 16 if scale21 else 6,
+        "dev_sources": 5 if scale21 else 2,
+        "dev_source_ids": sorted(
+            JOYSTICK_SCALE21_DEV_SOURCES if scale21 else JOYSTICK_PILOT_DEV_SOURCES
+        ),
+        "samples": manifest_rows,
         "input_shape": [16, 128, 128, 3], "input_dtype": "uint8_rgb",
         "source_report_file_sha256": report_hashes,
         "cohort_conclusion_file_sha256": _file_sha256(conclusion_path),
@@ -3521,7 +3599,10 @@ def run_joystick_materialize_pilot(
     manifest["manifest_sha256"] = _object_sha256(manifest)
     (staging / "manifest.json").write_bytes(_canonical(manifest) + b"\n")
     staging.rename(output_dir)
-    return validate_joystick_grouped_pilot(output_dir)
+    return (
+        validate_joystick_scale21_dataset(output_dir)
+        if scale21 else validate_joystick_grouped_pilot(output_dir)
+    )
 
 
 def run_joystick_materialize32(

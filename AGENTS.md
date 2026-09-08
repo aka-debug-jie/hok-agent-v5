@@ -50,6 +50,12 @@ Its strict first run exposed 11 portrait sources. The sole geometry repair retai
 excluded portrait metadata mechanically, added no replacements, and completed 13 landscape
 sources. Together with prior evidence, 21 train sources now permit one grouped dataset build;
 extractor/model tuning and another source scan remain closed.
+The 21-source dataset split keeps prior internal-dev `0e34...`/`1221...` and adds the first,
+middle and last compatible new identities by sorted hash (`1720...`, `3927...`, `493c...`).
+This 16/5 split is chosen without label-based source selection. Materialization remains model-free.
+The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
+249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
+balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.
 
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its

@@ -424,13 +424,36 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_SCALE24_LANDSCAPE_SUBSET_PASSED; prior grouped model remains failed
-BLOCKING FAILURE: 21-source grouped dataset not materialized; semantic accuracy remains unknown
-NEXT ACCEPTANCE: fixed 21-source split and causal dataset from stable runs/release STOP; no model run
-COMMAND STATUS: 4160 frames/1210 candidates/21 sources; 27 releases; no tuning/input/dev/test
+CURRENT STATUS: JOYSTICK_SCALE21_GROUPED_DATASET_VALIDATED; prior 73/25 model remains failed
+BLOCKING FAILURE: scaled grouped generalization untested; dev STOP/W support remains1
+NEXT ACCEPTANCE: one fresh-init 201/48 pilot with unchanged model/training gates; no checkpoint reuse
+COMMAND STATUS: 16 train sources/201 samples; 5 dev/48; overlap0; 249 unique clips; no model/input/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Scale21 grouped dataset (2026-09-08)
+
+- Fixed internal dev without label selection: retain prior `0e34...`/`1221...`, then add the
+  first/middle/last compatible new identities by sorted anonymous hash (`1720...`, `3927...`,
+  `493c...`). The other16 sources are train. Neither video-dev nor video-test is used.
+- One sample per stable direction-run onset plus each explicit release STOP produces train201 and
+  dev48. Train counts STOP26/N45/S27/W14/E25/NW17/NE20/SW12/SE15; dev counts
+  STOP1/N13/S8/W1/E7/NW4/NE9/SW2/SE3. Both splits contain all nine classes.
+- All249 masked RGB clips are unique and causal. Input-label gaps are train81–100ms and
+  dev81.3–100ms; variable gaps reflect decoded presentation timestamps. Source overlap is zero.
+- Two implementation corrections stopped before decoding: the new conclusion filename differed
+  from the old convention, then one copied full dev hash mismatched after the first eight chars.
+  Correcting the exact filename/hash restored the predeclared split; labels and extractor unchanged.
+- Output `$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/joystick-scale21-grouped-v1`.
+  Dataset SHA-256 `b29d952880a36dbc9796758ed20507eb7836f25ac16514b7d3a3e14aca240399`;
+  manifest file/self `39f04c197ba3bcd1a5a6d33d22f2da23f8dfdc628473f778278d42461a90f4f2` /
+  `0bdeb3690f674e23eb065113528a36747bb6faa5b94de25b4e6ae3143fa627cb`.
+  Compressed dataset135.1MiB; independent verify-only passed.
+- Status `JOYSTICK_SCALE21_GROUPED_DATASET_VALIDATED`. One fresh-init pilot may reuse the exact
+  prior model, balanced sampling, optimizer,30 epochs and gates. No failed checkpoint reuse,
+  model/extractor tuning, input or test access.
+- Focused tests, Ruff, strict mypy, project safety and diff checks are required before commit.
 
 ### Frozen-extractor scale24 audit (2026-09-08)
 

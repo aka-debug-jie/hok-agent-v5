@@ -88,6 +88,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-materialize32",
             "joystick-overfit32",
             "joystick-materialize-pilot",
+            "joystick-materialize-scale21",
             "joystick-train-pilot",
             "native-player-pilot",
             "native-anchor-cohort-audit",
@@ -1578,12 +1579,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = run_joystick_grouped_pilot(
                     args.config, args.dataset, args.output_dir, device_name=args.device
                 )
-            elif args.mode == "joystick-materialize-pilot":
+            elif args.mode in {"joystick-materialize-pilot", "joystick-materialize-scale21"}:
                 from hok_agent.movement_real_rgb import run_joystick_materialize_pilot
 
+                scale21 = args.mode == "joystick-materialize-scale21"
                 if args.verify_only:
                     result = run_joystick_materialize_pilot(
-                        Path(), Path(), Path(), Path(), Path(), args.output_dir, verify_only=True
+                        Path(), Path(), Path(), Path(), Path(), args.output_dir,
+                        verify_only=True, scale21=scale21,
                     )
                 else:
                     if (args.source_root is None or args.cohort_dir is None
@@ -1593,6 +1596,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     result = run_joystick_materialize_pilot(
                         args.source_root, args.cohort_dir, args.pre_ingest,
                         args.source_run, args.overfit_report, args.output_dir,
+                        scale21=scale21,
                     )
             elif args.mode == "joystick-overfit32":
                 if args.dataset is None:
