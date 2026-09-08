@@ -15,6 +15,12 @@ runtime guard passes.
 
 ## Current development plan
 
+The onset-versus-continuation audit now passes an eight-direction continuation target: 203 train
+and80 internal-dev samples have two preceding same-direction UI frames. STOP is removed from the
+learned action space and remains deterministic Router behavior because centered-screen semantics
+are unresolved. The next step is dataset materialization only; this target teaches continuation,
+not human turn onset or tactical intent.
+
 The 201/48 scale21 pilot also failed source generalization: dev accuracy0.1667 and macro-F10.1465,
 with four zero-recall classes and accuracy below the majority baseline. More samples helped only
 slightly over the 73/25 pilot. Current labels select action-run onsets; the next step is a no-training

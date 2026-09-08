@@ -90,6 +90,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-materialize-pilot",
             "joystick-materialize-scale21",
             "joystick-train-pilot",
+            "joystick-continuation-audit",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1571,6 +1572,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
+            elif args.mode == "joystick-continuation-audit":
+                if args.source_run is None or args.overfit_report is None:
+                    raise ValueError("continuation audit requires source-run and overfit-report")
+                from hok_agent.movement_real_rgb import run_joystick_continuation_audit
+
+                result = run_joystick_continuation_audit(
+                    args.source_run, args.overfit_report, args.output_dir
+                )
             elif args.mode == "joystick-train-pilot":
                 if args.dataset is None:
                     raise ValueError("joystick train pilot requires --dataset")

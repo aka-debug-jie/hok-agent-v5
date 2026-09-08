@@ -59,6 +59,12 @@ tracks dataset size (201). Both prior checkpoints are forbidden and the attempt 
 That scale21 pilot also failed: dev accuracy 0.1667/macro-F1 0.1465. No retry, model or extractor
 tuning. The next work may only audit frozen label timing semantics by separating stable-run onset
 from continuation frames. It writes no RGB/model and cannot reinterpret UI labels as intent.
+The continuation audit defines an observable direction target only at the third or later equal
+joystick candidate, so two prior same-direction frames precede the label. STOP remains a
+deterministic Router action because centered-screen semantics are unresolved. Audit is JSON-only.
+That audit passed with 203 train/80 dev direction-continuation targets. The next step may
+materialize these frozen indices as an eight-direction dataset with the same 16/5 source split.
+It may not include STOP, change the extractor, train a model or open original video-dev/test.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.

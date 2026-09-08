@@ -2961,6 +2961,122 @@ def joystick_training_eligibility(
     }
 
 
+def joystick_continuation_support(
+    sessions: list[dict[str, object]], dev_sources: set[str],
+) -> dict[str, object]:
+    directions = JOYSTICK_ACTIONS[1:]
+    split_rows: dict[str, object] = {}
+    for split in ("train", "dev"):
+        onset = dict.fromkeys(directions, 0)
+        one_history = dict.fromkeys(directions, 0)
+        two_history = dict.fromkeys(directions, 0)
+        sources: dict[str, set[str]] = {action: set() for action in directions}
+        stop_runs = stop_one = stop_two = releases = 0
+        split_source_ids: set[str] = set()
+        for session in sessions:
+            source_id = str(session["session"])
+            if (source_id in dev_sources) != (split == "dev"):
+                continue
+            split_source_ids.add(source_id)
+            windows = cast(list[dict[str, object]], session["windows"])
+            for window in windows:
+                actions = [str(row["candidate_action"])
+                           for row in cast(list[dict[str, object]], window["predictions"])]
+                start = 0
+                while start < len(actions):
+                    end = start + 1
+                    while end < len(actions) and actions[end] == actions[start]:
+                        end += 1
+                    action, length = actions[start], end - start
+                    if action in onset and length >= 2:
+                        onset[action] += 1
+                        one_history[action] += length - 1
+                        if length >= 3:
+                            two_history[action] += length - 2
+                            sources[action].add(source_id)
+                    elif action == "STOP":
+                        stop_runs += 1
+                        stop_one += max(0, length - 1)
+                        stop_two += max(0, length - 2)
+                    start = end
+            releases += cast(int, joystick_training_eligibility(windows)["release_stop_count"])
+        source_support = {action: len(value) for action, value in sources.items()}
+        split_rows[split] = {
+            "sources": len(split_source_ids), "stable_run_onsets": onset,
+            "one_prior_same_direction_frames": one_history,
+            "two_prior_same_direction_frames": two_history,
+            "two_prior_direction_source_support": source_support,
+            "direction_continuation_samples": sum(two_history.values()),
+            "stop": {"runs": stop_runs, "one_prior_center_frames": stop_one,
+                     "two_prior_center_frames": stop_two, "release_events": releases,
+                     "learning_eligible": False,
+                     "reason": "centered UI scene semantics remain unresolved"},
+        }
+    train = cast(dict[str, object], split_rows["train"])
+    dev = cast(dict[str, object], split_rows["dev"])
+    train_counts = cast(dict[str, int], train["two_prior_same_direction_frames"])
+    dev_counts = cast(dict[str, int], dev["two_prior_same_direction_frames"])
+    train_sources = cast(dict[str, int], train["two_prior_direction_source_support"])
+    dev_sources_count = cast(dict[str, int], dev["two_prior_direction_source_support"])
+    gates = {
+        "train_each_direction_at_least_5": min(train_counts.values()) >= 5,
+        "train_each_direction_at_least_3_sources": min(train_sources.values()) >= 3,
+        "dev_each_direction_at_least_1": min(dev_counts.values()) >= 1,
+        "dev_each_direction_at_least_1_source": min(dev_sources_count.values()) >= 1,
+        "source_split_is_16_5": train["sources"] == 16 and dev["sources"] == 5,
+    }
+    return {
+        "definition": (
+            "direction target at the third or later equal candidate in a run; the preceding "
+            "two sampled frames carry the same joystick direction"
+        ),
+        "actor_input": "16 RGB frames ending at the preceding PTS; joystick pixels excluded",
+        "retrospective_ui_requirement": True, "splits": split_rows, "gates": gates,
+        "direction_continuation_allowed": all(gates.values()),
+        "learned_stop_allowed": False, "training_allowed": False,
+    }
+
+
+def run_joystick_continuation_audit(
+    source_run: Path, failed_pilot_report: Path, output_dir: Path,
+) -> dict[str, object]:
+    if output_dir.exists():
+        raise ValueError("continuation audit output exists")
+    conclusion_path = source_run / "conclusion.json"
+    conclusion = cast(dict[str, object], json.loads(conclusion_path.read_text()))
+    failed = _load_bound_json(failed_pilot_report, "report_sha256")
+    if (conclusion.get("status") != "JOYSTICK_SCALE24_LANDSCAPE_SUBSET_PASSED"
+            or failed.get("schema_version") != "joystick-scale21-pilot-report-v1"
+            or failed.get("passed") is not False
+            or failed.get("next_stage_allowed") is not False):
+        raise ValueError("continuation audit requires frozen scale evidence and failed pilot")
+    sessions, report_hashes = _joystick_scale21_sessions(source_run.parent, source_run)
+    support = joystick_continuation_support(sessions, JOYSTICK_SCALE21_DEV_SOURCES)
+    report: dict[str, object] = {
+        "schema_version": "joystick-continuation-support-audit-v1",
+        "source_report_file_sha256": report_hashes,
+        "scale_conclusion_file_sha256": _file_sha256(conclusion_path),
+        "failed_pilot_report_file_sha256": _file_sha256(failed_pilot_report),
+        "support": support,
+        "status": (
+            "JOYSTICK_DIRECTION_CONTINUATION_SUPPORT_PASSED"
+            if support["direction_continuation_allowed"]
+            else "JOYSTICK_DIRECTION_CONTINUATION_SUPPORT_FAILED"
+        ),
+        "dataset_materialization_allowed": support["direction_continuation_allowed"],
+        "learned_action_space": list(JOYSTICK_ACTIONS[1:]),
+        "stop_owner": "deterministic_router", "rgb_decodes": 0, "model_runs": 0,
+        "training_allowed": False, "device_input_allowed": False,
+        "video_dev_opened": False, "video_test_opened": False,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-continuation-", dir=output_dir.parent))
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return report
+
+
 def run_joystick_eligibility(source_run: Path, output_dir: Path) -> dict[str, object]:
     source = _load_bound_json(source_run / "report.json", "report_sha256")
     contract = _load_bound_json(source_run / "contract.json", "contract_sha256")

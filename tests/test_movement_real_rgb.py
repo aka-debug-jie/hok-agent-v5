@@ -68,6 +68,37 @@ def test_joystick_eligibility_rejects_center_without_recent_direction() -> None:
     assert not result["training_allowed"]
 
 
+def test_joystick_continuation_requires_two_prior_frames_and_excludes_stop() -> None:
+    from hok_agent.movement_real_rgb import (
+        JOYSTICK_ACTIONS,
+        JOYSTICK_SCALE21_DEV_SOURCES,
+        joystick_continuation_support,
+    )
+
+    source_ids = [f"train-{index}" for index in range(16)] + sorted(
+        JOYSTICK_SCALE21_DEV_SOURCES
+    )
+    sessions = []
+    for source_id in source_ids:
+        actions = []
+        for action in JOYSTICK_ACTIONS[1:]:
+            actions.extend((action, action, action, action, "unknown"))
+        actions.extend(("STOP", "STOP", "STOP", "STOP"))
+        sessions.append({"session": source_id, "windows": [{
+            "fraction": 0.2, "timestamp_us": [i * 100_000 for i in range(len(actions))],
+            "predictions": [{"candidate_action": action} for action in actions],
+        }]})
+    result = joystick_continuation_support(sessions, JOYSTICK_SCALE21_DEV_SOURCES)
+    train = result["splits"]["train"]
+    dev = result["splits"]["dev"]
+    assert all(value == 32 for value in train["two_prior_same_direction_frames"].values())
+    assert all(value == 10 for value in dev["two_prior_same_direction_frames"].values())
+    assert train["stop"]["two_prior_center_frames"] == 32
+    assert not train["stop"]["learning_eligible"]
+    assert result["direction_continuation_allowed"]
+    assert not result["learned_stop_allowed"] and not result["training_allowed"]
+
+
 def test_joystick_transfer_counts_sessions_not_frames() -> None:
     from hok_agent.movement_real_rgb import joystick_transfer_summary
 

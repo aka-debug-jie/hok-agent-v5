@@ -424,13 +424,33 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_SCALE21_PILOT_FAILED_NO_GENERALIZATION
-BLOCKING FAILURE: dev accuracy0.1667/macro-F1 0.1465; four classes zero recall; below majority accuracy
-NEXT ACCEPTANCE: onset-vs-continuation target audit from frozen reports; no RGB decode or training
-COMMAND STATUS: one scale21 attempt consumed; checkpoints diagnostic-only; no input/video-dev/test
+CURRENT STATUS: JOYSTICK_DIRECTION_CONTINUATION_SUPPORT_PASSED
+BLOCKING FAILURE: eight-direction continuation RGB dataset not materialized; semantics limited to continuation
+NEXT ACCEPTANCE: causal masked 203-train/80-dev dataset; STOP excluded and Router-owned
+COMMAND STATUS: JSON audit only; all direction gates pass; no RGB decode/model/input/video-dev/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick continuation target audit (2026-09-08)
+
+- Added JSON-only `joystick-continuation-audit`, binding all frozen candidate reports and the failed
+  scale21 pilot. It separates run onset, one-prior-frame continuation and two-prior-frame
+  continuation. No RGB decode, model, threshold or split change.
+- Learned direction target is eligible only at the third or later equal candidate in one run.
+  Thus two prior same-direction sampled frames precede the label and may expose established motion
+  in RGB. Train has203 targets; dev80. Counts train N87/S40/W9/E18/NW14/NE15/SW7/SE13;
+  dev N21/S17/W1/E8/NW5/NE21/SW2/SE5. All fixed gates pass.
+- Source support train is10/9/4/7/7/5/4/3 and dev4/3/1/2/2/5/1/1 in the same action order.
+  Rare W/SW/SE remain fragile but nonzero; future metrics must retain per-class recall.
+- STOP is excluded from learning. Although two-prior-center frames number train104/dev10, centered
+  UI may mean death, overlay, disabled control or intentional stop. Deterministic Router owns STOP.
+- Status `JOYSTICK_DIRECTION_CONTINUATION_SUPPORT_PASSED`; report file/self
+  `2c87d6e90c90302a4ad5c558654bf760ca9c7becf82461b4a5a9d809971794fc` /
+  `f0b089f9dae2b294e41bd71ef26f2d9c52a58f8ad457ef5ad156182c6ca1beda`.
+  Output about3KiB; no GPU/input/video-dev/test.
+- Next: materialize the frozen203/80 indices into an eight-direction, masked causal RGB dataset.
+  This learns movement continuation only, not direction-change onset or tactical intent.
 
 ### Scale21 grouped pilot result (2026-09-08)
 
