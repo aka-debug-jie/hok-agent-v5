@@ -595,9 +595,13 @@ def _joystick_pilot_metrics(
 def run_joystick_grouped_pilot(
     config_path: Path, dataset_dir: Path, output_dir: Path, *, device_name: str,
 ) -> dict[str, object]:
-    from hok_agent.movement_real_rgb import validate_joystick_grouped_pilot
+    from hok_agent.movement_real_rgb import (
+        validate_joystick_grouped_pilot,
+        validate_joystick_scale21_dataset,
+    )
 
     config = cast(dict[str, object], json.loads(config_path.read_text(encoding="utf-8")))
+    scale21 = config.get("schema_version") == "joystick-scale21-pilot-train-contract-v1"
     unsigned = {key: value for key, value in config.items() if key != "contract_sha256"}
     training = cast(dict[str, object], config["training"])
     gates = cast(dict[str, object], config["gates"])
@@ -605,7 +609,8 @@ def run_joystick_grouped_pilot(
         "architecture": "task_specific_groupnorm_gru_686281", "optimizer": "AdamW",
         "learning_rate": 0.001, "weight_decay": 0.0, "batch_size": 8, "epochs": 30,
         "evaluation_epochs": [5, 10, 15, 20, 25, 30],
-        "sampling": "class_balanced_replacement", "samples_per_epoch": 73,
+        "sampling": "class_balanced_replacement",
+        "samples_per_epoch": 201 if scale21 else 73,
         "precision": "fp32",
         "selection": "highest_dev_macro_f1_then_lower_loss_then_earlier_epoch",
     }
@@ -615,12 +620,17 @@ def run_joystick_grouped_pilot(
         "minimum_gain_over_majority_macro_f1": 0.20,
         "minimum_each_dev_source_accuracy": 0.20,
     }
-    dataset_path = dataset_dir / "joystick-grouped-pilot.npz"
+    dataset_path = dataset_dir / (
+        "joystick-scale21-grouped.npz" if scale21 else "joystick-grouped-pilot.npz"
+    )
     manifest_path = dataset_dir / "manifest.json"
     conclusion_path = dataset_dir / "conclusion.json"
     conclusion = cast(dict[str, object], json.loads(conclusion_path.read_text()))
     if (
-        config.get("schema_version") != "joystick-grouped-pilot-train-contract-v1"
+        config.get("schema_version") not in {
+            "joystick-grouped-pilot-train-contract-v1",
+            "joystick-scale21-pilot-train-contract-v1",
+        }
         or config.get("contract_sha256") != _canonical_sha256(unsigned)
         or config.get("dataset_sha256") != _sha256(dataset_path)
         or config.get("manifest_file_sha256") != _sha256(manifest_path)
@@ -630,6 +640,9 @@ def run_joystick_grouped_pilot(
         or config.get("attempt_limit") != 1
         or config.get("fresh_initialization") is not True
         or config.get("overfit_checkpoint_allowed") is not False
+        or (scale21 and config.get("prior_failed_checkpoint_allowed") is not False)
+        or (scale21 and config.get("prior_failed_report_file_sha256") !=
+            "2d9d917df08255cad30d90a8d3cb9e141610289724b4c5a8615e3c333669282b")
         or config.get("formal_training_allowed") is not False
         or config.get("checkpoint_promotion_allowed") is not False
         or config.get("video_dev_allowed") is not False
@@ -639,7 +652,10 @@ def run_joystick_grouped_pilot(
         or conclusion.get("checkpoint_promotion_allowed") is not False
     ):
         raise ValueError("joystick grouped pilot contract differs")
-    validate_joystick_grouped_pilot(dataset_dir)
+    if scale21:
+        validate_joystick_scale21_dataset(dataset_dir)
+    else:
+        validate_joystick_grouped_pilot(dataset_dir)
     if output_dir.exists():
         raise ValueError("joystick grouped pilot output exists")
     with np.load(dataset_path, allow_pickle=False) as data:
@@ -765,7 +781,10 @@ def run_joystick_grouped_pilot(
                   "best_epoch": str(best_epoch)},
     )
     report: dict[str, object] = {
-        "schema_version": "joystick-grouped-pilot-report-v1",
+        "schema_version": (
+            "joystick-scale21-pilot-report-v1" if scale21
+            else "joystick-grouped-pilot-report-v1"
+        ),
         "status": "PASSED" if passed else "FAILED", "passed": passed,
         "contract_sha256": config["contract_sha256"],
         "config_file_sha256": _sha256(config_path), "dataset_sha256": _sha256(dataset_path),
@@ -778,6 +797,10 @@ def run_joystick_grouped_pilot(
         "total_parameters": sum(parameter.numel() for parameter in model.parameters()),
         "fresh_initialization": True, "initial_state_sha256": initial_hash,
         "overfit_checkpoint_loaded": False, "seed": seed, "device": str(device),
+        "prior_failed_checkpoint_loaded": False,
+        "comparison_prior_report_file_sha256": (
+            config.get("prior_failed_report_file_sha256") if scale21 else None
+        ),
         "epochs": training["epochs"], "best_epoch": best_epoch,
         "sampled_train_label_counts": dict(zip(
             MOVEMENT_ACTIONS, sampled_counts.tolist(), strict=True

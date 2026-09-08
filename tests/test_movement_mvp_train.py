@@ -45,6 +45,7 @@ CONFIG = ROOT / "configs" / "movement_mvp.json"
 CONFIG_V2 = ROOT / "configs" / "movement_mvp_stage_c_v2.json"
 JOYSTICK_CONFIG = ROOT / "configs" / "joystick_overfit32.json"
 JOYSTICK_PILOT_CONFIG = ROOT / "configs" / "joystick_grouped_pilot.json"
+JOYSTICK_SCALE21_CONFIG = ROOT / "configs" / "joystick_scale21_pilot.json"
 REAL_COUNTERFACTUAL_TRAIN = (
     ROOT / "configs" / "movement_real_counterfactual_overfit32_train_v1.json"
 )
@@ -91,6 +92,22 @@ def test_joystick_grouped_pilot_rejects_unbound_dataset_before_output(tmp_path: 
     with pytest.raises(ValueError, match="contract differs"):
         run_joystick_grouped_pilot(
             JOYSTICK_PILOT_CONFIG, dataset, output, device_name="cpu"
+        )
+    assert not output.exists()
+
+
+def test_joystick_scale21_pilot_rejects_old_grouped_dataset(tmp_path: Path) -> None:
+    dataset = tmp_path / "dataset"
+    dataset.mkdir()
+    (dataset / "joystick-scale21-grouped.npz").write_bytes(b"old grouped data")
+    (dataset / "manifest.json").write_text("{}")
+    (dataset / "conclusion.json").write_text(json.dumps({
+        "pilot_training_allowed": True, "checkpoint_promotion_allowed": False,
+    }))
+    output = tmp_path / "output"
+    with pytest.raises(ValueError, match="contract differs"):
+        run_joystick_grouped_pilot(
+            JOYSTICK_SCALE21_CONFIG, dataset, output, device_name="cpu"
         )
     assert not output.exists()
 

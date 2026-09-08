@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The 201/48 scale21 pilot also failed source generalization: dev accuracy0.1667 and macro-F10.1465,
+with four zero-recall classes and accuracy below the majority baseline. More samples helped only
+slightly over the 73/25 pilot. Current labels select action-run onsets; the next step is a no-training
+audit of whether continuation frames form a more observable target. Failed checkpoints stay closed.
+
 The larger grouped dataset is now valid: 201 samples from16 train sources and48 from5 internal-dev
 sources, all nine classes, zero source overlap and249 unique masked causal clips. The dev groups
 were chosen by prior membership plus sorted anonymous hash positions, not action labels. One

@@ -424,13 +424,35 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_SCALE21_GROUPED_DATASET_VALIDATED; prior 73/25 model remains failed
-BLOCKING FAILURE: scaled grouped generalization untested; dev STOP/W support remains1
-NEXT ACCEPTANCE: one fresh-init 201/48 pilot with unchanged model/training gates; no checkpoint reuse
-COMMAND STATUS: 16 train sources/201 samples; 5 dev/48; overlap0; 249 unique clips; no model/input/test
+CURRENT STATUS: JOYSTICK_SCALE21_PILOT_FAILED_NO_GENERALIZATION
+BLOCKING FAILURE: dev accuracy0.1667/macro-F1 0.1465; four classes zero recall; below majority accuracy
+NEXT ACCEPTANCE: onset-vs-continuation target audit from frozen reports; no RGB decode or training
+COMMAND STATUS: one scale21 attempt consumed; checkpoints diagnostic-only; no input/video-dev/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Scale21 grouped pilot result (2026-09-08)
+
+- The single scale comparison reused the exact 686k GroupNorm+GRU, seed0, AdamW1e-3, balanced
+  sampling, batch8,30 epochs, evaluation schedule and gates. Samples per epoch followed dataset
+  size201. Both prior checkpoints were forbidden; initial state is fresh and hash-recorded.
+- Best epoch10: train accuracy0.7214, internal-dev accuracy0.1667, macro-F10.14652, loss2.33794.
+  N/S/NW/NE/SE recalls are0.231/0.125/0.25/0.222/0.333; STOP/W/E/SW are zero. Source
+  accuracies are0.125/0.294/0/0/0.2. Majority-N accuracy0.2708/macro-F10.04736.
+- Only nonzero-recall and first-update gates pass. Scaling from73/25 raises macro-F1 from0.0974
+  and nonzero classes3→5, but does not materially improve accuracy0.16→0.1667 or generalization.
+  Later epochs raise train accuracy to0.955 while dev F1 falls, confirming overfitting.
+- Status `JOYSTICK_SCALE21_PILOT_FAILED_NO_GENERALIZATION`. Same-data retry, model/extractor
+  tuning, formal training and checkpoint promotion are closed. The failed checkpoint is evidence only.
+- Report `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/joystick-scale21-pilot-seed0-v1`.
+  Report file/self `056f299bd6e8e9816622294eeb9d3fdfcc532b28a4ec123b124a93be2105dd93` /
+  `1cc211c4b31ccec6203e079f972707d2b17339c071cc740bed704b56a2d1fbeb`;
+  checkpoint `3b562e2eb5c1e974d14d8f016507a1b34f031ff8eac749e2248f275c7b93e1e3`.
+  CUDA runtime10.175s, peak312,573,440 bytes. No device input or video-dev/test.
+- Current data selects each stable-run onset. Predicting that direction from RGB ending before
+  the onset may include unobservable human intent. This is a hypothesis, not a proven cause.
+  Next: JSON-only audit separating run onset from continuation frames before any new training.
 
 ### Scale21 grouped dataset (2026-09-08)
 

@@ -53,6 +53,12 @@ extractor/model tuning and another source scan remain closed.
 The 21-source dataset split keeps prior internal-dev `0e34...`/`1221...` and adds the first,
 middle and last compatible new identities by sorted hash (`1720...`, `3927...`, `493c...`).
 This 16/5 split is chosen without label-based source selection. Materialization remains model-free.
+The 201/48 dataset passed validation. One scale21 pilot may use the same 686k model, seed,
+optimizer, balanced sampling, 30 epochs and gates as the failed 73/25 pilot. Samples per epoch
+tracks dataset size (201). Both prior checkpoints are forbidden and the attempt limit is one.
+That scale21 pilot also failed: dev accuracy 0.1667/macro-F1 0.1465. No retry, model or extractor
+tuning. The next work may only audit frozen label timing semantics by separating stable-run onset
+from continuation frames. It writes no RGB/model and cannot reinterpret UI labels as intent.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.
