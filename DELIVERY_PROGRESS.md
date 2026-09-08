@@ -424,13 +424,33 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: CHANGE_EVENT_DATASET_VALIDATED
-BLOCKING FAILURE: simulator change policy untrained; real Macro goal rendering remains unverified
-NEXT ACCEPTANCE: fixed GRU-vs-last-frame simulator pilot; fresh init, eight directions, no STOP
-COMMAND STATUS: train256/64 episodes; dev96/24; balanced8 classes; overlap0; no model/input/test
+CURRENT STATUS: SIMULATOR_CHANGE_POLICY_PASSED_LAST_FRAME_SELECTED
+BLOCKING FAILURE: selected checkpoint not integrated in multi-waypoint offline replay; real goal rendering unverified
+NEXT ACCEPTANCE: offline change-event inference + deterministic KEEP/STOP over complete waypoint episodes
+COMMAND STATUS: both dev accuracy/F1 1.0; selected587080 params/epoch5; simulator-only, no input/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Simulator change-policy comparison (2026-09-08)
+
+- Added one fixed fresh-init comparison on the balanced simulator dataset. Both use the same
+  convolutional encoder/projector and8-output head. Temporal variant adds a GRU (686,152 params);
+  control consumes only the current final frame (587,080 params). No previous checkpoint loaded.
+- Both pass all gates with train/dev accuracy1.0, dev macro-F11.0 and every recall1.0.
+  GRU best epoch10/loss0.04837/runtime13.714s; last-frame best epoch5/loss0.05655/runtime11.905s.
+- The predeclared0.01 tolerance selects last-frame because accuracy/F1/recall tie and it removes
+  99,072 parameters. Selected checkpoint SHA-256
+  `e7cd269756aa691401ed54616161a65b9dab6fe071b23310480d69863a93cf0d`.
+  GRU checkpoint is retained as unselected evidence only.
+- Status `SIMULATOR_CHANGE_POLICY_PASSED_LAST_FRAME_SELECTED`. Report file/self
+  `462080a6d094c176c36589c2e5a89161917cedf24a548d6a4989abf67f6ebaa0` /
+  `f33d0f66ff9a1ee8b11b9f68724c07991e2d7853a99f8969a5e8d4df01516042`.
+  Peak GPU allocation986,850,816 bytes; no phone/video-dev/test.
+- This permits simulator integration only. It does not establish real goal rendering, real RGB
+  behavior or gameplay quality. Router still owns STOP; executor owns persistence.
+- Next: load only the selected checkpoint in an offline multi-waypoint replay, call it on Macro
+  goal changes and verify deterministic KEEP/STOP between events.
 
 ### Simulator change-event dataset (2026-09-08)
 

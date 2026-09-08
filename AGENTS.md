@@ -91,6 +91,12 @@ contains no STOP/previous-action input, and must be validated before any trainin
 That dataset passed with256/96 balanced samples and352 unique clips. One fixed simulator pilot
 may compare the fresh 8-head GroupNorm+GRU with a last-frame control. Model selection favors the
 simpler control when performance matches. No prior weights or real-domain claim.
+The comparison fixes seed0, AdamW1e-3, batch32,30 epochs and six evaluation points. Both models
+must reach dev accuracy/macro-F1>=0.95 and each recall>=0.90. Within0.01, select the 587080
+parameter last-frame control. One attempt per model; simulator integration only.
+Both models passed; the 587080-parameter last-frame checkpoint is selected for simulator-only
+integration. The next step may load only that exact checkpoint in an offline multi-waypoint replay.
+Policy invocation/KEEP/STOP ownership must match the change-only contract; no real RGB or input.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.

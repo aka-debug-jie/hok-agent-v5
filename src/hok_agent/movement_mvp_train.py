@@ -61,6 +61,23 @@ class TaskSpecificMovement(nn.Module):
         return cast(torch.Tensor, self.head(hidden[-1]))
 
 
+class TaskSpecificLastFrame(nn.Module):
+    def __init__(self, output_actions: int) -> None:
+        super().__init__()
+        self.spatial = nn.Sequential(
+            nn.Conv2d(3, 16, 5, stride=2, padding=2), nn.GroupNorm(4, 16), nn.GELU(),
+            nn.Conv2d(16, 32, 3, stride=2, padding=1), nn.GroupNorm(8, 32), nn.GELU(),
+            nn.Conv2d(32, 64, 3, stride=2, padding=1), nn.GroupNorm(8, 64), nn.GELU(),
+            nn.Conv2d(64, 64, 3, stride=2, padding=1), nn.GroupNorm(8, 64), nn.GELU(),
+        )
+        self.project = nn.Linear(64 * 8 * 8, 128)
+        self.head = nn.Linear(128, output_actions)
+
+    def forward(self, clips: torch.Tensor) -> torch.Tensor:
+        features = self.spatial(clips[:, -1])
+        return cast(torch.Tensor, self.head(self.project(features.flatten(1))))
+
+
 class RelationalMovement(nn.Module):
     """Learn two spatial slots and classify their relative motion with no coordinate labels."""
 
@@ -565,7 +582,7 @@ def run_joystick_overfit32(
 
 
 def _joystick_pilot_metrics(
-    model: TaskSpecificMovement, clips: torch.Tensor, labels: torch.Tensor,
+    model: nn.Module, clips: torch.Tensor, labels: torch.Tensor,
     sources: np.ndarray, device: torch.device, batch_size: int,
     action_order: tuple[str, ...] = MOVEMENT_ACTIONS,
 ) -> dict[str, object]:
@@ -844,6 +861,232 @@ def run_joystick_grouped_pilot(
             int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else 0
         ),
         "attempt_limit": 1, "attempts_used": 1, "input_commands_sent": 0,
+        "video_dev_opened": False, "video_test_opened": False,
+    }
+    report["report_sha256"] = _canonical_sha256(report)
+    (staging / "report.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    staging.rename(output_dir)
+    return report
+
+
+def run_change_policy_pilot(
+    config_path: Path, dataset_dir: Path, output_dir: Path, *, device_name: str,
+) -> dict[str, object]:
+    from hok_agent.movement_goal_canvas import CHANGE_MODEL_ACTIONS, validate_change_event_dataset
+
+    config = cast(dict[str, object], json.loads(config_path.read_text()))
+    unsigned = {key: value for key, value in config.items() if key != "contract_sha256"}
+    training = cast(dict[str, object], config["training"])
+    gates = cast(dict[str, object], config["gates"])
+    selection = cast(dict[str, object], config["selection"])
+    dataset_path = dataset_dir / "change-events.npz"
+    manifest_path = dataset_dir / "manifest.json"
+    conclusion_path = dataset_dir / "conclusion.json"
+    conclusion = cast(dict[str, object], json.loads(conclusion_path.read_text()))
+    if (
+        config.get("schema_version") != "movement-change-pilot-contract-v1"
+        or config.get("contract_sha256") != _canonical_sha256(unsigned)
+        or config.get("dataset_sha256") != _sha256(dataset_path)
+        or config.get("manifest_file_sha256") != _sha256(manifest_path)
+        or config.get("conclusion_file_sha256") != _sha256(conclusion_path)
+        or config.get("action_order") != list(CHANGE_MODEL_ACTIONS)
+        or config.get("models") != [
+            "task_specific_gru_686152", "task_specific_last_frame_587080"
+        ]
+        or training != {
+            "optimizer": "AdamW", "learning_rate": 0.001, "weight_decay": 0.0,
+            "batch_size": 32, "epochs": 30,
+            "evaluation_epochs": [5, 10, 15, 20, 25, 30],
+            "sampling": "balanced_dataset_shuffle", "precision": "fp32",
+        }
+        or gates != {
+            "minimum_train_accuracy": 0.95, "minimum_dev_accuracy": 0.95,
+            "minimum_dev_macro_f1": 0.95, "minimum_each_dev_recall": 0.90,
+        }
+        or selection != {
+            "metric": "dev_macro_f1_then_accuracy_then_lower_parameters",
+            "simpler_model_tolerance": 0.01,
+        }
+        or config.get("attempts_per_model") != 1
+        or config.get("fresh_initialization") is not True
+        or config.get("previous_checkpoint_allowed") is not False
+        or config.get("simulator_only") is not True
+        or config.get("formal_training_allowed") is not False
+        or config.get("device_input_allowed") is not False
+        or config.get("video_dev_allowed") is not False
+        or config.get("video_test_allowed") is not False
+        or conclusion.get("pilot_training_allowed") is not True
+        or conclusion.get("checkpoint_promotion_allowed") is not False
+    ):
+        raise ValueError("change policy pilot contract differs")
+    validate_change_event_dataset(dataset_dir)
+    if output_dir.exists():
+        raise ValueError("change policy pilot output exists")
+    with np.load(dataset_path, allow_pickle=False) as data:
+        train_clips = torch.from_numpy(data["train_rgb"].copy())
+        train_labels = torch.from_numpy(data["train_label"].astype(np.int64))
+        train_groups = data["train_episode_id"].copy()
+        dev_clips = torch.from_numpy(data["dev_rgb"].copy())
+        dev_labels = torch.from_numpy(data["dev_label"].astype(np.int64))
+        dev_groups = data["dev_episode_id"].copy()
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise ValueError("CUDA is unavailable")
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+    seed = cast(int, config["seed"])
+
+    def train_variant(name: str) -> tuple[dict[str, object], dict[str, torch.Tensor]]:
+        torch.manual_seed(seed)
+        if device.type == "cuda":
+            torch.cuda.manual_seed_all(seed)
+        model: nn.Module = (
+            TaskSpecificMovement(output_actions=8).to(device)
+            if name == "task_specific_gru_686152"
+            else TaskSpecificLastFrame(8).to(device)
+        )
+        optimizer = torch.optim.AdamW(
+            model.parameters(), lr=cast(float, training["learning_rate"]),
+            weight_decay=cast(float, training["weight_decay"]),
+        )
+        loader = DataLoader(
+            TensorDataset(train_clips, train_labels),
+            batch_size=cast(int, training["batch_size"]), shuffle=True, num_workers=0,
+            generator=torch.Generator().manual_seed(seed),
+        )
+        initial_hash = hashlib.sha256(b"".join(
+            value.detach().cpu().numpy().tobytes() for value in model.state_dict().values()
+        )).hexdigest()
+        before = [parameter.detach().clone() for parameter in model.parameters()]
+        first: dict[str, object] | None = None
+        history: list[dict[str, object]] = []
+        best_key = (-math.inf, -math.inf, -math.inf)
+        best_epoch = 0
+        best_state: dict[str, torch.Tensor] | None = None
+        started = time.monotonic()
+        evaluation_epochs = set(cast(list[int], training["evaluation_epochs"]))
+        for epoch in range(1, cast(int, training["epochs"]) + 1):
+            losses: list[float] = []
+            for clips, labels in loader:
+                loss, gradient = train_step(
+                    model, _batch(clips, device), labels.to(device), optimizer
+                )
+                losses.append(loss)
+                if first is None:
+                    first = {"loss": loss, "gradient_norm": gradient,
+                             "parameter_changed": any(
+                                 not torch.equal(old, parameter.detach())
+                                 for old, parameter in zip(before, model.parameters(), strict=True)
+                             ),
+                             "finite": math.isfinite(loss) and math.isfinite(gradient)
+                             and gradient > 0}
+            if epoch in evaluation_epochs:
+                train_metrics = _joystick_pilot_metrics(
+                    model, train_clips, train_labels, train_groups, device,
+                    cast(int, training["batch_size"]), CHANGE_MODEL_ACTIONS,
+                )
+                dev_metrics = _joystick_pilot_metrics(
+                    model, dev_clips, dev_labels, dev_groups, device,
+                    cast(int, training["batch_size"]), CHANGE_MODEL_ACTIONS,
+                )
+                history.append({"epoch": epoch, "mean_update_loss": float(np.mean(losses)),
+                                "train": train_metrics, "dev": dev_metrics})
+                key = (cast(float, dev_metrics["macro_f1"]),
+                       cast(float, dev_metrics["accuracy"]), -float(epoch))
+                if key > best_key:
+                    best_key, best_epoch = key, epoch
+                    best_state = {
+                        key: value.detach().cpu().clone()
+                        for key, value in model.state_dict().items()
+                    }
+        if first is None or best_state is None:
+            raise ValueError("change policy variant performed no updates")
+        model.load_state_dict(best_state)
+        train_metrics = _joystick_pilot_metrics(
+            model, train_clips, train_labels, train_groups, device,
+            cast(int, training["batch_size"]), CHANGE_MODEL_ACTIONS,
+        )
+        dev_metrics = _joystick_pilot_metrics(
+            model, dev_clips, dev_labels, dev_groups, device,
+            cast(int, training["batch_size"]), CHANGE_MODEL_ACTIONS,
+        )
+        recalls = cast(dict[str, float], dev_metrics["recall"])
+        gate_results = {
+            "train_accuracy": cast(float, train_metrics["accuracy"])
+            >= cast(float, gates["minimum_train_accuracy"]),
+            "dev_accuracy": cast(float, dev_metrics["accuracy"])
+            >= cast(float, gates["minimum_dev_accuracy"]),
+            "dev_macro_f1": cast(float, dev_metrics["macro_f1"])
+            >= cast(float, gates["minimum_dev_macro_f1"]),
+            "each_dev_recall": min(recalls.values())
+            >= cast(float, gates["minimum_each_dev_recall"]),
+            "first_update": bool(first["finite"] and first["parameter_changed"]),
+        }
+        return ({
+            "model": name, "parameters": sum(p.numel() for p in model.parameters()),
+            "initial_state_sha256": initial_hash, "fresh_initialization": True,
+            "best_epoch": best_epoch, "first_update": first, "history": history,
+            "best_train": train_metrics, "best_dev": dev_metrics,
+            "gate_results": gate_results, "passed": all(gate_results.values()),
+            "elapsed_seconds": time.monotonic() - started,
+        }, best_state)
+
+    variants: dict[str, dict[str, object]] = {}
+    states: dict[str, dict[str, torch.Tensor]] = {}
+    for name in cast(list[str], config["models"]):
+        variants[name], states[name] = train_variant(name)
+    passing = [name for name, row in variants.items() if row["passed"]]
+    selected: str | None = None
+    if passing:
+        gru = variants["task_specific_gru_686152"]
+        simple = variants["task_specific_last_frame_587080"]
+        tolerance = cast(float, selection["simpler_model_tolerance"])
+        simple_dev = cast(dict[str, object], simple["best_dev"])
+        gru_dev = cast(dict[str, object], gru["best_dev"])
+        if (simple["passed"] and cast(float, simple_dev["macro_f1"])
+                >= cast(float, gru_dev["macro_f1"]) - tolerance
+                and cast(float, simple_dev["accuracy"])
+                >= cast(float, gru_dev["accuracy"]) - tolerance):
+            selected = "task_specific_last_frame_587080"
+        else:
+            selected = max(
+                passing, key=lambda name: (
+                    cast(float, cast(dict[str, object], variants[name]["best_dev"])["macro_f1"]),
+                    cast(float, cast(dict[str, object], variants[name]["best_dev"])["accuracy"]),
+                    -cast(int, variants[name]["parameters"]),
+                )
+            )
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".movement-change-pilot-", dir=output_dir.parent))
+    checkpoint_rows: dict[str, str] = {}
+    for name, state in states.items():
+        checkpoint = staging / f"{name}.safetensors"
+        save_file(
+            state, checkpoint,
+            metadata={"purpose": "simulator_change_pilot", "model": name,
+                      "dataset_sha256": _sha256(dataset_path),
+                      "contract_sha256": cast(str, config["contract_sha256"]),
+                      "selected": str(name == selected).lower(), "fresh_initialization": "true"},
+        )
+        checkpoint_rows[name] = _sha256(checkpoint)
+    report: dict[str, object] = {
+        "schema_version": "movement-change-pilot-report-v1",
+        "status": "PASSED" if selected else "FAILED", "passed": selected is not None,
+        "contract_sha256": config["contract_sha256"],
+        "config_file_sha256": _sha256(config_path), "dataset_sha256": _sha256(dataset_path),
+        "manifest_file_sha256": _sha256(manifest_path), "variants": variants,
+        "checkpoint_sha256": checkpoint_rows, "selected_model": selected,
+        "selection_rule": selection, "gates": gates,
+        "simulator_integration_allowed": selected is not None,
+        "formal_training_allowed": False, "real_rgb_generalization_verified": False,
+        "checkpoint_real_deployment_allowed": False, "previous_checkpoint_loaded": False,
+        "stop_owner": "deterministic_router", "persistence_owner": "deterministic_executor",
+        "gpu_peak_allocated_bytes": (
+            int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else 0
+        ),
+        "attempts_per_model": 1, "input_commands_sent": 0,
         "video_dev_opened": False, "video_test_opened": False,
     }
     report["report_sha256"] = _canonical_sha256(report)

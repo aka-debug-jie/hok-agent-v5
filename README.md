@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The simulator change-policy comparison passes. GRU and last-frame models both reach train/dev
+accuracy and macro-F11.0 with all recalls1.0. The predeclared simplicity rule selects the587,080
+parameter last-frame checkpoint; GRU adds99,072 parameters without performance gain. This model
+is simulator-only. Next is an offline multi-waypoint integration with Router STOP and executor KEEP.
+
 The simulator change-event dataset is valid: train256/64 episodes and dev96/24, with eight
 directions exactly balanced and no episode overlap. Each sequence shows the old goal for15 frames
 and the new observable Macro goal in the current final frame. STOP and previous action are absent.

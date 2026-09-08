@@ -2,6 +2,12 @@
 
 ## 当前接续：从真实摇杆反馈生成监督
 
+change-policy模拟对照通过：GRU与last-frame均达到train/dev accuracy1.0、macro-F11.0、八类
+recall1.0。按预先简化规则选择587080参数last-frame，较GRU少99072参数且无需时序状态；
+最佳epoch5。该checkpoint仅允许模拟集成。下一步离线运行多waypoint episode：仅Macro目标
+变化时推理，其他step由执行器KEEP，目标到达/未知/终局由Router STOP。不得由此声称
+真实RGB、手机或实战性能，也不加载未选GRU权重。
+
 change-event模拟数据已完成：train64局256样本、dev24局96样本，八方向严格平衡、episode
 交叉0、352个clip唯一。序列前15帧显示旧Macro目标，最后当前帧显示新目标；标签仅由玩家
 标记与新目标环几何关系产生。输入没有previous_action、方向箭头或STOP。下一步固定比较

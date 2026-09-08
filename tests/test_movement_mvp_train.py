@@ -21,6 +21,7 @@ from hok_agent.movement_mvp import (
 )
 from hok_agent.movement_mvp_train import (
     RelationalMovement,
+    TaskSpecificLastFrame,
     TaskSpecificMovement,
     TrajectoryWindowDataset,
     _action_step,
@@ -29,6 +30,7 @@ from hok_agent.movement_mvp_train import (
     _window,
     evaluate_stage_c_dev,
     localized_train_step,
+    run_change_policy_pilot,
     run_joystick_grouped_pilot,
     run_joystick_overfit32,
     run_overfit32,
@@ -47,6 +49,7 @@ JOYSTICK_CONFIG = ROOT / "configs" / "joystick_overfit32.json"
 JOYSTICK_PILOT_CONFIG = ROOT / "configs" / "joystick_grouped_pilot.json"
 JOYSTICK_SCALE21_CONFIG = ROOT / "configs" / "joystick_scale21_pilot.json"
 JOYSTICK_CONTINUATION_CONFIG = ROOT / "configs" / "joystick_continuation_pilot.json"
+CHANGE_CONFIG = ROOT / "configs" / "movement_change_pilot_v1.json"
 REAL_COUNTERFACTUAL_TRAIN = (
     ROOT / "configs" / "movement_real_counterfactual_overfit32_train_v1.json"
 )
@@ -136,6 +139,23 @@ def test_task_specific_model_consumes_sixteen_rgb_frames() -> None:
     continuation = TaskSpecificMovement(8)
     assert continuation(torch.zeros((2, 16, 3, 128, 128))).shape == (2, 8)
     assert sum(parameter.numel() for parameter in continuation.parameters()) == 686_152
+    last_frame = TaskSpecificLastFrame(8)
+    assert last_frame(torch.zeros((2, 16, 3, 128, 128))).shape == (2, 8)
+    assert sum(parameter.numel() for parameter in last_frame.parameters()) == 587_080
+
+
+def test_change_policy_pilot_rejects_unbound_dataset_before_output(tmp_path: Path) -> None:
+    dataset = tmp_path / "dataset"
+    dataset.mkdir()
+    (dataset / "change-events.npz").write_bytes(b"changed")
+    (dataset / "manifest.json").write_text("{}")
+    (dataset / "conclusion.json").write_text(json.dumps({
+        "pilot_training_allowed": True, "checkpoint_promotion_allowed": False,
+    }))
+    output = tmp_path / "output"
+    with pytest.raises(ValueError, match="contract differs"):
+        run_change_policy_pilot(CHANGE_CONFIG, dataset, output, device_name="cpu")
+    assert not output.exists()
 
 
 def test_relational_model_consumes_rgb_without_coordinate_labels() -> None:

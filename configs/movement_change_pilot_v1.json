@@ -1,0 +1,39 @@
+{
+  "schema_version": "movement-change-pilot-contract-v1",
+  "contract_sha256": "768cf0f9dd5a10286e8908648b2a9d1c612b0e41d4672ec6453365c32656913f",
+  "dataset_sha256": "1fd0d5a10d64adc99166f22babc1e566c1febe02c758e0007011c4278dfcb490",
+  "manifest_file_sha256": "956e25691389a0d4b3d5c256973a0ed1f643f58be126ff8da8369e4ee2e8ede6",
+  "conclusion_file_sha256": "2189e10a1a4789d5cab2e164610e3accd86abd465895a2c10ebafa86cc6c3507",
+  "action_order": ["N", "S", "W", "E", "NW", "NE", "SW", "SE"],
+  "models": ["task_specific_gru_686152", "task_specific_last_frame_587080"],
+  "seed": 0,
+  "training": {
+    "optimizer": "AdamW",
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "batch_size": 32,
+    "epochs": 30,
+    "evaluation_epochs": [5, 10, 15, 20, 25, 30],
+    "sampling": "balanced_dataset_shuffle",
+    "precision": "fp32"
+  },
+  "gates": {
+    "minimum_train_accuracy": 0.95,
+    "minimum_dev_accuracy": 0.95,
+    "minimum_dev_macro_f1": 0.95,
+    "minimum_each_dev_recall": 0.90
+  },
+  "selection": {
+    "metric": "dev_macro_f1_then_accuracy_then_lower_parameters",
+    "simpler_model_tolerance": 0.01
+  },
+  "attempts_per_model": 1,
+  "fresh_initialization": true,
+  "previous_checkpoint_allowed": false,
+  "simulator_only": true,
+  "formal_training_allowed": false,
+  "real_rgb_generalization_verified": false,
+  "device_input_allowed": false,
+  "video_dev_allowed": false,
+  "video_test_allowed": false
+}
