@@ -2,6 +2,12 @@
 
 ## 当前接续：从真实摇杆反馈生成监督
 
+零参数 persistence 基线在冻结延续数据上达到 train203/203、dev80/80，八方向 recall1.0；
+现有执行器对 previous=current 的八方向全部输出 KEEP，并已有 previous_action 保存/恢复。
+这只证明动作保持，无新转向能力。由此关闭 learned continuation：持续移动由执行器状态
+负责，STOP由Router负责。后续 Movement 模型只能学习“何时转向以及转到哪里”，且必须
+由单独可观察的 Macro 目标提供条件；当前人类视频摇杆标签本身不包含这个目标。
+
 八分类 continuation pilot 仍失败：train accuracy1.0，dev accuracy0.25、macro-F10.1897，
 W/E/NW/SE recall为0，准确率略低于多数类0.2625。模型和同数据重训停止。由于延续标签
 按定义已有两帧相同执行方向，确定性执行状态直接保持 previous_direction 可能天然满足

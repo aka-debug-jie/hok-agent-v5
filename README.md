@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+Direction persistence is now solved deterministically: previous-direction prediction is exact on
+all203 train and80 dev continuation targets, and the existing executor maps every same-direction
+request to `KEEP`. Learned continuation is therefore closed. Future Movement learning should only
+propose direction changes from an observable Macro goal; Router retains STOP.
+
 The eight-class continuation pilot also failed: train accuracy1.0, internal-dev accuracy0.25 and
 macro-F10.1897, with four zero-recall directions. No retry or model tuning is allowed. Because
 every continuation target is defined after two prior equal directions, the next step is a JSON-only

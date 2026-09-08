@@ -424,13 +424,33 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_CONTINUATION_PILOT_FAILED_NO_GENERALIZATION
-BLOCKING FAILURE: train1.0 vs dev accuracy0.25/macro-F1 0.1897; four zero-recall directions
-NEXT ACCEPTANCE: deterministic previous-direction persistence audit; JSON only, no model
-COMMAND STATUS: one 8-head attempt consumed; Router STOP unchanged; no input/video-dev/test
+CURRENT STATUS: DETERMINISTIC_DIRECTION_PERSISTENCE_EXACT
+BLOCKING FAILURE: no observable target for learned direction change; persistence itself is solved
+NEXT ACCEPTANCE: change-only Movement contract conditioned on a separately observable Macro goal
+COMMAND STATUS: persistence203/203 train,80/80 dev; all executor commands KEEP; no model/input/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Deterministic direction persistence (2026-09-08)
+
+- Added JSON-only `joystick-persistence-audit`. Every continuation manifest row is rebound to its
+  source candidate sequence and must have identical direction at target and two preceding ticks.
+  Candidate PTS, label PTS and manifest prior timestamps are checked; Actor-video PTS may differ
+  by at most25ms (observed maximum23ms), with both clocks before the target.
+- Baseline predicts the previous executed direction. It reaches train203/203 and dev80/80,
+  accuracy1.0 and every supported class recall1.0. This is exact by continuation-target definition,
+  not learned generalization or gameplay performance.
+- Existing executor `_movement_command(previous,current)` returns `KEEP` for each of N/S/W/E/
+  NW/NE/SW/SE when directions match. Runtime already maintains/rebuilds `previous_action`.
+  Thus no additional neural model or transport is needed for smooth action persistence.
+- Status `DETERMINISTIC_DIRECTION_PERSISTENCE_EXACT`; report file/self
+  `8ff2a3e2c54be71ac8f3e8c19c5211e69ee62572ff135969bb4aefbcbcee7fc3` /
+  `7afffddf73a6ff9439a9e506c55c2d6f6198960ea397cfb82b84ea1e831e1a63`.
+  No RGB decode/model/GPU/input/video-dev/test.
+- Learned continuation is closed and its checkpoint remains rejected. Persistence stays in the
+  deterministic executor; STOP stays in Router. Future Movement learning must address a new
+  direction conditioned on an observable Macro goal, which current real-video labels do not supply.
 
 ### Joystick continuation pilot result (2026-09-08)
 

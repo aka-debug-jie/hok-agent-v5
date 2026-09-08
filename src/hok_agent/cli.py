@@ -92,6 +92,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-train-pilot",
             "joystick-continuation-audit",
             "joystick-materialize-continuation",
+            "joystick-persistence-audit",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1573,6 +1574,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
+            elif args.mode == "joystick-persistence-audit":
+                if args.dataset is None or args.source_run is None:
+                    raise ValueError("persistence audit requires dataset and source-run")
+                from hok_agent.movement_real_rgb import run_joystick_persistence_audit
+
+                result = run_joystick_persistence_audit(
+                    args.dataset, args.source_run, args.output_dir
+                )
             elif args.mode == "joystick-materialize-continuation":
                 from hok_agent.movement_real_rgb import run_joystick_materialize_continuation
 

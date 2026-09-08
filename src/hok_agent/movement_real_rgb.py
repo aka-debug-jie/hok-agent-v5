@@ -3740,6 +3740,125 @@ def run_joystick_materialize_continuation(
     return validate_joystick_continuation_dataset(output_dir)
 
 
+def evaluate_joystick_persistence(
+    samples: dict[str, list[dict[str, object]]], sessions: list[dict[str, object]],
+) -> dict[str, object]:
+    session_map = {str(row["session"]): row for row in sessions}
+    splits: dict[str, object] = {}
+    for split in ("train", "dev"):
+        correct = 0
+        class_counts = dict.fromkeys(JOYSTICK_CONTINUATION_ACTIONS, 0)
+        class_correct = dict.fromkeys(JOYSTICK_CONTINUATION_ACTIONS, 0)
+        for sample in samples[split]:
+            source_id = str(sample["source_id"])
+            session = session_map.get(source_id)
+            if session is None:
+                raise ValueError("persistence sample source is unbound")
+            fraction = float(cast(float, sample["source_fraction"]))
+            windows = cast(list[dict[str, object]], session["windows"])
+            matching = [row for row in windows if float(cast(float, row["fraction"])) == fraction]
+            if len(matching) != 1:
+                raise ValueError("persistence source window is ambiguous")
+            window = matching[0]
+            index = cast(int, sample["source_frame_index"])
+            predictions = cast(list[dict[str, object]], window["predictions"])
+            times = list(map(int, cast(list[int], window["timestamp_us"])))
+            if index < 2 or index >= len(predictions):
+                raise ValueError("persistence sample index differs")
+            expected = str(sample["action"])
+            observed = [str(predictions[offset]["candidate_action"])
+                        for offset in (index - 2, index - 1, index)]
+            prior_times = list(map(
+                int, cast(list[int], sample["prior_same_direction_timestamp_us"])
+            ))
+            if (observed != [expected] * 3
+                    or prior_times != [times[index - 2], times[index - 1]]
+                    or cast(int, sample["label_timestamp_us"]) != times[index]
+                    or cast(int, sample["input_end_timestamp_us"]) >= times[index]
+                    or abs(cast(int, sample["input_end_timestamp_us"]) - times[index - 1])
+                    > 25_000):
+                raise ValueError("persistence causal binding differs")
+            baseline = observed[-2]
+            class_counts[expected] += 1
+            if baseline == expected:
+                correct += 1
+                class_correct[expected] += 1
+        recalls = {
+            action: class_correct[action] / class_counts[action] if class_counts[action] else 0.0
+            for action in JOYSTICK_CONTINUATION_ACTIONS
+        }
+        splits[split] = {
+            "samples": len(samples[split]), "correct": correct,
+            "accuracy": correct / len(samples[split]), "class_support": class_counts,
+            "recall": recalls, "macro_f1": 1.0 if correct == len(samples[split]) else None,
+        }
+    return {"splits": splits, "exact": all(
+        cast(dict[str, object], row)["accuracy"] == 1.0 for row in splits.values()
+    )}
+
+
+def run_joystick_persistence_audit(
+    dataset_dir: Path, continuation_audit_run: Path, output_dir: Path,
+) -> dict[str, object]:
+    if output_dir.exists():
+        raise ValueError("persistence audit output exists")
+    validate_joystick_continuation_dataset(dataset_dir)
+    manifest = _load_bound_json(dataset_dir / "manifest.json", "manifest_sha256")
+    audit = _load_bound_json(continuation_audit_run / "report.json", "report_sha256")
+    if (audit.get("status") != "JOYSTICK_DIRECTION_CONTINUATION_SUPPORT_PASSED"
+            or manifest.get("action_order") != list(JOYSTICK_CONTINUATION_ACTIONS)
+            or manifest.get("stop_owner") != "deterministic_router"
+            or manifest.get("continuation_audit_file_sha256") !=
+            _file_sha256(continuation_audit_run / "report.json")):
+        raise ValueError("persistence audit bindings differ")
+    scale_run = continuation_audit_run.parent / "joystick-scale24-audit-v2-landscape-subset"
+    sessions, report_hashes = _joystick_scale21_sessions(
+        continuation_audit_run.parent, scale_run
+    )
+    if report_hashes != manifest["source_report_file_sha256"]:
+        raise ValueError("persistence source reports differ")
+    result = evaluate_joystick_persistence(
+        cast(dict[str, list[dict[str, object]]], manifest["samples"]), sessions
+    )
+    from hok_agent.movement_mvp import StageAMovement, _movement_command
+
+    commands = {
+        action: _movement_command(cast(StageAMovement, action), cast(StageAMovement, action))
+        for action in JOYSTICK_CONTINUATION_ACTIONS
+    }
+    exact = result["exact"] is True and set(commands.values()) == {"KEEP"}
+    report: dict[str, object] = {
+        "schema_version": "joystick-persistence-baseline-audit-v1",
+        "dataset_sha256": manifest["dataset_sha256"],
+        "manifest_file_sha256": _file_sha256(dataset_dir / "manifest.json"),
+        "continuation_audit_file_sha256": _file_sha256(
+            continuation_audit_run / "report.json"
+        ),
+        "movement_runtime_source_sha256": _file_sha256(Path(__file__).with_name("movement_mvp.py")),
+        "baseline": "predict previous executed direction; request same direction",
+        "clock_alignment": (
+            "joystick sampling PTS and decoded Actor PTS may differ by <=25ms; both precede label"
+        ),
+        "executor_commands": commands, "result": result,
+        "status": (
+            "DETERMINISTIC_DIRECTION_PERSISTENCE_EXACT"
+            if exact else "DETERMINISTIC_DIRECTION_PERSISTENCE_FAILED"
+        ),
+        "learned_continuation_recommended": False if exact else None,
+        "continuation_checkpoint_allowed": False,
+        "learned_direction_change_verified": False,
+        "stop_owner": "deterministic_router", "model_runs": 0,
+        "rgb_decodes": 0, "gpu_seconds": 0, "input_commands_sent": 0,
+        "video_dev_opened": False, "video_test_opened": False,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".joystick-persistence-", dir=output_dir.parent))
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return report
+
+
 def run_joystick_materialize_pilot(
     source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
     final_run: Path, overfit_report_path: Path, output_dir: Path,

@@ -129,6 +129,28 @@ def test_joystick_continuation_selection_uses_only_third_and_later_frames() -> N
     )
 
 
+def test_joystick_persistence_reproduces_prior_direction_and_rejects_drift() -> None:
+    from hok_agent.movement_real_rgb import evaluate_joystick_persistence
+
+    session = {"session": "source", "windows": [{
+        "fraction": 0.2, "timestamp_us": [100_000, 200_000, 300_000],
+        "predictions": [{"candidate_action": "NE"}] * 3,
+    }]}
+    sample = {
+        "source_id": "source", "source_fraction": 0.2, "source_frame_index": 2,
+        "action": "NE", "prior_same_direction_timestamp_us": [100_000, 200_000],
+        "input_end_timestamp_us": 200_000, "label_timestamp_us": 300_000,
+    }
+    result = evaluate_joystick_persistence(
+        {"train": [sample], "dev": [sample]}, [session]
+    )
+    assert result["exact"]
+    assert result["splits"]["train"]["accuracy"] == 1.0
+    changed = {**sample, "input_end_timestamp_us": 350_000}
+    with pytest.raises(ValueError, match="causal binding"):
+        evaluate_joystick_persistence({"train": [changed], "dev": [sample]}, [session])
+
+
 def test_joystick_transfer_counts_sessions_not_frames() -> None:
     from hok_agent.movement_real_rgb import joystick_transfer_summary
 

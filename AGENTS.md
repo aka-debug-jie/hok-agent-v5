@@ -76,6 +76,12 @@ majority-F1 gain>=0.20 and every dev source accuracy>=0.20. One attempt; no fall
 That pilot failed at dev accuracy0.25/macro-F10.1897. No retry or model tuning. The next work may
 only audit the deterministic previous-direction persistence baseline on the frozen continuation
 manifest. This uses execution state outside Actor RGB and sends no input.
+The baseline must reproduce every manifest sample from the two prior equal candidates and verify
+the existing executor maps same previous/current direction to `KEEP`. It may not decode RGB,
+load a checkpoint, choose a new direction or claim gameplay performance.
+That audit passed exactly on203/80 samples and all eight executor mappings return `KEEP`.
+Learned continuation and its checkpoints are now closed. Future Movement learning must target
+direction change conditioned on a separately observable Macro goal; persistence remains deterministic.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.
