@@ -15,6 +15,16 @@ runtime guard passes.
 
 ## Current development plan
 
+The frozen extractor now covers 21 train sources after a fixed scale audit. A strict 24-source
+run exposed 11 portrait inputs; the sole repair mechanically retained the 13 landscape sources
+without replacements. Aggregate evidence is 4,160 frames, 1,210 candidates and 27 release STOP
+events. Source expansion is closed; next is one larger grouped causal dataset, not model tuning.
+
+The frozen extractor now has evidence across 21 train sources: 4,160 sampled frames, 1,210
+candidates, 27 release STOP events and every direction supported by 8–16 sources. The fixed
+scale24 audit excluded 11 portrait sources by metadata and retained 13 landscape sources without
+replacement. Source expansion is closed; next is one larger source-grouped dataset build.
+
 The first grouped joystick pilot failed cross-source generalization: train accuracy1.0, but
 internal-dev accuracy0.16 and macro-F10.0974, below even the majority baseline in accuracy.
 Six classes have zero recall. The attempt and checkpoint are frozen; the same dataset/model is

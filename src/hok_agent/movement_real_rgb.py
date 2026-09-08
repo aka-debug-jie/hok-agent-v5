@@ -3027,6 +3027,8 @@ def _run_joystick_transfer(
     source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
     extractor_run: Path, output_dir: Path,
     *, source_ids: tuple[str, ...], fractions: tuple[float, ...], schema_version: str,
+    selection_contract_sha256: str | None = None,
+    selection_preflight: dict[str, object] | None = None,
 ) -> dict[str, object]:
     import cv2
     from PIL import Image, ImageDraw
@@ -3073,6 +3075,8 @@ def _run_joystick_transfer(
         "fractions": fractions, "frames_per_window": 40,
         "sample_period_us": 100000, "training_allowed": False,
         "dev_frames_opened": 0, "test_frames_opened": 0,
+        "selection_contract_sha256": selection_contract_sha256,
+        "selection_preflight": selection_preflight,
     }
     contract["contract_sha256"] = _object_sha256(contract)
     (staging / "contract.json").write_bytes(_canonical(contract) + b"\n")
@@ -3613,6 +3617,77 @@ def run_joystick_final_transfer(
         source_ids=JOYSTICK_FINAL_TRANSFER_SOURCES,
         fractions=JOYSTICK_FINAL_TRANSFER_FRACTIONS,
         schema_version="joystick-final-train-transfer-v1",
+    )
+
+
+def run_joystick_scale24_audit(
+    config_path: Path, source_root: Path, cohort_dir: Path, pre_ingest_path: Path,
+    extractor_run: Path, output_dir: Path,
+) -> dict[str, object]:
+    config = _load_bound_json(config_path, "contract_sha256")
+    sources = tuple(map(str, cast(list[str], config["source_ids"])))
+    fractions = tuple(map(float, cast(list[float], config["fractions"])))
+    if (
+        config.get("schema_version") != "joystick-scale24-audit-contract-v1"
+        or config.get("extractor_contract_sha256") !=
+        "f687f5423235e918fe37728793d24f0ea73a33936fc46344429d38ad91ec7c7c"
+        or len(sources) != 24 or list(sources) != sorted(set(sources))
+        or fractions != (0.15, 0.35, 0.55, 0.75, 0.9)
+        or config.get("frames_per_window") != 40
+        or config.get("sample_period_us") != 100000
+        or config.get("extractor_frozen") is not True
+        or config.get("model_training_allowed") is not False
+        or config.get("video_dev_allowed") is not False
+        or config.get("video_test_allowed") is not False
+        or config.get("device_input_allowed") is not False
+    ):
+        raise ValueError("scale24 audit contract differs")
+    import av
+
+    from hok_agent import pre_ingest
+    from hok_agent.v5_data import load_automatic_cohort
+
+    cohort = load_automatic_cohort(cohort_dir, pre_ingest_path)
+    if any(cohort.session_splits.get(identity) != "train" for identity in sources):
+        raise ValueError("scale24 sources must all be train")
+    paths: dict[str, Path] = {}
+    for path in pre_ingest._scan(source_root):
+        identity = pre_ingest._sha(pre_ingest._canonical([
+            "candidate-v2-file-atomic", path.relative_to(source_root).as_posix(),
+            pre_ingest._stat_signature(path.stat()),
+        ]))
+        if identity in sources:
+            paths[identity] = path
+    if set(paths) != set(sources):
+        raise ValueError("scale24 preflight sources unavailable")
+    geometry: list[dict[str, object]] = []
+    compatible: list[str] = []
+    for identity in sources:
+        descriptor, opened = pre_ingest._open_regular(paths[identity])
+        with os.fdopen(descriptor, "rb") as handle, av.open(handle, mode="r") as container:
+            stream = container.streams.video[0]
+            rotation = pre_ingest._rotation(stream)
+            accepted = stream.width > stream.height and rotation == 0
+            geometry.append({"source_id": identity, "width": stream.width,
+                             "height": stream.height, "rotation": rotation,
+                             "landscape_compatible": accepted})
+            if accepted:
+                compatible.append(identity)
+            pre_ingest._assert_unchanged(handle.fileno(), opened)
+    if len(compatible) < 12:
+        raise ValueError("scale24 has insufficient landscape-compatible sources")
+    preflight: dict[str, object] = {
+        "rule": "width > height and metadata rotation == 0",
+        "requested_sources": len(sources), "compatible_sources": len(compatible),
+        "excluded_sources": len(sources) - len(compatible), "replacement_sources": 0,
+        "geometry": geometry,
+    }
+    return _run_joystick_transfer(
+        source_root, cohort_dir, pre_ingest_path, extractor_run, output_dir,
+        source_ids=tuple(compatible), fractions=fractions,
+        schema_version="joystick-scale24-audit-v2-landscape-subset",
+        selection_contract_sha256=cast(str, config["contract_sha256"]),
+        selection_preflight=preflight,
     )
 
 

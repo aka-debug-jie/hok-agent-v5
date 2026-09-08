@@ -424,13 +424,34 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_GROUPED_PILOT_FAILED_NO_GENERALIZATION
-BLOCKING FAILURE: train1.0 vs dev accuracy0.16/macro-F1 0.0974; only three nonzero recalls
-NEXT ACCEPTANCE: frozen-extractor coverage on predeclared additional existing train sources; no model retry
-COMMAND STATUS: one attempt consumed; grouped checkpoint diagnostic-only; no input/video-dev/test
+CURRENT STATUS: JOYSTICK_SCALE24_LANDSCAPE_SUBSET_PASSED; prior grouped model remains failed
+BLOCKING FAILURE: 21-source grouped dataset not materialized; semantic accuracy remains unknown
+NEXT ACCEPTANCE: fixed 21-source split and causal dataset from stable runs/release STOP; no model run
+COMMAND STATUS: 4160 frames/1210 candidates/21 sources; 27 releases; no tuning/input/dev/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Frozen-extractor scale24 audit (2026-09-08)
+
+- Fixed 24 additional anonymous train identities and five four-second windows at 15/35/55/75/90%.
+  The strict first run stopped because 11 are portrait 1080×2408. Its failure staging is retained.
+  The sole repair used container-header geometry only: keep width>height and rotation0, exclude
+  portrait sources, add zero replacements, bind all 24 geometry rows in the new run contract.
+- The 13 compatible sources complete 2600 frames with 653 candidates (25.12%). Every source has
+  candidates; minimum coverage3.5%. Direction support sources: N9, S10, W4, E10, NW8, NE8,
+  SW7, SE5. Stable runs:29/17/9/25/13/15/10/14; release STOP19.
+- Combined with the previous eight sources: 21 sources, 4160 frames, 1210 candidates (29.09%),
+  27 release STOP. Direction support sources are N16, S16, W8, E14, NW13, NE15, SW11, SE8;
+  stable runs58/35/15/32/21/29/14/18. This is enough for a larger grouped data build.
+- Representative QA inspected four low/mid/high coverage sheets. Accepted examples generally
+  align with the visible control; this remains automatic weak-label evidence, not semantic truth.
+- Result `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/joystick-scale24-audit-v2-landscape-subset`.
+  Report file/self `04f6462ae97de4f5c600649e55ae26ff4eb2366e3b7b99edc147fb19c3a44a84` /
+  `4354ae8223ee05d487146bc12a0e2da1f8e74e10444eb73b917dc08b67a2edde`.
+  Artifacts22.8MiB; no native cache/model/GPU/input/dev/test.
+- Source expansion is now closed. Next: fix a 21-source group split and materialize one causal,
+  masked dataset from each stable-run onset plus release STOP. No model run or extractor tuning.
 
 ### Joystick grouped pilot result (2026-09-07)
 

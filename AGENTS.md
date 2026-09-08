@@ -43,6 +43,13 @@ The single grouped pilot is now frozen failed: train accuracy 1.0 but internal-d
 and macro-F1 0.0974. Do not rerun/tune this dataset or architecture. A continuation may only
 scale frozen-extractor evidence on a predeclared set of additional existing train videos before
 another model contract; original video-dev/test, phone and diagnostic checkpoints remain closed.
+The next scale audit is fixed to the 24 anonymous train identities in
+`configs/joystick_scale24_audit.json`, five four-second windows each. It uses frozen extractor v3,
+writes no native RGB/model, and closes before any dataset materialization or training.
+Its strict first run exposed 11 portrait sources. The sole geometry repair retained the same 24,
+excluded portrait metadata mechanically, added no replacements, and completed 13 landscape
+sources. Together with prior evidence, 21 train sources now permit one grouped dataset build;
+extractor/model tuning and another source scan remain closed.
 
 The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
 for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its

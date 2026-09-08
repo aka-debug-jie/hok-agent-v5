@@ -84,6 +84,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-eligibility",
             "joystick-transfer",
             "joystick-transfer-final",
+            "joystick-scale24-audit",
             "joystick-materialize32",
             "joystick-overfit32",
             "joystick-materialize-pilot",
@@ -1618,6 +1619,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.source_root, args.cohort_dir, args.pre_ingest,
                         args.source_run, args.output_dir,
                     )
+            elif args.mode == "joystick-scale24-audit":
+                if (args.source_root is None or args.cohort_dir is None
+                        or args.pre_ingest is None or args.source_run is None):
+                    raise ValueError("scale24 audit requires source/cohort/pre-ingest/source-run")
+                from hok_agent.movement_real_rgb import run_joystick_scale24_audit
+
+                result = run_joystick_scale24_audit(
+                    args.config, args.source_root, args.cohort_dir, args.pre_ingest,
+                    args.source_run, args.output_dir,
+                )
             elif args.mode in {"joystick-transfer", "joystick-transfer-final"}:
                 if (args.source_root is None or args.cohort_dir is None
                         or args.pre_ingest is None or args.source_run is None):

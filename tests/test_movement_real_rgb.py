@@ -92,6 +92,28 @@ def test_joystick_transfer_counts_sessions_not_frames() -> None:
     assert not result["all_directions_have_two_sessions"] and not result["training_allowed"]
 
 
+def test_joystick_scale24_contract_is_fixed_train_only_and_disjoint() -> None:
+    from hok_agent.movement_real_rgb import (
+        JOYSTICK_FINAL_TRANSFER_SOURCES,
+        JOYSTICK_TRANSFER_SOURCES,
+        NATIVE_PLAYER_SOURCES,
+        _load_bound_json,
+    )
+
+    config = _load_bound_json(ROOT / "configs" / "joystick_scale24_audit.json",
+                              "contract_sha256")
+    sources = list(config["source_ids"])
+    prior = set(JOYSTICK_TRANSFER_SOURCES) | set(JOYSTICK_FINAL_TRANSFER_SOURCES) | {
+        key for key, split in NATIVE_PLAYER_SOURCES.items() if split == "train"
+    }
+    assert len(sources) == 24 and sources == sorted(set(sources))
+    assert not set(sources) & prior
+    assert config["fractions"] == [0.15, 0.35, 0.55, 0.75, 0.9]
+    assert config["split"] == "train" and config["extractor_frozen"] is True
+    assert config["model_training_allowed"] is False
+    assert config["video_dev_allowed"] is False and config["video_test_allowed"] is False
+
+
 def test_joystick_overfit32_selection_is_balanced_grouped_and_causal() -> None:
     from hok_agent.movement_real_rgb import JOYSTICK_ACTIONS, select_joystick_overfit32
 
