@@ -85,6 +85,12 @@ direction change conditioned on a separately observable Macro goal; persistence 
 The next contract may reuse synthetic hollow-goal-ring RGB only. The model vocabulary is eight
 directions and invocation occurs only on Macro goal-version change, stuck recovery or respawn
 reset. Executor owns persistence; Router owns STOP/unknown/terminal. No training or phone input.
+The change-event dataset is fixed to64/24 episodes, four Macro goal changes each, 15 old-goal
+frames plus one current new-goal frame, and balanced eight-direction labels. It is simulator-only,
+contains no STOP/previous-action input, and must be validated before any training.
+That dataset passed with256/96 balanced samples and352 unique clips. One fixed simulator pilot
+may compare the fresh 8-head GroupNorm+GRU with a last-frame control. Model selection favors the
+simpler control when performance matches. No prior weights or real-domain claim.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.

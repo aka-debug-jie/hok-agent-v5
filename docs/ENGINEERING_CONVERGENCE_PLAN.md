@@ -2,6 +2,12 @@
 
 ## 当前接续：从真实摇杆反馈生成监督
 
+change-event模拟数据已完成：train64局256样本、dev24局96样本，八方向严格平衡、episode
+交叉0、352个clip唯一。序列前15帧显示旧Macro目标，最后当前帧显示新目标；标签仅由玩家
+标记与新目标环几何关系产生。输入没有previous_action、方向箭头或STOP。下一步固定比较
+fresh 8-head GroupNorm+GRU与last-frame control；若效果相同选择更简单者。该实验只验证
+simulator目标条件，不产生真实RGB、手机或实战能力声明。
+
 change-only 合同已通过：模型只在Macro目标版本变化、卡住恢复或复活重置时调用，只输出
 八方向；previous_action不进入Actor。稳态由执行器KEEP，目标到达/未知/终局由Router STOP。
 8个方向变化、8个稳态、8个同方向新目标和3个STOP边界均通过。下一步使用现有目标环

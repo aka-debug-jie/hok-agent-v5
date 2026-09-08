@@ -94,6 +94,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-materialize-continuation",
             "joystick-persistence-audit",
             "change-contract",
+            "change-materialize",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1574,6 +1575,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.pre_ingest,
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
+                    )
+            elif args.mode == "change-materialize":
+                from hok_agent.movement_goal_canvas import materialize_change_event_dataset
+
+                if args.verify_only:
+                    result = materialize_change_event_dataset(
+                        Path(), Path(), args.output_dir, verify_only=True
+                    )
+                else:
+                    if args.prior_report is None:
+                        raise ValueError("change-materialize requires --prior-report")
+                    result = materialize_change_event_dataset(
+                        args.config, args.prior_report, args.output_dir
                     )
             elif args.mode == "change-contract":
                 if args.prior_report is None:

@@ -9,6 +9,7 @@ import pytest
 
 from hok_agent.movement_goal_canvas import (
     CHANGE_MODEL_ACTIONS,
+    _change_event_samples,
     _object_sha256,
     change_only_route,
     materialize_goal_canvas_overfit32,
@@ -42,6 +43,17 @@ def test_change_only_route_separates_policy_persistence_and_stop() -> None:
         assert not stopped["model_invoked"] and stopped["applied_action"] == "STOP"
         assert stopped["owner"] == "deterministic_router"
     assert "STOP" not in CHANGE_MODEL_ACTIONS and len(CHANGE_MODEL_ACTIONS) == 8
+
+
+def test_change_event_samples_are_balanced_grouped_and_goal_conditioned() -> None:
+    marker = {"radius": 7, "thickness": 2, "rgb": [245, 225, 45]}
+    clips, labels, episodes, rows = _change_event_samples("tiny", 4, 4, marker, 700)
+    assert clips.shape == (16, 16, 128, 128, 3)
+    assert np.bincount(labels, minlength=8).tolist() == [2] * 8
+    assert len(set(episodes.tolist())) == 4 and len(rows) == 16
+    assert all(not np.array_equal(clip[-2], clip[-1]) for clip in clips)
+    assert all(row["old_direction"] != row["target_direction"] for row in rows)
+    assert not any(row["target_direction"] == "STOP" for row in rows)
 
 
 def _inputs(tmp_path: Path) -> tuple[Path, Path]:

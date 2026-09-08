@@ -424,13 +424,33 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: CHANGE_ONLY_MOVEMENT_CONTRACT_PASSED
-BLOCKING FAILURE: change-event RGB dataset and learned goal-conditioned policy do not exist
-NEXT ACCEPTANCE: new simulator-only change-event dataset with hollow Macro goal ring; no training
-COMMAND STATUS: 8 change/8 persist/8 same-direction/3 Router STOP cases; no model/input/test
+CURRENT STATUS: CHANGE_EVENT_DATASET_VALIDATED
+BLOCKING FAILURE: simulator change policy untrained; real Macro goal rendering remains unverified
+NEXT ACCEPTANCE: fixed GRU-vs-last-frame simulator pilot; fresh init, eight directions, no STOP
+COMMAND STATUS: train256/64 episodes; dev96/24; balanced8 classes; overlap0; no model/input/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Simulator change-event dataset (2026-09-08)
+
+- Added `change-materialize` under the change-only contract. Dataset has64 train and24 dev episode
+  groups, four goal-version changes each: train256/dev96. Every direction has32/12 samples.
+- Each 16-frame synthetic minimap clip uses fifteen old-goal frames and one current new-goal frame.
+  The label is derived from player-to-new-goal geometry. Previous action and direction arrows are
+  absent; STOP is absent. Current goal frame is included because Macro updates precede the decision.
+- All352 clips are unique, train/dev episode overlap0. Every old frame resolves to one different
+  direction and every final frame resolves to its stored label. Counterfactual new goals are checked
+  with the same last-frame render seed so target geometry, not noise, changes the label.
+- Output `$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/movement-change-events-v1`.
+  Dataset SHA-256 `1fd0d5a10d64adc99166f22babc1e566c1febe02c758e0007011c4278dfcb490`;
+  manifest file/self `956e25691389a0d4b3d5c256973a0ed1f643f58be126ff8da8369e4ee2e8ede6` /
+  `caccd9bc122d4a3a594e1b205f139ef7859835328a9a96c4322c6e4c876c49de`.
+  Compressed dataset56.95MiB; independent verify-only passed.
+- Status `CHANGE_EVENT_DATASET_VALIDATED`. Next pilot may compare fresh 8-head GroupNorm+GRU with
+  a last-frame control. If they match, select the simpler model. No historical weights or real-RGB claim.
+- No GPU/model/phone/video-dev/test. Focused tests, Ruff, strict mypy, safety and diff checks are
+  required before commit.
 
 ### Change-only Movement contract (2026-09-08)
 

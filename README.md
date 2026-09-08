@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The simulator change-event dataset is valid: train256/64 episodes and dev96/24, with eight
+directions exactly balanced and no episode overlap. Each sequence shows the old goal for15 frames
+and the new observable Macro goal in the current final frame. STOP and previous action are absent.
+Next is one fresh simulator comparison between the 8-head GRU and a last-frame control.
+
 The new change-only Movement contract passes. A model may emit only eight directions and is called
 only when a Macro goal version changes or recovery requests reconsideration. The executor owns
 `KEEP`; Router owns goal-reached/unknown/terminal `STOP`. The next step is a fresh simulator-only
