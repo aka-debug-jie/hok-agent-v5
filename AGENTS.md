@@ -70,6 +70,12 @@ write 203/80 masked causal clips with action order `N,S,W,E,NW,NE,SW,SE`, and ve
 That dataset is now validated with283 unique clips. One fresh-init continuation pilot may reuse
 the existing spatial encoder/GRU architecture with a newly initialized eight-output head and
 class-balanced sampling. No prior weights; deterministic Router retains STOP.
+The continuation pilot contract fixes seed0, AdamW1e-3, batch8,30 epochs,203 balanced samples
+per epoch and the prior selection rule. Gates are dev accuracy/F1>=0.35, six nonzero recalls,
+majority-F1 gain>=0.20 and every dev source accuracy>=0.20. One attempt; no fallback.
+That pilot failed at dev accuracy0.25/macro-F10.1897. No retry or model tuning. The next work may
+only audit the deterministic previous-direction persistence baseline on the frozen continuation
+manifest. This uses execution state outside Actor RGB and sends no input.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.

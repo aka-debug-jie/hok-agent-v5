@@ -2,6 +2,12 @@
 
 ## 当前接续：从真实摇杆反馈生成监督
 
+八分类 continuation pilot 仍失败：train accuracy1.0，dev accuracy0.25、macro-F10.1897，
+W/E/NW/SE recall为0，准确率略低于多数类0.2625。模型和同数据重训停止。由于延续标签
+按定义已有两帧相同执行方向，确定性执行状态直接保持 previous_direction 可能天然满足
+该任务。下一步仅从冻结 manifest 审计这一零参数基线；若其精确成立，持续移动交给
+确定性控制器，学习模型只应处理带可观察目标的新转向意图，而非重复学习动作保持。
+
 八方向延续数据已物化：train203/16来源、dev80/5来源，来源交叉0，283个clip唯一；输入
 提前标签81–100ms并遮掉摇杆。动作顺序固定N/S/W/E/NW/NE/SW/SE，数据中没有STOP，
 停止继续归确定性Router。下一步只运行一次fresh-init八分类continuation pilot，复用现有

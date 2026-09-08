@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The eight-class continuation pilot also failed: train accuracy1.0, internal-dev accuracy0.25 and
+macro-F10.1897, with four zero-recall directions. No retry or model tuning is allowed. Because
+every continuation target is defined after two prior equal directions, the next step is a JSON-only
+deterministic previous-direction baseline. This may show that learned continuation is unnecessary.
+
 The eight-direction continuation dataset is now valid: train203/16 sources, internal-dev80/5,
 source overlap0 and283 unique masked causal clips. It contains no STOP; deterministic Router owns
 stopping. One fresh-init continuation pilot may use the existing spatial encoder/GRU with a new

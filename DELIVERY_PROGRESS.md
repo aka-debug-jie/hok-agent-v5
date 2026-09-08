@@ -424,13 +424,33 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: JOYSTICK_CONTINUATION_DATASET_VALIDATED
-BLOCKING FAILURE: eight-direction continuation generalization untested; dev W/SW support1/2
-NEXT ACCEPTANCE: one fresh-init 8-head continuation pilot; existing encoder/GRU, new head; Router STOP
-COMMAND STATUS: train203/16 sources; dev80/5; overlap0; 283 clips; no model/input/video-dev/test
+CURRENT STATUS: JOYSTICK_CONTINUATION_PILOT_FAILED_NO_GENERALIZATION
+BLOCKING FAILURE: train1.0 vs dev accuracy0.25/macro-F1 0.1897; four zero-recall directions
+NEXT ACCEPTANCE: deterministic previous-direction persistence audit; JSON only, no model
+COMMAND STATUS: one 8-head attempt consumed; Router STOP unchanged; no input/video-dev/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Joystick continuation pilot result (2026-09-08)
+
+- Added one fresh-init eight-output task-specific GroupNorm+GRU. Spatial encoder/GRU dimensions,
+  seed0, AdamW1e-3, batch8, balanced sampling,30 epochs and selection rule are unchanged; only
+  the nine-output head becomes eight outputs (686,152 parameters). No previous checkpoint loaded.
+- Best epoch30 memorizes train at accuracy1.0. Internal-dev accuracy0.25, macro-F10.18971,
+  loss3.11219; N/S/NE/SW recalls0.429/0.294/0.190/1.0, while W/E/NW/SE are zero.
+  Majority-N accuracy0.2625/macro-F10.05198. Source accuracy ranges0–0.6.
+- Only train-accuracy and first-update gates pass. Dev accuracy/F1, six nonzero recalls, majority
+  gain and every-source accuracy fail. Across checkpoints dev accuracy remains0.175–0.25 and
+  macro-F10.107–0.190 while train reaches1.0. Same-data retry and tuning are closed.
+- Status `JOYSTICK_CONTINUATION_PILOT_FAILED_NO_GENERALIZATION`. Report file/self
+  `ca0e95c0f56289971b72c92fc273efba2140bfc3d4ae1dfebcb7f532081302da` /
+  `202ca356e029e90bc27d24e9655f838208952b720f3b1b8ac23100499e7f97d7`;
+  diagnostic checkpoint `c87a7ab9220342eed79d94823e3580b13a8c0df22242b868e30fa3d7958650ee`.
+  Runtime10.123s on RTX4090, peak312,570,880 bytes. No input or video-dev/test.
+- By target definition, previous executed direction equals every continuation target. Next audit
+  compares a deterministic previous-direction persistence baseline using manifest state only.
+  If exact, learned continuation is redundant and learning should return to observable goal/change intent.
 
 ### Joystick continuation dataset (2026-09-08)
 

@@ -33,7 +33,7 @@ from hok_agent.rich_renderer import render
 
 
 class TaskSpecificMovement(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, output_actions: int = len(MOVEMENT_ACTIONS)) -> None:
         super().__init__()
         self.spatial = nn.Sequential(
             nn.Conv2d(3, 16, 5, stride=2, padding=2),
@@ -51,7 +51,7 @@ class TaskSpecificMovement(nn.Module):
         )
         self.project = nn.Linear(64 * 8 * 8, 128)
         self.temporal = nn.GRU(128, 128, batch_first=True)
-        self.head = nn.Linear(128, len(MOVEMENT_ACTIONS))
+        self.head = nn.Linear(128, output_actions)
 
     def forward(self, clips: torch.Tensor) -> torch.Tensor:
         batch, sequence, channels, height, width = clips.shape
@@ -567,6 +567,7 @@ def run_joystick_overfit32(
 def _joystick_pilot_metrics(
     model: TaskSpecificMovement, clips: torch.Tensor, labels: torch.Tensor,
     sources: np.ndarray, device: torch.device, batch_size: int,
+    action_order: tuple[str, ...] = MOVEMENT_ACTIONS,
 ) -> dict[str, object]:
     model.eval()
     logits = []
@@ -576,10 +577,10 @@ def _joystick_pilot_metrics(
     scores = torch.cat(logits)
     predicted = scores.argmax(1).numpy()
     expected = labels.numpy()
-    metrics = _classification_metrics(predicted, expected, len(MOVEMENT_ACTIONS))
+    metrics = _classification_metrics(predicted, expected, len(action_order), action_order)
     metrics["loss"] = float(nn.functional.cross_entropy(scores, labels))
     metrics["support"] = dict(zip(
-        MOVEMENT_ACTIONS, np.bincount(expected, minlength=len(MOVEMENT_ACTIONS)).tolist(),
+        action_order, np.bincount(expected, minlength=len(action_order)).tolist(),
         strict=True,
     ))
     metrics["nonzero_recalls"] = sum(
@@ -596,32 +597,46 @@ def run_joystick_grouped_pilot(
     config_path: Path, dataset_dir: Path, output_dir: Path, *, device_name: str,
 ) -> dict[str, object]:
     from hok_agent.movement_real_rgb import (
+        JOYSTICK_CONTINUATION_ACTIONS,
+        validate_joystick_continuation_dataset,
         validate_joystick_grouped_pilot,
         validate_joystick_scale21_dataset,
     )
 
     config = cast(dict[str, object], json.loads(config_path.read_text(encoding="utf-8")))
     scale21 = config.get("schema_version") == "joystick-scale21-pilot-train-contract-v1"
+    continuation = (
+        config.get("schema_version") == "joystick-continuation-pilot-train-contract-v1"
+    )
+    action_order = JOYSTICK_CONTINUATION_ACTIONS if continuation else MOVEMENT_ACTIONS
     unsigned = {key: value for key, value in config.items() if key != "contract_sha256"}
     training = cast(dict[str, object], config["training"])
     gates = cast(dict[str, object], config["gates"])
     expected_training = {
-        "architecture": "task_specific_groupnorm_gru_686281", "optimizer": "AdamW",
+        "architecture": (
+            "task_specific_groupnorm_gru_686152_8head"
+            if continuation else "task_specific_groupnorm_gru_686281"
+        ),
+        "optimizer": "AdamW",
         "learning_rate": 0.001, "weight_decay": 0.0, "batch_size": 8, "epochs": 30,
         "evaluation_epochs": [5, 10, 15, 20, 25, 30],
         "sampling": "class_balanced_replacement",
-        "samples_per_epoch": 201 if scale21 else 73,
+        "samples_per_epoch": 203 if continuation else 201 if scale21 else 73,
         "precision": "fp32",
         "selection": "highest_dev_macro_f1_then_lower_loss_then_earlier_epoch",
     }
     expected_gates = {
-        "minimum_train_accuracy": 0.85, "minimum_dev_accuracy": 0.32,
-        "minimum_dev_macro_f1": 0.35, "minimum_nonzero_dev_recalls": 5,
+        "minimum_train_accuracy": 0.85,
+        "minimum_dev_accuracy": 0.35 if continuation else 0.32,
+        "minimum_dev_macro_f1": 0.35,
+        "minimum_nonzero_dev_recalls": 6 if continuation else 5,
         "minimum_gain_over_majority_macro_f1": 0.20,
         "minimum_each_dev_source_accuracy": 0.20,
     }
     dataset_path = dataset_dir / (
-        "joystick-scale21-grouped.npz" if scale21 else "joystick-grouped-pilot.npz"
+        "joystick-continuation-grouped.npz" if continuation
+        else "joystick-scale21-grouped.npz" if scale21
+        else "joystick-grouped-pilot.npz"
     )
     manifest_path = dataset_dir / "manifest.json"
     conclusion_path = dataset_dir / "conclusion.json"
@@ -630,29 +645,37 @@ def run_joystick_grouped_pilot(
         config.get("schema_version") not in {
             "joystick-grouped-pilot-train-contract-v1",
             "joystick-scale21-pilot-train-contract-v1",
+            "joystick-continuation-pilot-train-contract-v1",
         }
         or config.get("contract_sha256") != _canonical_sha256(unsigned)
         or config.get("dataset_sha256") != _sha256(dataset_path)
         or config.get("manifest_file_sha256") != _sha256(manifest_path)
         or config.get("conclusion_file_sha256") != _sha256(conclusion_path)
-        or config.get("action_order") != list(MOVEMENT_ACTIONS)
+        or config.get("action_order") != list(action_order)
         or training != expected_training or gates != expected_gates
         or config.get("attempt_limit") != 1
         or config.get("fresh_initialization") is not True
-        or config.get("overfit_checkpoint_allowed") is not False
+        or (not continuation and config.get("overfit_checkpoint_allowed") is not False)
         or (scale21 and config.get("prior_failed_checkpoint_allowed") is not False)
         or (scale21 and config.get("prior_failed_report_file_sha256") !=
             "2d9d917df08255cad30d90a8d3cb9e141610289724b4c5a8615e3c333669282b")
+        or (continuation and config.get("previous_checkpoint_allowed") is not False)
+        or (continuation and config.get("prior_failed_report_file_sha256") !=
+            "056f299bd6e8e9816622294eeb9d3fdfcc532b28a4ec123b124a93be2105dd93")
+        or (continuation and config.get("stop_owner") != "deterministic_router")
         or config.get("formal_training_allowed") is not False
         or config.get("checkpoint_promotion_allowed") is not False
         or config.get("video_dev_allowed") is not False
         or config.get("video_test_allowed") is not False
         or config.get("device_input_allowed") is not False
-        or conclusion.get("pilot_training_allowed") is not True
+        or (not continuation and conclusion.get("pilot_training_allowed") is not True)
+        or (continuation and conclusion.get("continuation_training_allowed") is not True)
         or conclusion.get("checkpoint_promotion_allowed") is not False
     ):
         raise ValueError("joystick grouped pilot contract differs")
-    if scale21:
+    if continuation:
+        validate_joystick_continuation_dataset(dataset_dir)
+    elif scale21:
         validate_joystick_scale21_dataset(dataset_dir)
     else:
         validate_joystick_grouped_pilot(dataset_dir)
@@ -675,12 +698,12 @@ def run_joystick_grouped_pilot(
         torch.cuda.reset_peak_memory_stats(device)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
-    model = TaskSpecificMovement().to(device)
+    model = TaskSpecificMovement(output_actions=len(action_order)).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=cast(float, training["learning_rate"]),
         weight_decay=cast(float, training["weight_decay"]),
     )
-    counts = torch.bincount(train_labels, minlength=len(MOVEMENT_ACTIONS))
+    counts = torch.bincount(train_labels, minlength=len(action_order))
     sampler = WeightedRandomSampler(
         1.0 / counts[train_labels].double(), num_samples=cast(int, training["samples_per_epoch"]),
         replacement=True, generator=torch.Generator().manual_seed(seed),
@@ -698,13 +721,13 @@ def run_joystick_grouped_pilot(
     best_state: dict[str, torch.Tensor] | None = None
     best_key = (-math.inf, -math.inf, -math.inf)
     best_epoch = 0
-    sampled_counts = torch.zeros(len(MOVEMENT_ACTIONS), dtype=torch.int64)
+    sampled_counts = torch.zeros(len(action_order), dtype=torch.int64)
     started = time.monotonic()
     evaluation_epochs = set(cast(list[int], training["evaluation_epochs"]))
     for epoch in range(1, cast(int, training["epochs"]) + 1):
         losses: list[float] = []
         for clips, labels in loader:
-            sampled_counts += torch.bincount(labels, minlength=len(MOVEMENT_ACTIONS))
+            sampled_counts += torch.bincount(labels, minlength=len(action_order))
             loss, gradient = train_step(
                 model, _batch(clips, device), labels.to(device), optimizer
             )
@@ -721,11 +744,11 @@ def run_joystick_grouped_pilot(
         if epoch in evaluation_epochs:
             train_metrics = _joystick_pilot_metrics(
                 model, train_clips, train_labels, train_sources, device,
-                cast(int, training["batch_size"]),
+                cast(int, training["batch_size"]), action_order,
             )
             dev_metrics = _joystick_pilot_metrics(
                 model, dev_clips, dev_labels, dev_sources, device,
-                cast(int, training["batch_size"]),
+                cast(int, training["batch_size"]), action_order,
             )
             history.append({"epoch": epoch, "mean_train_update_loss": float(np.mean(losses)),
                             "train": train_metrics, "dev": dev_metrics})
@@ -741,15 +764,15 @@ def run_joystick_grouped_pilot(
     model.load_state_dict(best_state)
     train_metrics = _joystick_pilot_metrics(
         model, train_clips, train_labels, train_sources, device,
-        cast(int, training["batch_size"]),
+        cast(int, training["batch_size"]), action_order,
     )
     dev_metrics = _joystick_pilot_metrics(
         model, dev_clips, dev_labels, dev_sources, device,
-        cast(int, training["batch_size"]),
+        cast(int, training["batch_size"]), action_order,
     )
     majority = int(torch.bincount(train_labels).argmax())
     majority_metrics = _classification_metrics(
-        np.full(len(dev_labels), majority), dev_labels.numpy(), len(MOVEMENT_ACTIONS)
+        np.full(len(dev_labels), majority), dev_labels.numpy(), len(action_order), action_order
     )
     source_accuracy = cast(dict[str, float], dev_metrics["source_accuracy"])
     gate_results = {
@@ -775,14 +798,16 @@ def run_joystick_grouped_pilot(
     checkpoint = staging / "best-internal-dev.safetensors"
     save_file(
         best_state, checkpoint,
-        metadata={"purpose": "grouped_pilot_only", "dataset_sha256": _sha256(dataset_path),
+        metadata={"purpose": "continuation_pilot_only" if continuation else "grouped_pilot_only",
+                  "dataset_sha256": _sha256(dataset_path),
                   "contract_sha256": cast(str, config["contract_sha256"]),
                   "fresh_initialization": "true", "overfit_checkpoint_loaded": "false",
                   "best_epoch": str(best_epoch)},
     )
     report: dict[str, object] = {
         "schema_version": (
-            "joystick-scale21-pilot-report-v1" if scale21
+            "joystick-continuation-pilot-report-v1" if continuation
+            else "joystick-scale21-pilot-report-v1" if scale21
             else "joystick-grouped-pilot-report-v1"
         ),
         "status": "PASSED" if passed else "FAILED", "passed": passed,
@@ -792,22 +817,27 @@ def run_joystick_grouped_pilot(
         "checkpoint_sha256": _sha256(checkpoint), "checkpoint_promotion_allowed": False,
         "formal_training_allowed": False, "next_stage_allowed": False,
         "semantic_accuracy_verified": False,
-        "generalization_scope": "two internal train-cohort sources",
-        "architecture": "TaskSpecificMovement-GroupNorm-GRU-686281",
+        "generalization_scope": "five internal train-cohort sources" if scale21 or continuation
+        else "two internal train-cohort sources",
+        "architecture": (
+            "TaskSpecificMovement-GroupNorm-GRU-686152-8head"
+            if continuation else "TaskSpecificMovement-GroupNorm-GRU-686281"
+        ),
         "total_parameters": sum(parameter.numel() for parameter in model.parameters()),
         "fresh_initialization": True, "initial_state_sha256": initial_hash,
         "overfit_checkpoint_loaded": False, "seed": seed, "device": str(device),
         "prior_failed_checkpoint_loaded": False,
         "comparison_prior_report_file_sha256": (
-            config.get("prior_failed_report_file_sha256") if scale21 else None
+            config.get("prior_failed_report_file_sha256") if scale21 or continuation else None
         ),
         "epochs": training["epochs"], "best_epoch": best_epoch,
         "sampled_train_label_counts": dict(zip(
-            MOVEMENT_ACTIONS, sampled_counts.tolist(), strict=True
+            action_order, sampled_counts.tolist(), strict=True
         )),
         "first_update": first_update, "history": history,
         "best_train": train_metrics, "best_dev": dev_metrics,
-        "majority_baseline": {"predicted_action": MOVEMENT_ACTIONS[majority], **majority_metrics},
+        "majority_baseline": {"predicted_action": action_order[majority], **majority_metrics},
+        "stop_owner": "deterministic_router" if continuation else None,
         "gate_results": gate_results, "gates": gates,
         "elapsed_seconds": elapsed,
         "gpu_peak_allocated_bytes": (
@@ -825,7 +855,8 @@ def run_joystick_grouped_pilot(
 
 
 def _classification_metrics(
-    predicted: np.ndarray, labels: np.ndarray, classes: int
+    predicted: np.ndarray, labels: np.ndarray, classes: int,
+    action_order: Sequence[str] = MOVEMENT_ACTIONS,
 ) -> dict[str, object]:
     confusion = np.zeros((classes, classes), dtype=np.int64)
     for expected, actual in zip(labels, predicted, strict=True):
@@ -845,7 +876,7 @@ def _classification_metrics(
     return {
         "accuracy": float(np.mean(predicted == labels)),
         "macro_f1": float(np.mean(f1_values)),
-        "recall": dict(zip(MOVEMENT_ACTIONS, recalls, strict=True)),
+        "recall": dict(zip(action_order, recalls, strict=True)),
         "confusion": confusion.tolist(),
     }
 

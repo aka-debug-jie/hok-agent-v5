@@ -46,6 +46,7 @@ CONFIG_V2 = ROOT / "configs" / "movement_mvp_stage_c_v2.json"
 JOYSTICK_CONFIG = ROOT / "configs" / "joystick_overfit32.json"
 JOYSTICK_PILOT_CONFIG = ROOT / "configs" / "joystick_grouped_pilot.json"
 JOYSTICK_SCALE21_CONFIG = ROOT / "configs" / "joystick_scale21_pilot.json"
+JOYSTICK_CONTINUATION_CONFIG = ROOT / "configs" / "joystick_continuation_pilot.json"
 REAL_COUNTERFACTUAL_TRAIN = (
     ROOT / "configs" / "movement_real_counterfactual_overfit32_train_v1.json"
 )
@@ -112,10 +113,29 @@ def test_joystick_scale21_pilot_rejects_old_grouped_dataset(tmp_path: Path) -> N
     assert not output.exists()
 
 
+def test_joystick_continuation_pilot_rejects_nine_class_dataset(tmp_path: Path) -> None:
+    dataset = tmp_path / "dataset"
+    dataset.mkdir()
+    (dataset / "joystick-continuation-grouped.npz").write_bytes(b"nine-class data")
+    (dataset / "manifest.json").write_text("{}")
+    (dataset / "conclusion.json").write_text(json.dumps({
+        "continuation_training_allowed": True, "checkpoint_promotion_allowed": False,
+    }))
+    output = tmp_path / "output"
+    with pytest.raises(ValueError, match="contract differs"):
+        run_joystick_grouped_pilot(
+            JOYSTICK_CONTINUATION_CONFIG, dataset, output, device_name="cpu"
+        )
+    assert not output.exists()
+
+
 def test_task_specific_model_consumes_sixteen_rgb_frames() -> None:
     model = TaskSpecificMovement()
     assert model(torch.zeros((2, 16, 3, 128, 128))).shape == (2, 9)
     assert sum(parameter.numel() for parameter in model.parameters()) < 1_000_000
+    continuation = TaskSpecificMovement(8)
+    assert continuation(torch.zeros((2, 16, 3, 128, 128))).shape == (2, 8)
+    assert sum(parameter.numel() for parameter in continuation.parameters()) == 686_152
 
 
 def test_relational_model_consumes_rgb_without_coordinate_labels() -> None:

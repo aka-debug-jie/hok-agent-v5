@@ -1,0 +1,41 @@
+{
+  "schema_version": "joystick-continuation-pilot-train-contract-v1",
+  "contract_sha256": "3628630c20d3603ad72698320446fa2c0850623fb8e4f858d46d0163295e47c1",
+  "dataset_sha256": "a6b4d566f5ae873e4d74fb35fcccb99e114941d934cbabd37aa0d4422b26f85a",
+  "manifest_file_sha256": "797f77c8b54cef49119a631e07e0ac59f487ea7a4b2a8c064147cd8c5b36a75e",
+  "conclusion_file_sha256": "cbe9b34f500bcca6440aa88486417827cbb24c8c61d0743b13293bb06c9954b2",
+  "prior_failed_report_file_sha256": "056f299bd6e8e9816622294eeb9d3fdfcc532b28a4ec123b124a93be2105dd93",
+  "action_order": ["N", "S", "W", "E", "NW", "NE", "SW", "SE"],
+  "seed": 0,
+  "training": {
+    "architecture": "task_specific_groupnorm_gru_686152_8head",
+    "optimizer": "AdamW",
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "batch_size": 8,
+    "epochs": 30,
+    "evaluation_epochs": [5, 10, 15, 20, 25, 30],
+    "sampling": "class_balanced_replacement",
+    "samples_per_epoch": 203,
+    "precision": "fp32",
+    "selection": "highest_dev_macro_f1_then_lower_loss_then_earlier_epoch"
+  },
+  "gates": {
+    "minimum_train_accuracy": 0.85,
+    "minimum_dev_accuracy": 0.35,
+    "minimum_dev_macro_f1": 0.35,
+    "minimum_nonzero_dev_recalls": 6,
+    "minimum_gain_over_majority_macro_f1": 0.20,
+    "minimum_each_dev_source_accuracy": 0.20
+  },
+  "attempt_limit": 1,
+  "fresh_initialization": true,
+  "previous_checkpoint_allowed": false,
+  "stop_owner": "deterministic_router",
+  "formal_training_allowed": false,
+  "checkpoint_promotion_allowed": false,
+  "semantic_accuracy_verified": false,
+  "video_dev_allowed": false,
+  "video_test_allowed": false,
+  "device_input_allowed": false
+}
