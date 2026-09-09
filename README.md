@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The position-held-out v2 model failed: train accuracy1.0 versus dev0.2083/macro-F10.1987, with
+four zero-recall directions. Complete E/W row coverage did not overcome absolute-position
+memorization. The checkpoint and neural simulator change branch are rejected for this cycle.
+Next is a zero-parameter geometry baseline on v2 data and unchanged routes.
+
 The position-corrected simulator dataset v2 is valid. E/W now cover rows2/3/4; train current x
 is6/7/8 and dev x is5/9 with zero position overlap. Size and class balance remain256/96 and
 32/12 per direction. Next is one fresh last-frame-only candidate; the GRU control is not repeated

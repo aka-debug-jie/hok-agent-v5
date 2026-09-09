@@ -875,27 +875,40 @@ def run_joystick_grouped_pilot(
 def run_change_policy_pilot(
     config_path: Path, dataset_dir: Path, output_dir: Path, *, device_name: str,
 ) -> dict[str, object]:
-    from hok_agent.movement_goal_canvas import CHANGE_MODEL_ACTIONS, validate_change_event_dataset
+    from hok_agent.movement_goal_canvas import (
+        CHANGE_MODEL_ACTIONS,
+        validate_change_event_dataset,
+        validate_change_event_dataset_v2,
+    )
 
     config = cast(dict[str, object], json.loads(config_path.read_text()))
+    position_v2 = (
+        config.get("schema_version") == "movement-change-position-v2-pilot-contract-v1"
+    )
     unsigned = {key: value for key, value in config.items() if key != "contract_sha256"}
     training = cast(dict[str, object], config["training"])
     gates = cast(dict[str, object], config["gates"])
     selection = cast(dict[str, object], config["selection"])
-    dataset_path = dataset_dir / "change-events.npz"
+    dataset_path = dataset_dir / (
+        "change-events-position-v2.npz" if position_v2 else "change-events.npz"
+    )
     manifest_path = dataset_dir / "manifest.json"
     conclusion_path = dataset_dir / "conclusion.json"
     conclusion = cast(dict[str, object], json.loads(conclusion_path.read_text()))
     if (
-        config.get("schema_version") != "movement-change-pilot-contract-v1"
+        config.get("schema_version") not in {
+            "movement-change-pilot-contract-v1",
+            "movement-change-position-v2-pilot-contract-v1",
+        }
         or config.get("contract_sha256") != _canonical_sha256(unsigned)
         or config.get("dataset_sha256") != _sha256(dataset_path)
         or config.get("manifest_file_sha256") != _sha256(manifest_path)
         or config.get("conclusion_file_sha256") != _sha256(conclusion_path)
         or config.get("action_order") != list(CHANGE_MODEL_ACTIONS)
-        or config.get("models") != [
-            "task_specific_gru_686152", "task_specific_last_frame_587080"
-        ]
+        or config.get("models") != (
+            ["task_specific_last_frame_587080"] if position_v2
+            else ["task_specific_gru_686152", "task_specific_last_frame_587080"]
+        )
         or training != {
             "optimizer": "AdamW", "learning_rate": 0.001, "weight_decay": 0.0,
             "batch_size": 32, "epochs": 30,
@@ -913,6 +926,8 @@ def run_change_policy_pilot(
         or config.get("attempts_per_model") != 1
         or config.get("fresh_initialization") is not True
         or config.get("previous_checkpoint_allowed") is not False
+        or (position_v2 and config.get("prior_failed_replay_report_file_sha256") !=
+            "43fa89e115830e79a87110c34f2a66f0a154b39ac714c0212d36a899ca1defbf")
         or config.get("simulator_only") is not True
         or config.get("formal_training_allowed") is not False
         or config.get("device_input_allowed") is not False
@@ -922,7 +937,10 @@ def run_change_policy_pilot(
         or conclusion.get("checkpoint_promotion_allowed") is not False
     ):
         raise ValueError("change policy pilot contract differs")
-    validate_change_event_dataset(dataset_dir)
+    if position_v2:
+        validate_change_event_dataset_v2(dataset_dir)
+    else:
+        validate_change_event_dataset(dataset_dir)
     if output_dir.exists():
         raise ValueError("change policy pilot output exists")
     with np.load(dataset_path, allow_pickle=False) as data:
@@ -1040,7 +1058,9 @@ def run_change_policy_pilot(
         variants[name], states[name] = train_variant(name)
     passing = [name for name, row in variants.items() if row["passed"]]
     selected: str | None = None
-    if passing:
+    if position_v2 and passing:
+        selected = passing[0]
+    elif passing:
         gru = variants["task_specific_gru_686152"]
         simple = variants["task_specific_last_frame_587080"]
         tolerance = cast(float, selection["simpler_model_tolerance"])
@@ -1073,12 +1093,18 @@ def run_change_policy_pilot(
         )
         checkpoint_rows[name] = _sha256(checkpoint)
     report: dict[str, object] = {
-        "schema_version": "movement-change-pilot-report-v1",
+        "schema_version": (
+            "movement-change-position-v2-pilot-report-v1"
+            if position_v2 else "movement-change-pilot-report-v1"
+        ),
         "status": "PASSED" if selected else "FAILED", "passed": selected is not None,
         "contract_sha256": config["contract_sha256"],
         "config_file_sha256": _sha256(config_path), "dataset_sha256": _sha256(dataset_path),
         "manifest_file_sha256": _sha256(manifest_path), "variants": variants,
         "checkpoint_sha256": checkpoint_rows, "selected_model": selected,
+        "prior_failed_replay_report_file_sha256": (
+            config.get("prior_failed_replay_report_file_sha256") if position_v2 else None
+        ),
         "selection_rule": selection, "gates": gates,
         "simulator_integration_allowed": selected is not None,
         "formal_training_allowed": False, "real_rgb_generalization_verified": False,

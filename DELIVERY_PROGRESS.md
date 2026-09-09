@@ -424,13 +424,31 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: CHANGE_EVENT_POSITION_V2_DATASET_VALIDATED
-BLOCKING FAILURE: corrected spatial generalization untested; prior checkpoint remains rejected
-NEXT ACCEPTANCE: one fresh last-frame-only v2 pilot with unchanged training parameters/gates
-COMMAND STATUS: train256 x6/7/8; dev96 x5/9; E/W rows2/3/4; overlap0; no model/input/test
+CURRENT STATUS: CHANGE_POSITION_V2_PILOT_FAILED_ABSOLUTE_POSITION_SHORTCUT
+BLOCKING FAILURE: train1.0/dev0.2083; position-held-out relation not learned; new replay closed
+NEXT ACCEPTANCE: deterministic geometry baseline on v2 data and unchanged routes; no model
+COMMAND STATUS: one v2 attempt consumed; checkpoint rejected; no device input/video-dev/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Position-held-out change pilot v2 (2026-09-09)
+
+- Ran the sole fresh last-frame attempt with the same seed0, AdamW1e-3, batch32,30 epochs and
+  0.95 accuracy/F1 plus0.90 recall gates. The old checkpoint was not loaded; GRU was not repeated.
+- Best epoch5 has train accuracy1.0 but position-held-out dev accuracy0.20833, macro-F10.19872,
+  loss5.76653. N/S/NW/SE recalls are0; W/E are0.333 and NE/SW0.5. Every gate except train and
+  first-update fails. Dev result is unchanged through epoch30 while loss increases to7.735.
+- The explicit E/W row repair did not solve x-position generalization. Evidence supports an
+  absolute-position shortcut in this CNN, not a learned player-to-goal relation. The attempt is consumed.
+- Status `CHANGE_POSITION_V2_PILOT_FAILED_ABSOLUTE_POSITION_SHORTCUT`; report file/self
+  `d889134b37cb240c577c71da3d211901f4c2b8ca65cfafa68676dff2b6e485a5` /
+  `1132e9bc903dee9da10b48efc5f9c5fdb7896ca3b21af9bbcda51cef6f5c461e`;
+  rejected checkpoint `22c771f08611e91753e121896a273e5326b8f8e582da973bed476ba51e2b8fc6`.
+  Runtime12.285s, peak280,201,216 GPU bytes. No replay/input/video-dev/test.
+- No same-data retry, model growth or relational architecture tuning. Next audit uses the existing
+  zero-parameter goal-canvas geometry rule on v2 data and unchanged routes. If exact, simulator
+  change control remains deterministic; real use still needs a valid visual player/goal source.
 
 ### Position-held-out change dataset v2 (2026-09-09)
 

@@ -109,6 +109,11 @@ unchanged. No model run until v2 data validation passes.
 V2 data now passes with zero position overlap and352 unique clips. One fresh last-frame-only
 candidate may reuse the prior seed, optimizer,30 epochs and gates. The GRU comparison is not
 repeated because replay failure isolated spatial position coverage. No old checkpoint.
+If the single v2 last-frame attempt passes, bind a new replay contract to its report/checkpoint;
+the original multi-waypoint routes remain unchanged. No threshold or route repair.
+That attempt failed at train1.0/dev0.2083 and is consumed; no replay or model/architecture retry.
+The next work may only audit the deterministic `goal_canvas_geometry_movement` baseline on v2
+data and unchanged routes. It cannot claim real-RGB observability or authorize input.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.
