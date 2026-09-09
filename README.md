@@ -15,10 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
-The zero-parameter geometry baseline passes the corrected dataset352/352 and the unchanged
-multi-waypoint replay10/10 with40 changes,40 KEEP,40 STOP and120 arena steps. Simulator Movement
-therefore uses deterministic goal geometry; learned continuation/change checkpoints remain rejected.
-The next step is an offline evidence package. Real deployment still needs real player/goal observability.
+The zero-parameter geometry baseline and its immutable delivery package pass. The corrected
+dataset is352/352 and the unchanged multi-waypoint replay is10/10 with40 changes,40 KEEP,40 STOP
+and120 arena steps. Simulator Movement therefore uses deterministic goal geometry; learned
+continuation/change checkpoints remain rejected. Real deployment still needs real player/goal
+observability.
 
 The position-held-out v2 model failed: train accuracy1.0 versus dev0.2083/macro-F10.1987, with
 four zero-recall directions. Complete E/W row coverage did not overcome absolute-position
@@ -260,6 +261,26 @@ python -m hok_agent movement-mvp --mode package-cycle --verify-only \
 Its delivery grade is `R1_ENGINEERING_OFFLINE_ZERO_REWARD`: deterministic Movement plus verified
 Event-to-Store plumbing, with learned Movement, semantic Reward, real-video policy, mobile control
 and RL all explicitly false.
+
+The final simulator hierarchy is packaged as a small evidence extension around that R1 package:
+
+```bash
+python -m hok_agent movement-mvp --mode package-hierarchical-rule \
+  --source-run "$MOVEMENT_EVIDENCE_ROOT/r1-offline-engineering-v1" \
+  --evidence-report "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/joystick-persistence-baseline-v1/report.json" \
+  --evidence-report "$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/movement-change-only-contract-v1/report.json" \
+  --evidence-report "$MOVEMENT_EVIDENCE_ROOT/movement-change-pilot-v1/report.json" \
+  --evidence-report "$MOVEMENT_EVIDENCE_ROOT/movement-change-replay-v1/report.json" \
+  --evidence-report "$MOVEMENT_EVIDENCE_ROOT/movement-change-position-v2-pilot/report.json" \
+  --evidence-report "$MOVEMENT_EVIDENCE_ROOT/movement-change-geometry-replay-v1/report.json" \
+  --output-dir "$MOVEMENT_EVIDENCE_ROOT/r1-hierarchical-rule-v1"
+python -m hok_agent movement-mvp --mode package-hierarchical-rule --verify-only \
+  --output-dir "$MOVEMENT_EVIDENCE_ROOT/r1-hierarchical-rule-v1"
+```
+
+Its grade is `R1_HIERARCHICAL_RULE_OFFLINE`. It binds Macro goal geometry change, deterministic
+direction persistence and Router STOP, but contains no checkpoint and grants no real-RGB, Reward,
+mobile-control or RL capability.
 
 `make check` now always binds this checkout's absolute `src` directory through the shared
 `RUN_PYTHON` wrapper, preventing a neighbouring editable `hok_agent` installation from being

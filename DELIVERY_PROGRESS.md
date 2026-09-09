@@ -423,14 +423,39 @@ results remain evidence and reusable components, not reopened parallel routes.
 ## Engineering convergence execution state
 
 ```text
-CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: SIMULATOR_GEOMETRY_CHANGE_REPLAY_PASSED
+CURRENT GOAL: freeze the bounded offline simulator hierarchy
+CURRENT STATUS: R1_HIERARCHICAL_RULE_OFFLINE_COMPLETE
 BLOCKING FAILURE: real player/goal observability remains unavailable; learned Movement rejected
-NEXT ACCEPTANCE: package offline hierarchical rule evidence; no new model/data/input
-COMMAND STATUS: dataset352/352; replay10/10,40 change/40 KEEP/40 STOP/120 steps; model0
+NEXT ACCEPTANCE: none in this cycle; a new cycle requires an observable real player/goal source
+COMMAND STATUS: package verified; dataset352/352; replay10/10,40 change/40 KEEP/40 STOP/120 steps
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Hierarchical simulator rule delivery (2026-09-09)
+
+- Added `movement-mvp --mode package-hierarchical-rule` with an independent read-only
+  `--verify-only` path. It nests the verified R1 engineering package and binds exactly six frozen
+  Movement reports: deterministic persistence, change-only ownership, the initial neural pilot,
+  both rejected neural replays/pilots, and the passing geometry replay.
+- Delivery grade is `R1_HIERARCHICAL_RULE_OFFLINE`. The selected simulator chain is Macro exact
+  goal geometry change, deterministic previous-direction persistence and deterministic Router
+  STOP. It contains no promoted checkpoint and does not grant real-RGB, Reward, mobile or RL use.
+- Real package passes352/352 dataset decisions and10/10 replay episodes with40 geometry changes,
+  40 KEEP,40 STOP and120 arena steps. Model runs and input commands are both zero.
+- Package:
+  `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/r1-hierarchical-rule-v1`.
+  It contains403 files and32,730,021 bytes. Manifest file SHA-256
+  `563774c64f09058f09c481ebb5794ac2080dfdb33775908daa566e764cad152d`;
+  summary file SHA-256
+  `6c2a7b70272b0313fcc6b5136c1e6399e95c44a6a9046e3fb19532359706def6`.
+- A new process completed read-only verification with the same result. This closes the simulator
+  Movement cycle; future work must begin from separately observable real player and Macro goal
+  evidence rather than another model/data retry on these synthetic markers.
+- Delivery validation passed Ruff, strict mypy on70 source files, all492 pytest tests in108.64s,
+  project safety on271 files/131 Python files/71,842 lines, and `git diff --check`. The first plain
+  `make check` used the ambient Conda `python3` without mypy and stopped before pytest; rerunning the
+  identical target with the project Python3.10 environment passed completely.
 
 ### Deterministic geometry change replay (2026-09-09)
 

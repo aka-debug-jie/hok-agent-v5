@@ -21,11 +21,33 @@ RESOLVED_CONFIG_SCHEMA = "movement-mvp-r0-resolved-config-v1"
 MOVEMENT_ACTIONS = ("STOP", "N", "S", "W", "E", "NW", "NE", "SW", "SE")
 CYCLE_PACKAGE_SCHEMA = "offline-engineering-cycle-package-v1"
 CYCLE_SUMMARY_SCHEMA = "offline-engineering-cycle-summary-v1"
+HIERARCHICAL_PACKAGE_SCHEMA = "hierarchical-rule-delivery-package-v1"
+HIERARCHICAL_SUMMARY_SCHEMA = "hierarchical-rule-delivery-summary-v1"
 FAILURE_EVIDENCE_NAMES = {
     "WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED": "weak-anchor-relation-failed.json",
     "DEATH_BANNER_CONSENSUS_DATA_INSUFFICIENT": "death-banner-consensus-insufficient.json",
     "NATIVE_DEATH_CUE_PREFLIGHT_INSUFFICIENT": "native-death-preflight-machine.json",
     "NATIVE_DEATH_CUE_PREFLIGHT_DOMAIN_MISMATCH": "native-death-preflight-qa.json",
+}
+HIERARCHICAL_EVIDENCE = {
+    "joystick-persistence-baseline-audit-v1": (
+        "DETERMINISTIC_DIRECTION_PERSISTENCE_EXACT",
+        "direction-persistence.json",
+    ),
+    "movement-change-only-contract-report-v1": (
+        "CHANGE_ONLY_MOVEMENT_CONTRACT_PASSED",
+        "change-only-contract.json",
+    ),
+    "movement-change-pilot-report-v1": ("PASSED", "neural-change-pilot.json"),
+    "movement-change-replay-report-v1": ("FAILED", "neural-change-replay-failed.json"),
+    "movement-change-position-v2-pilot-report-v1": (
+        "FAILED",
+        "neural-position-v2-failed.json",
+    ),
+    "movement-change-geometry-replay-report-v1": (
+        "PASSED",
+        "geometry-replay-passed.json",
+    ),
 }
 
 
@@ -731,6 +753,240 @@ def verify_offline_cycle_package(output_dir: Path) -> dict[str, object]:
         "failure_reports": len(failures),
         "input_commands_sent": 0,
         "promoted_checkpoint": None,
+        "manifest_file_sha256": _file_sha256(manifest_path),
+        "summary_file_sha256": _file_sha256(output_dir / "summary.json"),
+        "package_bytes": package_bytes,
+        "offline_only": True,
+    }
+
+
+def _load_hierarchical_evidence(paths: list[Path]) -> list[dict[str, object]]:
+    if len(paths) != len(HIERARCHICAL_EVIDENCE):
+        raise ValueError("hierarchical package requires exactly six evidence reports")
+    rows: list[dict[str, object]] = []
+    schemas: set[str] = set()
+    for path in paths:
+        payload = _read_self_bound(path, "report_sha256")
+        schema = str(payload.get("schema_version", ""))
+        expected = HIERARCHICAL_EVIDENCE.get(schema)
+        if expected is None or schema in schemas or payload.get("status") != expected[0]:
+            raise ValueError("hierarchical package evidence identity differs")
+        encoded = json.dumps(payload, sort_keys=True)
+        if (
+            payload.get("input_commands_sent") != 0
+            or payload.get("video_test_opened") is not False
+            or '"device_input_allowed": true' in encoded
+            or '"real_rgb_generalization_verified": true' in encoded
+        ):
+            raise ValueError("hierarchical package evidence grants a blocked capability")
+        rows.append(
+            {
+                "schema_version": schema,
+                "status": expected[0],
+                "source": path,
+                "output_name": expected[1],
+                "sha256": _file_sha256(path),
+            }
+        )
+        schemas.add(schema)
+    if schemas != set(HIERARCHICAL_EVIDENCE):
+        raise ValueError("hierarchical package evidence set differs")
+    return sorted(rows, key=lambda row: str(row["output_name"]))
+
+
+def create_hierarchical_rule_package(
+    r1_package: Path,
+    evidence_reports: list[Path],
+    output_dir: Path,
+) -> dict[str, object]:
+    r1 = verify_offline_cycle_package(r1_package)
+    evidence = _load_hierarchical_evidence(evidence_reports)
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("hierarchical package output already exists")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        shutil.copytree(r1_package, staging / "r1")
+        evidence_dir = staging / "movement-evidence"
+        evidence_dir.mkdir()
+        evidence_summary: list[dict[str, object]] = []
+        for row in evidence:
+            target = evidence_dir / str(row["output_name"])
+            shutil.copyfile(cast(Path, row["source"]), target)
+            _fsync_file(target)
+            evidence_summary.append(
+                {
+                    "schema_version": row["schema_version"],
+                    "status": row["status"],
+                    "path": f"movement-evidence/{target.name}",
+                    "sha256": row["sha256"],
+                }
+            )
+        summary: dict[str, object] = {
+            "schema_version": HIERARCHICAL_SUMMARY_SCHEMA,
+            "status": "PASSED",
+            "delivery_grade": "R1_HIERARCHICAL_RULE_OFFLINE",
+            "selected_runtime_policy": {
+                "macro_change": "exact_simulator_goal_geometry",
+                "movement_persistence": "deterministic_previous_direction",
+                "stop": "deterministic_router",
+            },
+            "promoted_checkpoint": None,
+            "capabilities": {
+                "simulator_goal_change": True,
+                "deterministic_movement_persistence": True,
+                "deterministic_router_stop": True,
+                "learned_movement": False,
+                "real_rgb_goal_observability": False,
+                "real_rgb_player_localization": False,
+                "semantic_reward": False,
+                "mobile_control": False,
+                "reinforcement_learning": False,
+            },
+            "geometry_replay": {
+                "dataset_correct": 352,
+                "episodes_passed": 10,
+                "geometry_changes": 40,
+                "executor_keep_steps": 40,
+                "router_stop_steps": 40,
+                "arena_steps": 120,
+                "model_runs": 0,
+            },
+            "r1": {
+                "delivery_grade": r1["delivery_grade"],
+                "manifest_file_sha256": r1["manifest_file_sha256"],
+                "summary_file_sha256": r1["summary_file_sha256"],
+            },
+            "movement_evidence": evidence_summary,
+            "input_commands_sent": 0,
+            "video_test_opened": False,
+            "offline_only": True,
+        }
+        summary["summary_sha256"] = _object_sha256(summary)
+        _write_json(staging / "summary.json", summary)
+        files = _manifest_files(staging)
+        manifest: dict[str, object] = {
+            "schema_version": HIERARCHICAL_PACKAGE_SCHEMA,
+            "status": "COMPLETE",
+            "files": files,
+            "file_count": len(files),
+            "package_payload_bytes": sum(cast(int, row["bytes"]) for row in files),
+        }
+        manifest["manifest_sha256"] = _object_sha256(manifest)
+        _write_json(staging / "manifest.json", manifest)
+        os.replace(staging, output_dir)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return verify_hierarchical_rule_package(output_dir)
+
+
+def verify_hierarchical_rule_package(output_dir: Path) -> dict[str, object]:
+    if output_dir.is_symlink() or not output_dir.is_dir():
+        raise ValueError("hierarchical package is not a regular directory")
+    manifest_path = output_dir / "manifest.json"
+    manifest = _read_self_bound(manifest_path, "manifest_sha256")
+    rows = cast(list[dict[str, object]], manifest.get("files"))
+    declared = {str(row["path"]): row for row in rows}
+    actual = {
+        path.relative_to(output_dir).as_posix()
+        for path in output_dir.rglob("*")
+        if path.is_file() and path.name != "manifest.json"
+    }
+    if (
+        manifest.get("schema_version") != HIERARCHICAL_PACKAGE_SCHEMA
+        or manifest.get("status") != "COMPLETE"
+        or len(rows) != manifest.get("file_count")
+        or len(declared) != len(rows)
+        or actual != set(declared)
+        or any(path.is_symlink() for path in output_dir.rglob("*"))
+    ):
+        raise ValueError("hierarchical package manifest differs")
+    for relative, row in declared.items():
+        path = output_dir / relative
+        if (
+            Path(relative).is_absolute()
+            or ".." in Path(relative).parts
+            or path.stat().st_size != row["bytes"]
+            or _file_sha256(path) != row["sha256"]
+        ):
+            raise ValueError("hierarchical package file binding differs")
+    if sum(cast(int, row["bytes"]) for row in rows) != manifest.get("package_payload_bytes"):
+        raise ValueError("hierarchical package payload size differs")
+    summary = _read_self_bound(output_dir / "summary.json", "summary_sha256")
+    r1 = verify_offline_cycle_package(output_dir / "r1")
+    evidence_paths = sorted((output_dir / "movement-evidence").glob("*.json"))
+    evidence = _load_hierarchical_evidence(evidence_paths)
+    expected_evidence = cast(list[dict[str, object]], summary.get("movement_evidence"))
+    geometry = cast(dict[str, object], summary.get("geometry_replay"))
+    capabilities = cast(dict[str, object], summary.get("capabilities"))
+    selected_policy = cast(dict[str, object], summary.get("selected_runtime_policy"))
+    if (
+        summary.get("schema_version") != HIERARCHICAL_SUMMARY_SCHEMA
+        or summary.get("status") != "PASSED"
+        or summary.get("delivery_grade") != "R1_HIERARCHICAL_RULE_OFFLINE"
+        or summary.get("promoted_checkpoint") is not None
+        or summary.get("input_commands_sent") != 0
+        or summary.get("video_test_opened") is not False
+        or summary.get("offline_only") is not True
+        or cast(dict[str, object], summary.get("r1")).get("manifest_file_sha256")
+        != r1["manifest_file_sha256"]
+        or cast(dict[str, object], summary.get("r1")).get("summary_file_sha256")
+        != r1["summary_file_sha256"]
+        or {str(row["schema_version"]): row["sha256"] for row in expected_evidence}
+        != {str(row["schema_version"]): row["sha256"] for row in evidence}
+        or geometry
+        != {
+            "dataset_correct": 352,
+            "episodes_passed": 10,
+            "geometry_changes": 40,
+            "executor_keep_steps": 40,
+            "router_stop_steps": 40,
+            "arena_steps": 120,
+            "model_runs": 0,
+        }
+        or capabilities.get("learned_movement") is not False
+        or capabilities.get("real_rgb_goal_observability") is not False
+        or capabilities.get("real_rgb_player_localization") is not False
+        or capabilities.get("mobile_control") is not False
+        or capabilities.get("reinforcement_learning") is not False
+        or selected_policy
+        != {
+            "macro_change": "exact_simulator_goal_geometry",
+            "movement_persistence": "deterministic_previous_direction",
+            "stop": "deterministic_router",
+        }
+        or any(output_dir.rglob("*.safetensors"))
+        or any(output_dir.rglob("replay.sqlite3-*"))
+    ):
+        raise ValueError("hierarchical package summary differs")
+    geometry_report = _read_json(output_dir / "movement-evidence" / "geometry-replay-passed.json")
+    dataset_results = cast(dict[str, dict[str, object]], geometry_report.get("dataset_results"))
+    if (
+        dataset_results.get("train", {}).get("correct") != 256
+        or dataset_results.get("dev", {}).get("correct") != 96
+        or geometry_report.get("episodes_passed") != 10
+        or geometry_report.get("geometry_changes") != 40
+        or geometry_report.get("executor_keep_steps") != 40
+        or geometry_report.get("router_stop_steps") != 40
+        or geometry_report.get("arena_steps") != 120
+        or geometry_report.get("model_runs") != 0
+    ):
+        raise ValueError("hierarchical package geometry evidence differs")
+    package_bytes = sum(path.stat().st_size for path in output_dir.rglob("*") if path.is_file())
+    return {
+        "status": "PASSED",
+        "delivery_grade": "R1_HIERARCHICAL_RULE_OFFLINE",
+        "dataset_correct": 352,
+        "episodes_passed": 10,
+        "geometry_changes": 40,
+        "executor_keep_steps": 40,
+        "router_stop_steps": 40,
+        "arena_steps": 120,
+        "model_runs": 0,
+        "input_commands_sent": 0,
+        "promoted_checkpoint": None,
+        "evidence_reports": len(evidence),
         "manifest_file_sha256": _file_sha256(manifest_path),
         "summary_file_sha256": _file_sha256(output_dir / "summary.json"),
         "package_bytes": package_bytes,

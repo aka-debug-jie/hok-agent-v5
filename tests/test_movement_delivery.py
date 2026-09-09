@@ -17,8 +17,10 @@ from hok_agent.hierarchical_e1 import (
 )
 from hok_agent.movement_delivery import (
     _object_sha256,
+    create_hierarchical_rule_package,
     create_offline_cycle_package,
     create_r0_package,
+    verify_hierarchical_rule_package,
     verify_offline_cycle_package,
     verify_r0_package,
 )
@@ -134,6 +136,47 @@ def _rewrite_self_bound(path: Path, field: str, updates: dict[str, object]) -> N
     payload.pop(field)
     payload[field] = _object_sha256(payload)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _hierarchical_reports(root: Path) -> list[Path]:
+    definitions = (
+        ("joystick-persistence-baseline-audit-v1", "DETERMINISTIC_DIRECTION_PERSISTENCE_EXACT"),
+        ("movement-change-only-contract-report-v1", "CHANGE_ONLY_MOVEMENT_CONTRACT_PASSED"),
+        ("movement-change-pilot-report-v1", "PASSED"),
+        ("movement-change-replay-report-v1", "FAILED"),
+        ("movement-change-position-v2-pilot-report-v1", "FAILED"),
+        ("movement-change-geometry-replay-report-v1", "PASSED"),
+    )
+    reports: list[Path] = []
+    for index, (schema, status) in enumerate(definitions):
+        payload: dict[str, object] = {
+            "schema_version": schema,
+            "status": status,
+            "input_commands_sent": 0,
+            "video_test_opened": False,
+            "device_input_allowed": False,
+            "real_rgb_generalization_verified": False,
+        }
+        if schema == "movement-change-geometry-replay-report-v1":
+            payload.update(
+                {
+                    "dataset_results": {
+                        "train": {"correct": 256},
+                        "dev": {"correct": 96},
+                    },
+                    "episodes_passed": 10,
+                    "geometry_changes": 40,
+                    "executor_keep_steps": 40,
+                    "router_stop_steps": 40,
+                    "arena_steps": 120,
+                    "model_runs": 0,
+                }
+            )
+        payload["report_sha256"] = _object_sha256(payload)
+        path = root / f"hierarchical-{index}.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        reports.append(path)
+    return reports
 
 
 def test_r0_package_create_and_verify(
@@ -311,6 +354,101 @@ def test_cycle_package_cli_verify_only_is_read_only(
                 "movement-mvp",
                 "--mode",
                 "package-cycle",
+                "--verify-only",
+                "--source-run",
+                "unexpected",
+                "--output-dir",
+                str(package),
+            ]
+        )
+        == 2
+    )
+    assert "accepts only" in capsys.readouterr().err
+
+
+def test_hierarchical_rule_package_create_verify_and_boundaries(
+    cycle_evidence: tuple[Path, Path, list[Path], Path], tmp_path: Path
+) -> None:
+    r1 = cycle_evidence[3]
+    reports = _hierarchical_reports(tmp_path)
+    package = tmp_path / "hierarchical-package"
+    result = create_hierarchical_rule_package(r1, reports, package)
+    assert result == verify_hierarchical_rule_package(package)
+    assert result["delivery_grade"] == "R1_HIERARCHICAL_RULE_OFFLINE"
+    assert result["dataset_correct"] == 352
+    assert result["episodes_passed"] == 10
+    assert result["geometry_changes"] == 40
+    assert result["executor_keep_steps"] == 40
+    assert result["router_stop_steps"] == 40
+    assert result["arena_steps"] == 120
+    assert result["model_runs"] == 0
+    assert result["input_commands_sent"] == 0
+    assert result["promoted_checkpoint"] is None
+    assert result["evidence_reports"] == 6
+    assert not tuple(package.rglob("*.safetensors"))
+    assert not tuple(package.rglob("replay.sqlite3-*"))
+    with pytest.raises(ValueError, match="already exists"):
+        create_hierarchical_rule_package(r1, reports, package)
+
+
+@pytest.mark.parametrize(
+    "relative",
+    (
+        "summary.json",
+        "manifest.json",
+        "movement-evidence/geometry-replay-passed.json",
+        "movement-evidence/neural-position-v2-failed.json",
+        "r1/summary.json",
+    ),
+)
+def test_hierarchical_rule_package_rejects_tampering(
+    cycle_evidence: tuple[Path, Path, list[Path], Path],
+    tmp_path: Path,
+    relative: str,
+) -> None:
+    package = tmp_path / "source-package"
+    create_hierarchical_rule_package(
+        cycle_evidence[3], _hierarchical_reports(tmp_path), package
+    )
+    tampered = tmp_path / relative.replace("/", "-")
+    shutil.copytree(package, tampered)
+    (tampered / relative).write_bytes(b"tampered")
+    with pytest.raises(ValueError):
+        verify_hierarchical_rule_package(tampered)
+
+
+def test_hierarchical_rule_package_cli_verify_only_is_read_only(
+    cycle_evidence: tuple[Path, Path, list[Path], Path],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    package = tmp_path / "hierarchical-package"
+    create_hierarchical_rule_package(
+        cycle_evidence[3], _hierarchical_reports(tmp_path), package
+    )
+    before = (package / "manifest.json").read_bytes()
+    assert (
+        main(
+            [
+                "movement-mvp",
+                "--mode",
+                "package-hierarchical-rule",
+                "--verify-only",
+                "--output-dir",
+                str(package),
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["delivery_grade"] == "R1_HIERARCHICAL_RULE_OFFLINE"
+    assert (package / "manifest.json").read_bytes() == before
+    assert (
+        main(
+            [
+                "movement-mvp",
+                "--mode",
+                "package-hierarchical-rule",
                 "--verify-only",
                 "--source-run",
                 "unexpected",

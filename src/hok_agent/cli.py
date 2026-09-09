@@ -66,6 +66,7 @@ def _parser() -> argparse.ArgumentParser:
             "rule-batch",
             "package",
             "package-cycle",
+            "package-hierarchical-rule",
             "real-rgb-preflight",
             "real-rgb-goal-canvas",
             "goal-canvas-overfit32-materialize",
@@ -126,6 +127,7 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--control-run", type=Path)
     movement_mvp.add_argument("--event-run", type=Path)
     movement_mvp.add_argument("--failure-report", type=Path, action="append", default=[])
+    movement_mvp.add_argument("--evidence-report", type=Path, action="append", default=[])
     movement_mvp.add_argument("--verify-only", action="store_true")
     movement_mvp.add_argument("--normalize-scale", action="store_true")
     movement_mvp.add_argument("--geometric-base", action="store_true")
@@ -1932,6 +1934,28 @@ def main(argv: Sequence[str] | None = None) -> int:
                 from hok_agent.movement_real_rgb import run_real_rgb_preflight
 
                 result = run_real_rgb_preflight(args.config, args.target_root, args.output_dir)
+            elif args.mode == "package-hierarchical-rule":
+                from hok_agent.movement_delivery import (
+                    create_hierarchical_rule_package,
+                    verify_hierarchical_rule_package,
+                )
+
+                if args.verify_only:
+                    if args.source_run is not None or args.evidence_report:
+                        raise ValueError(
+                            "package-hierarchical-rule --verify-only accepts only --output-dir"
+                        )
+                    result = verify_hierarchical_rule_package(args.output_dir)
+                else:
+                    if args.source_run is None:
+                        raise ValueError(
+                            "package-hierarchical-rule creation requires --source-run"
+                        )
+                    result = create_hierarchical_rule_package(
+                        args.source_run,
+                        args.evidence_report,
+                        args.output_dir,
+                    )
             elif args.mode == "package-cycle":
                 from hok_agent.movement_delivery import (
                     create_offline_cycle_package,

@@ -531,6 +531,11 @@ checkpoint。该R1是工程能力整理，不是R0策略升级，也不授权真
 语义来源时当前工程周期到此结束；后续立项应先明确可获得的标签/环境反馈，再选择Reward或
 英雄专用动作数据，不继续从同一批无真值视频制造新支线。
 
+Movement分层控制也已作为`R1_HIERARCHICAL_RULE_OFFLINE`独立冻结。外层包嵌套验证既有R1，
+再绑定方向保持、换向合同、两次神经模型失败和最终几何回放共6份报告；不复制数据集或权重。
+当前模拟器执行链固定为Macro精确目标几何换向、Executor保持方向、Router停止。该结果只证明
+合成标记可见条件下的确定性工程组合，不解决真实玩家定位或Macro目标可观察性。
+
 下一周期的后羿数据只读审计已完成。149个MP4的文件/目录名无后羿、Houyi、射手或发育路线索；
 正式审计先按cohort过滤，仅打开103 train和23 dev容器元数据，英雄关键词仍为0，test容器与帧
 均为0。hero profile仍是`TEMPLATE_NOT_CONFIGURED`，owner attestation没有hero字段；152份summary
@@ -779,6 +784,10 @@ RichPixelArena，把tower_damage和minion_damage设为0，落实连续STOP三步
 本阶段已按R0收口。`movement-mvp --mode package`将D0中断版和连续版核验后写入一个原子目录，
 `--verify-only`在独立进程只读复核。最终包为521,244字节，包含90条transition、10条终局、
 100个派生帧和单一manifest，不含checkpoint。当前状态与hash以进度账本为准。
+
+后续`package-cycle`与`package-hierarchical-rule`仍复用同一`movement-mvp`入口：前者冻结零奖励
+Event工程链，后者只增加最终模拟器分层规则证据。两者均为不可覆盖目录、支持独立只读验证，
+且不把失败checkpoint带入交付。
 
 1. 为新任务只加一个 lazy CLI；当前可运行入口为`movement-mvp`，规则运行、训练诊断、评估、
    恢复与package均通过其mode选择。规则/学习策略由同一配置字段选择，
