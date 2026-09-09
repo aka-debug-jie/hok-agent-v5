@@ -10,11 +10,12 @@ The public tree contains no device identity, calibrated layout, recordings, data
 ## Current work
 
 Follow the one active task in [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md#current-execution-state).
-The [engineering plan](docs/ENGINEERING_CONVERGENCE_PLAN.md) defines the next 12-hour offline batch:
+The [engineering plan](docs/ENGINEERING_CONVERGENCE_PLAN.md) defined the completed offline batch:
 
-- N1: make existing real-ROI localization, goals, suggestions and unknown intervals visible.
-- N2: connect multi-goal rules to the existing Store and mid-episode recovery in one runtime.
-- One integration check and handoff. No new training or packaging milestone.
+- N1 produced four 10-second QA GIFs, a same-frame goal counterfactual and frame records. It
+  remains `DATA_SOURCE_LIMITED`: 212/4,455 direct observations.
+- N2 now records multi-goal movement in the existing Store and restores from transition 4.
+  Interrupted and continuous 10-episode runs contain identical 140-transition content.
 
 The frozen hierarchical package contains a 10-episode synthetic geometry report alongside the
 older recoverable rule/Event evidence. Its 352/352 decisions and 10/10 routes are narrow simulator
@@ -54,9 +55,17 @@ env -u LD_LIBRARY_PATH PYTHONPATH="$PWD/src" ../hok-agent-v5/.venv/bin/python -m
   --output-dir "${HOK_LARGE_ROOT:?set HOK_LARGE_ROOT}/runs/hierarchical-movement-mvp/r1-hierarchical-rule-v1"
 ```
 
-N1/N2 commands will be documented after implementation. Earlier experiment commands and exact
-planning snapshots are in [DELIVERY_HISTORY.md](docs/DELIVERY_HISTORY.md#planning-snapshot-20260909);
-their presence is not an instruction to rerun consumed experiments.
+Completed N1/N2 artifacts are local under `$HOK_LARGE_ROOT`:
+
+```text
+audit/hierarchical-movement-mvp/n1-real-navigation-demo-v1
+runs/hierarchical-movement-mvp/n2-multigoal-recovery-v1
+runs/hierarchical-movement-mvp/n2-multigoal-continuous-v1
+```
+
+Earlier experiment commands and exact planning snapshots are in
+[DELIVERY_HISTORY.md](docs/DELIVERY_HISTORY.md#planning-snapshot-20260909); their presence is not
+an instruction to rerun consumed experiments.
 
 ## Data and execution scope
 
@@ -65,9 +74,9 @@ The default storage path is Git-ignored .local-data/hok-agent-v5. Existing raw v
 copied into the repository. Public manifests contain anonymous identities and artifact references,
 not source-video locators, credentials or device identifiers.
 
-This batch uses existing offline evidence and PixelArena. Recorded-video suggestions are not
+This batch used existing offline evidence and PixelArena. Recorded-video suggestions are not
 executed actions. All rewards remain zero. No phone connection, old test/holdout, RL, new human
-recordings or annotation is part of the active batch.
+recordings or annotation was used.
 Future device tasks use the existing locally attested testbed and its unchanged authorization
 requirements in [BOUNDARIES.md](BOUNDARIES.md).
 

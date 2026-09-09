@@ -77,6 +77,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-player-cue",
             "real-player-goal-continuity",
             "real-player-localization-audit-v2",
+            "real-navigation-demo",
             "real-player-tracking-audit",
             "real-player-flow-audit",
             "joystick-visibility",
@@ -1784,6 +1785,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 result = run_joystick_visibility(
                     args.source_root, args.cohort_dir, args.pre_ingest, args.output_dir
+                )
+            elif args.mode == "real-navigation-demo":
+                if args.session_root is None or args.prior_report is None:
+                    raise ValueError(
+                        "real-navigation-demo requires --session-root and --prior-report"
+                    )
+                from hok_agent.movement_real_rgb import run_real_navigation_demo
+
+                result = run_real_navigation_demo(
+                    args.config, args.prior_report, args.session_root, args.output_dir
                 )
             elif args.mode == "real-player-flow-audit":
                 if args.session_root is None or args.prior_report is None:

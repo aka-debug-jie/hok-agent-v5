@@ -1,0 +1,33 @@
+{
+  "contract_version": "movement-mvp-multigoal-v1",
+  "hero": "houyi",
+  "role": "marksman",
+  "side": "blue",
+  "lane": "bottom",
+  "start": [5, 2],
+  "goal": [5, 2],
+  "step_duration_ms": 100,
+  "max_steps": 24,
+  "seed": 0,
+  "goal_marker": {
+    "rgb": [245, 225, 45],
+    "radius": 7,
+    "thickness": 2
+  },
+  "intermediate_stop_steps": 1,
+  "terminal_stop_steps": 3,
+  "routes": [
+    {
+      "start": [5, 2],
+      "goals": [[7, 2], [9, 4], [7, 4], [5, 2]]
+    },
+    {
+      "start": [9, 2],
+      "goals": [[7, 2], [5, 4], [7, 4], [9, 2]]
+    },
+    {
+      "start": [7, 4],
+      "goals": [[7, 2], [9, 2], [9, 4], [7, 4]]
+    }
+  ]
+}

@@ -11,28 +11,26 @@ Only this section schedules work; all experiment entries below are historical ev
 
 ```text
 OBJECTIVE: observable offline navigation, followed by same-run Store/recovery integration
-STATUS: READY
-NEXT_ACTION: N1 existing-ROI visual demonstrator; use plan section 4
+STATUS: DONE
+NEXT_ACTION: none; choose a new independent player/position source or accept session-002 partial scope
 INPUT_EVIDENCE: existing session 002/003/005 ROI, player localization v2 and frozen QA
-CHANGED_FILES: planning documents only; N1/N2 implementation not started
+CHANGED_FILES: two configs, real RGB demo/CLI, rule runner/transition type, focused tests and docs
 PRIMARY_METRIC: N1 traceable valid/unknown intervals; N2 same-run action/Store/resume equivalence
 BASELINE: 002 partial only; 003/005 unsupported; latest geometry runner records JSON only
-RESULT: planning reset complete; no new behavior result in this documentation batch
-ENGINEERING_HOURS_USED_AND_CAP: N1/N2 0/12 h; historical total UNKNOWN
+RESULT: N1 DATA_SOURCE_LIMITED; N2 10/10 and interrupted/direct 140-transition content identical
+ENGINEERING_HOURS_USED_AND_CAP: about 0.54/12 h observed implementation wall-clock; historical total UNKNOWN
 GPU_SECONDS: N1/N2 0, cap 0
-NEW_BYTES: N1/N2 0, cap 512 MiB
-STOP_REASON: none for N1; real continuous navigation remains DATA_SOURCE_LIMITED
-NEXT_DECISION: complete N1 then the one bounded N2 integration; data limitation blocks further learning
+NEW_BYTES: N1/N2 12,809,566 bytes, cap 512 MiB
+STOP_REASON: real continuous navigation remains DATA_SOURCE_LIMITED
+NEXT_DECISION: change the data source or explicitly accept partial-session application scope
 ```
 
-- Current scope: the plan's N1 4 h + N2 6 h + verification/handoff 2 h.
-  This is a new bounded scope, not a claim that the old 80-hour budget remains.
+- Completed scope: N1 visual evidence, N2 same-run Store/recovery and one verification/handoff.
 - The existing `R1_HIERARCHICAL_RULE_OFFLINE` package at commit `727d360` remains frozen.
   It contains a synthetic 10-episode/120-step geometry report beside the older R0/R1 runtime evidence.
   It does not establish that the new geometry policy already shares the old Store/resume path.
-- The next task needs no new training, video-test, mobile connection or human recording/label.
-  If N1 exposes no new valid source, retain the local-only conclusion; finish N2's limited engineering
-  integration and then stop this batch. Do not substitute another synthetic training cycle.
+- The batch used no training, video-test, mobile connection or human recording/label. N1 exposed no
+  new valid source, so this simulator batch is closed and cannot substitute another training cycle.
 - Planning and documentation time for this reset was not instrumented and is UNKNOWN; it is not
   included in the unstarted N1/N2 0/12 h figure.
 
@@ -60,6 +58,38 @@ NEXT_DECISION: complete N1 then the one bounded N2 integration; data limitation 
   sections, twelve added local links/anchors, one active task card and git diff --check.
   Source, tests, configs, game rules, dependencies and Makefile have no changes; no training or
   historical test suite was run for this plan reset.
+
+### N1 real navigation demonstrator and N2 integrated runtime (2026-09-09)
+
+- N1 reproduced localization v2 on all4,455 cached 128x128 minimap frames. Direct observations are
+  208/1,485 for session002,0/1,485 for003 and4/1,485 for005; maximum unknown streak is1,485.
+  Four10-second GIFs show the densest valid002 interval, longest unknown002 interval and fixed-UI
+  intervals in003/005. A same-frame counterfactual changes the explicit goal and proposal SE→NW.
+- N1 remains `DATA_SOURCE_LIMITED`; localization was not changed. It used no gap filling, recorded
+  future as action effect, training, test or device input. Output:
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/n1-real-navigation-demo-v1`.
+  Summary file SHA-256 `546147dfbc3f9105bed3194be9dc28b78101e6685afabb2b0dcfd047568ce304`.
+- N2 extends the existing rule-batch path with RGB goal-marked minimaps and optional navigation
+  context in the existing Store. Every step checks the current goal; matching direction yields
+  KEEP, exact arrival yields Router STOP, intermediate STOP advances the goal, and the final goal
+  requires three STOPs. The first smoke exposed the old one-cell stop radius; the new multi-goal
+  path alone uses exact radius0 while legacy callers retain radius1.
+- The paused/resumed and continuous runs both pass10/10 episodes with140 transitions,10 terminal
+  rows,40 goal versions,30 goal changes,80 direction actions,40 KEEP and60 Router STOP. All eight
+  directions occur. Transition SHA-256 is
+  `a56fc55e205536b181b034b3db69bd1d0151989a76eadaeee78de1a57be01b91` and frame-view SHA-256 is
+  `ee158ec107f1e972e8504e735a4a43335c846b18c543a0a0998f87bd3975bcb8` in both runs.
+- Recovery restored four committed transitions; SQLite integrity is ok, all rewards are0, model
+  runs0 and input0. Outputs:
+  `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/n2-multigoal-recovery-v1` and
+  `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/n2-multigoal-continuous-v1`.
+- New artifacts total12,809,566 bytes. GPU use is0. Observed implementation wall-clock through the
+  final delivery check is about0.54h; historical engineering time remains unknown.
+- Focused N1/N2, Store and boundary tests passed. The first full check found one static-boundary
+  failure because the new GIF test imported Pillow outside the existing allowlist; adding that
+  exact focused test path was the only repair. The repeated `make check` passed Ruff, strict mypy
+  on70 source files, all497 tests in118.04s and project safety on273 files/131 Python files/72,802
+  nonblank Python lines. `git diff --check` also passed.
 
 ## Public release state
 

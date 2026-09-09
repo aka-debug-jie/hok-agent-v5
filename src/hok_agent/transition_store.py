@@ -33,6 +33,9 @@ TerminalReason = Literal[
 ]
 EpisodeEndKind = Literal["NOT_DONE", "TERMINATED", "TRUNCATED", "ERROR"]
 ReplaySource = Literal["demo", "sim", "controller", "online", "offline_video"]
+NavigationDecisionOwner = Literal[
+    "geometry_rule", "deterministic_executor", "deterministic_router"
+]
 
 _MACRO_ACTIONS = {"FARM_LANE", "PUSH_STRUCTURE", "ENGAGE", "DISENGAGE", "RECALL", "HOLD"}
 _MOVEMENT_ACTIONS = {"NONE", "STOP", "N", "NE", "E", "SE", "S", "SW", "W", "NW"}
@@ -93,6 +96,19 @@ class ReplayRecord(TypedDict):
     priority: float
 
 
+class NavigationContextRecord(TypedDict):
+    goal_version: int
+    next_goal_version: int
+    goal_xy: list[int]
+    next_goal_xy: list[int]
+    position_before: list[int]
+    position_after: list[int]
+    decision_owner: NavigationDecisionOwner
+    decision_reason: str
+    goal_source: Literal["simulator_config"]
+    simulation_time_ms: int
+
+
 class HierarchicalTransitionRecord(TypedDict):
     schema_version: str
     episode_id: str
@@ -115,6 +131,7 @@ class HierarchicalTransitionRecord(TypedDict):
     training_eligible: bool
     ineligibility_reasons: NotRequired[list[str]]
     replay: ReplayRecord
+    navigation_context: NotRequired[NavigationContextRecord]
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +237,32 @@ def validate_transition(row: HierarchicalTransitionRecord) -> TransitionValidati
         errors.append("requested_combat_invalid")
     if executed["applied_combat"] not in _COMBAT_ACTIONS:
         errors.append("applied_combat_invalid")
+    navigation = row.get("navigation_context")
+    if navigation is not None:
+        if (
+            navigation["goal_version"] < 0
+            or navigation["next_goal_version"] not in {
+                navigation["goal_version"],
+                navigation["goal_version"] + 1,
+            }
+            or len(navigation["goal_xy"]) != 2
+            or len(navigation["next_goal_xy"]) != 2
+            or len(navigation["position_before"]) != 2
+            or len(navigation["position_after"]) != 2
+            or navigation["goal_source"] != "simulator_config"
+            or navigation["simulation_time_ms"] != row["step_id"] * 100
+        ):
+            errors.append("navigation_context_invalid")
+        if (
+            navigation["decision_owner"] == "deterministic_executor"
+            and executed["movement_command"] != "KEEP"
+        ):
+            errors.append("navigation_executor_without_keep")
+        if (
+            navigation["decision_owner"] == "deterministic_router"
+            and executed["applied_movement"] != "STOP"
+        ):
+            errors.append("navigation_router_without_stop")
     if executed["dispatch_start_ns"] < max(decision_ends):
         message = "dispatch_before_decision_end"
         errors.append(message)

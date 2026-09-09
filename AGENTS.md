@@ -8,12 +8,11 @@ Follow the user's current instructions, then the current task in
 Read the short README and the relevant BOUNDARIES before edits.
 Read historical evidence only when the current task depends on it; do not reread the entire ledger.
 
-The active work is a bounded offline navigation development batch, N1/N2 in the plan.
-N1 makes already available real-ROI evidence inspectable, including unknown/false-UI intervals.
-N2 integrates goal change, persistent direction and Router STOP into the existing recoverable
-PixelArena runner. Neither has been executed merely because this plan exists.
-Their combined engineering cap is 12 hours, GPU 0 and incremental artifacts 512 MiB.
-The existing simulator package is frozen; it does not prove this new same-run integration.
+The bounded offline N1/N2 navigation batch is complete. N1 made the existing real-ROI evidence
+inspectable and froze it as DATA_SOURCE_LIMITED. N2 integrated goal change, persistent direction
+and Router STOP into the existing recoverable PixelArena runner. Do not rerun or extend either
+task. There is no active implementation task after this batch; the next decision requires a new
+independent player/position source or acceptance of session-002 partial scope.
 
 The user has asked for efficient continuing development. Complete an authorized READY offline
 task without asking for approval at each implementation detail. The next "continue" selects the
@@ -36,9 +35,8 @@ create another research branch under a renamed contract.
   Independently observed identity, weak cue coverage and synthetic truth are distinct evidence.
 - For experiments, bind budget/attempts to the question, not the run ID. Existing failed
   checkpoints/results stay failed. N1/N2 train no model and open no old test/holdout.
-- Do not retune the frozen player detector or rerun the rejected joystick/Movement experiments
-  during N1. Show their documented limitations. If no new usable data appears, finish N2's
-  bounded engineering integration and end the batch rather than extend simulator research.
+- Do not retune the frozen player detector or rerun the rejected joystick/Movement experiments.
+  N1/N2 are finished and the simulator branch stops here.
 - Budgeted bug fixes are ordinary development; input/label meaning or public interface changes
   need an explicit versioned configuration. Do not create a protocol for every optimizer tweak.
 - Keep old run evidence/configurations/weights intact. Source-bound old recovery runs remain

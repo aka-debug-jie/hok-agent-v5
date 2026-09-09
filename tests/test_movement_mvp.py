@@ -8,9 +8,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from hok_agent.frame_bus import FramePacket, RgbView
 from hok_agent.movement_mvp import (
     MOVEMENT_ACTIONS,
     _canonical_sha256,
+    _navigation_decision,
     load_navigation_config,
     mark_visible_target,
     materialize_overfit32,
@@ -26,6 +28,7 @@ from hok_agent.transition_store import UnifiedTransitionStore, validate_transiti
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "movement_mvp.json"
+MULTIGOAL_CONFIG = ROOT / "configs" / "movement_mvp_multigoal_v1.json"
 
 
 def test_stage_a_action_order_preserves_rich_directions_after_stop() -> None:
@@ -227,6 +230,134 @@ def test_rule_batch_requires_resume_and_cannot_shrink(tmp_path: Path) -> None:
     run_rule_batch(CONFIG, output, 3, resume=True)
     with pytest.raises(ValueError, match="cannot shrink"):
         run_rule_batch(CONFIG, output, 1, resume=True)
+
+
+def test_multigoal_rule_batch_records_and_recovers_the_same_runtime(tmp_path: Path) -> None:
+    interrupted = tmp_path / "interrupted"
+    continuous = tmp_path / "continuous"
+    paused = run_rule_batch(MULTIGOAL_CONFIG, interrupted, 10, step_budget=4)
+    assert paused["status"] == "PAUSED"
+    assert paused["transitions"] == 4
+    resumed = run_rule_batch(MULTIGOAL_CONFIG, interrupted, 10, resume=True)
+    direct = run_rule_batch(MULTIGOAL_CONFIG, continuous, 10)
+    expected = {
+        "completed_episodes": 10,
+        "transitions": 140,
+        "terminal_transitions": 10,
+        "goal_versions": 40,
+        "goal_changes": 30,
+        "direction_actions": 80,
+        "executor_keep_steps": 40,
+        "router_stop_steps": 60,
+        "model_runs": 0,
+        "reward_total": 0.0,
+        "input_commands_sent": 0,
+    }
+    assert all(resumed[key] == direct[key] == value for key, value in expected.items())
+    assert resumed["recovered_transition_count"] == 4
+    assert resumed["resume_count"] == 1
+    assert resumed["transition_content_sha256"] == direct["transition_content_sha256"]
+    assert resumed["frame_view_manifest_sha256"] == direct["frame_view_manifest_sha256"]
+    assert all(resumed["direction_counts"][action] > 0 for action in MOVEMENT_ACTIONS[1:])
+    rows = _batch_rows(interrupted)
+    assert rows == _batch_rows(continuous)
+    assert sum(row["done"] for row in rows) == 10
+    assert all(row["reward"]["total"] == 0.0 for row in rows)
+    assert all("navigation_context" in row for row in rows)
+    first = rows[:14]
+    assert [row["executed_action"]["applied_movement"] for row in first] == [
+        "E",
+        "E",
+        "STOP",
+        "SE",
+        "SE",
+        "STOP",
+        "W",
+        "W",
+        "STOP",
+        "NW",
+        "NW",
+        "STOP",
+        "STOP",
+        "STOP",
+    ]
+    assert [row["navigation_context"]["goal_version"] for row in first] == [
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        4,
+        4,
+        4,
+        4,
+        4,
+    ]
+    assert first[-1]["done"] is True
+    assert first[-1]["terminal_reason"] == "NAVIGATION_GOAL_REACHED"
+
+
+def test_multigoal_rule_rechecks_direction_and_unknown_stops(tmp_path: Path) -> None:
+    changed = json.loads(MULTIGOAL_CONFIG.read_text(encoding="utf-8"))
+    changed["routes"][0]["goals"] = [[9, 4], [7, 2], [9, 2], [5, 4]]
+    config_path = tmp_path / "changed-distance.json"
+    config_path.write_text(json.dumps(changed), encoding="utf-8")
+    output = tmp_path / "changed-distance"
+    summary = run_rule_batch(config_path, output, 1)
+    assert summary["status"] == "PASSED"
+    rows = _batch_rows(output)
+    assert [row["executed_action"]["applied_movement"] for row in rows[:5]] == [
+        "SE",
+        "SE",
+        "E",
+        "E",
+        "STOP",
+    ]
+    assert rows[2]["executed_action"]["movement_command"] == "MOVE"
+    assert rows[2]["navigation_context"]["decision_owner"] == "geometry_rule"
+    black = bytes((0, 0, 0))
+    observation = FramePacket(
+        "unknown-obs",
+        0,
+        1,
+        "pixelarena",
+        "unknown.npz",
+        tuple(RgbView(name, black, (1, 1, 3)) for name in ("main", "minimap", "hud")),
+    )
+    config = load_navigation_config(MULTIGOAL_CONFIG)
+    assert _navigation_decision(
+        config, observation, (5, 2), (7, 2), "E", goal_available=False
+    ) == ("STOP", "deterministic_router", "goal_unknown")
+
+
+def test_multigoal_resume_rejects_navigation_context_tampering(tmp_path: Path) -> None:
+    output = tmp_path / "tampered"
+    run_rule_batch(MULTIGOAL_CONFIG, output, 10, step_budget=4)
+    with sqlite3.connect(output / "replay.sqlite3") as connection:
+        encoded = connection.execute(
+            "SELECT payload_json FROM transitions WHERE step_id = 1"
+        ).fetchone()[0]
+        payload = json.loads(encoded)
+        payload["navigation_context"]["goal_xy"] = [8, 2]
+        connection.execute(
+            "UPDATE transitions SET payload_json = ? WHERE step_id = 1",
+            (json.dumps(payload),),
+        )
+    with pytest.raises(ValueError, match="transition content differs"):
+        run_rule_batch(MULTIGOAL_CONFIG, output, 10, resume=True)
+
+
+def test_multigoal_resume_reuses_an_atomic_orphan_frame(tmp_path: Path) -> None:
+    output = tmp_path / "orphan"
+    with pytest.raises(RuntimeError, match="atomic frame"):
+        run_rule_batch(MULTIGOAL_CONFIG, output, 1, interrupt_after_frames=5)
+    resumed = run_rule_batch(MULTIGOAL_CONFIG, output, 1, resume=True)
+    assert resumed["transitions"] == 14
+    assert resumed["terminal_transitions"] == 1
 
 
 def test_stage_b_materializes_causal_balanced_overfit32(tmp_path: Path) -> None:

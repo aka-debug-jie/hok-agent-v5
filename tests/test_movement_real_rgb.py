@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from hok_agent.cli import main
 from hok_agent.movement_real_rgb import (
     _canonical_content,
     _object_sha256,
     materialize_real_counterfactual_overfit32,
+    run_real_navigation_demo,
     run_real_player_cue_preflight,
     run_real_player_goal_continuity,
     run_real_player_localization_audit_v2,
@@ -1639,6 +1642,133 @@ def test_localization_v2_excludes_fixed_ui_and_requires_action_response(
     )
     assert failed["status"] == "PLAYER_CUE_V2_FAILED"
     assert failed["checks"]["session002_response_events"] is False
+
+
+def _navigation_demo_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
+    session_root, old_prior, localization_contract = _localization_audit_inputs(
+        tmp_path, response_events=True
+    )
+    shard_path = (
+        session_root / "teacher-session-002" / "shards" / "observations-0000.npz"
+    )
+    with np.load(shard_path, allow_pickle=False) as source:
+        arrays = {name: source[name].copy() for name in source.files}
+    frames = arrays["minimap_rgb"]
+    frames[120:] = 0
+    frames[120:, 6:14, 116:124] = (20, 180, 40)
+    frames[120:, 7:13, 111:117] = (200, 40, 30)
+    arrays["main_rgb"] = frames.copy()
+    with shard_path.open("wb") as handle:
+        np.savez_compressed(handle, **arrays)
+    summary_path = session_root / "teacher-session-002" / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["observation_shards"][0]["sha256"] = hashlib.sha256(
+        shard_path.read_bytes()
+    ).hexdigest()
+    summary.pop("summary_sha256")
+    summary["summary_sha256"] = _object_sha256(summary)
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    localization = json.loads(localization_contract.read_text(encoding="utf-8"))
+    localization["sessions"][0]["summary_sha256"] = hashlib.sha256(
+        summary_path.read_bytes()
+    ).hexdigest()
+    localization.pop("contract_sha256")
+    localization["contract_sha256"] = _object_sha256(localization)
+    localization_contract.write_text(json.dumps(localization), encoding="utf-8")
+    localization_output = tmp_path / "localization"
+    prior = run_real_player_localization_audit_v2(
+        localization_contract, old_prior, session_root, localization_output
+    )
+    prior_path = localization_output / "report.json"
+    contract = {
+        "schema_version": "movement-real-navigation-demo-v1",
+        "prior_report_file_sha256": hashlib.sha256(prior_path.read_bytes()).hexdigest(),
+        "prior_report_sha256": prior["report_sha256"],
+        "sessions": localization["sessions"],
+        "color": localization["color"],
+        "components": localization["components"],
+        "excluded_ui_xyxy": [112, 0, 128, 16],
+        "frame_period_ms": 200,
+        "expected_frames_per_session": 192,
+        "segment_frames": 50,
+        "gif_frame_duration_ms": 200,
+        "primary_goal_xy_relative": [0.78, 0.78],
+        "counterfactual_goal_xy_relative": [0.22, 0.22],
+        "marker": {"rgb": [245, 225, 45], "radius": 7, "thickness": 2},
+        "stop_radius_pixels": 8.0,
+        "training_allowed": False,
+        "test_allowed": False,
+        "device_input_allowed": False,
+    }
+    contract["contract_sha256"] = _object_sha256(contract)
+    contract_path = tmp_path / "navigation-demo-contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    return session_root, prior_path, contract_path
+
+
+def test_real_navigation_demo_exposes_direct_unknown_and_fixed_ui(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from PIL import Image
+
+    session_root, prior, contract = _navigation_demo_inputs(tmp_path)
+    output = tmp_path / "navigation-demo"
+    for module in ("hok_agent.mobile_testbed", "hok_agent.movement_mvp_train"):
+        sys.modules.pop(module, None)
+    assert (
+        main(
+            [
+                "movement-mvp",
+                "--mode",
+                "real-navigation-demo",
+                "--config",
+                str(contract),
+                "--prior-report",
+                str(prior),
+                "--session-root",
+                str(session_root),
+                "--output-dir",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "DATA_SOURCE_LIMITED"
+    assert report["visual_demonstrator_complete"] is True
+    assert report["localization_improved"] is False
+    assert report["samples_total"] == 576
+    assert report["displayed_frames"] == 200
+    assert report["displayed_duration_ms"] == 40_000
+    assert report["offline_gap_filled_observations"] == 0
+    assert report["counterfactual_actions"][0] != report["counterfactual_actions"][1]
+    assert report["device_input_commands_sent"] == 0
+    assert {path.name for path in output.iterdir()} == {
+        "teacher-session-002-valid-densest.gif",
+        "teacher-session-002-unknown-longest.gif",
+        "teacher-session-003-fixed-ui-densest.gif",
+        "teacher-session-005-fixed-ui-densest.gif",
+        "counterfactual-goals.png",
+        "rows.jsonl",
+        "summary.json",
+    }
+    rows = [json.loads(line) for line in (output / "rows.jsonl").read_text().splitlines()]
+    unknown = [row for row in rows if row["localization_state"] == "unknown"]
+    assert unknown and all(row["proposal"] is None for row in unknown)
+    assert all(
+        row["router_action"] == "STOP" and row["stop_reason"] == "PLAYER_UNKNOWN"
+        for row in unknown
+    )
+    fixed_ui = [row for row in rows if row["segment"] == "fixed-ui-densest"]
+    assert fixed_ui and all(row["excluded_ui_candidate_count"] >= 1 for row in fixed_ui)
+    with Image.open(output / "teacher-session-002-valid-densest.gif") as image:
+        assert image.n_frames == 50
+    assert all(
+        module not in sys.modules
+        for module in ("hok_agent.mobile_testbed", "hok_agent.movement_mvp_train")
+    )
+    with pytest.raises(ValueError, match="output already exists"):
+        run_real_navigation_demo(contract, prior, session_root, output)
 
 
 def test_real_rgb_preflight_reports_non_observable_without_training(tmp_path: Path) -> None:

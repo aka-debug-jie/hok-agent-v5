@@ -2372,6 +2372,392 @@ def run_real_player_localization_audit_v2(
     return audit
 
 
+def _densest_window_start(flags: list[bool], length: int) -> int:
+    width = min(length, len(flags))
+    score = sum(flags[:width])
+    best_score = score
+    best_start = 0
+    for start in range(1, len(flags) - width + 1):
+        score += int(flags[start + width - 1]) - int(flags[start - 1])
+        if score > best_score:
+            best_score = score
+            best_start = start
+    return best_start
+
+
+def _longest_missing_start(positions: list[tuple[float, float] | None]) -> tuple[int, int]:
+    best_start = best_length = current_start = current_length = 0
+    for index, position in enumerate(positions):
+        if position is not None:
+            current_length = 0
+            continue
+        if current_length == 0:
+            current_start = index
+        current_length += 1
+        if current_length > best_length:
+            best_start, best_length = current_start, current_length
+    return best_start, best_length
+
+
+def _navigation_demo_overlay(
+    frame: np.ndarray,
+    candidates: list[tuple[float, float, float]],
+    position: tuple[float, float] | None,
+    exclusion: tuple[int, int, int, int],
+    goal_xy: list[float],
+    marker: dict[str, object],
+    label: str,
+) -> np.ndarray:
+    from PIL import Image, ImageDraw
+
+    image = Image.fromarray(_mark_goal(frame, goal_xy, marker))
+    draw = ImageDraw.Draw(image)
+    x0, y0, x1, y1 = exclusion
+    draw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=(255, 80, 80), width=2)
+    for y, x, _distance in candidates:
+        excluded = x0 <= x < x1 and y0 <= y < y1
+        color = (255, 0, 255) if excluded else (255, 155, 40)
+        draw.ellipse((x - 5, y - 5, x + 5, y + 5), outline=color, width=2)
+    if position is not None:
+        y, x = position
+        draw.ellipse((x - 7, y - 7, x + 7, y + 7), outline=(0, 255, 255), width=2)
+    image = image.resize((256, 256), Image.Resampling.NEAREST)
+    canvas = Image.new("RGB", (256, 288), (8, 8, 8))
+    canvas.paste(image, (0, 0))
+    ImageDraw.Draw(canvas).text((4, 260), label, fill=(255, 255, 255))
+    return np.asarray(canvas, dtype=np.uint8)
+
+
+def run_real_navigation_demo(
+    contract_path: Path,
+    prior_report_path: Path,
+    session_root: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    import time
+
+    from PIL import Image
+
+    started = time.monotonic()
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    prior = _load_bound_json(prior_report_path, "report_sha256")
+    if (
+        contract.get("schema_version") != "movement-real-navigation-demo-v1"
+        or contract.get("training_allowed") is not False
+        or contract.get("test_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+        or prior.get("status") != "PLAYER_CUE_PARTIAL_SESSION002_ONLY"
+        or _file_sha256(prior_report_path) != contract.get("prior_report_file_sha256")
+        or prior.get("report_sha256") != contract.get("prior_report_sha256")
+    ):
+        raise ValueError("real navigation demo contract differs")
+    if session_root.is_symlink() or not session_root.is_dir():
+        raise ValueError("real navigation demo session root differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("real navigation demo output already exists")
+
+    frame_period_ms = int(cast(int, contract["frame_period_ms"]))
+    expected_frames = int(cast(int, contract["expected_frames_per_session"]))
+    segment_frames = int(cast(int, contract["segment_frames"]))
+    gif_duration_ms = int(cast(int, contract["gif_frame_duration_ms"]))
+    exclusion = tuple(map(int, cast(list[int], contract["excluded_ui_xyxy"])))
+    primary_goal = cast(list[float], contract["primary_goal_xy_relative"])
+    counterfactual_goal = cast(list[float], contract["counterfactual_goal_xy_relative"])
+    marker = cast(dict[str, object], contract["marker"])
+    stop_radius = float(cast(float, contract["stop_radius_pixels"]))
+    if (
+        frame_period_ms != 200
+        or segment_frames != 50
+        or gif_duration_ms != 200
+        or exclusion != (112, 0, 128, 16)
+        or primary_goal != [0.78, 0.78]
+        or counterfactual_goal != [0.22, 0.22]
+        or stop_radius != 8.0
+    ):
+        raise ValueError("real navigation demo fixed settings differ")
+
+    prior_sessions = {
+        str(row["session"]): row for row in cast(list[dict[str, object]], prior["sessions"])
+    }
+    cue_contract: dict[str, object] = {
+        "color": contract["color"],
+        "components": contract["components"],
+    }
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    rows: list[dict[str, object]] = []
+    session_results: list[dict[str, object]] = []
+    segment_results: list[dict[str, object]] = []
+    counterfactual: (
+        tuple[np.ndarray, list[tuple[float, float, float]], tuple[float, float]] | None
+    ) = None
+    try:
+        for declaration in cast(list[dict[str, object]], contract["sessions"]):
+            basename = str(declaration["basename"])
+            directory = session_root / basename
+            summary_path = directory / "summary.json"
+            if (
+                Path(basename).name != basename
+                or _file_sha256(summary_path) != declaration["summary_sha256"]
+            ):
+                raise ValueError("real navigation demo session summary differs")
+            summary = _load_bound_json(summary_path, "summary_sha256")
+            frame_parts: list[np.ndarray] = []
+            timestamp_parts: list[np.ndarray] = []
+            for shard_row in cast(list[dict[str, object]], summary["observation_shards"]):
+                shard_name = str(shard_row["path"])
+                shard_path = directory / "shards" / shard_name
+                if (
+                    Path(shard_name).name != shard_name
+                    or shard_path.is_symlink()
+                    or _file_sha256(shard_path) != shard_row["sha256"]
+                ):
+                    raise ValueError("real navigation demo shard differs")
+                with np.load(shard_path, allow_pickle=False) as shard:
+                    frame_parts.append(shard["minimap_rgb"].copy())
+                    timestamp_parts.append(shard["scheduled_elapsed_ms"].copy())
+            frames = np.concatenate(frame_parts)
+            timestamps = np.concatenate(timestamp_parts)
+            if (
+                frames.shape != (expected_frames, 128, 128, 3)
+                or frames.dtype != np.uint8
+                or timestamps.shape != (expected_frames,)
+                or not np.all(np.diff(timestamps) == frame_period_ms)
+            ):
+                raise ValueError("real navigation demo frame cache differs")
+            candidates, positions = _filtered_player_positions(frames, cue_contract, exclusion)
+            valid = [position is not None for position in positions]
+            excluded = [
+                any(
+                    exclusion[0] <= item[1] < exclusion[2]
+                    and exclusion[1] <= item[0] < exclusion[3]
+                    for item in frame_candidates
+                )
+                for frame_candidates in candidates
+            ]
+            missing_start, maximum_missing = _longest_missing_start(positions)
+            filtered_count = sum(valid)
+            rejected_count = sum(excluded)
+            prior_row = prior_sessions[basename]
+            if (
+                int(cast(int, prior_row["frames"])) != len(frames)
+                or not math.isclose(
+                    float(cast(float, prior_row["filtered_candidate_coverage"])),
+                    filtered_count / len(frames),
+                )
+                or not math.isclose(
+                    float(cast(float, prior_row["rejected_ui_candidate_coverage"])),
+                    rejected_count / len(frames),
+                )
+                or int(cast(int, prior_row["maximum_filtered_missing_streak"]))
+                != maximum_missing
+            ):
+                raise ValueError("real navigation demo does not reproduce localization v2")
+            session_results.append(
+                {
+                    "session": basename,
+                    "samples_total": len(frames),
+                    "direct_observations": filtered_count,
+                    "localization_coverage": filtered_count / len(frames),
+                    "rejected_ui_frames": rejected_count,
+                    "maximum_unknown_streak": maximum_missing,
+                }
+            )
+
+            selected: list[tuple[str, int]] = []
+            if basename == "teacher-session-002":
+                selected.extend(
+                    (
+                        ("valid-densest", _densest_window_start(valid, segment_frames)),
+                        ("unknown-longest", missing_start),
+                    )
+                )
+                for index, position in enumerate(positions):
+                    if position is None:
+                        continue
+                    primary_action = _goal_direction(
+                        position,
+                        (round(primary_goal[1] * 127), round(primary_goal[0] * 127)),
+                        stop_radius,
+                    )
+                    counterfactual_action = _goal_direction(
+                        position,
+                        (
+                            round(counterfactual_goal[1] * 127),
+                            round(counterfactual_goal[0] * 127),
+                        ),
+                        stop_radius,
+                    )
+                    if primary_action != counterfactual_action:
+                        counterfactual = (frames[index], candidates[index], position)
+                        break
+            else:
+                selected.append(
+                    ("fixed-ui-densest", _densest_window_start(excluded, segment_frames))
+                )
+
+            goal_yx = (round(primary_goal[1] * 127), round(primary_goal[0] * 127))
+            for kind, start in selected:
+                end = min(start + segment_frames, len(frames))
+                rendered: list[np.ndarray] = []
+                for index in range(start, end):
+                    position = positions[index]
+                    proposal = (
+                        _goal_direction(position, goal_yx, stop_radius)
+                        if position is not None
+                        else None
+                    )
+                    router_action = proposal if proposal is not None else "STOP"
+                    stop_reason = None if proposal is not None else "PLAYER_UNKNOWN"
+                    label = (
+                        f"{basename[-3:]} {int(timestamps[index])}ms "
+                        f"state={'valid' if position is not None else 'unknown'} "
+                        f"proposal={proposal or 'null'} router={router_action}"
+                    )
+                    rendered.append(
+                        _navigation_demo_overlay(
+                            frames[index],
+                            candidates[index],
+                            position,
+                            exclusion,
+                            primary_goal,
+                            marker,
+                            label,
+                        )
+                    )
+                    rows.append(
+                        {
+                            "session": basename,
+                            "segment": kind,
+                            "frame_index": index,
+                            "scheduled_elapsed_ms": int(timestamps[index]),
+                            "localization_state": "direct" if position is not None else "unknown",
+                            "player_yx": list(position) if position is not None else None,
+                            "excluded_ui_candidate_count": sum(
+                                exclusion[0] <= item[1] < exclusion[2]
+                                and exclusion[1] <= item[0] < exclusion[3]
+                                for item in candidates[index]
+                            ),
+                            "goal_xy_relative": primary_goal,
+                            "goal_source": "explicit_demo_config",
+                            "proposal": proposal,
+                            "router_action": router_action,
+                            "stop_reason": stop_reason,
+                            "executed_action": None,
+                        }
+                    )
+                filename = f"{basename}-{kind}.gif"
+                images = [Image.fromarray(frame) for frame in rendered]
+                images[0].save(
+                    staging / filename,
+                    save_all=True,
+                    append_images=images[1:],
+                    duration=gif_duration_ms,
+                    loop=0,
+                    optimize=False,
+                    disposal=2,
+                )
+                segment_results.append(
+                    {
+                        "session": basename,
+                        "kind": kind,
+                        "start_frame": start,
+                        "frames": len(rendered),
+                        "duration_ms": len(rendered) * gif_duration_ms,
+                        "path": filename,
+                    }
+                )
+
+        if counterfactual is None:
+            raise ValueError("real navigation demo lacks a counterfactual action change")
+        frame, counterfactual_candidates, position = counterfactual
+        panels: list[np.ndarray] = []
+        counterfactual_actions: list[str] = []
+        for name, goal in (("primary", primary_goal), ("counterfactual", counterfactual_goal)):
+            action = _goal_direction(
+                position,
+                (round(goal[1] * 127), round(goal[0] * 127)),
+                stop_radius,
+            )
+            counterfactual_actions.append(action)
+            panels.append(
+                _navigation_demo_overlay(
+                    frame,
+                    counterfactual_candidates,
+                    position,
+                    exclusion,
+                    goal,
+                    marker,
+                    f"same frame {name} goal proposal={action}",
+                )
+            )
+        Image.fromarray(np.concatenate(panels, axis=1)).save(
+            staging / "counterfactual-goals.png", format="PNG", optimize=False
+        )
+        if counterfactual_actions[0] == counterfactual_actions[1]:
+            raise ValueError("real navigation demo counterfactual does not change proposal")
+
+        rows_path = staging / "rows.jsonl"
+        with rows_path.open("w", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        artifacts = [
+            {
+                "path": path.name,
+                "bytes": path.stat().st_size,
+                "sha256": _file_sha256(path),
+            }
+            for path in sorted(staging.iterdir())
+        ]
+        direct_observations = sum(
+            int(cast(int, row["direct_observations"])) for row in session_results
+        )
+        report: dict[str, object] = {
+            "schema_version": "movement-real-navigation-demo-report-v1",
+            "status": "DATA_SOURCE_LIMITED",
+            "contract_sha256": contract["contract_sha256"],
+            "prior_report_sha256": prior["report_sha256"],
+            "visual_demonstrator_complete": True,
+            "localization_improved": False,
+            "samples_total": sum(int(cast(int, row["samples_total"])) for row in session_results),
+            "direct_observations": direct_observations,
+            "offline_gap_filled_observations": 0,
+            "proposal_count": direct_observations,
+            "maximum_unknown_streak": max(
+                int(cast(int, row["maximum_unknown_streak"])) for row in session_results
+            ),
+            "displayed_frames": len(rows),
+            "displayed_duration_ms": sum(
+                int(cast(int, row["duration_ms"])) for row in segment_results
+            ),
+            "sessions": session_results,
+            "segments": segment_results,
+            "counterfactual_actions": counterfactual_actions,
+            "rows_file_sha256": _file_sha256(rows_path),
+            "artifacts": artifacts,
+            "recorded_future_used_as_action_effect": False,
+            "training_called": False,
+            "test_frames_read": 0,
+            "device_input_commands_sent": 0,
+            "gpu_seconds": 0,
+            "runtime_wall_seconds": time.monotonic() - started,
+        }
+        report["summary_sha256"] = _object_sha256(report)
+        (staging / "summary.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return report
+
+
 def _mask_player_patch(
     frame: np.ndarray, player_yx: tuple[float, float], radius: int
 ) -> np.ndarray:

@@ -25,6 +25,7 @@ from hok_agent.transition_store import (
     ExecutedActionRecord,
     HierarchicalTransitionRecord,
     MovementAction,
+    NavigationContextRecord,
     PolicyProposalRecord,
     ProposalBundleRecord,
     ReplayRecord,
@@ -86,6 +87,12 @@ _VECTORS: Final = {
 
 
 @dataclass(frozen=True, slots=True)
+class NavigationRoute:
+    start: tuple[int, int]
+    goals: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class NavigationConfig:
     contract_version: str
     hero: str
@@ -97,31 +104,65 @@ class NavigationConfig:
     step_duration_ms: int
     max_steps: int
     seed: int
+    routes: tuple[NavigationRoute, ...] = ()
+    goal_marker_rgb: tuple[int, int, int] = (245, 225, 45)
+    goal_marker_radius: int = 7
+    goal_marker_thickness: int = 2
+    intermediate_stop_steps: int = 1
+    terminal_stop_steps: int = 3
+
+    @property
+    def multigoal(self) -> bool:
+        return bool(self.routes)
 
     @property
     def sha256(self) -> str:
-        return hashlib.sha256(
-            json.dumps(
+        payload: dict[str, object] = {
+            "contract_version": self.contract_version,
+            "hero": self.hero,
+            "role": self.role,
+            "side": self.side,
+            "lane": self.lane,
+            "start": self.start,
+            "goal": self.goal,
+            "step_duration_ms": self.step_duration_ms,
+            "max_steps": self.max_steps,
+            "seed": self.seed,
+        }
+        if self.multigoal:
+            payload.update(
                 {
-                    "contract_version": self.contract_version,
-                    "hero": self.hero,
-                    "role": self.role,
-                    "side": self.side,
-                    "lane": self.lane,
-                    "start": self.start,
-                    "goal": self.goal,
-                    "step_duration_ms": self.step_duration_ms,
-                    "max_steps": self.max_steps,
-                    "seed": self.seed,
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode()
+                    "routes": [asdict(route) for route in self.routes],
+                    "goal_marker": {
+                        "rgb": self.goal_marker_rgb,
+                        "radius": self.goal_marker_radius,
+                        "thickness": self.goal_marker_thickness,
+                    },
+                    "intermediate_stop_steps": self.intermediate_stop_steps,
+                    "terminal_stop_steps": self.terminal_stop_steps,
+                }
+            )
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
 
 
 def load_navigation_config(path: Path) -> NavigationConfig:
     raw = json.loads(path.read_text(encoding="utf-8"))
+    route_rows = cast(list[dict[str, object]], raw.get("routes", []))
+    routes = tuple(
+        NavigationRoute(
+            start=cast(
+                tuple[int, int], tuple(map(int, cast(list[int], route["start"])))
+            ),
+            goals=tuple(
+                cast(tuple[int, int], tuple(map(int, goal)))
+                for goal in cast(list[list[int]], route["goals"])
+            ),
+        )
+        for route in route_rows
+    )
+    marker = cast(dict[str, object], raw.get("goal_marker", {}))
     config = NavigationConfig(
         contract_version=str(raw["contract_version"]),
         hero=str(raw["hero"]),
@@ -133,6 +174,15 @@ def load_navigation_config(path: Path) -> NavigationConfig:
         step_duration_ms=int(raw["step_duration_ms"]),
         max_steps=int(raw["max_steps"]),
         seed=int(raw["seed"]),
+        routes=routes,
+        goal_marker_rgb=cast(
+            tuple[int, int, int],
+            tuple(map(int, cast(list[int], marker.get("rgb", [245, 225, 45])))),
+        ),
+        goal_marker_radius=int(cast(int, marker.get("radius", 7))),
+        goal_marker_thickness=int(cast(int, marker.get("thickness", 2))),
+        intermediate_stop_steps=int(raw.get("intermediate_stop_steps", 1)),
+        terminal_stop_steps=int(raw.get("terminal_stop_steps", 3)),
     )
     if (config.hero, config.role, config.side, config.lane) != (
         "houyi",
@@ -141,10 +191,27 @@ def load_navigation_config(path: Path) -> NavigationConfig:
         "bottom",
     ):
         raise ValueError("stage A is fixed to blue-side Houyi marksman bottom lane")
-    if config.start[1] != 4 or config.goal[1] != 4:
+    if not config.multigoal and (config.start[1] != 4 or config.goal[1] != 4):
         raise ValueError("stage A start and goal must remain on the bottom lane")
     if config.step_duration_ms != 100 or config.max_steps <= 0:
         raise ValueError("stage A requires 100 ms steps and a positive step limit")
+    if config.multigoal and (
+        config.contract_version != "movement-mvp-multigoal-v1"
+        or len(config.routes) != 3
+        or any(len(route.goals) != 4 for route in config.routes)
+        or any(
+            not (0 <= point[0] < 15 and point[1] in (2, 3, 4))
+            for route in config.routes
+            for point in (route.start, *route.goals)
+        )
+        or config.goal_marker_rgb != (245, 225, 45)
+        or config.goal_marker_radius != 7
+        or config.goal_marker_thickness != 2
+        or config.intermediate_stop_steps != 1
+        or config.terminal_stop_steps != 3
+        or config.max_steps != 24
+    ):
+        raise ValueError("multi-goal navigation contract differs")
     return config
 
 
@@ -182,14 +249,14 @@ def mark_visible_target(rgb: np.ndarray, target_category: str) -> np.ndarray:
     return marked
 
 
-def rgb_geometry_movement(marked_rgb: np.ndarray) -> StageAMovement:
+def rgb_geometry_movement(marked_rgb: np.ndarray, *, stop_radius: int = 1) -> StageAMovement:
     own_y, own_x = np.nonzero(np.all(marked_rgb == (55, 195, 235), axis=2))
     target_y, target_x = np.nonzero(np.all(marked_rgb == (245, 225, 45), axis=2))
     if not len(own_x) or not len(target_x):
         raise ValueError("RGB geometry baseline requires visible self and target")
     dx = int(round((float(target_x.mean()) - float(own_x.mean())) / 8.0))
     dy = int(round((float(target_y.mean()) - float(own_y.mean())) / 13.0))
-    return rule_movement_in_range((0, 0), (dx, dy))
+    return rule_movement_in_range((0, 0), (dx, dy), stop_radius=stop_radius)
 
 
 def _warmup_pair(current: tuple[int, int], goal: tuple[int, int]) -> tuple[str, str]:
@@ -576,9 +643,14 @@ def _packet(
     render_seed: int,
     *,
     require_existing: bool = False,
+    minimap_override: np.ndarray | None = None,
 ) -> FramePacket:
     main = render(observation, render_seed)
-    minimap = np.ascontiguousarray(main[::2, ::2])
+    minimap = (
+        np.ascontiguousarray(main[::2, ::2])
+        if minimap_override is None
+        else np.ascontiguousarray(minimap_override)
+    )
     hud = np.ascontiguousarray(main[-16:])
     basename = f"{episode_id}-{step_id:03d}.npz"
     bundle = output_dir / basename
@@ -615,7 +687,12 @@ def _packet(
     )
 
 
-def _proposal(observation_id: str, value: str, start_ns: int) -> PolicyProposalRecord:
+def _proposal(
+    observation_id: str,
+    value: str,
+    start_ns: int,
+    policy_bundle_version: str = "movement-mvp-stage-a-rule-v0",
+) -> PolicyProposalRecord:
     return {
         "observation_id": observation_id,
         "applied_observation_id": observation_id,
@@ -625,7 +702,7 @@ def _proposal(observation_id: str, value: str, start_ns: int) -> PolicyProposalR
         "decision_start_ns": start_ns,
         "decision_end_ns": start_ns + 1_000_000,
         "valid_until_ns": start_ns + 20_000_000,
-        "policy_bundle_version": "movement-mvp-stage-a-rule-v0",
+        "policy_bundle_version": policy_bundle_version,
     }
 
 
@@ -648,15 +725,21 @@ def _transition(
     *,
     success: bool,
     timeout: bool,
+    navigation_context: NavigationContextRecord | None = None,
 ) -> HierarchicalTransitionRecord:
     decision_start = observation.capture_end_ns + 1_000_000
     dispatch_start = decision_start + 2_000_000
     dispatch_ack = dispatch_start + 1_000_000
     settle_end = dispatch_ack + 1_000_000
+    policy_version = (
+        "movement-mvp-multigoal-rule-v1"
+        if config.multigoal
+        else "movement-mvp-stage-a-rule-v0"
+    )
     proposals: ProposalBundleRecord = {
-        "macro": _proposal(observation.observation_id, "HOLD", decision_start),
-        "movement": _proposal(observation.observation_id, action, decision_start),
-        "combat": _proposal(observation.observation_id, "WAIT", decision_start),
+        "macro": _proposal(observation.observation_id, "HOLD", decision_start, policy_version),
+        "movement": _proposal(observation.observation_id, action, decision_start, policy_version),
+        "combat": _proposal(observation.observation_id, "WAIT", decision_start, policy_version),
     }
     executed: ExecutedActionRecord = {
         "requested_movement": cast(MovementAction, action),
@@ -689,11 +772,11 @@ def _transition(
     }
     replay: ReplayRecord = {"source": "controller", "failure_tags": [], "priority": 1.0}
     done = success or timeout
-    return {
+    row: HierarchicalTransitionRecord = {
         "schema_version": "hok-agent-hierarchical-transition-v0",
         "episode_id": episode_id,
         "step_id": step_id,
-        "policy_bundle_version": "movement-mvp-stage-a-rule-v0",
+        "policy_bundle_version": policy_version,
         "policy_bundle_sha256": config.sha256,
         "event_engine_version": "disabled-zero-reward-v0",
         "event_engine_sha256": _ZERO_HASH,
@@ -713,6 +796,9 @@ def _transition(
         "training_eligible": True,
         "replay": replay,
     }
+    if navigation_context is not None:
+        row["navigation_context"] = navigation_context
+    return row
 
 
 def run_stage_a(config_path: Path, output_dir: Path) -> dict[str, object]:
@@ -829,11 +915,64 @@ _RULE_BATCH_SCHEMA = "movement-mvp-rule-batch-v1"
 _RULE_RUN_CONTRACT_SCHEMA = "movement-mvp-rule-run-contract-v1"
 
 
-def _rule_arena(config: NavigationConfig) -> RichPixelArena:
+def _navigation_route(config: NavigationConfig, ordinal: int) -> NavigationRoute:
+    if config.routes:
+        return config.routes[ordinal % len(config.routes)]
+    return NavigationRoute(config.start, (config.goal,))
+
+
+def _goal_minimap(
+    config: NavigationConfig,
+    position: tuple[int, int],
+    goal: tuple[int, int],
+    render_seed: int,
+) -> np.ndarray | None:
+    if not config.multigoal:
+        return None
+    from hok_agent.movement_goal_canvas import render_goal_minimap
+
+    marker: dict[str, object] = {
+        "rgb": list(config.goal_marker_rgb),
+        "radius": config.goal_marker_radius,
+        "thickness": config.goal_marker_thickness,
+    }
+    return render_goal_minimap(position, goal, render_seed, marker)
+
+
+def _minimap_array(observation: FramePacket) -> np.ndarray:
+    view = observation.view("minimap")
+    return np.frombuffer(view.rgb, dtype=np.uint8).reshape(view.shape)
+
+
+def _navigation_decision(
+    config: NavigationConfig,
+    observation: FramePacket,
+    position: tuple[int, int],
+    goal: tuple[int, int],
+    previous_action: StageAMovement,
+    *,
+    goal_available: bool = True,
+) -> tuple[StageAMovement, str, str]:
+    if not goal_available:
+        return "STOP", "deterministic_router", "goal_unknown"
+    action = (
+        rgb_geometry_movement(_minimap_array(observation), stop_radius=0)
+        if config.multigoal
+        else rule_movement(position, goal)
+    )
+    if action == "STOP":
+        return action, "deterministic_router", "goal_reached"
+    if action == previous_action:
+        return action, "deterministic_executor", "persist_direction"
+    return action, "geometry_rule", "select_direction"
+
+
+def _rule_arena(config: NavigationConfig, ordinal: int) -> RichPixelArena:
+    route = _navigation_route(config, ordinal)
     arena = RichPixelArena(
         ArenaConfig(
             max_ticks=max(config.max_steps + 1, 32),
-            blue_start=config.start,
+            blue_start=route.start,
             red_start=(12, 2),
         )
     )
@@ -856,6 +995,21 @@ def _rule_run_contract(config: NavigationConfig) -> dict[str, object]:
             "transition_store": _file_sha256(Path(__file__).with_name("transition_store.py")),
         },
     }
+    if config.multigoal:
+        payload.update(
+            {
+                "policy": "rgb-goal-geometry-with-deterministic-persistence-and-router-stop",
+                "routes": json.loads(json.dumps([asdict(route) for route in config.routes])),
+                "intermediate_stop_steps": config.intermediate_stop_steps,
+                "terminal_stop_steps": config.terminal_stop_steps,
+                "source_sha256": {
+                    **cast(dict[str, str], payload["source_sha256"]),
+                    "movement_goal_canvas": _file_sha256(
+                        Path(__file__).with_name("movement_goal_canvas.py")
+                    ),
+                },
+            }
+        )
     payload["run_contract_sha256"] = _canonical_sha256(payload)
     return payload
 
@@ -877,17 +1031,22 @@ def _restore_rule_episode(
     config: NavigationConfig,
     output_dir: Path,
     episode_id: str,
+    ordinal: int,
     rows: tuple[HierarchicalTransitionRecord, ...],
 ) -> tuple[
     RichPixelArena,
     FramePacket,
     StageAMovement,
     int,
+    int,
     list[tuple[int, int]],
     list[StageAMovement],
 ]:
-    arena = _rule_arena(config)
+    route = _navigation_route(config, ordinal)
+    arena = _rule_arena(config, ordinal)
     step_ns = config.step_duration_ms * 1_000_000
+    goal_index = 0
+    initial_goal = route.goals[goal_index]
     observation = _packet(
         output_dir,
         episode_id,
@@ -896,10 +1055,11 @@ def _restore_rule_episode(
         arena.observe("blue"),
         config.seed,
         require_existing=bool(rows),
+        minimap_override=_goal_minimap(config, route.start, initial_goal, config.seed),
     )
     previous_action: StageAMovement = "STOP"
     stop_streak = 0
-    positions = [config.start]
+    positions = [route.start]
     actions: list[StageAMovement] = []
     for step_id, row in enumerate(rows):
         if row["step_id"] != step_id or not validate_transition(row).valid:
@@ -909,19 +1069,7 @@ def _restore_rule_episode(
         current = arena.observe("blue")
         position_raw = cast(dict[str, int], current["self_position"])
         position = (position_raw["x"], position_raw["y"])
-        action_raw = str(row["executed_action"]["applied_movement"])
-        if action_raw not in MOVEMENT_ACTIONS:
-            raise ValueError("committed movement is outside the rule vocabulary")
-        action = action_raw
-        if action != rule_movement(position, config.goal):
-            raise ValueError("committed movement differs from the fixed rule")
-        arena.step(to_arena_action(action), wait_action())
-        next_position_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
-        next_position = (next_position_raw["x"], next_position_raw["y"])
-        stopped_at_goal = action == "STOP" and position == config.goal and next_position == position
-        stop_streak = stop_streak + 1 if stopped_at_goal else 0
-        success = stop_streak >= 3
-        timeout = step_id + 1 == config.max_steps and not success
+        goal = route.goals[goal_index]
         expected_observation = _packet(
             output_dir,
             episode_id,
@@ -930,7 +1078,34 @@ def _restore_rule_episode(
             current,
             config.seed + step_id,
             require_existing=True,
+            minimap_override=_goal_minimap(config, position, goal, config.seed + step_id),
         )
+        expected_action, owner, reason = _navigation_decision(
+            config, expected_observation, position, goal, previous_action
+        )
+        action_raw = str(row["executed_action"]["applied_movement"])
+        if action_raw not in MOVEMENT_ACTIONS:
+            raise ValueError("committed movement is outside the rule vocabulary")
+        action = action_raw
+        if action != expected_action:
+            raise ValueError("committed movement differs from the fixed rule")
+        arena.step(to_arena_action(action), wait_action())
+        next_position_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+        next_position = (next_position_raw["x"], next_position_raw["y"])
+        stopped_at_goal = action == "STOP" and position == goal and next_position == position
+        stop_streak = stop_streak + 1 if stopped_at_goal else 0
+        next_goal_index = goal_index
+        if (
+            goal_index < len(route.goals) - 1
+            and stop_streak >= config.intermediate_stop_steps
+        ):
+            next_goal_index += 1
+        success = (
+            goal_index == len(route.goals) - 1
+            and stop_streak >= config.terminal_stop_steps
+        )
+        timeout = step_id + 1 == config.max_steps and not success
+        next_goal = route.goals[next_goal_index]
         next_observation = _packet(
             output_dir,
             episode_id,
@@ -939,7 +1114,27 @@ def _restore_rule_episode(
             arena.observe("blue"),
             config.seed + step_id + 1,
             require_existing=True,
+            minimap_override=_goal_minimap(
+                config, next_position, next_goal, config.seed + step_id + 1
+            ),
         )
+        navigation_context: NavigationContextRecord | None = None
+        if config.multigoal:
+            navigation_context = {
+                "goal_version": goal_index + 1,
+                "next_goal_version": next_goal_index + 1,
+                "goal_xy": list(goal),
+                "next_goal_xy": list(next_goal),
+                "position_before": list(position),
+                "position_after": list(next_position),
+                "decision_owner": cast(
+                    Literal["geometry_rule", "deterministic_executor", "deterministic_router"],
+                    owner,
+                ),
+                "decision_reason": reason,
+                "goal_source": "simulator_config",
+                "simulation_time_ms": step_id * config.step_duration_ms,
+            }
         expected = _transition(
             config,
             episode_id,
@@ -950,6 +1145,7 @@ def _restore_rule_episode(
             previous_action,
             success=success,
             timeout=timeout,
+            navigation_context=navigation_context,
         )
         if row != expected:
             raise ValueError("committed transition content differs from deterministic replay")
@@ -957,7 +1153,10 @@ def _restore_rule_episode(
         previous_action = action
         actions.append(action)
         positions.append(next_position)
-    return arena, observation, previous_action, stop_streak, positions, actions
+        if next_goal_index != goal_index:
+            goal_index = next_goal_index
+            stop_streak = 0
+    return arena, observation, previous_action, stop_streak, goal_index, positions, actions
 
 
 def _episode_summary(
@@ -981,7 +1180,7 @@ def _episode_summary(
         "done": complete,
         "terminal_reason": rows[-1]["terminal_reason"] if complete else "NOT_DONE",
         "terminal_transition_committed": complete,
-        "stop_confirmation_steps": 3,
+        "stop_confirmation_steps": config.terminal_stop_steps,
         "reward_total": sum(float(row["reward"]["total"]) for row in rows),
     }
 
@@ -1005,9 +1204,15 @@ def _batch_summary(
             rows = store.load_episode(episode_id)
             if not rows:
                 continue
-            _arena, _observation, _previous, _streak, positions, actions = _restore_rule_episode(
-                config, output_dir, episode_id, rows
-            )
+            (
+                _arena,
+                _observation,
+                _previous,
+                _streak,
+                _goal_index,
+                positions,
+                actions,
+            ) = _restore_rule_episode(config, output_dir, episode_id, ordinal, rows)
             episode_summaries.append(_episode_summary(config, episode_id, rows, positions, actions))
             all_rows.extend(rows)
             if not rows[-1]["done"]:
@@ -1050,8 +1255,12 @@ def _batch_summary(
             )
             for index, row in enumerate(rows)
         ),
-        "policy": "structured-simulator-rule",
-        "fixed_scene_repeated": True,
+        "policy": (
+            "rgb-goal-geometry-with-deterministic-persistence-and-router-stop"
+            if config.multigoal
+            else "structured-simulator-rule"
+        ),
+        "fixed_scene_repeated": not config.multigoal,
         "mid_episode_resume": True,
         "resume_source": "committed_sqlite_transitions",
         "learned_navigation": False,
@@ -1059,6 +1268,43 @@ def _batch_summary(
         "reward_total": sum(float(row["reward"]["total"]) for row in all_rows),
         "input_commands_sent": 0,
     }
+    if config.multigoal:
+        contexts = [row["navigation_context"] for row in all_rows]
+        payload.update(
+            {
+                "simulator_only": True,
+                "multi_goal_store_recovery": True,
+                "goal_versions": sum(
+                    len({context["goal_version"] for context in (
+                        item["navigation_context"]
+                        for item in all_rows
+                        if item["episode_id"] == summary["episode_id"]
+                    )})
+                    for summary in episode_summaries
+                ),
+                "goal_changes": sum(
+                    context["next_goal_version"] > context["goal_version"]
+                    for context in contexts
+                ),
+                "direction_actions": sum(
+                    row["executed_action"]["applied_movement"] != "STOP" for row in all_rows
+                ),
+                "executor_keep_steps": sum(
+                    row["executed_action"]["movement_command"] == "KEEP" for row in all_rows
+                ),
+                "router_stop_steps": sum(
+                    row["executed_action"]["applied_movement"] == "STOP" for row in all_rows
+                ),
+                "direction_counts": {
+                    action: sum(
+                        row["executed_action"]["applied_movement"] == action
+                        for row in all_rows
+                    )
+                    for action in MOVEMENT_ACTIONS[1:]
+                },
+                "model_runs": 0,
+            }
+        )
     payload["summary_sha256"] = _canonical_sha256(payload)
     return payload
 
@@ -1127,9 +1373,15 @@ def run_rule_batch(
         for ordinal in range(completed_before, episode_count):
             episode_id = f"movement-rule-seed-{config.seed}-episode-{ordinal:03d}"
             rows = store.load_episode(episode_id)
-            arena, observation, previous_action, stop_streak, _positions, _actions = (
-                _restore_rule_episode(config, output_dir, episode_id, rows)
-            )
+            (
+                arena,
+                observation,
+                previous_action,
+                stop_streak,
+                goal_index,
+                _positions,
+                _actions,
+            ) = _restore_rule_episode(config, output_dir, episode_id, ordinal, rows)
             if rows and rows[-1]["done"]:
                 continue
             bus = LatestFrameBus()
@@ -1139,16 +1391,30 @@ def run_rule_batch(
                 current = arena.observe("blue")
                 position_raw = cast(dict[str, int], current["self_position"])
                 position = (position_raw["x"], position_raw["y"])
-                action = rule_movement(position, config.goal)
+                route = _navigation_route(config, ordinal)
+                goal = route.goals[goal_index]
+                action, owner, reason = _navigation_decision(
+                    config, observation, position, goal, previous_action
+                )
                 arena.step(to_arena_action(action), wait_action())
                 next_position_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
                 next_position = (next_position_raw["x"], next_position_raw["y"])
                 stopped_at_goal = (
-                    action == "STOP" and position == config.goal and next_position == position
+                    action == "STOP" and position == goal and next_position == position
                 )
                 stop_streak = stop_streak + 1 if stopped_at_goal else 0
-                success = stop_streak >= 3
+                next_goal_index = goal_index
+                if (
+                    goal_index < len(route.goals) - 1
+                    and stop_streak >= config.intermediate_stop_steps
+                ):
+                    next_goal_index += 1
+                success = (
+                    goal_index == len(route.goals) - 1
+                    and stop_streak >= config.terminal_stop_steps
+                )
                 timeout = step_id + 1 == config.max_steps and not success
+                next_goal = route.goals[next_goal_index]
                 next_observation = _packet(
                     output_dir,
                     episode_id,
@@ -1156,10 +1422,34 @@ def run_rule_batch(
                     (step_id + 1) * step_ns,
                     arena.observe("blue"),
                     config.seed + step_id + 1,
+                    minimap_override=_goal_minimap(
+                        config, next_position, next_goal, config.seed + step_id + 1
+                    ),
                 )
                 bus.publish(next_observation)
                 if interrupt_after_frames == new_commits + 1:
                     raise RuntimeError("injected interruption after atomic frame")
+                navigation_context: NavigationContextRecord | None = None
+                if config.multigoal:
+                    navigation_context = {
+                        "goal_version": goal_index + 1,
+                        "next_goal_version": next_goal_index + 1,
+                        "goal_xy": list(goal),
+                        "next_goal_xy": list(next_goal),
+                        "position_before": list(position),
+                        "position_after": list(next_position),
+                        "decision_owner": cast(
+                            Literal[
+                                "geometry_rule",
+                                "deterministic_executor",
+                                "deterministic_router",
+                            ],
+                            owner,
+                        ),
+                        "decision_reason": reason,
+                        "goal_source": "simulator_config",
+                        "simulation_time_ms": step_id * config.step_duration_ms,
+                    }
                 stored = store.append(
                     _transition(
                         config,
@@ -1171,6 +1461,7 @@ def run_rule_batch(
                         previous_action,
                         success=success,
                         timeout=timeout,
+                        navigation_context=navigation_context,
                     )
                 )
                 if not stored.validation.valid:
@@ -1179,6 +1470,9 @@ def run_rule_batch(
                 if interrupt_after_commits == new_commits:
                     raise RuntimeError("injected interruption after committed transition")
                 observation, previous_action = next_observation, action
+                if next_goal_index != goal_index:
+                    goal_index = next_goal_index
+                    stop_streak = 0
                 if success or timeout:
                     break
                 if step_budget is not None and new_commits >= step_budget:

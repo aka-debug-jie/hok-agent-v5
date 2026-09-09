@@ -165,6 +165,7 @@ ALLOWED_ANNOTATION_PATHS = {
     Path("src/hok_agent/movement_real_rgb.py"),
     Path("tests/test_alignment.py"),
     Path("tests/test_mobile_testbed.py"),
+    Path("tests/test_movement_real_rgb.py"),
 }
 DENIED_MODULE_NAMES = {"android", "client", "device"}
 SECRET_PATTERN = re.compile(
