@@ -1,21 +1,21 @@
 # Boundaries
 
-## Current offline convergence scope (2026-09-05)
+## Current offline convergence scope (2026-09-09)
 
-`docs/ENGINEERING_CONVERGENCE_PLAN.md` replaces future scheduling and experiment-budget policy,
-not device authorization. Stage A is implemented offline with project-owned simulated action/state
-loops and zero device input. New bounded training/integration work must complete stage B before
-full training; it does not
-reopen frozen commands, consumed video-test, failed E1d integration, RewardHub or device input.
-Macro/Combat rules may support a clearly labeled offline engineering baseline while Movement
-learning is evaluated separately. Rule success cannot count as learned success.
+[ENGINEERING_CONVERGENCE_PLAN.md](docs/ENGINEERING_CONVERGENCE_PLAN.md) governs future scheduling.
+The active N1/N2 batch uses existing bound offline ROI evidence and project-owned PixelArena.
+N1 creates non-training visual QA/proposals; N2 joins the existing movement and Store/recovery
+components. This planning reset changes no device authorization, data privacy contract, Actor
+inputs, consumed test status or historical result.
 
-The proposed goal-marked RGB input and STOP/truncation semantics require explicit new contracts;
-no simulator truth may be encoded into Actor inputs. Existing real-video storage restrictions,
-input protections and RGB-only boundaries remain. No new human recordings/labels, transport or
-input gates are added. Source-size and storage targets in the plan are project budget review
-limits, not new runtime safety gates. Historical per-lineage restrictions below remain historical;
-they do not prevent new offline engineering work expressly scoped by the current plan.
+Recorded-video proposals do not cause future recorded frames and cannot be relabeled as executed
+transitions. Synthetic marker positions and simulator time must be identified as synthetic.
+Unknown/occluded positions cannot be replaced with simulator truth in a real RGB analysis.
+Rules, learned policies and their evidence are reported separately.
+
+No new human recordings/labels, device connection, input transport, extra input gates or RL is
+part of N1/N2. Existing source-bound reports, models and run directories remain intact.
+The prior stage schedules are historical; the execution boundaries below remain in force.
 
 ## Allowed execution surfaces
 

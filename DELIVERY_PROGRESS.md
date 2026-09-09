@@ -4,6 +4,63 @@ This is the only current-state ledger. The sanitized historical ledger is preser
 [`docs/DELIVERY_HISTORY.md`](docs/DELIVERY_HISTORY.md). Large datasets, checkpoints, recordings,
 and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distributed in Git.
 
+## Current execution state
+
+Updated 2026-09-09 after the user's development-efficiency review.
+Only this section schedules work; all experiment entries below are historical evidence.
+
+```text
+OBJECTIVE: observable offline navigation, followed by same-run Store/recovery integration
+STATUS: READY
+NEXT_ACTION: N1 existing-ROI visual demonstrator; use plan section 4
+INPUT_EVIDENCE: existing session 002/003/005 ROI, player localization v2 and frozen QA
+CHANGED_FILES: planning documents only; N1/N2 implementation not started
+PRIMARY_METRIC: N1 traceable valid/unknown intervals; N2 same-run action/Store/resume equivalence
+BASELINE: 002 partial only; 003/005 unsupported; latest geometry runner records JSON only
+RESULT: planning reset complete; no new behavior result in this documentation batch
+ENGINEERING_HOURS_USED_AND_CAP: N1/N2 0/12 h; historical total UNKNOWN
+GPU_SECONDS: N1/N2 0, cap 0
+NEW_BYTES: N1/N2 0, cap 512 MiB
+STOP_REASON: none for N1; real continuous navigation remains DATA_SOURCE_LIMITED
+NEXT_DECISION: complete N1 then the one bounded N2 integration; data limitation blocks further learning
+```
+
+- Current scope: the plan's N1 4 h + N2 6 h + verification/handoff 2 h.
+  This is a new bounded scope, not a claim that the old 80-hour budget remains.
+- The existing `R1_HIERARCHICAL_RULE_OFFLINE` package at commit `727d360` remains frozen.
+  It contains a synthetic 10-episode/120-step geometry report beside the older R0/R1 runtime evidence.
+  It does not establish that the new geometry policy already shares the old Store/resume path.
+- The next task needs no new training, video-test, mobile connection or human recording/label.
+  If N1 exposes no new valid source, retain the local-only conclusion; finish N2's limited engineering
+  integration and then stop this batch. Do not substitute another synthetic training cycle.
+- Planning and documentation time for this reset was not instrumented and is UNKNOWN; it is not
+  included in the unstarted N1/N2 0/12 h figure.
+
+### 2026-09-09 development review and factual corrections
+
+- Code inspection: `run_change_geometry_replay` in movement_goal_canvas.py appends plain step
+  dictionaries and writes report.json; it has no UnifiedTransitionStore or recovery argument.
+  `run_rule_batch` in movement_mvp.py separately supplies timestamped transitions and recovery.
+  The package nests their evidence; component composition must still be demonstrated by N2.
+- The current geometry replay gets positions from RichPixelArena and renders exact markers;
+  352/352 and 10/10 are therefore simulator-only evidence, not real-player observability.
+- The frozen package has 403 manifest-listed payload entries and 406 files in total, including
+  three manifest.json files. The earlier wording “403 files” was incorrect.
+- The shared environment currently reports Python 3.11.15, consistent with pyproject >=3.11.
+  The earlier “Python3.10” description was incorrect.
+- The 492-test full check occurred before the final nine-line verifier edit; the final code then
+  passed 25 focused tests, Ruff, strict mypy and real-package verification. Do not describe that
+  historical full run as a fresh full-suite result for the later code tree.
+- The new plan defines one task at a time, same-question budgets, behavior-based acceptance,
+  short development batches and risk-based checks. Previous AGENTS/README/plan text is retained
+  verbatim in docs/DELIVERY_HISTORY.md as non-active historical snapshots.
+- This batch edits documentation only. No algorithm, dataset, threshold, checkpoint, device
+  interface or frozen external artifact was changed. Verification is diff/link/consistency only.
+- Documentation checks passed: three verbatim historical snapshots, two unchanged execution-boundary
+  sections, twelve added local links/anchors, one active task card and git diff --check.
+  Source, tests, configs, game rules, dependencies and Makefile have no changes; no training or
+  historical test suite was run for this plan reset.
+
 ## Public release state
 
 - Version: `0.1.0`.
@@ -19,7 +76,7 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 Future scheduling is governed by `docs/ENGINEERING_CONVERGENCE_PLAN.md`; the historical route
 restrictions below are not a queue of new work. Frozen experiment outcomes remain unchanged.
 
-| Route | Current result | Promotion boundary |
+| Historical route | Last recorded result | Promotion boundary |
 |---|---|---|
 | Engineering convergence | `R1_ENGINEERING_OFFLINE_ZERO_REWARD`: R0 rule runtime, zero-reward Event replay and four failure boundaries packaged and verified | Cycle closed; no policy/Reward/mobile promotion without a new semantic source |
 | Houyi-bound real data | `HOUYI_BOUND_REAL_DATA_NOT_AVAILABLE`: 103 train/23 dev metadata have no hero identity; profile and real-session bindings are absent | Requires future episode declaration plus immutable identity reference; no retroactive labels |
@@ -422,15 +479,9 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ## Engineering convergence execution state
 
-```text
-CURRENT GOAL: freeze the bounded offline simulator hierarchy
-CURRENT STATUS: R1_HIERARCHICAL_RULE_OFFLINE_COMPLETE
-BLOCKING FAILURE: real player/goal observability remains unavailable; learned Movement rejected
-NEXT ACCEPTANCE: none in this cycle; a new cycle requires an observable real player/goal source
-COMMAND STATUS: package verified; dataset352/352; replay10/10,40 change/40 KEEP/40 STOP/120 steps
-BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
-DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
-```
+The active task is at [Current execution state](#current-execution-state).
+The entries below record completed experiments and their original next-step decisions; they do not
+schedule new work. The frozen package status remains `R1_HIERARCHICAL_RULE_OFFLINE_COMPLETE`.
 
 ### Hierarchical simulator rule delivery (2026-09-09)
 
@@ -445,7 +496,7 @@ DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model gr
   40 KEEP,40 STOP and120 arena steps. Model runs and input commands are both zero.
 - Package:
   `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/r1-hierarchical-rule-v1`.
-  It contains403 files and32,730,021 bytes. Manifest file SHA-256
+  It contains403 manifest-listed payload entries (406 total files) and32,730,021 bytes. Manifest file SHA-256
   `563774c64f09058f09c481ebb5794ac2080dfdb33775908daa566e764cad152d`;
   summary file SHA-256
   `6c2a7b70272b0313fcc6b5136c1e6399e95c44a6a9046e3fb19532359706def6`.
@@ -455,7 +506,7 @@ DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model gr
 - Delivery validation passed Ruff, strict mypy on70 source files, all492 pytest tests in108.64s,
   project safety on271 files/131 Python files/71,842 lines, and `git diff --check`. The first plain
   `make check` used the ambient Conda `python3` without mypy and stopped before pytest; rerunning the
-  identical target with the project Python3.10 environment passed completely.
+  identical target with the shared project environment passed completely (version correction above).
 
 ### Deterministic geometry change replay (2026-09-09)
 

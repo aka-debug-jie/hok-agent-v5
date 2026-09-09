@@ -1,426 +1,76 @@
 # AGENTS.md
 
-`DELIVERY_PROGRESS.md` is the only current-state ledger. Read it, `README.md`, and
-`BOUNDARIES.md` before changing this repository.
+## Current development authority (2026-09-09)
 
-## Current planning authority (2026-09-05)
+Follow the user's current instructions, then the current task in
+[DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md#current-execution-state) and
+[ENGINEERING_CONVERGENCE_PLAN.md](docs/ENGINEERING_CONVERGENCE_PLAN.md).
+Read the short README and the relevant BOUNDARIES before edits.
+Read historical evidence only when the current task depends on it; do not reread the entire ledger.
 
-User-confirmed translucent joystick feedback authorizes a separate visibility pilot: the existing
-two native-player train/dev sources, three fixed four-second windows each, lower-left native RGB.
-`movement_real_rgb.py` may decode these windows with existing PyAV and write offline Pillow QA.
-No action labels or training follow automatically; no test, mobile input or old detector retuning.
-The subsequent authorized extractor may use only the six cached joystick windows and OpenCV.
-Train-only templates are frozen before dev extraction; results remain candidate UI-state labels,
-not validated policy targets. No new raw-video decode, model, phone or test access is required.
-The authorized coverage continuation freezes geometric extractor v3 and samples twelve additional
-four-second windows from the same existing train video only. No calibration or model training;
-no dev/test decoding. Native RGB stays in memory; only candidate records/hashes and QA persist.
-The eligibility continuation may read only the completed coverage JSON. It may count stable
-direction runs, explicit direction-to-center release events and PTS gaps, but writes no policy
-RGB/sample/model. The current frame is the target; Actor input must end at the preceding PTS.
-The cross-train transfer audit may open only four predeclared train identities, at 20/50/80%,
-using the frozen v3 template/fingerprint. It persists QA, hashes and candidates, not native RGB.
-No dev/test source, threshold change, calibration, policy sample or training is authorized.
-The final bounded expansion may open only the three remaining predeclared train identities at
-10/30/50/70/90%. It uses the same frozen extractor and then closes train-source expansion.
-That expansion passed minimum automatic weak-label support across eight train sources. The next
-step may materialize only a small diagnostic dataset: stable two-frame directions plus explicit
-release STOP, with 16 Actor frames ending before the label and joystick pixels excluded. It may
-not train or promote a model until the materialized dataset passes causal/hash/split validation.
-The resulting 32-sample dataset has passed those mechanical validations. One fresh-init diagnostic
-overfit is allowed with the existing task-specific GroupNorm+GRU only. It cannot count as formal
-training, generalization, semantic accuracy or checkpoint promotion; no architecture/threshold loop.
-That single diagnostic passed and is consumed. Its checkpoint remains diagnostic-only. The next
-step may materialize one fixed six-train/two-internal-dev source-grouped pilot from the existing
-frozen candidate reports. It cannot load the diagnostic checkpoint or open video-dev/test.
-The grouped pilot split is fixed: dev identities `0e34a785...` and `12214351...`, with the other
-six train-cohort identities retained for pilot training. Materialization takes one stable-run
-onset per direction plus release STOP; it stores masked causal Actor RGB and no source paths.
-That 73-train/25-dev dataset is mechanically validated with all nine classes and zero source
-overlap. A separately contracted fresh-init grouped pilot may run next with class-balanced train
-sampling. It must report macro-F1 and every recall; no overfit checkpoint reuse or promotion.
-The single grouped pilot is now frozen failed: train accuracy 1.0 but internal-dev accuracy 0.16
-and macro-F1 0.0974. Do not rerun/tune this dataset or architecture. A continuation may only
-scale frozen-extractor evidence on a predeclared set of additional existing train videos before
-another model contract; original video-dev/test, phone and diagnostic checkpoints remain closed.
-The next scale audit is fixed to the 24 anonymous train identities in
-`configs/joystick_scale24_audit.json`, five four-second windows each. It uses frozen extractor v3,
-writes no native RGB/model, and closes before any dataset materialization or training.
-Its strict first run exposed 11 portrait sources. The sole geometry repair retained the same 24,
-excluded portrait metadata mechanically, added no replacements, and completed 13 landscape
-sources. Together with prior evidence, 21 train sources now permit one grouped dataset build;
-extractor/model tuning and another source scan remain closed.
-The 21-source dataset split keeps prior internal-dev `0e34...`/`1221...` and adds the first,
-middle and last compatible new identities by sorted hash (`1720...`, `3927...`, `493c...`).
-This 16/5 split is chosen without label-based source selection. Materialization remains model-free.
-The 201/48 dataset passed validation. One scale21 pilot may use the same 686k model, seed,
-optimizer, balanced sampling, 30 epochs and gates as the failed 73/25 pilot. Samples per epoch
-tracks dataset size (201). Both prior checkpoints are forbidden and the attempt limit is one.
-That scale21 pilot also failed: dev accuracy 0.1667/macro-F1 0.1465. No retry, model or extractor
-tuning. The next work may only audit frozen label timing semantics by separating stable-run onset
-from continuation frames. It writes no RGB/model and cannot reinterpret UI labels as intent.
-The continuation audit defines an observable direction target only at the third or later equal
-joystick candidate, so two prior same-direction frames precede the label. STOP remains a
-deterministic Router action because centered-screen semantics are unresolved. Audit is JSON-only.
-That audit passed with 203 train/80 dev direction-continuation targets. The next step may
-materialize these frozen indices as an eight-direction dataset with the same 16/5 source split.
-It may not include STOP, change the extractor, train a model or open original video-dev/test.
-Materialization must bind the audit and five candidate reports, preserve the fixed16/5 sources,
-write 203/80 masked causal clips with action order `N,S,W,E,NW,NE,SW,SE`, and verify all hashes.
-That dataset is now validated with283 unique clips. One fresh-init continuation pilot may reuse
-the existing spatial encoder/GRU architecture with a newly initialized eight-output head and
-class-balanced sampling. No prior weights; deterministic Router retains STOP.
-The continuation pilot contract fixes seed0, AdamW1e-3, batch8,30 epochs,203 balanced samples
-per epoch and the prior selection rule. Gates are dev accuracy/F1>=0.35, six nonzero recalls,
-majority-F1 gain>=0.20 and every dev source accuracy>=0.20. One attempt; no fallback.
-That pilot failed at dev accuracy0.25/macro-F10.1897. No retry or model tuning. The next work may
-only audit the deterministic previous-direction persistence baseline on the frozen continuation
-manifest. This uses execution state outside Actor RGB and sends no input.
-The baseline must reproduce every manifest sample from the two prior equal candidates and verify
-the existing executor maps same previous/current direction to `KEEP`. It may not decode RGB,
-load a checkpoint, choose a new direction or claim gameplay performance.
-That audit passed exactly on203/80 samples and all eight executor mappings return `KEEP`.
-Learned continuation and its checkpoints are now closed. Future Movement learning must target
-direction change conditioned on a separately observable Macro goal; persistence remains deterministic.
-The next contract may reuse synthetic hollow-goal-ring RGB only. The model vocabulary is eight
-directions and invocation occurs only on Macro goal-version change, stuck recovery or respawn
-reset. Executor owns persistence; Router owns STOP/unknown/terminal. No training or phone input.
-The change-event dataset is fixed to64/24 episodes, four Macro goal changes each, 15 old-goal
-frames plus one current new-goal frame, and balanced eight-direction labels. It is simulator-only,
-contains no STOP/previous-action input, and must be validated before any training.
-That dataset passed with256/96 balanced samples and352 unique clips. One fixed simulator pilot
-may compare the fresh 8-head GroupNorm+GRU with a last-frame control. Model selection favors the
-simpler control when performance matches. No prior weights or real-domain claim.
-The comparison fixes seed0, AdamW1e-3, batch32,30 epochs and six evaluation points. Both models
-must reach dev accuracy/macro-F1>=0.95 and each recall>=0.90. Within0.01, select the 587080
-parameter last-frame control. One attempt per model; simulator integration only.
-Both models passed; the 587080-parameter last-frame checkpoint is selected for simulator-only
-integration. The next step may load only that exact checkpoint in an offline multi-waypoint replay.
-Policy invocation/KEEP/STOP ownership must match the change-only contract; no real RGB or input.
-The replay is fixed to10 episodes, four two-cell waypoints and three steps per waypoint:
-model change, executor KEEP, Router STOP. It must load only the selected checkpoint and reach
-all40 waypoints with40/40 predictions,40 KEEP and40 STOP. No transition to real RGB.
-The formal route preflight failed20/40 with E/W at0/10 each and executed zero arena steps.
-Do not retry this checkpoint or change routes. One simulator-data correction may vary E/W across
-rows2/3/4 and create a position-held-out dev split; materialize/validate before training.
-The v2 data correction keeps256/96 balanced samples. E/W cover rows2/3/4 in both splits;
-train player x is6/7/8 and dev x is5/9 with zero position overlap. All other contracts remain
-unchanged. No model run until v2 data validation passes.
-V2 data now passes with zero position overlap and352 unique clips. One fresh last-frame-only
-candidate may reuse the prior seed, optimizer,30 epochs and gates. The GRU comparison is not
-repeated because replay failure isolated spatial position coverage. No old checkpoint.
-If the single v2 last-frame attempt passes, bind a new replay contract to its report/checkpoint;
-the original multi-waypoint routes remain unchanged. No threshold or route repair.
-That attempt failed at train1.0/dev0.2083 and is consumed; no replay or model/architecture retry.
-The next work may only audit the deterministic `goal_canvas_geometry_movement` baseline on v2
-data and unchanged routes. It cannot claim real-RGB observability or authorize input.
-The geometry replay must score352/352 on v2, then run the unchanged10 episodes with40 geometry
-changes,40 executor KEEP,40 Router STOP and120 arena steps. It loads no model and preserves
-simulator-only/zero-input boundaries.
-It passed exactly. Simulator Movement now selects deterministic goal geometry + executor KEEP +
-Router STOP; all neural change/continuation checkpoints remain rejected. The next step may package
-this offline simulator evidence only. Real continuation requires a new player/goal visual source.
-The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
-249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
-balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.
+The active work is a bounded offline navigation development batch, N1/N2 in the plan.
+N1 makes already available real-ROI evidence inspectable, including unknown/false-UI intervals.
+N2 integrates goal change, persistent direction and Router STOP into the existing recoverable
+PixelArena runner. Neither has been executed merely because this plan exists.
+Their combined engineering cap is 12 hours, GPU 0 and incremental artifacts 512 MiB.
+The existing simulator package is frozen; it does not prove this new same-run integration.
 
-The user-authorized short-gap optical-flow experiment supersedes future-work restrictions only
-for one offline run on existing teacher sessions 002/003/005. `movement_real_rgb.py` and its
-focused tests may lazily import OpenCV for this run. No historical detector thresholds change;
-no Movement training, raw-video decoding, phone or test access is authorized. Houyi identity
-is not required for this generic localization experiment. Old outcomes remain immutable.
+The user has asked for efficient continuing development. Complete an authorized READY offline
+task without asking for approval at each implementation detail. The next "continue" selects the
+ledger's NEXT_ACTION, not a historical "next" paragraph. Ask only for a material goal, data-source,
+external-action or budget change that is not already authorized.
+When evidence is insufficient, finish the bounded result and state the missing source; do not
+create another research branch under a renamed contract.
 
-`docs/ENGINEERING_CONVERGENCE_PLAN.md` governs future work ordering and resource budgets.
-Stages A/B passed, but the first Stage C simulator candidate failed: epoch 20 reached 15/24 with
-collision fraction 0.271. Random reached 18/24, so the frozen +8 comparison is infeasible on 24
-episodes. The separately versioned `configs/movement_mvp_stage_c_v2.json` now defines the next
-bounded correction: the same 24 dev scenarios, navigation-only damage settings, three consecutive
-STOPs and failure-inclusive step efficiency. Recovery-only and class-balanced corrections both
-failed at 0/24; this round's two correction attempts are exhausted. Do not start another training
-or overfit diagnostic. The cycle is closed at `E_R0_DELIVERY_COMPLETE`: D0 passed 10 episodes after
-a step-4 pause/resume and exactly matched an uninterrupted control; E packaged and independently
-verified that evidence without weights. Any real-RGB or learned-Movement continuation requires a
-new cycle. The first new-cycle step is now frozen failed as
-`REAL_RGB_OBSERVABILITY_V1_FAILED`: 3 sessions / 9 clips / 288 train-dev frames reached 0.4792
-pair coverage and 0.4128 marker-jump fraction; one train session reached only 0.0938 coverage.
-Do not run R2, train from these candidates, lower the gates, or open video-test. A separately
-versioned v2 goal canvas now passes deterministic crop/marker/counterfactual checks on the same 288
-frames by taking its semantic goal from Macro instead of detecting red targets. Player localization,
-lane-coordinate semantics and policy value remain unresolved. The new simulator goal-canvas
-overfit32 contract passed at accuracy 1.0 / loss 0.00614 with all nine recalls at 1.0. Its sole
-diagnostic attempt is consumed and its checkpoint is not reusable for formal training. The next
-work created fresh 64/24 simulator trajectories and one formal candidate. Training loss reached
-0.01414, but dev rollout reached only 9/24 versus 21/24; it is frozen failed. Geometry reached
-24/24, while failed learned episodes repeatedly requested premature STOP. Do not add epochs,
-trajectories or sampling repairs to this architecture. A future learned correction requires a new
-spatial-relation architecture contract and must still resolve the real player cue before R2. The
-first 93,611-parameter two-slot relational model is now frozen failed at overfit32 accuracy 0.625 /
-loss 1.258; N/S/E/W recalls were zero and no formal training ran. Do not rerun or proceed to Stage C.
-The first automatic-localization correction is also frozen failed: mean slot error passed at 3.94
-pixels, but slot-cell accuracy was 0.6875 and action accuracy/loss were 0.4375/1.055. Formal
-training did not run. Two-stage v1 stopped at its exact-cell gate; v2 used a predeclared one-cell
-tolerance, passed localization at 1.0 within-one-cell / 3.97 pixels, froze the localizer exactly,
-but action accuracy/loss were only 0.8125/0.871. Formal training did not run. Synthetic model tuning
-is stopped. Player-localization audit v2 proves that the old near-100% cue coverage was dominated
-by a fixed top-right UI marker. After excluding it, session 002 has 0.1401 partial coverage and
-action-response support; sessions 003/005 have no usable track. The old cue, continuity and
-overfit32 results are non-promoting. A five-group, three-variant grouped evaluation then failed:
-full mean accuracy was 0.7778 and exceeded player-masked/goal-only controls by only 0.0889/0.1111.
-Freeze the result as `REAL_COUNTERFACTUAL_MODEL_SHORTCUT_OR_NO_GENERALIZATION`; do not tune this
-model path. The next work may only repair automatic player localization coverage. Formal training,
-R2 and device input remain closed.
-That bounded continuation is now closed: native-resolution weak-anchor coverage passed after one
-four-dev-session expansion, but the session-isolated relation diagnostic failed. Its sole render
-repair changed only target rendering order, passed overfit36 at 1.0/0.00647, then full,
-anchor-masked and goal-only each collapsed to dev accuracy 0.1111 / macro-F1 0.0222. Freeze as
-`WEAK_ANCHOR_RELATION_DIAGNOSTIC_FAILED`; no further anchor detector, epochs, model, samples,
-checkpoint or Movement training. A new cycle must choose a separately observable target; R0 rule
-Movement remains the engineering baseline and phone/test/RL remain closed.
-The next observable-data cycle now passes an offline engineering replay only: the frozen E1a
-dev-death session produces 284 causal, explicitly non-training transitions with one DEATH, one
-RESPAWN, 17 SELF_HP_DELTA events, zero reward and a terminal VIDEO_EOF row committed before exit.
-Freeze detector thresholds and E1a evidence. This permits only a read-only cross-session death
-candidate audit on existing train/dev artifacts; semantic accuracy, Reward, promotion, phone,
-test and RL remain closed.
-That operational inventory is now complete and insufficient: one paired positive session versus
-three required, with seven negative sessions and no false death events. Session 002 has six legacy
-hard-stop frames but zero frozen-engine death events, so hard-stop is not a death label. The next
-cycle may only seek additional dynamic candidates in existing train/dev video using a separately
-observable second cue; do not change E1a thresholds or open test/Reward/training/device input.
-The frozen two-cue consensus retains the sole known death/respawn and rejects both session-002
-hard-stop rising edges. It still has only one positive session, so Reward remains closed. The next
-bounded work may inspect at most 12 existing train/dev raw videos for a visible death-banner or
-countdown layout before materializing clips; do not infer labels from hard-stop outside its source.
-That 12-session raw-video preflight is complete and frozen domain-mismatched: the normalized mobile
-top-center cue repeatedly selects scoreboard/kill/persistent red UI, while center-health geometry
-is not cross-layout stable. Eleven paired automatic outputs are rejected by QA and one is unpaired.
-Do not repair thresholds, materialize death clips, train Reward, or branch to tower/economy weak
-labels without a new semantic source. Keep the zero-reward Event-to-Store baseline.
-The cycle is packaged and independently verified as `R1_ENGINEERING_OFFLINE_ZERO_REWARD`: nested
-R0 rule evidence, 284 non-training Event transitions, four frozen failure reports, zero reward,
-zero input and no checkpoint. Do not reopen this cycle. Future work requires a new semantic source
-or separately authorized hero-bound data contract; packaging is not policy promotion.
-The first Houyi-bound data audit is frozen unavailable: train/dev container metadata has zero hero
-keywords, the hero profile is unconfigured, and no real session carries an episode-scoped immutable
-Houyi binding. One simulator declaration is not real evidence. A prior exploratory pass opened 23
-test container headers but decoded zero frames and was unused; formal audit opens zero test. Do not
-retroactively label existing video. Future hero-bound work requires declaration plus reference
-evidence before collection and cannot authorize input by itself.
-Movement is the only first-cycle learned component;
-Macro/Combat remain deterministic interim components. The cycle is capped at 80 engineering
-hours, 24 GPU-hours, and 50 GiB incremental artifacts, including failed runs and controls.
-Do not connect a phone, reopen consumed video-test, start RL, or add input gates/transports.
+## Implementation and evidence rules
 
-For new development under this plan, bounded train/dev debugging may use new run IDs without
-creating an architecture per failure. Old reports, configurations, checkpoints, test consumption,
-and failure conclusions remain immutable; old frozen commands are not reopened. This supersedes
-the future-work prescriptions below to create a normalization-stable candidate or permanently
-block all new integration. It does not promote a failed model. Stage A supplies STOP/end-kind
-contracts and a state-changing rule trajectory. Stage B supplies goal-marked RGB and selects the
-686,281-parameter task-specific GroupNorm+GRU only for the next simulator pilot. Its target marker
-is not real-video compatible; R2 remains closed. All four overfit diagnostic attempts are consumed;
-do not run a fifth. Stage C must initialize this architecture afresh rather than load the diagnostic
-checkpoint. No hidden-state inputs.
-Keep the existing execution/data boundaries and dependency allowlist. Do not expand scope merely
-because unused budget remains. `DELIVERY_PROGRESS.md` alone records executed progress.
-Use the plan's stage A-E implementation notes and risk-tiered verification policy. Documentation
-updates need diff/link/consistency checks, not model runs or full pytest. Local code changes use
-focused tests; run the full suite once for a deliverable code freeze. Do not default to duplicate
-agent review, per-commit historical smoke suites, or repeated approval for budgeted debug choices.
+- One feature in progress plus its direct blocker. Prefer an existing runtime path and one
+  configuration over another runner, CLI alias, framework or packaging layer.
+- Components passing separately are not an integrated system. Claims about record/replay/resume
+  must come from the same selected policy, observations, actions and Store.
+- Frozen geometry reports prove exact synthetic-marker behavior only. Recorded-video proposals
+  do not cause the next recorded frame and cannot become executed training transitions.
+- Preserve the existing executor, Router, action order, RGB Actor boundary and Store semantics.
+  Validity and goal arrival are evaluated each step; KEEP does not disable feedback.
+- Unknown is not STOP supervision and an unknown-triggered stop is not task success.
+  Independently observed identity, weak cue coverage and synthetic truth are distinct evidence.
+- For experiments, bind budget/attempts to the question, not the run ID. Existing failed
+  checkpoints/results stay failed. N1/N2 train no model and open no old test/holdout.
+- Do not retune the frozen player detector or rerun the rejected joystick/Movement experiments
+  during N1. Show their documented limitations. If no new usable data appears, finish N2's
+  bounded engineering integration and end the batch rather than extend simulator research.
+- Budgeted bug fixes are ordinary development; input/label meaning or public interface changes
+  need an explicit versioned configuration. Do not create a protocol for every optimizer tweak.
+- Keep old run evidence/configurations/weights intact. Source-bound old recovery runs remain
+  reproducible at their frozen commit. New runner changes require a fresh run, not old partial state.
+- Do not infer remaining historical budget. Record actual new costs and use null for unknowns.
+  Do not report tests, hashes, files or parameter count as gameplay progress.
+- Do not connect a phone, decode old test, start RL, add human labels/recordings, paid services or
+  a new input transport. The existing runtime protections remain as documented below.
+- Local commits stay on hierarchical-policy-v0-prep; no automatic GitHub push or cross-project edits.
 
-## Historical route decisions and retained boundaries
+## Documentation and verification
 
-The route-specific decisions below describe preserved experiments. For future schedule, parameter
-budgets and debugging policy, the current planning authority above takes precedence; historical
-result and device-authorization restrictions continue to apply.
+Only the top current task in DELIVERY_PROGRESS.md is mutable execution state.
+README is orientation and working commands; the convergence plan holds goals/budgets; this file
+holds agent rules. Put completed evidence below the active ledger section, not new instructions
+in three files. Previous instructions and plans are preserved as literal historical snapshots in
+[DELIVERY_HISTORY.md](docs/DELIVERY_HISTORY.md#planning-snapshot-20260909); they cannot reopen work.
 
-- Hierarchical Policy v0 is the active development-preparation successor governed by
-  `docs/HIERARCHICAL_POLICY_V0_PROTOCOL.md`. It keeps one RGB PolicyBundle with a shared temporal
-  representation and separate Macro, Movement, and Combat heads; VisualEventEngine and the
-  deterministic Router remain outside the Actor. E0 FrameBus, VisualEvent schema, and
-  UnifiedTransition validation are complete offline. E1a health/death/respawn passed only its
-  non-promoting engineering diagnostic after the single allowed cross-session bar-width repair;
-  numeric HP accuracy, semantic accuracy, Reward, and promotion remain false. E1b terminal OCR is
-  frozen failed at train/dev GAME_END coverage `0.125/0.5` and outcome coverage `0/0`; do not change
-  OCR confidence, tail duration, or sampling rate. The next terminal candidate must be a separately
-  versioned dynamic short-clip transition contract. E1c result-page anchor preflight passed with
-  34 train and 7 dev anchors and zero conflicts, but anchor frames cannot enter a future model and
-  WIN/LOSS remains unresolved. E1c-clip materialization produced 34/7 complete same-session
-  triplets with zero anchor overlap and no timestamps in model inputs. These are weak transition
-  candidates only. E1c-probe is frozen blocked because within-session materialization ordinal gives
-  train/dev time-only macro-F1 `1.0/1.0`; no temporal, last-frame, or shuffle model may be trained on
-  these labels. A new label source must identify the visual event rather than a fixed anchor offset.
-  E1d crystal consensus is that separate source: after one preserved threshold repair it found
-  33 train and 7 dev candidates. E1d-clip then built 33/7 event-centered pairs and reduced
-  ordinal-only accuracy to about `0.424/0.429`. The CPU seed-0 probe passed overfit32 and reached
-  dev temporal macro-F1 1.0 versus 0.8571 for last-frame and shuffle. It remains weak-label-only;
-  WIN/LOSS and Reward stay false. The pre-test bundle is now frozen at bundle hash
-  `55a679883119cdbf1a6a7703f945d61ce33408bad84013362e66355e83345c79`; the one-shot 23-session
-  test contract was immutable before test decoding. The one-shot test is now consumed and frozen
-  failed with `TEST_SESSION_NO_PRE_RESULT_SEQUENCE`; it did not complete metrics. Rerun, repair,
-  threshold tuning, offline EventEngine integration, Reward, and promotion are prohibited.
-  E1e subsequently evaluated only unused, unanchored train/dev sessions with robust per-session
-  rejection. It found only 6 train and 1 dev eligible pairs versus 10/3 required and is frozen
-  insufficient; it cannot replace the consumed test or reopen integration.
-  P0 adapter-value testing rejected the old epoch-3 SimSiam adapter as a Hierarchical Policy
-  initializer: adapter, source, and random frozen encoders all reached dev macro-F1 1.0, so the
-  required source/random margins were zero. Do not promote that adapter or retune this easy probe.
-  The harder P0 middle-shuffle task also rejected it: adapter temporal dev macro-F1 `0.3333`,
-  source `0.4687`, and random `0.5142`. The old adapter is permanently unavailable as the new
-  PolicyBundle initializer. The separately trained seed-0 temporal SSL pilot passed overfit32 and
-  non-collapse checks and improved dev macro-F1 to `0.7031`, but missed its frozen `0.75` gate.
-  Its sole pre-update repair only set deterministic CuBLAS workspace state; model, data, and gates
-  did not change. The run is frozen failed with no encoder checkpoint. Do not retune or rerun this
-  lineage, and do not initialize PolicyBundle from it. A separately versioned v2 indexed 1,648
-  train-only pairs across all 103 video-train sessions and used a fixed last epoch without dev
-  selection. It passed at dev macro-F1 `0.7907`; representation SHA-256 is
-  `d1ce0a9c44710586e6df3124371ffa0171dc1806510efe2d9d02d5e733d1c848`. This representation may
-  initialize P0 only. P1 head data and learnability gates must be frozen independently before any
-  policy training. The first P1 Movement raw-video teacher audit is now frozen failed after its
-  sole display-matrix repair. All 103/23 train/dev sessions were sampled, but detection coverage
-  was only `0.1844/0.1898`, train detected-session fraction was `0.5922 < 0.6`, and dev stable west
-  support was `4 < 16`. Do not retune this teacher, ROI, sampling, confirmation, or gates; no
-  Movement Head training is authorized from this lineage. Continue with an independently frozen
-  Macro Head data contract while Movement remains blocked.
-  The independent P1 Macro simulator-data audit passed for the three Actor-owned intents:
-  train/dev windows are `1620/412`, every intent appears in all `40/10` episodes, class-prior F1
-  is `0.2019`, and time-only F1 is `0.3893`. Its report SHA-256 is
-  `de7f8c4b265e69694d01210cbec49948907c389041df4792c294a90994bcea7c`. This opens one
-  simulator-only Macro Head learnability run from the frozen P0 representation; it does not verify
-  real-video semantics or reopen Movement, Combat, PolicyBundle assembly, Reward, or input.
-  That run is now frozen failed: overfit32 reached `0.9688` accuracy but loss `0.1717 > 0.05`, and
-  dev macro-F1 `0.3868` did not beat time-only `0.3893`; its gain over label-shuffle was only
-  `0.0845`. No Macro Head checkpoint was written. Do not retune the canvas, head, epochs, loss, or
-  gates in this lineage. P0 remains valid only for its temporal-order evidence; it is not proven to
-  expose frozen simulator Macro semantics.
-  The independent P1 Combat data audit is also frozen failed. Although all positive classes have
-  numerical support, a 200 ms time-only lookup reaches macro-F1 `0.9331`, the eight sessions contain
-  only two positive action sequences, and no artifact binds the declared Houyi identity. These are
-  cooldown round-robin execution labels, not tactical choices. Do not train a Combat Head from them;
-  the existing visual cooldown arbiter remains deterministic only.
-  P1v2 now freezes the corrective architecture decision without reopening those failures: P0 through
-  layer2 is a shared frozen trunk, while Macro and Movement receive separate trainable layer3/layer4,
-  GRU, and Head branches with 8–14M parameters each. They train independently and propose at 2/10 Hz.
-  Combat v0 remains the deterministic visual cooldown arbiter at 10 Hz until hero-bound, non-clock
-  tactical data exists. The deterministic Router alone owns version checks, pointer concurrency,
-  death, and hard stop. No branch training is opened until its new data contract passes.
-  The first P1v2 Movement simulator audit is frozen failed: Global Agent train/dev contain only
-  east/west move labels (`376/226` and `115/45`), with all other six directions absent and dominant
-  fractions `0.6246/0.7188`. Skill aim and wait were correctly excluded. A read-only check of the
-  historical V7 fit/acquisition rows found only ego-view east moves, so it cannot repair coverage.
-  Do not shrink the eight-direction contract or relabel skill aim. The next source must be a new,
-  balanced, visually conditioned 2D PixelArena navigation curriculum.
-  That separate 2D source now passes materialization with 512/128 train/dev sequences, exactly
-  64/16 groups per direction, both ego sides, zero imbalance, and zero group overlap. Its report
-  SHA-256 is `f73e379dfe79ab24a7087e260e6d321f7c0e5f672f6ae2b6cbae4edea946880b`.
-  It opens one task-specific Movement branch learnability run for local visible-target approach
-  only; lane strategy, real-video semantics, Bundle assembly, Reward, online RL, and input stay false.
-  That branch run is frozen failed after its sole overfit-order repair. Full-data dev macro-F1 and
-  every direction recall were `1.0` versus label-shuffle `0.1748`, but overfit32 reached only
-  `0.9375` accuracy with loss `0.1704`, missing `0.95/0.05`. No checkpoint was saved. Do not change
-  batch size, steps, gates, or BatchNorm behavior in this lineage. A future norm-stable candidate
-  must be separately versioned; the successful full-data metric is learnability evidence only.
-  It does not authorize model-driven
-  mobile input, online learning, a learned Router, continuous joystick parameters, MoE, PPO, or
-  model growth. Every frozen Global Agent, Human IfO, T8, and Operation result remains immutable.
-- Global Agent v1 is the frozen simulator foundation and is governed by
-  `docs/GLOBAL_AGENT_V1_PROTOCOL.md`. A structured simulator rule teacher must first complete full
-  games and label only `intent_id`, `target_zone_id`, and an auxiliary `scene_id`. The RGB student
-  receives main/minimap/HUD sequences only. Target-zone navigation, combat modes, purchase, hero
-  profiles, layout adaptation, and safety remain deterministic execution modules. Behavior
-  cloning precedes simulator DAgger; PPO and mobile control remain blocked by complete-episode
-  gates.
-- Human IfO Bridge v1 is a completed, non-promoted representation repair governed by
-  `docs/HUMAN_IFO_V1_PROTOCOL.md`. It may learn a shared Human/Sim temporal representation, train
-  inverse macro dynamics only from GlobalArena truth, pseudolabel only video-train/video-dev, and
-  fit one seed-0 Human-BC model with frozen-Dagger distillation. Its frozen encoder-rebind result
-  is reusable evidence, not an active retraining route; scenario cards remain diagnostic-only.
-  Gate A-D cannot capture from or send input to a phone. Human-dev is diagnostics-only and must be
-  mechanically excluded from Human-BC; H5 is not planned and remains simulator-only.
-  Gate A reads exactly one Git-ignored local cohort manifest that binds 20 train and 5 dev anonymous
-  session hashes to one declared hero, role, and mode; missing, mixed, or unqualified rows stop
-  before any selected training frame is opened.
-- Global Agent work has a hard WIP limit: one global feature task plus one highest-frequency
-  blocking failure. Every active experiment must name the targeted lexicographic episode metric:
-  safety, non-timeout terminal, tower progress, stuck time, fallback rate, or win rate. Local F1
-  alone is diagnostic and never opens a new route.
-- The parameterized challenge curriculum is frozen after two bounded simulator-only candidates.
-  One improved canonical cards while regressing complete episodes; the conservative repair removed
-  the card gain and still failed disjoint parameter holdout. Do not retune curriculum weights or
-  train on the fixed six cards; the original Dagger checkpoint remains selected.
-- The observable-factor probe and its single authorized auxiliary representation update are frozen.
-  The probe exposed missing health/base/distance factors; layer4/project fine-tuning then regressed
-  full episodes to 12/20 and did not improve challenge coverage. Do not add another auxiliary run,
-  unfreeze more layers, or tune factor weights. The original Dagger checkpoint is permanent for v1.
-- Stage 6A is an explicitly authorized, zero-control Global Agent Shadow surface governed by
-  `docs/GLOBAL_AGENT_V1_SHADOW_PROTOCOL.md`. It may bind the promoted DAgger model to an attested
-  foreground self-built App and explicit V4L2 RGB node, but may only write candidate logs with
-  `input_commands_sent=0`. Challenge-pack failure continues to block every input stage.
+Use section 9 of the convergence plan: documentation gets diff/link/consistency checks, local
+code gets focused regressions, runtime/Store changes get relevant integration tests, and a
+deliverable code freeze gets one full make check. Do not add a second reviewer or run the full
+historical suite for documentation. Parallel agents are useful only for bounded independent
+work; follow the user's explicit model/role routing and review consequential conclusions locally.
 
-- V4: read a privacy-reviewed local recording or an explicitly selected Linux V4L2 UVC
-  capture node and emit host-side JSON/terminal hypotheses. The separately bounded
-  `mobile-testbed` route may capture and send bounded ADB touchscreen tap/swipe events only to
-  the owner-authorized test app whose package is declared by a local private build-identity file.
-- V5: train a separate causal PixelArena source teacher, then run unlabeled real-video
-  SimSiam adaptation, conservative pseudo-label filtering, and one Mean Teacher round. Base
-  training, validation, and model selection use no human labels.
-- V6: add RGB-derived dual-hero/HUD tracking and a causal eight-frame temporal diagnostic from
-  RGB only. It also uses no human labels.
-- V7: add an independent Rich PixelArena identity with 2D movement and factorized skills.
-- T8: turn foreground-guarded automatically executed sessions in the self-built mobile test app
-  into a separate RGB-plus-executed-action behavior-cloning corpus, then train a factorized visual policy,
-  validate it in Shadow, and admit only bounded test-app actions. The execution event is an
-  automatically recorded supervision signal, not a manually annotated frame/action label and
-  never enters V5/V6 base training.
-- T8-v4 is a separate read-only visual-causality diagnostic lineage. Its first contract learns only
-  `main_view_enemy_cue_visible`, `basic_attack_button_visual_enabled`,
-  `skill1_button_visual_ready`, and `skill2_button_visual_ready` under one fixed layout and action
-  schema. Two independent automatic teachers produce conservative consensus pseudolabels from
-  the frozen 103/23 video train/dev sessions; accepted labels may enter only the masked T8-v4
-  diagnostic loss. No human labels or annotation UI are permitted. Candidate actions are offline
-  logs with `control_output=false`.
-- T8-v5 is a separate offline ROI-isolation diagnostic after the frozen T8-v4 spatial failure. It
-  reuses only T8-v4 repair-1 weak labels and the frozen adapter. Enemy, basic attack, and skill1
-  must each beat time-only, wrong-ROI, and shuffle controls; skill2 is diagnostic-only. T8-v5 may
-  store derived ROI features but no RGB, video, source path, human label, or device data.
-- Basic-only MVP is an independent deterministic delivery route governed by
-  `docs/T8_BASIC_MVP_PROTOCOL.md`. It may extract only the independently passed T8-v5 basic ROI
-  component, but T8-v5's failed combined decision cannot authorize input. A passing all-dev
-  offline replay may admit one five-minute zero-control Shadow. No probe contract exists before
-  that Shadow passes.
-- Operation Policy v1 is the separate offline second-part route governed by
-  `docs/OPERATION_POLICY_V1_PROTOCOL.md`. It uses the frozen Mobile Operation Base and visual-combat
-  evidence to train seed-0 inverse dynamics, then may label only video-train/video-dev and fit one
-  16-frame causal movement/combat policy. Purchase and hard-stop remain deterministic. It cannot
-  open video-test, Shadow, capture, or device input in its first contract.
-  Its pooled and one allowed source-clock/spatial IDM runs failed; the lineage is frozen before
-  pseudolabel and policy stages and may not be reopened by threshold reduction or model growth.
-- Operation Direct Policy v1 is the separate executed-action check governed by
-  `docs/OPERATION_DIRECT_POLICY_V1_PROTOCOL.md`. Its seed-0 movement-transition and combat gates
-  failed. Automated actuator schedules must not be described as gameplay-state demonstrations;
-  this route is frozen without Shadow or input.
-- Operation Movement Teacher v1 is a supporting deterministic module governed by
-  `docs/OPERATION_MOVEMENT_TEACHER_PROTOCOL.md`. It replaces fixed patrol with the frozen
-  high-resolution minimap detector, uses the existing persistent joystick executor, and trains
-  only a movement head. The selected T8-v2.6 seed-1 combat model is immutable and bound by hash.
-  A zero-input smoke, bounded input smoke, four-session pilot, and movement gate are mandatory
-  before more collection, fusion Shadow, or model input.
-  Its direction-diversity repair may select exactly four sessions from a larger automatic
-  candidate pool and train one separately versioned 8-frame 2x4-spatial pilot. The nearest-target
-  teacher, frozen gates, human-label prohibition, and zero model-input boundary do not change.
-- Deterministic Marksman Lane Controller v1 is a separate non-learning owner-testbed route governed
-  by `docs/MARKSMAN_LANE_CONTROLLER_PROTOCOL.md`. It may use only the verified side, frozen
-  marksman opener, eight-second lane advance/four-second hold cycle, existing visual combat and
-  purchase rules, and death-triggered opener replay. It produces no movement training target.
-- Adaptive Layout and Hero Profiles v1 is governed by
-  `docs/ADAPTIVE_LAYOUT_AND_HERO_PROFILES.md`. Device geometry is icon-independent and local;
-  hero profiles define only fixed-slot behavior. Until a local profile and adaptive-layout hash
-  pass read-only calibration, skills are disabled and no execution route may infer a hero from a
-  variable skill icon.
-- A future, separately authorized post-training phase may use only owner gameplay-quality
-  preferences over completed PixelArena games. It is not part of V5/V6 base training.
-- Preserve V1/V2/V3 and the offline V4 route as frozen regressions. Never overwrite their
-  configs, renderers, models, hashes, schemas, or run evidence.
+The local shared interpreter currently reports Python 3.11.15; pyproject.toml requires >=3.11.
+Use PYTHONPATH for this checkout and an explicit interpreter:
+make PYTHON=../hok-agent-v5/.venv/bin/python check
+Use this full command only at the appropriate verification tier. Do not modify the ambient
+Conda installation to repair a wrong-interpreter invocation.
+
+The detailed execution/data/dependency boundaries below remain in force. Their lineage-specific
+descriptions preserve past authorization and failure scope; they are not future work queues.
 
 ## Non-negotiable boundaries
 
