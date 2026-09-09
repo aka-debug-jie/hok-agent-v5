@@ -10,6 +10,7 @@ import pytest
 from hok_agent.movement_goal_canvas import (
     CHANGE_MODEL_ACTIONS,
     _change_event_samples,
+    _change_event_samples_position_v2,
     _object_sha256,
     change_only_route,
     materialize_goal_canvas_overfit32,
@@ -55,6 +56,25 @@ def test_change_event_samples_are_balanced_grouped_and_goal_conditioned() -> Non
     assert all(not np.array_equal(clip[-2], clip[-1]) for clip in clips)
     assert all(row["old_direction"] != row["target_direction"] for row in rows)
     assert not any(row["target_direction"] == "STOP" for row in rows)
+
+
+def test_position_v2_covers_horizontal_rows_with_disjoint_position_groups() -> None:
+    marker = {"radius": 7, "thickness": 2, "rgb": [245, 225, 45]}
+    train = _change_event_samples_position_v2("train", 6, marker, 800)
+    dev = _change_event_samples_position_v2("dev", 6, marker, 1800)
+    for output in (train, dev):
+        assert output[0].shape == (24, 16, 128, 128, 3)
+        assert np.bincount(output[1], minlength=8).tolist() == [3] * 8
+        rows = output[3]
+        horizontal_rows = {
+            row["position"][1] for row in rows if row["target_direction"] in {"E", "W"}
+        }
+        assert horizontal_rows == {2, 3, 4}
+    train_positions = {tuple(row["position"]) for row in train[3]}
+    dev_positions = {tuple(row["position"]) for row in dev[3]}
+    assert {point[0] for point in train_positions} == {6, 7, 8}
+    assert {point[0] for point in dev_positions} == {5, 9}
+    assert not train_positions & dev_positions
 
 
 def test_change_replay_routes_are_two_cell_segments_and_cover_all_directions() -> None:

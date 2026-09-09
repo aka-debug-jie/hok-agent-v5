@@ -95,6 +95,7 @@ def _parser() -> argparse.ArgumentParser:
             "joystick-persistence-audit",
             "change-contract",
             "change-materialize",
+            "change-materialize-v2",
             "change-train",
             "change-replay",
             "native-player-pilot",
@@ -1595,6 +1596,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = run_change_policy_pilot(
                     args.config, args.dataset, args.output_dir, device_name=args.device
                 )
+            elif args.mode == "change-materialize-v2":
+                if args.verify_only:
+                    from hok_agent.movement_goal_canvas import validate_change_event_dataset_v2
+
+                    result = validate_change_event_dataset_v2(args.output_dir)
+                else:
+                    if args.prior_report is None or args.dataset is None:
+                        raise ValueError("change-materialize-v2 requires report and source dataset")
+                    from hok_agent.movement_goal_canvas import materialize_change_event_dataset_v2
+
+                    result = materialize_change_event_dataset_v2(
+                        args.config, args.prior_report, args.dataset, args.output_dir
+                    )
             elif args.mode == "change-materialize":
                 from hok_agent.movement_goal_canvas import materialize_change_event_dataset
 

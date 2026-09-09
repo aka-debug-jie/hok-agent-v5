@@ -424,13 +424,30 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: CHANGE_REPLAY_FAILED_POSITION_SHORTCUT
-BLOCKING FAILURE: route preflight20/40; E/W0/10 due training row coupling; formal arena steps0
-NEXT ACCEPTANCE: corrected simulator data with E/W across y2/3/4 and position-held-out dev; no training
-COMMAND STATUS: selected checkpoint rejected; no route/checkpoint retry, device input or video test
+CURRENT STATUS: CHANGE_EVENT_POSITION_V2_DATASET_VALIDATED
+BLOCKING FAILURE: corrected spatial generalization untested; prior checkpoint remains rejected
+NEXT ACCEPTANCE: one fresh last-frame-only v2 pilot with unchanged training parameters/gates
+COMMAND STATUS: train256 x6/7/8; dev96 x5/9; E/W rows2/3/4; overlap0; no model/input/test
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Position-held-out change dataset v2 (2026-09-09)
+
+- Added the sole data correction allowed by the failed replay. Dataset size,64/24 episode groups,
+  256/96 samples, eight-class balance, marker,15-old/1-new goal sequence and no-STOP boundary stay fixed.
+- E/W current row now cycles2/3/4 in both splits. Train current x is6/7/8; dev current x is5/9.
+  Current-position sets have zero overlap. The replay routes exercise both train x7 and held-out x5/9.
+- All352 clips remain unique and every final RGB frame resolves to its balanced direction label.
+  Counterfactual targets, no previous-action input, no arrow and simulator-only boundaries remain.
+- Output `$HOK_LARGE_ROOT/datasets/hierarchical-movement-mvp/movement-change-events-position-v2`.
+  Dataset SHA-256 `0fcfa4c20f9911b00277ca899a0f282a4d10b2de1e396662c1d7f401d8f46613`;
+  manifest file/self `43e0fe195764b1fb73d1ea095585ce3b675d864a77aa4298037ec932e5f5c1bb` /
+  `8bf52c58f2cf97591e37746b740f1c48f5bfc244a600d4c55bd829293dfc06e4`.
+  Compressed dataset56.95MiB; independent verify-only passed.
+- Status `CHANGE_EVENT_POSITION_V2_DATASET_VALIDATED`. Next is one fresh last-frame-only model
+  using the same seed/optimizer/30 epochs/gates. GRU is not rerun because failure was spatial.
+- No model/GPU/input/real RGB/video-dev/test. Focused tests and checks required before commit.
 
 ### Multi-waypoint change replay failure (2026-09-08)
 

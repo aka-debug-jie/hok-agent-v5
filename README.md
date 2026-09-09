@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The position-corrected simulator dataset v2 is valid. E/W now cover rows2/3/4; train current x
+is6/7/8 and dev x is5/9 with zero position overlap. Size and class balance remain256/96 and
+32/12 per direction. Next is one fresh last-frame-only candidate; the GRU control is not repeated
+because replay isolated a spatial coverage shortcut.
+
 The selected simulator checkpoint failed multi-waypoint preflight20/40 and executed zero formal
 arena steps. E/W are0/10 because the dataset placed every E/W example on row3; routes at rows2/4
 expose a position shortcut. The checkpoint is rejected. The next step changes simulator data only:

@@ -103,6 +103,12 @@ all40 waypoints with40/40 predictions,40 KEEP and40 STOP. No transition to real 
 The formal route preflight failed20/40 with E/W at0/10 each and executed zero arena steps.
 Do not retry this checkpoint or change routes. One simulator-data correction may vary E/W across
 rows2/3/4 and create a position-held-out dev split; materialize/validate before training.
+The v2 data correction keeps256/96 balanced samples. E/W cover rows2/3/4 in both splits;
+train player x is6/7/8 and dev x is5/9 with zero position overlap. All other contracts remain
+unchanged. No model run until v2 data validation passes.
+V2 data now passes with zero position overlap and352 unique clips. One fresh last-frame-only
+candidate may reuse the prior seed, optimizer,30 epochs and gates. The GRU comparison is not
+repeated because replay failure isolated spatial position coverage. No old checkpoint.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.

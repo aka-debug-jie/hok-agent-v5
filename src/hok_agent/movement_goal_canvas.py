@@ -220,9 +220,11 @@ _CHANGE_VECTOR: dict[StageAMovement, tuple[int, int]] = {
 
 
 def _change_geometry(
-    action: StageAMovement, x_shift: int,
+    action: StageAMovement, x_shift: int, horizontal_y: int | None = None,
 ) -> tuple[tuple[int, int], tuple[int, int]]:
-    y = 4 if action in {"N", "NW", "NE"} else 2 if action in {"S", "SW", "SE"} else 3
+    y = (4 if action in {"N", "NW", "NE"}
+         else 2 if action in {"S", "SW", "SE"}
+         else 3 if horizontal_y is None else horizontal_y)
     position = (7 + x_shift, y)
     dx, dy = _CHANGE_VECTOR[action]
     return position, (position[0] + dx, position[1] + dy)
@@ -285,6 +287,62 @@ def _change_event_samples(
                 "old_goal": list(old_goal), "new_goal": list(new_goal),
                 "old_direction": old_action, "target_direction": action,
                 "render_seed": render_seed,
+                "rgb_sha256": hashlib.sha256(clip.tobytes()).hexdigest(),
+            })
+    return (np.stack(clips), np.asarray(labels, dtype=np.int64),
+            np.asarray(episode_ids), rows)
+
+
+def _change_event_samples_position_v2(
+    split: str, episodes: int, marker: dict[str, object], seed: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[dict[str, object]]]:
+    x_values = (-1, 0, 1) if split == "train" else (-2, 2)
+    horizontal_y = (2, 3, 4)
+    occurrences = dict.fromkeys(CHANGE_MODEL_ACTIONS, 0)
+    clips: list[np.ndarray] = []
+    labels: list[int] = []
+    episode_ids: list[str] = []
+    rows: list[dict[str, object]] = []
+    for episode in range(episodes):
+        episode_id = f"change-position-{split}-{episode:03d}"
+        for event in range(4):
+            label = (episode * 4 + event) % len(CHANGE_MODEL_ACTIONS)
+            action = CHANGE_MODEL_ACTIONS[label]
+            occurrence = occurrences[action]
+            occurrences[action] += 1
+            row_y = horizontal_y[occurrence % len(horizontal_y)] if action in {"E", "W"} else None
+            position, new_goal = _change_geometry(
+                action, x_values[occurrence % len(x_values)], row_y
+            )
+            old_action, old_goal = _old_change_goal(position, action, episode + event)
+            render_seed = seed + episode * 103 + event * 23
+            frames = [render_goal_minimap(position, old_goal, render_seed + i, marker)
+                      for i in range(15)]
+            frames.append(render_goal_minimap(position, new_goal, render_seed + 15, marker))
+            clip = np.stack(frames).astype(np.uint8)
+            old_geometry = [goal_canvas_geometry_movement(frame) for frame in clip[:-1]]
+            if (goal_canvas_geometry_movement(clip[-1]) != action
+                    or any(value != old_action for value in old_geometry)
+                    or old_action == action):
+                raise ValueError("position-v2 change geometry differs")
+            alternative, alternative_goal = _old_change_goal(
+                position, action, episode + event + 3
+            )
+            counterfactual = render_goal_minimap(
+                position, alternative_goal, render_seed + 15, marker
+            )
+            if (alternative == action or np.array_equal(counterfactual, clip[-1])
+                    or goal_canvas_geometry_movement(counterfactual) == action):
+                raise ValueError("position-v2 counterfactual differs")
+            clips.append(clip)
+            labels.append(label)
+            episode_ids.append(episode_id)
+            rows.append({
+                "sample_id": f"{episode_id}-{event}", "episode_id": episode_id,
+                "event_id": event, "position_group": position[0],
+                "position": list(position), "old_goal": list(old_goal),
+                "new_goal": list(new_goal), "old_direction": old_action,
+                "target_direction": action, "render_seed": render_seed,
                 "rgb_sha256": hashlib.sha256(clip.tobytes()).hexdigest(),
             })
     return (np.stack(clips), np.asarray(labels, dtype=np.int64),
@@ -389,6 +447,126 @@ def materialize_change_event_dataset(
     (staging / "manifest.json").write_bytes(_canonical(manifest) + b"\n")
     staging.rename(output_dir)
     return validate_change_event_dataset(output_dir)
+
+
+def validate_change_event_dataset_v2(output_dir: Path) -> dict[str, object]:
+    manifest = _load_bound(output_dir / "manifest.json", "manifest_sha256")
+    dataset_path = output_dir / "change-events-position-v2.npz"
+    if dataset_path.is_symlink() or _file_sha256(dataset_path) != manifest["dataset_sha256"]:
+        raise ValueError("position-v2 dataset hash differs")
+    rows = cast(dict[str, list[dict[str, object]]], manifest["samples"])
+    position_sets: dict[str, set[tuple[int, int]]] = {}
+    all_hashes: list[str] = []
+    summaries: dict[str, object] = {}
+    with np.load(dataset_path, allow_pickle=False) as data:
+        for split, samples, episodes in (("train", 256, 64), ("dev", 96, 24)):
+            clips = data[f"{split}_rgb"]
+            labels = data[f"{split}_label"]
+            episode_ids = data[f"{split}_episode_id"]
+            if (clips.shape != (samples, 16, 128, 128, 3) or clips.dtype != np.uint8
+                    or labels.shape != (samples,) or episode_ids.shape != (samples,)
+                    or len(rows[split]) != samples):
+                raise ValueError(f"{split} position-v2 arrays differ")
+            counts = np.bincount(labels, minlength=8)
+            if not np.all(counts == samples // 8):
+                raise ValueError(f"{split} position-v2 labels are not balanced")
+            positions = {
+                cast(tuple[int, int], tuple(map(int, cast(list[int], row["position"]))))
+                for row in rows[split]
+            }
+            position_sets[split] = positions
+            expected_x = {6, 7, 8} if split == "train" else {5, 9}
+            horizontal_rows = {
+                cast(list[int], row["position"])[1]
+                for row in rows[split] if row["target_direction"] in {"E", "W"}
+            }
+            if {point[0] for point in positions} != expected_x or horizontal_rows != {2, 3, 4}:
+                raise ValueError(f"{split} position-v2 parameter coverage differs")
+            for clip, label in zip(clips, labels, strict=True):
+                action = CHANGE_MODEL_ACTIONS[int(label)]
+                if goal_canvas_geometry_movement(clip[-1]) != action:
+                    raise ValueError(f"{split} position-v2 RGB label differs")
+                all_hashes.append(hashlib.sha256(clip.tobytes()).hexdigest())
+            if len(set(map(str, episode_ids.tolist()))) != episodes:
+                raise ValueError(f"{split} position-v2 episodes differ")
+            summaries[split] = {
+                "samples": samples, "episodes": episodes,
+                "current_x": sorted({point[0] for point in positions}),
+                "horizontal_current_y": sorted(horizontal_rows),
+                "class_counts": dict(zip(CHANGE_MODEL_ACTIONS, counts.tolist(), strict=True)),
+            }
+    if position_sets["train"] & position_sets["dev"] or len(set(all_hashes)) != 352:
+        raise ValueError("position-v2 holdout overlap or duplicate clips")
+    return {"status": "CHANGE_EVENT_POSITION_V2_DATASET_VALIDATED", "splits": summaries,
+            "position_overlap": 0, "unique_clips": 352, "stop_in_dataset": False,
+            "training_allowed": False}
+
+
+def materialize_change_event_dataset_v2(
+    contract_path: Path, failed_replay_report_path: Path, source_dataset_path: Path,
+    output_dir: Path, *, verify_only: bool = False,
+) -> dict[str, object]:
+    if verify_only:
+        return validate_change_event_dataset_v2(output_dir)
+    contract = _load_bound(contract_path, "contract_sha256")
+    failed = _load_bound(failed_replay_report_path, "report_sha256")
+    if (
+        contract.get("schema_version") != "movement-change-event-position-dataset-contract-v2"
+        or contract.get("failed_replay_report_file_sha256") !=
+        _file_sha256(failed_replay_report_path)
+        or contract.get("source_dataset_sha256") != _file_sha256(source_dataset_path)
+        or failed.get("failure") != "ROUTE_PARAMETER_GENERALIZATION_FAILED_PRECHECK"
+        or failed.get("arena_steps_executed") != 0
+        or contract.get("action_order") != list(CHANGE_MODEL_ACTIONS)
+        or contract.get("sequence_frames") != 16 or contract.get("old_goal_frames") != 15
+        or contract.get("new_goal_frames") != 1 or contract.get("events_per_episode") != 4
+        or contract.get("train_episodes") != 64 or contract.get("dev_episodes") != 24
+        or contract.get("train_samples") != 256 or contract.get("dev_samples") != 96
+        or contract.get("train_current_x") != [6, 7, 8]
+        or contract.get("dev_current_x") != [5, 9]
+        or contract.get("horizontal_current_y") != [2, 3, 4]
+        or contract.get("position_group_overlap_allowed") is not False
+        or contract.get("previous_action_is_actor_input") is not False
+        or contract.get("stop_in_dataset") is not False
+        or contract.get("model_training_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+        or contract.get("video_dev_allowed") is not False
+        or contract.get("video_test_allowed") is not False
+    ):
+        raise ValueError("position-v2 dataset contract differs")
+    if output_dir.exists():
+        raise ValueError("position-v2 output exists")
+    marker = cast(dict[str, object], contract["marker"])
+    train = _change_event_samples_position_v2("train", 64, marker, 410_000)
+    dev = _change_event_samples_position_v2("dev", 24, marker, 510_000)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".movement-change-position-v2-", dir=output_dir.parent))
+    dataset_path = staging / "change-events-position-v2.npz"
+    with dataset_path.open("wb") as handle:
+        np.savez_compressed(
+            handle, train_rgb=train[0], train_label=train[1], train_episode_id=train[2],
+            dev_rgb=dev[0], dev_label=dev[1], dev_episode_id=dev[2],
+        )
+        handle.flush()
+        os.fsync(handle.fileno())
+    manifest: dict[str, object] = {
+        "schema_version": "movement-change-event-position-dataset-manifest-v2",
+        "dataset": dataset_path.name, "dataset_sha256": _file_sha256(dataset_path),
+        "contract_sha256": contract["contract_sha256"],
+        "failed_replay_report_file_sha256": _file_sha256(failed_replay_report_path),
+        "source_dataset_sha256": _file_sha256(source_dataset_path),
+        "action_order": list(CHANGE_MODEL_ACTIONS), "samples": {"train": train[3], "dev": dev[3]},
+        "input_shape": [16, 128, 128, 3], "train_current_x": [6, 7, 8],
+        "dev_current_x": [5, 9], "horizontal_current_y": [2, 3, 4],
+        "position_group_overlap": 0, "previous_action_in_input": False,
+        "stop_in_dataset": False, "real_rgb_frames": 0, "training_allowed": False,
+        "checkpoint_allowed": False, "input_commands_sent": 0,
+        "video_dev_opened": False, "video_test_opened": False,
+    }
+    manifest["manifest_sha256"] = _object_sha256(manifest)
+    (staging / "manifest.json").write_bytes(_canonical(manifest) + b"\n")
+    staging.rename(output_dir)
+    return validate_change_event_dataset_v2(output_dir)
 
 
 def _warmup(position: tuple[int, int], goal: tuple[int, int]) -> tuple[str, str]:
