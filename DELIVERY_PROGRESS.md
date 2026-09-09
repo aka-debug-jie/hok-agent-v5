@@ -10,19 +10,19 @@ Updated 2026-09-09 after the user's development-efficiency review.
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text
-OBJECTIVE: observable offline navigation, followed by same-run Store/recovery integration
+OBJECTIVE: quantify the selected session-002 partial navigation scope
 STATUS: DONE
-NEXT_ACTION: none; choose a new independent player/position source or accept session-002 partial scope
-INPUT_EVIDENCE: existing session 002/003/005 ROI, player localization v2 and frozen QA
-CHANGED_FILES: two configs, real RGB demo/CLI, rule runner/transition type, focused tests and docs
-PRIMARY_METRIC: N1 traceable valid/unknown intervals; N2 same-run action/Store/resume equivalence
-BASELINE: 002 partial only; 003/005 unsupported; latest geometry runner records JSON only
-RESULT: N1 DATA_SOURCE_LIMITED; N2 10/10 and interrupted/direct 140-transition content identical
-ENGINEERING_HOURS_USED_AND_CAP: about 0.54/12 h observed implementation wall-clock; historical total UNKNOWN
-GPU_SECONDS: N1/N2 0, cap 0
-NEW_BYTES: N1/N2 12,809,566 bytes, cap 512 MiB
-STOP_REASON: real continuous navigation remains DATA_SOURCE_LIMITED
-NEXT_DECISION: change the data source or explicitly accept partial-session application scope
+NEXT_ACTION: none; a new independent player/position source is required
+INPUT_EVIDENCE: frozen N1 summary and existing session002 derived minimap shards
+CHANGED_FILES: one config, partial Shadow module/CLI, focused tests and current docs
+PRIMARY_METRIC: direct localization coverage and longest continuous valid interval
+BASELINE: 208/1,485 direct frames; longest valid interval not previously reported
+RESULT: 14.01% direct coverage,27 valid runs,longest6.6s; partial scope remains insufficient
+ENGINEERING_HOURS_USED_AND_CAP: about0.21/2 h observed implementation wall-clock
+GPU_SECONDS: 0, cap 0
+NEW_BYTES: 578,468 bytes, cap 5 MiB
+STOP_REASON: DATA_SOURCE_LIMITED; coverage and continuity both miss the observation gate
+NEXT_DECISION: provide a new independent player/position reference before navigation resumes
 ```
 
 - Completed scope: N1 visual evidence, N2 same-run Store/recovery and one verification/handoff.
@@ -90,6 +90,28 @@ NEXT_DECISION: change the data source or explicitly accept partial-session appli
   exact focused test path was the only repair. The repeated `make check` passed Ruff, strict mypy
   on70 source files, all497 tests in118.04s and project safety on273 files/131 Python files/72,802
   nonblank Python lines. `git diff --check` also passed.
+
+### P0 session002 partial navigation Shadow (2026-09-09)
+
+- Added `movement-mvp --mode real-navigation-shadow`. It reads the frozen N1 summary and all six
+  session002 minimap shards, reuses the same detector and fixed goal, and writes only one
+  `shadow.jsonl` plus a self-hashed summary. No RGB, SQLite or model artifact is copied.
+- All1,485 frames are processed at the recorded200ms period. Direct candidates are208 and unknown
+  frames1,277 across27 valid runs; the longest valid run is33 frames/6.6s. Proposals are E149,
+  SE39 and NE20. Commands are DOWN27,KEEP175,MOVE6,UP27 and NOOP1,250.
+- Every unknown has `proposal=null` and Shadow STOP. The first unknown after a direction produces
+  UP, continuous unknown produces NOOP, and reacquisition starts with DOWN. Executed actions,
+  transitions, training, test, GPU and input are all0; recorded future is not used as action effect.
+- Status is `PARTIAL_OFFLINE_SHADOW_COMPLETE_DATA_SOURCE_LIMITED`. Output:
+  `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/session002-partial-navigation-shadow-v1`.
+  Summary file SHA-256 `1c9eba075182b12845eda852c0c8f9a8d5a5ee8e4c4e355730b0dd9634400327`;
+  shadow JSONL SHA-256 `7751a71bf13f05ed7679ac4fe4065a734ccf41a267588a61d0fec15c0583b9ef`.
+- The output occupies578,468 bytes and runtime is3.88s. Observed implementation wall-clock through
+  final checks is about0.21h, GPU0. This completes the selected partial route; it does not meet the
+  80% coverage or continuous10s observation gate, so navigation stops pending a new reference.
+- Focused Shadow/boundary tests, Ruff and strict mypy passed. The single full `make check` passed
+  all499 tests in113.97s and project safety on276 files/133 Python files/73,209 nonblank Python
+  lines. `git diff --check` passed.
 
 ## Public release state
 

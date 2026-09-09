@@ -3,10 +3,10 @@
 ## Current offline convergence scope (2026-09-09)
 
 [ENGINEERING_CONVERGENCE_PLAN.md](docs/ENGINEERING_CONVERGENCE_PLAN.md) governs future scheduling.
-The completed N1/N2 batch used existing bound offline ROI evidence and project-owned PixelArena.
-N1 created non-training visual QA/proposals; N2 joined the existing movement and Store/recovery
-components. The batch changed no device authorization, data privacy contract, Actor inputs,
-consumed test status or historical result.
+The completed N1/N2 batch and P0 partial Shadow used existing bound offline ROI evidence and
+project-owned PixelArena. P0 produced offline candidate metadata only, with no executed action,
+transition or persisted RGB. These tasks changed no device authorization, data privacy contract,
+Actor inputs, consumed test status or historical result.
 
 Recorded-video proposals do not cause future recorded frames and cannot be relabeled as executed
 transitions. Synthetic marker positions and simulator time must be identified as synthetic.
@@ -14,7 +14,7 @@ Unknown/occluded positions cannot be replaced with simulator truth in a real RGB
 Rules, learned policies and their evidence are reported separately.
 
 No human recordings/labels, device connection, input transport, extra input gates or RL was part
-of N1/N2. Existing source-bound reports, models and run directories remain intact.
+of N1/N2/P0. Existing source-bound reports, models and run directories remain intact.
 The prior stage schedules are historical; the execution boundaries below remain in force.
 
 ## Allowed execution surfaces

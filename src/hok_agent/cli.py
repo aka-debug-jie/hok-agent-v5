@@ -78,6 +78,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-player-goal-continuity",
             "real-player-localization-audit-v2",
             "real-navigation-demo",
+            "real-navigation-shadow",
             "real-player-tracking-audit",
             "real-player-flow-audit",
             "joystick-visibility",
@@ -1785,6 +1786,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 result = run_joystick_visibility(
                     args.source_root, args.cohort_dir, args.pre_ingest, args.output_dir
+                )
+            elif args.mode == "real-navigation-shadow":
+                if args.session_root is None or args.prior_report is None:
+                    raise ValueError(
+                        "real-navigation-shadow requires --session-root and --prior-report"
+                    )
+                from hok_agent.movement_navigation_shadow import (
+                    run_partial_navigation_shadow,
+                )
+
+                result = run_partial_navigation_shadow(
+                    args.config, args.prior_report, args.session_root, args.output_dir
                 )
             elif args.mode == "real-navigation-demo":
                 if args.session_root is None or args.prior_report is None:

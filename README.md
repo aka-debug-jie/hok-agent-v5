@@ -16,6 +16,8 @@ The [engineering plan](docs/ENGINEERING_CONVERGENCE_PLAN.md) defined the complet
   remains `DATA_SOURCE_LIMITED`: 212/4,455 direct observations.
 - N2 now records multi-goal movement in the existing Store and restores from transition 4.
   Interrupted and continuous 10-episode runs contain identical 140-transition content.
+- P0 processed the complete session002 as an offline Shadow. Only208/1,485 frames have direct
+  localization and the longest valid run is6.6s, so navigation remains data-source limited.
 
 The frozen hierarchical package contains a 10-episode synthetic geometry report alongside the
 older recoverable rule/Event evidence. Its 352/352 decisions and 10/10 routes are narrow simulator
@@ -61,6 +63,7 @@ Completed N1/N2 artifacts are local under `$HOK_LARGE_ROOT`:
 audit/hierarchical-movement-mvp/n1-real-navigation-demo-v1
 runs/hierarchical-movement-mvp/n2-multigoal-recovery-v1
 runs/hierarchical-movement-mvp/n2-multigoal-continuous-v1
+runs/hierarchical-movement-mvp/session002-partial-navigation-shadow-v1
 ```
 
 Earlier experiment commands and exact planning snapshots are in
