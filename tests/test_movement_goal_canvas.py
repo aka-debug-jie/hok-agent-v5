@@ -25,6 +25,7 @@ CONTRACT = ROOT / "configs" / "movement_goal_canvas_overfit32_v1.json"
 STAGE_C_CONTRACT = ROOT / "configs" / "movement_goal_canvas_stage_c_v1.json"
 LOCALIZED_CONTRACT = ROOT / "configs" / "movement_goal_canvas_localized_v1.json"
 CHANGE_REPLAY_CONTRACT = ROOT / "configs" / "movement_change_replay_v1.json"
+GEOMETRY_REPLAY_CONTRACT = ROOT / "configs" / "movement_change_geometry_replay_v1.json"
 
 
 def test_change_only_route_separates_policy_persistence_and_stop() -> None:
@@ -94,6 +95,20 @@ def test_change_replay_routes_are_two_cell_segments_and_cover_all_directions() -
     assert set(directions) == set(MOVEMENT_ACTIONS[1:])
     assert contract["expected_model_invocations"] == 40
     assert contract["expected_keep_steps"] == contract["expected_router_stops"] == 40
+
+
+def test_geometry_replay_keeps_failed_neural_routes_and_zero_model_boundary() -> None:
+    neural = json.loads(CHANGE_REPLAY_CONTRACT.read_text())
+    geometry = json.loads(GEOMETRY_REPLAY_CONTRACT.read_text())
+    supplied = geometry.pop("contract_sha256")
+    assert supplied == _object_sha256(geometry)
+    assert geometry["routes"] == neural["routes"]
+    assert geometry["source_replay_contract_file_sha256"] == hashlib.sha256(
+        CHANGE_REPLAY_CONTRACT.read_bytes()
+    ).hexdigest()
+    assert geometry["model_runs"] == 0 and geometry["training_allowed"] is False
+    assert geometry["expected_route_changes"] == 40
+    assert geometry["expected_keep_steps"] == geometry["expected_router_stops"] == 40
 
 
 def _inputs(tmp_path: Path) -> tuple[Path, Path]:

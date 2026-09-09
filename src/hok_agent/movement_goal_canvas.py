@@ -569,6 +569,151 @@ def materialize_change_event_dataset_v2(
     return validate_change_event_dataset_v2(output_dir)
 
 
+def run_change_geometry_replay(
+    contract_path: Path, failed_model_report_path: Path,
+    dataset_dir: Path, output_dir: Path,
+) -> dict[str, object]:
+    contract = _load_bound(contract_path, "contract_sha256")
+    failed = _load_bound(failed_model_report_path, "report_sha256")
+    source_replay_path = contract_path.with_name("movement_change_replay_v1.json")
+    routes = cast(list[dict[str, object]], contract["routes"])
+    if (
+        contract.get("schema_version") != "movement-change-geometry-replay-contract-v1"
+        or contract.get("failed_model_report_file_sha256") !=
+        _file_sha256(failed_model_report_path)
+        or contract.get("position_v2_dataset_sha256") !=
+        _file_sha256(dataset_dir / "change-events-position-v2.npz")
+        or contract.get("source_replay_contract_file_sha256") != _file_sha256(source_replay_path)
+        or failed.get("schema_version") != "movement-change-position-v2-pilot-report-v1"
+        or failed.get("passed") is not False
+        or failed.get("simulator_integration_allowed") is not False
+        or contract.get("action_order") != list(CHANGE_MODEL_ACTIONS)
+        or contract.get("episodes") != 10 or contract.get("waypoints_per_episode") != 4
+        or contract.get("steps_per_waypoint") != 3
+        or contract.get("expected_dataset_train_correct") != 256
+        or contract.get("expected_dataset_dev_correct") != 96
+        or contract.get("expected_route_changes") != 40
+        or contract.get("expected_keep_steps") != 40
+        or contract.get("expected_router_stops") != 40
+        or contract.get("persistence_owner") != "deterministic_executor"
+        or contract.get("stop_owner") != "deterministic_router"
+        or contract.get("model_runs") != 0 or contract.get("training_allowed") is not False
+        or contract.get("device_input_allowed") is not False
+        or contract.get("video_dev_allowed") is not False
+        or contract.get("video_test_allowed") is not False
+    ):
+        raise ValueError("geometry replay contract differs")
+    source_replay = json.loads(source_replay_path.read_text())
+    if source_replay.get("routes") != routes:
+        raise ValueError("geometry replay routes differ from failed neural replay")
+    validate_change_event_dataset_v2(dataset_dir)
+    if output_dir.exists():
+        raise ValueError("geometry replay output exists")
+    dataset_results: dict[str, object] = {}
+    with np.load(dataset_dir / "change-events-position-v2.npz", allow_pickle=False) as data:
+        for split, expected_samples in (("train", 256), ("dev", 96)):
+            clips, labels = data[f"{split}_rgb"], data[f"{split}_label"]
+            predicted = np.asarray([
+                CHANGE_MODEL_ACTIONS.index(goal_canvas_geometry_movement(clip[-1]))
+                for clip in clips
+            ], dtype=np.int64)
+            correct = int(np.sum(predicted == labels))
+            recalls = {
+                action: float(np.mean(predicted[labels == index] == index))
+                for index, action in enumerate(CHANGE_MODEL_ACTIONS)
+            }
+            if correct != expected_samples or min(recalls.values()) != 1.0:
+                raise ValueError("geometry baseline fails position-v2 dataset")
+            dataset_results[split] = {
+                "samples": expected_samples, "correct": correct,
+                "accuracy": correct / expected_samples, "recall": recalls,
+            }
+    marker = cast(dict[str, object], source_replay["marker"])
+    episodes: list[dict[str, object]] = []
+    changes = keeps = stops = arena_steps = 0
+    direction_counts = dict.fromkeys(CHANGE_MODEL_ACTIONS, 0)
+    for episode in range(10):
+        route = routes[episode % len(routes)]
+        start = cast(tuple[int, int], tuple(map(int, cast(list[int], route["start"]))))
+        goals = [cast(tuple[int, int], tuple(map(int, raw)))
+                 for raw in cast(list[list[int]], route["goals"])]
+        arena = RichPixelArena(ArenaConfig(
+            max_ticks=64, blue_start=start, red_start=(13, 3), tower_damage=0,
+            minion_damage=0, minion_spawn_every_ticks=1000,
+        ))
+        arena.reset(610_000 + episode)
+        previous: StageAMovement = "STOP"
+        steps: list[dict[str, object]] = []
+        for version, goal in enumerate(goals, start=1):
+            position_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+            position = (position_raw["x"], position_raw["y"])
+            frame = render_goal_minimap(position, goal, 620_000 + episode * 10 + version, marker)
+            action = goal_canvas_geometry_movement(frame)
+            if action not in CHANGE_MODEL_ACTIONS:
+                raise ValueError("geometry replay change direction unavailable")
+            command = _movement_command(previous, action)
+            arena.step(to_arena_action(action), wait_action())
+            arena_steps += 1
+            after_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+            after = (after_raw["x"], after_raw["y"])
+            steps.append({"kind": "GEOMETRY_CHANGE", "goal_version": version,
+                          "position_before": list(position), "position_after": list(after),
+                          "goal": list(goal), "action": action, "executor_command": command})
+            changes += 1
+            direction_counts[action] += 1
+            previous = action
+            position = after
+            command = _movement_command(previous, previous)
+            arena.step(to_arena_action(previous), wait_action())
+            arena_steps += 1
+            after_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+            after = (after_raw["x"], after_raw["y"])
+            steps.append({"kind": "EXECUTOR_KEEP", "goal_version": version,
+                          "position_before": list(position), "position_after": list(after),
+                          "goal": list(goal), "action": previous, "executor_command": command})
+            if command != "KEEP" or after != goal:
+                raise ValueError("geometry replay persistence failed")
+            keeps += 1
+            command = _movement_command(previous, "STOP")
+            arena.step(wait_action(), wait_action())
+            arena_steps += 1
+            stopped_raw = cast(dict[str, int], arena.observe("blue")["self_position"])
+            stopped = (stopped_raw["x"], stopped_raw["y"])
+            steps.append({"kind": "ROUTER_STOP", "goal_version": version,
+                          "position_before": list(after), "position_after": list(stopped),
+                          "goal": list(goal), "action": "STOP", "executor_command": command})
+            if command != "UP" or stopped != goal:
+                raise ValueError("geometry replay Router stop failed")
+            stops += 1
+            previous = "STOP"
+        episodes.append({"episode_id": f"geometry-replay-{episode:02d}",
+                         "route_id": episode % len(routes), "steps": steps,
+                         "success": len(steps) == 12})
+    passed = (changes == keeps == stops == 40 and arena_steps == 120
+              and all(row["success"] for row in episodes) and all(direction_counts.values()))
+    report: dict[str, object] = {
+        "schema_version": "movement-change-geometry-replay-report-v1",
+        "status": "PASSED" if passed else "FAILED", "passed": passed,
+        "contract_sha256": contract["contract_sha256"],
+        "failed_model_report_file_sha256": _file_sha256(failed_model_report_path),
+        "dataset_sha256": _file_sha256(dataset_dir / "change-events-position-v2.npz"),
+        "dataset_results": dataset_results, "episodes": episodes,
+        "episodes_passed": sum(bool(row["success"]) for row in episodes),
+        "geometry_changes": changes, "executor_keep_steps": keeps,
+        "router_stop_steps": stops, "arena_steps": arena_steps,
+        "direction_counts": direction_counts, "model_runs": 0, "gpu_seconds": 0,
+        "simulator_rule_integration_allowed": passed,
+        "real_rgb_generalization_verified": False, "device_input_allowed": False,
+        "input_commands_sent": 0, "video_dev_opened": False, "video_test_opened": False,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".movement-geometry-replay-", dir=output_dir.parent))
+    (staging / "report.json").write_bytes(_canonical(report) + b"\n")
+    staging.rename(output_dir)
+    return report
+
+
 def _warmup(position: tuple[int, int], goal: tuple[int, int]) -> tuple[str, str]:
     for outgoing, incoming, dx in (("east", "west", 1), ("west", "east", -1)):
         destination = (position[0] + dx, position[1])

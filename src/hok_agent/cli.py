@@ -98,6 +98,7 @@ def _parser() -> argparse.ArgumentParser:
             "change-materialize-v2",
             "change-train",
             "change-replay",
+            "change-geometry-replay",
             "native-player-pilot",
             "native-anchor-cohort-audit",
             "native-anchor-cohort-repair",
@@ -1579,6 +1580,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         args.output_dir,
                         train_visibility_scan=args.train_visibility_scan,
                     )
+            elif args.mode == "change-geometry-replay":
+                if args.prior_report is None or args.dataset is None:
+                    raise ValueError("geometry replay requires prior-report and dataset")
+                from hok_agent.movement_goal_canvas import run_change_geometry_replay
+
+                result = run_change_geometry_replay(
+                    args.config, args.prior_report, args.dataset, args.output_dir
+                )
             elif args.mode == "change-replay":
                 if args.prior_report is None or len(args.checkpoint) != 1:
                     raise ValueError("change-replay requires prior-report and one checkpoint")

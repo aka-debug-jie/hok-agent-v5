@@ -15,6 +15,11 @@ runtime guard passes.
 
 ## Current development plan
 
+The zero-parameter geometry baseline passes the corrected dataset352/352 and the unchanged
+multi-waypoint replay10/10 with40 changes,40 KEEP,40 STOP and120 arena steps. Simulator Movement
+therefore uses deterministic goal geometry; learned continuation/change checkpoints remain rejected.
+The next step is an offline evidence package. Real deployment still needs real player/goal observability.
+
 The position-held-out v2 model failed: train accuracy1.0 versus dev0.2083/macro-F10.1987, with
 four zero-recall directions. Complete E/W row coverage did not overcome absolute-position
 memorization. The checkpoint and neural simulator change branch are rejected for this cycle.

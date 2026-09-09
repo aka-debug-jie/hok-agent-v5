@@ -2,6 +2,12 @@
 
 ## 当前接续：从真实摇杆反馈生成监督
 
+零参数几何基线在v2数据达到train256/256、dev96/96、八类recall1.0，并在原多waypoint
+路线完成10/10局、40次转向、40 KEEP、40 STOP、120 arena step。模型/GPU/输入均为0。
+因此模拟层正式选择Macro目标几何规则+执行器持续方向+Router停止，所有learned Movement
+checkpoint保持拒绝。下一步仅打包该离线证据；真实应用仍需新的可靠玩家定位和可观察
+Macro目标，未解决前不再训练Movement模型。
+
 位置held-out v2模型仍失败：train accuracy1.0，dev0.2083、macro-F10.1987，N/S/NW/SE
 recall为0；epoch5到30准确率不变且loss继续上升。E/W三行覆盖并未让CNN学会相对几何，
 仍表现为绝对位置记忆。本轮关闭同数据重训、模型扩展和关系架构调参，也不创建新replay。

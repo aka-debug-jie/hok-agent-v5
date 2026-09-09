@@ -1,0 +1,29 @@
+{
+  "schema_version": "movement-change-geometry-replay-contract-v1",
+  "contract_sha256": "456b4eb44aafc8dbec749fec481c9d43f92da2d21a4e5a3ed7c7ef57b47ab2b7",
+  "failed_model_report_file_sha256": "d889134b37cb240c577c71da3d211901f4c2b8ca65cfafa68676dff2b6e485a5",
+  "position_v2_dataset_sha256": "0fcfa4c20f9911b00277ca899a0f282a4d10b2de1e396662c1d7f401d8f46613",
+  "source_replay_contract_file_sha256": "e331218cebd7a5e6116afc4b317b5b3455b64048a4ba249c40dd1b6df8aa81e4",
+  "action_order": ["N", "S", "W", "E", "NW", "NE", "SW", "SE"],
+  "episodes": 10,
+  "waypoints_per_episode": 4,
+  "steps_per_waypoint": 3,
+  "routes": [
+    {"start": [5, 2], "goals": [[7, 2], [9, 4], [7, 4], [5, 2]]},
+    {"start": [9, 2], "goals": [[7, 2], [5, 4], [7, 4], [9, 2]]},
+    {"start": [7, 4], "goals": [[7, 2], [9, 2], [9, 4], [7, 4]]}
+  ],
+  "expected_dataset_train_correct": 256,
+  "expected_dataset_dev_correct": 96,
+  "expected_route_changes": 40,
+  "expected_keep_steps": 40,
+  "expected_router_stops": 40,
+  "persistence_owner": "deterministic_executor",
+  "stop_owner": "deterministic_router",
+  "model_runs": 0,
+  "training_allowed": false,
+  "real_rgb_generalization_verified": false,
+  "device_input_allowed": false,
+  "video_dev_allowed": false,
+  "video_test_allowed": false
+}

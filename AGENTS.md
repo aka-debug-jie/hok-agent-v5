@@ -114,6 +114,12 @@ the original multi-waypoint routes remain unchanged. No threshold or route repai
 That attempt failed at train1.0/dev0.2083 and is consumed; no replay or model/architecture retry.
 The next work may only audit the deterministic `goal_canvas_geometry_movement` baseline on v2
 data and unchanged routes. It cannot claim real-RGB observability or authorize input.
+The geometry replay must score352/352 on v2, then run the unchanged10 episodes with40 geometry
+changes,40 executor KEEP,40 Router STOP and120 arena steps. It loads no model and preserves
+simulator-only/zero-input boundaries.
+It passed exactly. Simulator Movement now selects deterministic goal geometry + executor KEEP +
+Router STOP; all neural change/continuation checkpoints remain rejected. The next step may package
+this offline simulator evidence only. Real continuation requires a new player/goal visual source.
 The resulting 201-train/48-dev dataset is validated with all classes, zero source overlap and
 249 unique masked causal clips. One fresh-init scale21 pilot may reuse the prior optimizer,
 balanced sampling, epochs and gates exactly; no failed checkpoint, extractor or split changes.

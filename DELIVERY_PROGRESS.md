@@ -424,13 +424,30 @@ results remain evidence and reusable components, not reopened parallel routes.
 
 ```text
 CURRENT GOAL: derive observable movement supervision from recorded joystick feedback
-CURRENT STATUS: CHANGE_POSITION_V2_PILOT_FAILED_ABSOLUTE_POSITION_SHORTCUT
-BLOCKING FAILURE: train1.0/dev0.2083; position-held-out relation not learned; new replay closed
-NEXT ACCEPTANCE: deterministic geometry baseline on v2 data and unchanged routes; no model
-COMMAND STATUS: one v2 attempt consumed; checkpoint rejected; no device input/video-dev/test
+CURRENT STATUS: SIMULATOR_GEOMETRY_CHANGE_REPLAY_PASSED
+BLOCKING FAILURE: real player/goal observability remains unavailable; learned Movement rejected
+NEXT ACCEPTANCE: package offline hierarchical rule evidence; no new model/data/input
+COMMAND STATUS: dataset352/352; replay10/10,40 change/40 KEEP/40 STOP/120 steps; model0
 BUDGET: cycle remains capped at 80 engineering hours / 24 GPU-hours / 50 GiB new artifacts
 DO NOT WORK ON: old test, E1 terminal research, phone input, online RL, model growth, MoE, PPO, new human labels
 ```
+
+### Deterministic geometry change replay (2026-09-09)
+
+- Added a zero-parameter geometry replay bound to the failed v2 model, position-v2 dataset and
+  exact original replay routes. It loads no checkpoint and changes no target/route geometry.
+- On the v2 dataset, geometry direction is train256/256 and dev96/96 with all recalls1.0.
+  This follows exact synthetic player/goal marker geometry and is not a real-RGB claim.
+- Original multi-waypoint replay passes10/10 episodes:40 geometry changes,40 executor KEEP,
+  40 Router STOP and120 arena steps. All eight directions occur; every waypoint is reached.
+- Status `SIMULATOR_GEOMETRY_CHANGE_REPLAY_PASSED`; report file/self
+  `191ae4065d1dd78fed28c8329c311f4875daf39eb6abcae503bf79f6a3c622a5` /
+  `3ba0df0a1a2ed2ec44dfc81a3cb865d60f5010a1c27ec98ba40deb65a64783cf`.
+  Model runs0, GPU0, input0, video-dev/test0.
+- Simulator hierarchy is now selected as Macro goal geometry change + deterministic direction
+  persistence + Router STOP. All learned continuation/change checkpoints stay rejected.
+- Next: package this offline simulator rule evidence. Real use remains blocked on reliable player
+  localization and observable Macro goal rendering; no further Movement training without that source.
 
 ### Position-held-out change pilot v2 (2026-09-09)
 
