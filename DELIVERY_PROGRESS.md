@@ -10,19 +10,19 @@ Updated 2026-09-09 after the user's development-efficiency review.
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text
-OBJECTIVE: quantify the selected session-002 partial navigation scope
+OBJECTIVE: test no-source player-candidate identifiability from action response
 STATUS: DONE
-NEXT_ACTION: none; a new independent player/position source is required
-INPUT_EVIDENCE: frozen N1 summary and existing session002 derived minimap shards
-CHANGED_FILES: one config, partial Shadow module/CLI, focused tests and current docs
-PRIMARY_METRIC: direct localization coverage and longest continuous valid interval
-BASELINE: 208/1,485 direct frames; longest valid interval not previously reported
-RESULT: 14.01% direct coverage,27 valid runs,longest6.6s; partial scope remains insufficient
-ENGINEERING_HOURS_USED_AND_CAP: about0.21/2 h observed implementation wall-clock
+NEXT_ACTION: prepare a bounded live multi-direction active probe in a fresh guarded testbed session
+INPUT_EVIDENCE: frozen N1 summary, three derived sessions and54 recorded movement events
+CHANGED_FILES: one audit config, response scoring/CLI, focused tests and current docs
+PRIMARY_METRIC: action-responsive interior pairs versus fixed-UI pairs
+BASELINE: fixed UI dominated prior static detection; semantic player identity unverified
+RESULT: session002 interior14/17 responsive; fixed UI0/45; other-session interior pairs0
+ENGINEERING_HOURS_USED_AND_CAP: not instrumented, cap4 h; formal runtime2.40s
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 578,468 bytes, cap 5 MiB
-STOP_REASON: DATA_SOURCE_LIMITED; coverage and continuity both miss the observation gate
-NEXT_DECISION: provide a new independent player/position reference before navigation resumes
+NEW_BYTES: 29,333 bytes, cap 50 MiB
+STOP_REASON: multi-session identity remains unverified; no current live probe session
+NEXT_DECISION: use new controlled actions for validation through the existing guarded interface
 ```
 
 - Completed scope: N1 visual evidence, N2 same-run Store/recovery and one verification/handoff.
@@ -111,6 +111,30 @@ NEXT_DECISION: provide a new independent player/position reference before naviga
   80% coverage or continuous10s observation gate, so navigation stops pending a new reference.
 - Focused Shadow/boundary tests, Ruff and strict mypy passed. The single full `make check` passed
   all499 tests in113.97s and project safety on276 files/133 Python files/73,209 nonblank Python
+  lines. `git diff --check` passed.
+
+### No-source action-response identity audit (2026-09-11)
+
+- Added `movement-mvp --mode action-response-identity-audit`. Candidate pairs are generated from
+  the two RGB frames without an action argument; the recorded action is applied only afterward to
+  score1,000ms displacement. Only unique start/end candidates within the interior or fixed-UI
+  group are retained.
+- The three sessions contain54 acknowledged non-wait movement events and62 unique candidate pairs.
+  Session002 contributes17 interior pairs over north/north-east/south/south-east/south-west;
+  14/17 have projection at least1 pixel, responsive fraction0.8235 and median projection2.009px.
+- Fixed UI contributes45 pairs across all sessions. Responsive pairs are0/45 and median displacement
+  is0.054px. Sessions003/005 contribute no interior pair. All six frozen gates pass.
+- Status is `ACTION_RESPONSE_SEPARATES_FIXED_UI_SESSION002_ONLY`. This supports a future active
+  probe design but keeps semantic identity and multi-session identity false. Training, test, GPU
+  and input are0. Output:
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/action-response-identity-v1`.
+  Report file SHA-256 `a657ff96423feeb2ec717a82b2cde4b0053b41d91341796cd19551c0b01bb7ff`;
+  report self-hash `d231ffa189e247442974a1704ccb7f695ded50efea8270296f4db51f584b1a3b`.
+- Output size is29,333 bytes and formal runtime2.40s. Existing data cannot validate a second
+  responsive session, so the next evidence must come from a new controlled action sequence rather
+  than another pass over these recordings.
+- Focused audit/boundary tests, Ruff and strict mypy passed. The single full `make check` passed
+  all501 tests in116.01s and project safety on277 files/133 Python files/73,647 nonblank Python
   lines. `git diff --check` passed.
 
 ## Public release state

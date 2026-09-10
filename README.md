@@ -18,6 +18,9 @@ The [engineering plan](docs/ENGINEERING_CONVERGENCE_PLAN.md) defined the complet
   Interrupted and continuous 10-episode runs contain identical 140-transition content.
 - P0 processed the complete session002 as an offline Shadow. Only208/1,485 frames have direct
   localization and the longest valid run is6.6s, so navigation remains data-source limited.
+- The no-source action-response audit evaluates54 existing movement events. Fourteen of17
+  session002 interior pairs respond by at least1 pixel in the sent direction, while0/45 fixed-UI
+  pairs do. This supports an active-probe design; cross-session player identity remains unresolved.
 
 The frozen hierarchical package contains a 10-episode synthetic geometry report alongside the
 older recoverable rule/Event evidence. Its 352/352 decisions and 10/10 routes are narrow simulator
@@ -64,6 +67,7 @@ audit/hierarchical-movement-mvp/n1-real-navigation-demo-v1
 runs/hierarchical-movement-mvp/n2-multigoal-recovery-v1
 runs/hierarchical-movement-mvp/n2-multigoal-continuous-v1
 runs/hierarchical-movement-mvp/session002-partial-navigation-shadow-v1
+audit/hierarchical-movement-mvp/action-response-identity-v1
 ```
 
 Earlier experiment commands and exact planning snapshots are in

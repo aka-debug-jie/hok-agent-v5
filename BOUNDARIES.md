@@ -8,6 +8,11 @@ project-owned PixelArena. P0 produced offline candidate metadata only, with no e
 transition or persisted RGB. These tasks changed no device authorization, data privacy contract,
 Actor inputs, consumed test status or historical result.
 
+The no-source action-response audit may compare already recorded, acknowledged movement events
+with derived minimap candidates. Candidate generation cannot read the action. Its passing result
+can support a future bounded active-probe design, but does not itself authorize device input or
+establish semantic player identity across sessions.
+
 Recorded-video proposals do not cause future recorded frames and cannot be relabeled as executed
 transitions. Synthetic marker positions and simulator time must be identified as synthetic.
 Unknown/occluded positions cannot be replaced with simulator truth in a real RGB analysis.

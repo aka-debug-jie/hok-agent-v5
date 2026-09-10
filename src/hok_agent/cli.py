@@ -79,6 +79,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-player-localization-audit-v2",
             "real-navigation-demo",
             "real-navigation-shadow",
+            "action-response-identity-audit",
             "real-player-tracking-audit",
             "real-player-flow-audit",
             "joystick-visibility",
@@ -1786,6 +1787,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 result = run_joystick_visibility(
                     args.source_root, args.cohort_dir, args.pre_ingest, args.output_dir
+                )
+            elif args.mode == "action-response-identity-audit":
+                if args.session_root is None or args.prior_report is None:
+                    raise ValueError(
+                        "action-response-identity-audit requires --session-root and --prior-report"
+                    )
+                from hok_agent.movement_navigation_shadow import (
+                    run_action_response_identity_audit,
+                )
+
+                result = run_action_response_identity_audit(
+                    args.config, args.prior_report, args.session_root, args.output_dir
                 )
             elif args.mode == "real-navigation-shadow":
                 if args.session_root is None or args.prior_report is None:

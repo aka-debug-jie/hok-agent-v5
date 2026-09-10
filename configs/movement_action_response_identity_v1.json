@@ -1,0 +1,56 @@
+{
+  "schema_version": "movement-action-response-identity-audit-v1",
+  "prior_summary_file_sha256": "546147dfbc3f9105bed3194be9dc28b78101e6685afabb2b0dcfd047568ce304",
+  "prior_summary_sha256": "19cf75560b9d495a477198110ec6e9f7d84ca92a18b0c8f00850e14348cb1fdb",
+  "sessions": [
+    {
+      "basename": "teacher-session-002",
+      "summary_sha256": "ca8f6d315b736f96c040bbf3cd727dd9c295d75511834eaceb446fb06ab07216"
+    },
+    {
+      "basename": "teacher-session-003",
+      "summary_sha256": "150eeca5e2cdb61535289145d12b87a956660c169d0e5fbddbdf5370e1fcba63"
+    },
+    {
+      "basename": "teacher-session-005",
+      "summary_sha256": "74a436ed6482a0f0ae60bb6cc5f6e8459e35ae782b496173f1ff463b0663fb69"
+    }
+  ],
+  "color": {
+    "green_minimum": 85,
+    "green_red_margin": 18,
+    "green_blue_margin": 10,
+    "red_minimum": 105,
+    "red_green_margin": 28,
+    "red_blue_margin": 18
+  },
+  "components": {
+    "green_size": [20, 140],
+    "green_extent": [7, 24],
+    "red_size": [20, 240],
+    "red_extent": [5, 24],
+    "maximum_pair_l1_distance": 7.0,
+    "reset_after_missing_frames": 10
+  },
+  "excluded_ui_xyxy": [112, 0, 128, 16],
+  "frame_period_ms": 200,
+  "expected_frames_per_session": 1485,
+  "response_lag_ms": 1000,
+  "movement_names": [
+    "wait", "north", "north_east", "east", "south_east",
+    "south", "south_west", "west", "north_west"
+  ],
+  "minimum_projection_pixels": 1.0,
+  "gates": {
+    "minimum_session002_interior_pairs": 10,
+    "minimum_session002_directions": 3,
+    "minimum_session002_responsive_fraction": 0.75,
+    "minimum_session002_median_projection_pixels": 1.0,
+    "maximum_fixed_ui_responsive_fraction": 0.05,
+    "maximum_fixed_ui_median_displacement_pixels": 0.5
+  },
+  "training_allowed": false,
+  "test_allowed": false,
+  "device_input_allowed": false,
+  "contract_sha256": "d2532385d219cf97b40ab412ffbe9500f2cc14ddca2924c8a993ba0857249e95"
+}

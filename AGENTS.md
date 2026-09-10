@@ -8,10 +8,11 @@ Follow the user's current instructions, then the current task in
 Read the short README and the relevant BOUNDARIES before edits.
 Read historical evidence only when the current task depends on it; do not reread the entire ledger.
 
-The bounded offline N1/N2 navigation batch and the selected session-002 partial Shadow are
-complete. P0 processed all1,485 frames but retained only208 direct observations and a maximum
-6.6-second valid run. Do not rerun or extend N1/N2/P0. There is no active implementation task;
-the next navigation work requires a new independent player/position source.
+The bounded N1/N2/P0 batch is complete. The user has now fixed the project goal as no-source
+visual control. A separate action-response audit shows that recorded input can reject the fixed
+top-right UI and isolate one responsive interior cue in session002, but it does not verify player
+identity across sessions. Do not rerun these offline inputs. A next live active probe must reuse
+the existing guarded testbed and requires a fresh active session plus its local identity/layout.
 
 The user has asked for efficient continuing development. Complete an authorized READY offline
 task without asking for approval at each implementation detail. The next "continue" selects the
@@ -35,7 +36,8 @@ create another research branch under a renamed contract.
 - For experiments, bind budget/attempts to the question, not the run ID. Existing failed
   checkpoints/results stay failed. N1/N2 train no model and open no old test/holdout.
 - Do not retune the frozen player detector or rerun the rejected joystick/Movement experiments.
-  N1/N2/P0 are finished and the current navigation branch stops here.
+  The no-source continuation uses controlled visual response as new evidence, not another static
+  detector pass.
 - Budgeted bug fixes are ordinary development; input/label meaning or public interface changes
   need an explicit versioned configuration. Do not create a protocol for every optimizer tweak.
 - Keep old run evidence/configurations/weights intact. Source-bound old recovery runs remain
