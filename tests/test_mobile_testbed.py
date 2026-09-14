@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from io import StringIO
+from itertools import pairwise
 from pathlib import Path
 from typing import cast
 
@@ -1599,6 +1600,21 @@ def test_active_probe_scene_wait_fails_closed_on_unknown_screen() -> None:
         mobile_testbed._wait_active_probe_scene(
             lambda: (0, black), 8.0, 5.0, timeout_seconds=0.05, period_seconds=0.01
         )
+
+
+def test_active_probe_cyclic_order_keeps_ring_steps() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._active_probe_contract(
+        root / "configs/movement_active_probe_v2.json"
+    )
+    assert len(digest) == 64
+    schedule = mobile_testbed.plan_active_probe_schedule(contract)
+    order = [entry["direction"] for entry in schedule if entry["kind"] == "pulse"]
+    ring = list(mobile_testbed.MOVEMENTS[1:])
+    assert len(order) == 48
+    assert all(direction in ring for direction in order)
+    for before, after in pairwise(order):
+        assert (ring.index(after) - ring.index(before)) % len(ring) == 1
 
 
 def test_active_probe_schedule_keeps_serialized_observation_windows() -> None:

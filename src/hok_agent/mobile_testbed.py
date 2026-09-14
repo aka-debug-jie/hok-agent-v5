@@ -6000,6 +6000,12 @@ def _active_probe_direction_order(
     return order
 
 
+def _active_probe_cyclic_order(directions: list[str], pulses_per_direction: int) -> list[str]:
+    if directions != list(MOVEMENTS[1:]):
+        raise MobileTestbedError("active probe cyclic order differs")
+    return list(directions) * pulses_per_direction
+
+
 def plan_active_probe_schedule(contract: dict[str, object]) -> list[dict[str, object]]:
     directions = cast(list[str], contract["directions"])
     pulses_per_direction = int(cast(int, contract["pulses_per_direction"]))
@@ -6009,7 +6015,15 @@ def plan_active_probe_schedule(contract: dict[str, object]) -> list[dict[str, ob
     control_windows = int(cast(int, contract["control_windows"]))
     control_window_ms = int(cast(int, contract["control_window_ms"]))
     seed = int(cast(int, contract.get("schedule_seed", 0)))
-    order = _active_probe_direction_order(directions, pulses_per_direction, seed)
+    order_kind = str(
+        contract.get("direction_order", "seeded-permutation-without-immediate-repeats")
+    )
+    if order_kind == "seeded-permutation-without-immediate-repeats":
+        order = _active_probe_direction_order(directions, pulses_per_direction, seed)
+    elif order_kind == "cyclic-rotation-of-all-directions":
+        order = _active_probe_cyclic_order(directions, pulses_per_direction)
+    else:
+        raise MobileTestbedError("active probe direction order differs")
     controls_after = len(order) // control_windows if control_windows else 0
     entries: list[dict[str, object]] = []
     cursor_ms = 0
