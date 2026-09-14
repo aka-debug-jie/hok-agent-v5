@@ -255,6 +255,23 @@ class GuardWatchdog:
         if time.monotonic_ns() - checked_ns > maximum_age_ms * 1_000_000:
             raise MobileTestbedError("mobile device guard snapshot is stale")
 
+    def ensure_fresh_or_refresh(self, maximum_age_ms: int = 500) -> None:
+        with self._lock:
+            allowed = self._allowed
+            checked_ns = self._checked_ns
+            error = self._error
+        if not allowed:
+            raise MobileTestbedError("mobile device guard stopped the live session") from error
+        if time.monotonic_ns() - checked_ns <= maximum_age_ms * 1_000_000:
+            return
+        self._guard.check()
+        with self._lock:
+            if not self._allowed:
+                raise MobileTestbedError(
+                    "mobile device guard stopped the live session"
+                ) from self._error
+            self._checked_ns = time.monotonic_ns()
+
     def stop(self) -> None:
         self._stop.set()
         if self._thread is not None:
@@ -6028,7 +6045,7 @@ def plan_active_probe_schedule(contract: dict[str, object]) -> list[dict[str, ob
 ACTIVE_PROBE_CONTRACT_SCHEMA = "movement-active-probe-contract-v1"
 ACTIVE_PROBE_SESSION_SCHEMA = "hok-agent-mobile-active-probe-session-v1"
 ACTIVE_PROBE_GUARD_INTERVAL_SECONDS = 0.5
-ACTIVE_PROBE_GUARD_STALENESS_MS = 5000
+ACTIVE_PROBE_GUARD_STALENESS_MS = 2000
 
 
 def _active_probe_contract(path: Path) -> tuple[dict[str, object], str]:
@@ -6289,7 +6306,7 @@ def run_mobile_active_probe(
         if not enable_input:
             return
         for operation in operations:
-            watchdog.ensure_fresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
+            watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
             session.touch(operation, guard.width, guard.height)
             pointer_messages += 1
 
@@ -6338,7 +6355,7 @@ def run_mobile_active_probe(
             if now >= next_frame_due:
                 tick_target = next_frame_due
                 next_frame_due += frame_interval
-                watchdog.ensure_fresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
+                watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
                 frame_timestamp_ns, frame = session.frame()
                 model_frame = _model_frame(frame)
                 screen_ok = bool(

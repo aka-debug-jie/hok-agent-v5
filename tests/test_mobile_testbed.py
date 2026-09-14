@@ -5,6 +5,7 @@ import json
 from collections import Counter
 from io import StringIO
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
@@ -1546,6 +1547,33 @@ def test_active_probe_final_ms_waits_for_release() -> None:
     assert mobile_testbed._active_probe_final_ms(pulse, 1000) == 1250
     control: dict[str, object] = {"kind": "control", "scheduled_window_end_ms": 5000}
     assert mobile_testbed._active_probe_final_ms(control, 1000) == 5000
+
+
+class _GuardStub:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def check(self) -> None:
+        self.calls += 1
+
+
+def test_watchdog_refreshes_a_stale_snapshot_inline() -> None:
+    stub = _GuardStub()
+    watchdog = mobile_testbed.GuardWatchdog(
+        cast(mobile_testbed.DeviceGuard, stub)
+    )
+    watchdog._checked_ns -= 10_000_000_000
+    watchdog.ensure_fresh_or_refresh(2000)
+    assert stub.calls == 1
+    watchdog.ensure_fresh_or_refresh(2000)
+    assert stub.calls == 1
+
+
+def test_watchdog_refresh_still_fails_when_stopped() -> None:
+    watchdog = mobile_testbed.GuardWatchdog(cast(mobile_testbed.DeviceGuard, _GuardStub()))
+    watchdog._allowed = False
+    with pytest.raises(mobile_testbed.MobileTestbedError, match="stopped"):
+        watchdog.ensure_fresh_or_refresh(2000)
 
 
 def test_active_probe_scene_wait_skips_startup_black_frames() -> None:
