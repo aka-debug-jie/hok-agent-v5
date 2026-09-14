@@ -17,11 +17,11 @@ INPUT_EVIDENCE: frozen action-response audit, the four user probe requirements a
 CHANGED_FILES: probe contract, audit, planner, runner/CLI, runner fixes (scene readiness, guard refresh, advancing observations) and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: A gate FAILED for both sessions: session-001 coverage 0.297, paired 0.125, responsive 0, longest valid 6.6 s; session-002 coverage 0.0, paired 0; the live own marker renders as a red ring with no green cue, so the frozen detector localized only a static corner blob; audit ACTIVE_PROBE_GATES_FAILED
+RESULT: A gate FAILED for both sessions: session-001 coverage 0.297, paired 0.125, responsive 0, longest valid 6.6 s (the marker hovered at the base); session-002 coverage 0.0, paired 0 (no marker detected); a post-run read-only check confirms the frozen cue does match the live client when the own marker is rendered; audit ACTIVE_PROBE_GATES_FAILED
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
 NEW_BYTES: 88,820,785 total (evidence pair 30,278,913; failed/duplicate verification attempts 43,204,209; smoke diagnostics 15,337,663); contract budget 52,428,800
-STOP_REASON: both sessions failed the A gate; the frozen no-source cue does not match the live minimap rendering
+STOP_REASON: both sessions failed the A gate; the runs did not provide an alive, moving hero in the declared open area (base-area-only displacement; no marker at all in session-002)
 NEXT_DECISION: (a) app-source test reference, (b) one final budgeted new-session batch with a marker-visible precheck, or (c) accept the data-limited local scope
 ```
 
