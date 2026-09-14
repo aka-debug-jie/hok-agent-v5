@@ -517,3 +517,532 @@ def run_action_response_identity_audit(
             staging.rmdir()
         raise
     return report
+
+
+_PROBE_DIRECTIONS = (
+    "north",
+    "north_east",
+    "east",
+    "south_east",
+    "south",
+    "south_west",
+    "west",
+    "north_west",
+)
+
+
+def _probe_unique_position(
+    candidates: list[tuple[float, float, float]],
+) -> tuple[float, float] | None:
+    return (candidates[0][0], candidates[0][1]) if len(candidates) == 1 else None
+
+
+def _probe_run_lengths(mask: np.ndarray) -> list[int]:
+    runs: list[int] = []
+    current = 0
+    for flag in mask:
+        if bool(flag):
+            current += 1
+        elif current:
+            runs.append(current)
+            current = 0
+    if current:
+        runs.append(current)
+    return runs
+
+
+def _probe_frame_candidates(
+    frames: np.ndarray,
+    cue_contract: dict[str, object],
+    exclusion: tuple[int, int, int, int],
+) -> tuple[
+    list[list[tuple[float, float, float]]],
+    list[list[tuple[float, float, float]]],
+]:
+    x0, y0, x1, y1 = exclusion
+    interior: list[list[tuple[float, float, float]]] = []
+    fixed: list[list[tuple[float, float, float]]] = []
+    for frame in frames:
+        frame_interior: list[tuple[float, float, float]] = []
+        frame_fixed: list[tuple[float, float, float]] = []
+        for candidate in _player_candidates(frame, cue_contract):
+            if x0 <= candidate[1] < x1 and y0 <= candidate[0] < y1:
+                frame_fixed.append(candidate)
+            else:
+                frame_interior.append(candidate)
+        interior.append(frame_interior)
+        fixed.append(frame_fixed)
+    return interior, fixed
+
+
+def _probe_last_frame(
+    times: np.ndarray, analysis: np.ndarray, target_ms: int, gap_ms: int
+) -> int | None:
+    index = int(np.searchsorted(times, target_ms, side="right")) - 1
+    if index < 0 or not bool(analysis[index]) or int(times[index]) < target_ms - gap_ms:
+        return None
+    return index
+
+
+def _probe_event_contaminated(
+    kind: str,
+    direction_id: int,
+    press_ack_ms: int,
+    release_ack_ms: int,
+    end_ms: int,
+    times: np.ndarray,
+    movement_ids: np.ndarray,
+    sent: np.ndarray,
+) -> bool:
+    for index in np.flatnonzero((times >= press_ack_ms) & (times <= end_ms)):
+        if not bool(sent[index]):
+            continue
+        if kind == "control":
+            return True
+        if int(times[index]) <= release_ack_ms and int(movement_ids[index]) == direction_id:
+            continue
+        return True
+    return False
+
+
+def _probe_event_metrics(
+    event: dict[str, object],
+    *,
+    direction_ids: dict[str, int],
+    observation_ms: int,
+    gap_ms: int,
+    minimum_projection: float,
+    times: np.ndarray,
+    analysis: np.ndarray,
+    interior: list[list[tuple[float, float, float]]],
+    fixed: list[list[tuple[float, float, float]]],
+    movement_ids: np.ndarray,
+    sent: np.ndarray,
+) -> dict[str, object]:
+    kind = str(event["kind"])
+    direction = str(event["direction"]) if kind == "pulse" else None
+    direction_id = direction_ids.get(direction, 0) if direction is not None else 0
+    if kind == "pulse":
+        press_ack_ms = int(cast(int, event["press_ack_ms"]))
+        release_ack_ms = int(cast(int, event["release_ack_ms"]))
+        end_target_ms = release_ack_ms + observation_ms
+    else:
+        press_ack_ms = int(cast(int, event["window_start_ms"]))
+        release_ack_ms = press_ack_ms
+        end_target_ms = int(cast(int, event["window_end_ms"]))
+    baseline_index = _probe_last_frame(times, analysis, press_ack_ms, gap_ms)
+    end_index = _probe_last_frame(times, analysis, end_target_ms, gap_ms)
+    contaminated = bool(event.get("contaminated")) or _probe_event_contaminated(
+        kind,
+        direction_id,
+        press_ack_ms,
+        release_ack_ms,
+        end_target_ms,
+        times,
+        movement_ids,
+        sent,
+    )
+    hard_stop = bool(event.get("hard_stop"))
+    row: dict[str, object] = {
+        "kind": kind,
+        "direction": direction,
+        "press_ack_ms": press_ack_ms,
+        "release_ack_ms": release_ack_ms,
+        "response_end_ms": end_target_ms,
+        "baseline_frame": baseline_index,
+        "response_frame": end_index,
+        "contaminated": contaminated,
+        "hard_stop": hard_stop,
+        "fate": "outside_analysis_window",
+        "projection_pixels": None,
+        "displacement_pixels": None,
+        "orthogonal_pixels": None,
+        "responsive": False,
+        "fixed_ui_projection_pixels": None,
+        "fixed_ui_displacement_pixels": None,
+        "fixed_ui_responsive": False,
+    }
+    if baseline_index is None or end_index is None:
+        return row
+    baseline_interior = interior[baseline_index]
+    end_interior = interior[end_index]
+    if hard_stop or contaminated:
+        row["fate"] = "contaminated"
+    elif not baseline_interior:
+        row["fate"] = "no_candidate_baseline"
+    elif not end_interior:
+        row["fate"] = "no_candidate_observation"
+    elif len(baseline_interior) > 1:
+        row["fate"] = "ambiguous_baseline"
+    elif len(end_interior) > 1:
+        row["fate"] = "ambiguous_observation"
+    else:
+        row["fate"] = "paired"
+    fate = str(row["fate"])
+    baseline_position = _probe_unique_position(baseline_interior)
+    end_position = _probe_unique_position(end_interior)
+    if baseline_position is not None and end_position is not None:
+        delta_y = end_position[0] - baseline_position[0]
+        delta_x = end_position[1] - baseline_position[1]
+        row["displacement_pixels"] = math.hypot(delta_y, delta_x)
+        if kind == "pulse" and direction is not None:
+            vector_y, vector_x = _MOVEMENT_VECTORS[direction]
+            norm = math.hypot(vector_y, vector_x)
+            projection = (delta_y * vector_y + delta_x * vector_x) / norm
+            row["projection_pixels"] = projection
+            row["orthogonal_pixels"] = abs(delta_y * vector_x - delta_x * vector_y) / norm
+            row["responsive"] = fate == "paired" and projection >= minimum_projection
+    baseline_fixed = _probe_unique_position(fixed[baseline_index])
+    end_fixed = _probe_unique_position(fixed[end_index])
+    if (
+        kind == "pulse"
+        and direction is not None
+        and baseline_fixed is not None
+        and end_fixed is not None
+    ):
+        delta_y = end_fixed[0] - baseline_fixed[0]
+        delta_x = end_fixed[1] - baseline_fixed[1]
+        vector_y, vector_x = _MOVEMENT_VECTORS[direction]
+        norm = math.hypot(vector_y, vector_x)
+        projection = (delta_y * vector_y + delta_x * vector_x) / norm
+        row["fixed_ui_projection_pixels"] = projection
+        row["fixed_ui_displacement_pixels"] = math.hypot(delta_y, delta_x)
+        row["fixed_ui_responsive"] = projection >= minimum_projection
+    return row
+
+
+def _probe_session_metrics(
+    directory: Path,
+    contract: dict[str, object],
+    opened_shards: list[dict[str, object]],
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    summary = _load_bound_json(directory / "summary.json", "summary_sha256")
+    if (
+        summary.get("schema_version") != contract["session_schema_version"]
+        or summary.get("contract_sha256") != contract["contract_sha256"]
+        or summary.get("derived_roi_rgb_persisted") is not True
+        or summary.get("raw_frames_persisted") is not False
+    ):
+        raise ValueError("active probe session summary differs")
+    frame_parts: list[np.ndarray] = []
+    scheduled_parts: list[np.ndarray] = []
+    elapsed_parts: list[np.ndarray] = []
+    valid_parts: list[np.ndarray] = []
+    allowed_parts: list[np.ndarray] = []
+    movement_parts: list[np.ndarray] = []
+    sent_parts: list[np.ndarray] = []
+    for source_row in cast(list[dict[str, object]], summary["observation_shards"]):
+        shard_name = str(source_row["path"])
+        shard_path = directory / "shards" / shard_name
+        if (
+            Path(shard_name).name != shard_name
+            or shard_path.is_symlink()
+            or _file_sha256(shard_path) != source_row["sha256"]
+        ):
+            raise ValueError("active probe session shard differs")
+        with np.load(shard_path, allow_pickle=False) as shard:
+            frame_parts.append(shard["minimap_rgb"].copy())
+            scheduled_parts.append(shard["scheduled_elapsed_ms"].copy())
+            elapsed_parts.append(shard["frame_elapsed_ms"].copy())
+            valid_parts.append(shard["screen_valid"].copy())
+            allowed_parts.append(shard["operation_allowed"].copy())
+            movement_parts.append(shard["movement_id"].copy())
+            sent_parts.append(shard["movement_input_sent"].copy())
+        opened_shards.append(
+            {"session": directory.name, "basename": shard_name, "sha256": source_row["sha256"]}
+        )
+    frames = np.concatenate(frame_parts)
+    scheduled = np.concatenate(scheduled_parts).astype(np.int64)
+    elapsed = np.concatenate(elapsed_parts).astype(np.int64)
+    screen_valid = np.concatenate(valid_parts).astype(bool)
+    operation_allowed = np.concatenate(allowed_parts).astype(bool)
+    movement_ids = np.concatenate(movement_parts).astype(np.int64)
+    sent = np.concatenate(sent_parts).astype(bool)
+    if (
+        frames.ndim != 4
+        or frames.shape[1:] != (128, 128, 3)
+        or frames.dtype != np.uint8
+        or scheduled.shape != (frames.shape[0],)
+        or elapsed.shape != (frames.shape[0],)
+        or screen_valid.shape != (frames.shape[0],)
+        or operation_allowed.shape != (frames.shape[0],)
+        or movement_ids.shape != (frames.shape[0],)
+        or sent.shape != (frames.shape[0],)
+        or not np.all(np.diff(elapsed) > 0)
+    ):
+        raise ValueError("active probe session arrays differ")
+    event_lines = (directory / "pulses.jsonl").read_text(encoding="utf-8").splitlines()
+    events: list[dict[str, object]] = []
+    for line in event_lines:
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise ValueError("active probe event is not an object")
+        events.append(cast(dict[str, object], payload))
+    pulse_events = [event for event in events if event.get("kind") == "pulse"]
+    control_events = [event for event in events if event.get("kind") == "control"]
+    if len(pulse_events) + len(control_events) != len(events):
+        raise ValueError("active probe event kind differs")
+    for event in pulse_events:
+        if (
+            str(event.get("direction")) not in _MOVEMENT_VECTORS
+            or not all(
+                isinstance(event.get(key), (int, float, bool))
+                for key in ("press_ack_ms", "release_ack_ms")
+            )
+            or int(cast(int, event["release_ack_ms"])) < int(cast(int, event["press_ack_ms"]))
+        ):
+            raise ValueError("active probe pulse event differs")
+    for event in control_events:
+        if (
+            not all(
+                isinstance(event.get(key), (int, float, bool))
+                for key in ("window_start_ms", "window_end_ms")
+            )
+            or int(cast(int, event["window_end_ms"]))
+            <= int(cast(int, event["window_start_ms"]))
+        ):
+            raise ValueError("active probe control event differs")
+    if (
+        int(cast(int, summary.get("pulses_dispatched", len(pulse_events)))) != len(pulse_events)
+        or int(cast(int, summary.get("control_windows_dispatched", len(control_events))))
+        != len(control_events)
+        or int(cast(int, summary["input_commands_sent"])) < 0
+    ):
+        raise ValueError("active probe event counts differ")
+
+    cue_contract: dict[str, object] = {
+        "color": contract["color"],
+        "components": contract["components"],
+    }
+    exclusion = cast(
+        tuple[int, int, int, int],
+        tuple(map(int, cast(list[int], contract["excluded_ui_xyxy"]))),
+    )
+    interior, fixed = _probe_frame_candidates(frames, cue_contract, exclusion)
+    analysis = screen_valid & operation_allowed
+    resolved = np.asarray([len(row) == 1 for row in interior], dtype=bool)
+    ambiguous = np.asarray([len(row) > 1 for row in interior], dtype=bool)
+    localized = analysis & resolved
+    unresolved = analysis & ~resolved
+    analysis_frames = int(analysis.sum())
+    analysis_coverage = int(localized.sum()) / analysis_frames if analysis_frames else 0.0
+    valid_runs = _probe_run_lengths(localized)
+    unresolved_runs = _probe_run_lengths(unresolved)
+    frame_period_ms = int(cast(int, contract["frame_period_ms"]))
+    components = cast(dict[str, object], contract["components"])
+    maximum_jump = float(cast(float, components["maximum_pair_l1_distance"]))
+    identity_switch_events = 0
+    previous: tuple[float, float] | None = None
+    for index in range(len(frames)):
+        if not bool(analysis[index]):
+            previous = None
+            continue
+        current = _probe_unique_position(interior[index])
+        if current is None:
+            previous = None
+            continue
+        if (
+            previous is not None
+            and abs(current[0] - previous[0]) + abs(current[1] - previous[1]) > maximum_jump
+        ):
+            identity_switch_events += 1
+        previous = current
+
+    measurement = cast(dict[str, object], contract["measurement"])
+    gates = cast(dict[str, object], contract["gates_per_session"])
+    direction_ids = {
+        name: index for index, name in enumerate(cast(list[str], contract["movement_names"]))
+    }
+    event_rows: list[dict[str, object]] = []
+    for event in events:
+        row = _probe_event_metrics(
+            event,
+            direction_ids=direction_ids,
+            observation_ms=int(cast(int, contract["observation_ms"])),
+            gap_ms=int(cast(int, measurement["maximum_gap_to_analysis_frame_ms"])),
+            minimum_projection=float(cast(float, gates["minimum_projection_pixels"])),
+            times=elapsed,
+            analysis=analysis,
+            interior=interior,
+            fixed=fixed,
+            movement_ids=movement_ids,
+            sent=sent,
+        )
+        row["session"] = directory.name
+        event_rows.append(row)
+
+    pulse_rows = [row for row in event_rows if row["kind"] == "pulse"]
+    control_rows = [row for row in event_rows if row["kind"] == "control"]
+    fates = Counter(str(row["fate"]) for row in pulse_rows)
+    paired_rows = [row for row in pulse_rows if row["fate"] == "paired"]
+    responsive_rows = [row for row in paired_rows if bool(row["responsive"])]
+    paired_fraction = len(paired_rows) / len(pulse_rows) if pulse_rows else 0.0
+    direction_correct_fraction = (
+        len(responsive_rows) / len(paired_rows) if paired_rows else 0.0
+    )
+    paired_directions = Counter(str(row["direction"]) for row in paired_rows)
+    pulse_projections = [
+        float(cast(float, row["projection_pixels"]))
+        for row in paired_rows
+        if row["projection_pixels"] is not None
+    ]
+    control_displacements = [
+        float(cast(float, row["displacement_pixels"]))
+        for row in control_rows
+        if row["fate"] == "paired" and row["displacement_pixels"] is not None
+    ]
+    fixed_rows = [row for row in pulse_rows if row["fixed_ui_displacement_pixels"] is not None]
+    fixed_responsive = [row for row in fixed_rows if bool(row["fixed_ui_responsive"])]
+    fixed_ui_responsive_fraction = len(fixed_responsive) / len(fixed_rows) if fixed_rows else 0.0
+    pulse_median_projection = float(np.median(pulse_projections)) if pulse_projections else 0.0
+    control_p95 = (
+        float(np.quantile(np.asarray(control_displacements), 0.95))
+        if control_displacements
+        else 0.0
+    )
+    longest_valid_run_seconds = max(valid_runs, default=0) * frame_period_ms / 1000.0
+    longest_unresolved_run_seconds = (
+        max(unresolved_runs, default=0) * frame_period_ms / 1000.0
+    )
+    checks = {
+        "dispatched_pulses": len(pulse_rows) >= int(cast(int, gates["minimum_dispatched_pulses"])),
+        "paired_fraction": paired_fraction >= float(cast(float, gates["minimum_paired_fraction"])),
+        "balanced_directions": len(paired_directions)
+        >= int(cast(int, gates["minimum_balanced_directions"])),
+        "direction_correct_fraction": direction_correct_fraction
+        >= float(cast(float, gates["minimum_direction_correct_fraction"])),
+        "pulse_median_projection": pulse_median_projection
+        >= float(cast(float, gates["minimum_projection_pixels"])),
+        "pulse_vs_control": (pulse_median_projection - control_p95)
+        >= float(cast(float, gates["minimum_pulse_median_minus_control_p95_pixels"])),
+        "fixed_ui_responsive_fraction": fixed_ui_responsive_fraction
+        <= float(cast(float, gates["maximum_fixed_ui_responsive_fraction"])),
+        "analysis_coverage": analysis_coverage
+        >= float(cast(float, gates["minimum_analysis_coverage_fraction"])),
+        "unknown_streak": longest_unresolved_run_seconds
+        <= float(cast(float, gates["maximum_unknown_streak_seconds"])),
+        "valid_run": longest_valid_run_seconds
+        >= float(cast(float, gates["minimum_valid_run_seconds"])),
+        "identity_switch_events": identity_switch_events
+        <= int(cast(int, gates["maximum_identity_switch_events"])),
+    }
+    metrics: dict[str, object] = {
+        "status": "PASSED" if all(checks.values()) else "FAILED",
+        "passed": all(checks.values()),
+        "frames": int(frames.shape[0]),
+        "analysis_frames": analysis_frames,
+        "analysis_coverage": analysis_coverage,
+        "ambiguous_frames": int((analysis & ambiguous).sum()),
+        "longest_valid_run_seconds": longest_valid_run_seconds,
+        "longest_unresolved_run_seconds": longest_unresolved_run_seconds,
+        "identity_switch_events": identity_switch_events,
+        "pulses_dispatched": len(pulse_rows),
+        "control_windows": len(control_rows),
+        "fates": dict(sorted(fates.items())),
+        "paired": len(paired_rows),
+        "paired_fraction": paired_fraction,
+        "responsive_pairs": len(responsive_rows),
+        "direction_correct_fraction": direction_correct_fraction,
+        "paired_directions": dict(sorted(paired_directions.items())),
+        "pulse_median_projection_pixels": pulse_median_projection,
+        "control_p95_displacement_pixels": control_p95,
+        "fixed_ui_pairs": len(fixed_rows),
+        "fixed_ui_responsive_fraction": fixed_ui_responsive_fraction,
+        "hard_stops": sum(bool(row["hard_stop"]) for row in pulse_rows),
+        "checks": checks,
+    }
+    return metrics, event_rows
+
+
+def run_active_probe_audit(
+    contract_path: Path, session_root: Path, output_dir: Path
+) -> dict[str, object]:
+    started = time.monotonic()
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    directions = tuple(cast(list[str], contract.get("directions", [])))
+    if (
+        contract.get("schema_version") != "movement-active-probe-contract-v1"
+        or contract.get("training_allowed") is not False
+        or contract.get("test_allowed") is not False
+        or directions != _PROBE_DIRECTIONS
+    ):
+        raise ValueError("active probe contract differs")
+    if session_root.is_symlink() or not session_root.is_dir():
+        raise ValueError("active probe session root differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("active probe output already exists")
+    sessions_required = int(cast(int, contract["sessions_required"]))
+    directories = sorted(
+        path
+        for path in session_root.iterdir()
+        if path.is_dir() and (path / "summary.json").is_file()
+    )
+    if not directories or len(directories) > sessions_required:
+        raise ValueError("active probe session count differs")
+    opened_shards: list[dict[str, object]] = []
+    session_metrics: dict[str, object] = {}
+    event_rows: list[dict[str, object]] = []
+    input_commands_sent = 0
+    for directory in directories:
+        metrics, rows = _probe_session_metrics(directory, contract, opened_shards)
+        session_metrics[directory.name] = metrics
+        event_rows.extend(rows)
+        summary = _load_bound_json(directory / "summary.json", "summary_sha256")
+        input_commands_sent += int(cast(int, summary["input_commands_sent"]))
+    passed_sessions = [
+        name
+        for name, metrics in session_metrics.items()
+        if bool(cast(dict[str, object], metrics)["passed"])
+    ]
+    found = len(directories)
+    identity_control_verified = found >= sessions_required and len(passed_sessions) == found
+    if identity_control_verified:
+        status = "ACTIVE_PROBE_IDENTITY_AND_CONTROL_VERIFIED"
+    elif found < sessions_required and len(passed_sessions) == found:
+        status = "ACTIVE_PROBE_SINGLE_SESSION_ONLY"
+    else:
+        status = "ACTIVE_PROBE_GATES_FAILED"
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
+        pulses_path = staging / "pulses.jsonl"
+        with pulses_path.open("w", encoding="utf-8") as handle:
+            for row in event_rows:
+                handle.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        report: dict[str, object] = {
+            "schema_version": "movement-active-probe-audit-report-v1",
+            "status": status,
+            "contract_sha256": contract["contract_sha256"],
+            "sessions_required": sessions_required,
+            "sessions_found": found,
+            "session_metrics": session_metrics,
+            "sessions_passed": sorted(passed_sessions),
+            "identity_control_verified": identity_control_verified,
+            "semantic_player_identity_verified": identity_control_verified,
+            "multi_session_identity_verified": identity_control_verified,
+            "navigation_available": False,
+            "pulses_file_sha256": _file_sha256(pulses_path),
+            "pulses_file_bytes": pulses_path.stat().st_size,
+            "opened_shards": opened_shards,
+            "device_input_commands_sent": input_commands_sent,
+            "training_called": False,
+            "test_frames_read": 0,
+            "gpu_seconds": 0,
+            "runtime_wall_seconds": time.monotonic() - started,
+        }
+        report["report_sha256"] = _object_sha256(report)
+        (staging / "report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return report

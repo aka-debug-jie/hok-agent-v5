@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from io import StringIO
 from pathlib import Path
 
@@ -1480,3 +1481,74 @@ def test_rgb_teacher_dry_run_records_decisions_and_never_opens_input(
             run_seconds=0.4,
             balanced_actions=True,
         )
+
+
+def test_active_probe_schedule_matches_frozen_contract() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract = json.loads(
+        (root / "configs/movement_active_probe_v1.json").read_text(encoding="utf-8")
+    )
+    schedule = mobile_testbed.plan_active_probe_schedule(contract)
+    pulses = [entry for entry in schedule if entry["kind"] == "pulse"]
+    controls = [entry for entry in schedule if entry["kind"] == "control"]
+    assert len(pulses) == len(contract["directions"]) * contract["pulses_per_direction"] == 48
+    assert len(controls) == contract["control_windows"] == 8
+    per_direction = Counter(str(entry["direction"]) for entry in pulses)
+    assert per_direction == Counter(
+        {str(name): int(contract["pulses_per_direction"]) for name in contract["directions"]}
+    )
+    assert all(
+        pulses[index]["direction"] != pulses[index + 1]["direction"]
+        for index in range(len(pulses) - 1)
+    )
+    assert schedule == mobile_testbed.plan_active_probe_schedule(contract)
+    end_ms = max(
+        int(entry["scheduled_release_ms"])
+        if entry["kind"] == "pulse"
+        else int(entry["scheduled_window_end_ms"])
+        for entry in schedule
+    )
+    assert end_ms + int(contract["observation_ms"]) <= int(
+        contract["budgets"]["maximum_duration_seconds_per_session"]
+    ) * 1000
+    assert len(pulses) <= int(contract["budgets"]["maximum_pulses_per_session"])
+
+
+def test_active_probe_schedule_keeps_serialized_observation_windows() -> None:
+    contract: dict[str, object] = {
+        "directions": ["north", "east", "south", "west"],
+        "pulses_per_direction": 3,
+        "hold_ms": 500,
+        "observation_ms": 1000,
+        "inter_pulse_gap_ms": 400,
+        "control_windows": 2,
+        "control_window_ms": 1000,
+        "schedule_seed": 0,
+    }
+    schedule = mobile_testbed.plan_active_probe_schedule(contract)
+    pulses = [entry for entry in schedule if entry["kind"] == "pulse"]
+    controls = [entry for entry in schedule if entry["kind"] == "control"]
+    assert len(pulses) == 12
+    assert len(controls) == 2
+    assert Counter(str(entry["direction"]) for entry in pulses) == Counter(
+        {"north": 3, "east": 3, "south": 3, "west": 3}
+    )
+
+    def start_ms(entry: dict[str, object]) -> int:
+        if entry["kind"] == "pulse":
+            return int(entry["scheduled_press_ms"])
+        return int(entry["scheduled_window_start_ms"])
+
+    ordered = sorted(schedule, key=start_ms)
+    for previous, current in zip(ordered[:-1], ordered[1:], strict=True):
+        previous_end_ms = (
+            int(previous["scheduled_release_ms"]) + int(contract["observation_ms"])
+            if previous["kind"] == "pulse"
+            else int(previous["scheduled_window_end_ms"])
+        )
+        assert start_ms(current) >= previous_end_ms
+    assert all(
+        int(entry["scheduled_window_end_ms"]) - int(entry["scheduled_window_start_ms"])
+        == contract["control_window_ms"]
+        for entry in controls
+    )

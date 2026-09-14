@@ -5963,6 +5963,68 @@ def _death_replay_visible(frame: np.ndarray, rois: ObservationROIs) -> bool:
     )
 
 
+def _active_probe_direction_order(
+    directions: list[str], pulses_per_direction: int, seed: int
+) -> list[str]:
+    rng = random.Random(seed)
+    order: list[str] = []
+    for _ in range(pulses_per_direction):
+        round_directions = list(directions)
+        rng.shuffle(round_directions)
+        if order and round_directions[0] == order[-1]:
+            for index in range(1, len(round_directions)):
+                if round_directions[index] != order[-1]:
+                    round_directions[0], round_directions[index] = (
+                        round_directions[index],
+                        round_directions[0],
+                    )
+                    break
+        order.extend(round_directions)
+    return order
+
+
+def plan_active_probe_schedule(contract: dict[str, object]) -> list[dict[str, object]]:
+    directions = cast(list[str], contract["directions"])
+    pulses_per_direction = int(cast(int, contract["pulses_per_direction"]))
+    hold_ms = int(cast(int, contract["hold_ms"]))
+    observation_ms = int(cast(int, contract["observation_ms"]))
+    gap_ms = int(cast(int, contract["inter_pulse_gap_ms"]))
+    control_windows = int(cast(int, contract["control_windows"]))
+    control_window_ms = int(cast(int, contract["control_window_ms"]))
+    seed = int(cast(int, contract.get("schedule_seed", 0)))
+    order = _active_probe_direction_order(directions, pulses_per_direction, seed)
+    controls_after = len(order) // control_windows if control_windows else 0
+    entries: list[dict[str, object]] = []
+    cursor_ms = 0
+    controls_placed = 0
+    for index, direction in enumerate(order):
+        entries.append(
+            {
+                "kind": "pulse",
+                "direction": direction,
+                "scheduled_press_ms": cursor_ms,
+                "scheduled_release_ms": cursor_ms + hold_ms,
+            }
+        )
+        cursor_ms += hold_ms + observation_ms + gap_ms
+        if (
+            control_windows
+            and controls_after
+            and (index + 1) % controls_after == 0
+            and controls_placed < control_windows
+        ):
+            entries.append(
+                {
+                    "kind": "control",
+                    "scheduled_window_start_ms": cursor_ms,
+                    "scheduled_window_end_ms": cursor_ms + control_window_ms,
+                }
+            )
+            cursor_ms += control_window_ms + gap_ms
+            controls_placed += 1
+    return entries
+
+
 def run_mobile_operation_base(
     *,
     serial: str,

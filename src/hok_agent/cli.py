@@ -80,6 +80,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-navigation-demo",
             "real-navigation-shadow",
             "action-response-identity-audit",
+            "active-probe-audit",
             "real-player-tracking-audit",
             "real-player-flow-audit",
             "joystick-visibility",
@@ -1799,6 +1800,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 result = run_action_response_identity_audit(
                     args.config, args.prior_report, args.session_root, args.output_dir
+                )
+            elif args.mode == "active-probe-audit":
+                if args.session_root is None:
+                    raise ValueError("active-probe-audit requires --session-root")
+                from hok_agent.movement_navigation_shadow import run_active_probe_audit
+
+                result = run_active_probe_audit(
+                    args.config, args.session_root, args.output_dir
                 )
             elif args.mode == "real-navigation-shadow":
                 if args.session_root is None or args.prior_report is None:

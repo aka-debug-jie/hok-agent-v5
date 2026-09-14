@@ -6,25 +6,27 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 ## Current execution state
 
-Updated 2026-09-09 after the user's development-efficiency review.
+Updated 2026-09-14: the active-probe preparation is scheduled after the user's four probe requirements.
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text
-OBJECTIVE: test no-source player-candidate identifiability from action response
-STATUS: DONE
-NEXT_ACTION: prepare a bounded live multi-direction active probe in a fresh guarded testbed session
-INPUT_EVIDENCE: frozen N1 summary, three derived sessions and54 recorded movement events
-CHANGED_FILES: one audit config, response scoring/CLI, focused tests and current docs
-PRIMARY_METRIC: action-responsive interior pairs versus fixed-UI pairs
-BASELINE: fixed UI dominated prior static detection; semantic player identity unverified
-RESULT: session002 interior14/17 responsive; fixed UI0/45; other-session interior pairs0
-ENGINEERING_HOURS_USED_AND_CAP: not instrumented, cap4 h; formal runtime2.40s
+OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
+STATUS: RUNNING
+NEXT_ACTION: implement the bounded probe runner over the guarded testbed transport (offline code)
+INPUT_EVIDENCE: frozen action-response audit, its NEXT_ACTION and the four user probe requirements
+CHANGED_FILES: active-probe contract config, probe audit/CLI, schedule planner and focused tests
+PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
+BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
+RESULT: contract frozen at e4e03244... (failure policy, seed); audit plus schedule planner; full check 505 passed
+ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 29,333 bytes, cap 50 MiB
-STOP_REASON: multi-session identity remains unverified; no current live probe session
-NEXT_DECISION: use new controlled actions for validation through the existing guarded interface
+NEW_BYTES: pending, cap 50 MiB
+STOP_REASON: pending
+NEXT_DECISION: after the runner lands offline, request one authorized fresh guarded testbed session
 ```
 
+- The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
+  ledger is the only current scheduler until this branch is merged.
 - Completed scope: N1 visual evidence, N2 same-run Store/recovery and one verification/handoff.
 - The existing `R1_HIERARCHICAL_RULE_OFFLINE` package at commit `727d360` remains frozen.
   It contains a synthetic 10-episode/120-step geometry report beside the older R0/R1 runtime evidence.

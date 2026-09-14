@@ -342,3 +342,261 @@ def test_action_response_audit_separates_moving_candidate_from_fixed_ui(
     assert all(module not in sys.modules for module in forbidden)
     with pytest.raises(ValueError, match="output already exists"):
         run_action_response_identity_audit(contract, prior, session_root, output)
+
+
+def _draw_probe_player(frame: np.ndarray, y: int, x: int) -> None:
+    frame[y : y + 8, x : x + 8] = (20, 180, 40)
+    frame[y + 1 : y + 7, x + 8 : x + 14] = (200, 40, 30)
+
+
+def _write_probe_session(
+    session_root: Path,
+    name: str,
+    contract: dict[str, object],
+    *,
+    contaminate: bool,
+) -> None:
+    directory = session_root / name
+    shard_dir = directory / "shards"
+    shard_dir.mkdir(parents=True)
+    frames = np.zeros((30, 128, 128, 3), dtype=np.uint8)
+    for frame in frames:
+        frame[6:14, 116:124] = (20, 180, 40)
+        frame[7:13, 111:117] = (200, 40, 30)
+    for index in range(30):
+        if index <= 5:
+            _draw_probe_player(frames[index], 60, 60)
+        elif index <= 15:
+            _draw_probe_player(frames[index], 57, 60)
+        else:
+            _draw_probe_player(frames[index], 57, 63)
+    times = np.arange(30, dtype=np.int64) * 200
+    movement = np.zeros(30, dtype=np.int8)
+    sent = np.zeros(30, dtype=np.uint8)
+    for start, direction_id in ((5, 1), (15, 3), (25, 5)):
+        movement[start : start + 3] = direction_id
+        sent[start : start + 3] = 1
+    if contaminate:
+        sent[20] = 1
+        movement[20] = 0
+    shard_path = shard_dir / "observations-0000.npz"
+    np.savez_compressed(
+        shard_path,
+        minimap_rgb=frames,
+        scheduled_elapsed_ms=times,
+        frame_elapsed_ms=times,
+        screen_valid=np.ones(30, dtype=np.uint8),
+        operation_allowed=np.ones(30, dtype=np.uint8),
+        movement_id=movement,
+        movement_input_sent=sent,
+    )
+    events: list[dict[str, object]] = [
+        {
+            "kind": "control",
+            "window_start_ms": 200,
+            "window_end_ms": 800,
+            "contaminated": False,
+            "hard_stop": False,
+        },
+        {
+            "kind": "pulse",
+            "direction": "north",
+            "press_scheduled_ms": 1000,
+            "press_ack_ms": 1000,
+            "release_scheduled_ms": 1500,
+            "release_ack_ms": 1500,
+            "contaminated": False,
+            "hard_stop": False,
+        },
+        {
+            "kind": "pulse",
+            "direction": "east",
+            "press_scheduled_ms": 3000,
+            "press_ack_ms": 3000,
+            "release_scheduled_ms": 3500,
+            "release_ack_ms": 3500,
+            "contaminated": False,
+            "hard_stop": False,
+        },
+        {
+            "kind": "pulse",
+            "direction": "south",
+            "press_scheduled_ms": 5000,
+            "press_ack_ms": 5000,
+            "release_scheduled_ms": 5500,
+            "release_ack_ms": 5500,
+            "contaminated": False,
+            "hard_stop": False,
+        },
+    ]
+    with (directory / "pulses.jsonl").open("w", encoding="utf-8") as handle:
+        for event in events:
+            handle.write(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
+    summary: dict[str, object] = {
+        "schema_version": contract["session_schema_version"],
+        "contract_sha256": contract["contract_sha256"],
+        "derived_roi_rgb_persisted": True,
+        "raw_frames_persisted": False,
+        "pulses_dispatched": 3,
+        "control_windows_dispatched": 1,
+        "input_commands_sent": 6,
+        "observation_shards": [
+            {
+                "path": shard_path.name,
+                "rows": 30,
+                "sha256": hashlib.sha256(shard_path.read_bytes()).hexdigest(),
+            }
+        ],
+    }
+    summary["summary_sha256"] = _object_sha256(summary)
+    (directory / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+
+def _probe_inputs(tmp_path: Path, *, contaminate: bool = False) -> tuple[Path, Path]:
+    session_root = tmp_path / "probe-sessions"
+    contract: dict[str, object] = {
+        "schema_version": "movement-active-probe-contract-v1",
+        "session_schema_version": "hok-agent-mobile-active-probe-session-v1",
+        "directions": [
+            "north",
+            "north_east",
+            "east",
+            "south_east",
+            "south",
+            "south_west",
+            "west",
+            "north_west",
+        ],
+        "movement_names": [
+            "wait",
+            "north",
+            "north_east",
+            "east",
+            "south_east",
+            "south",
+            "south_west",
+            "west",
+            "north_west",
+        ],
+        "frame_period_ms": 200,
+        "observation_ms": 1000,
+        "sessions_required": 2,
+        "measurement": {"maximum_gap_to_analysis_frame_ms": 600},
+        "color": {
+            "green_minimum": 85,
+            "green_red_margin": 18,
+            "green_blue_margin": 10,
+            "red_minimum": 105,
+            "red_green_margin": 28,
+            "red_blue_margin": 18,
+        },
+        "components": {
+            "green_size": [20, 140],
+            "green_extent": [7, 24],
+            "red_size": [20, 240],
+            "red_extent": [5, 24],
+            "maximum_pair_l1_distance": 7.0,
+            "reset_after_missing_frames": 10,
+        },
+        "excluded_ui_xyxy": [112, 0, 128, 16],
+        "gates_per_session": {
+            "minimum_dispatched_pulses": 3,
+            "minimum_paired_fraction": 0.6,
+            "minimum_balanced_directions": 2,
+            "minimum_direction_correct_fraction": 0.5,
+            "minimum_projection_pixels": 1.0,
+            "minimum_pulse_median_minus_control_p95_pixels": 0.0,
+            "maximum_fixed_ui_responsive_fraction": 0.05,
+            "minimum_analysis_coverage_fraction": 0.5,
+            "maximum_unknown_streak_seconds": 1.0,
+            "minimum_valid_run_seconds": 1.0,
+            "maximum_identity_switch_events": 0,
+        },
+        "training_allowed": False,
+        "test_allowed": False,
+    }
+    contract["contract_sha256"] = _object_sha256(contract)
+    contract_path = tmp_path / "probe-contract.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    for name in ("probe-session-001", "probe-session-002"):
+        _write_probe_session(session_root, name, contract, contaminate=contaminate)
+    return contract_path, session_root
+
+
+def test_active_probe_audit_verifies_identity_and_control(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    contract, session_root = _probe_inputs(tmp_path)
+    output = tmp_path / "probe-audit"
+    forbidden = ("hok_agent.mobile_testbed", "hok_agent.movement_mvp_train")
+    for module in forbidden:
+        sys.modules.pop(module, None)
+    assert (
+        main(
+            [
+                "movement-mvp",
+                "--mode",
+                "active-probe-audit",
+                "--config",
+                str(contract),
+                "--session-root",
+                str(session_root),
+                "--output-dir",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "ACTIVE_PROBE_IDENTITY_AND_CONTROL_VERIFIED"
+    assert report["sessions_found"] == 2
+    assert report["sessions_passed"] == ["probe-session-001", "probe-session-002"]
+    assert report["identity_control_verified"] is True
+    metrics = report["session_metrics"]["probe-session-001"]
+    assert metrics["fates"] == {"outside_analysis_window": 1, "paired": 2}
+    assert metrics["paired_fraction"] == pytest.approx(2 / 3)
+    assert metrics["direction_correct_fraction"] == 1.0
+    assert metrics["analysis_coverage"] == 1.0
+    assert metrics["identity_switch_events"] == 0
+    assert metrics["checks"] == {key: True for key in metrics["checks"]}
+    assert report["device_input_commands_sent"] == 12
+    assert report["navigation_available"] is False
+    assert report["training_called"] is False
+    assert {path.name for path in output.iterdir()} == {"pulses.jsonl", "report.json"}
+    rows = [
+        json.loads(line) for line in (output / "pulses.jsonl").read_text().splitlines()
+    ]
+    assert len(rows) == 8
+    assert sum(row["fate"] == "paired" and row["kind"] == "pulse" for row in rows) == 4
+    assert all(module not in sys.modules for module in forbidden)
+
+
+def test_active_probe_audit_counts_contaminated_denominator(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    contract, session_root = _probe_inputs(tmp_path, contaminate=True)
+    output = tmp_path / "probe-audit-contaminated"
+    assert (
+        main(
+            [
+                "movement-mvp",
+                "--mode",
+                "active-probe-audit",
+                "--config",
+                str(contract),
+                "--session-root",
+                str(session_root),
+                "--output-dir",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "ACTIVE_PROBE_GATES_FAILED"
+    assert report["identity_control_verified"] is False
+    metrics = report["session_metrics"]["probe-session-001"]
+    assert metrics["fates"]["contaminated"] == 1
+    assert metrics["fates"]["paired"] == 1
+    assert metrics["paired_fraction"] == pytest.approx(1 / 3)
+    assert metrics["checks"]["paired_fraction"] is False
