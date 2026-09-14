@@ -6027,7 +6027,8 @@ def plan_active_probe_schedule(contract: dict[str, object]) -> list[dict[str, ob
 
 ACTIVE_PROBE_CONTRACT_SCHEMA = "movement-active-probe-contract-v1"
 ACTIVE_PROBE_SESSION_SCHEMA = "hok-agent-mobile-active-probe-session-v1"
-ACTIVE_PROBE_GUARD_STALENESS_MS = 2000
+ACTIVE_PROBE_GUARD_INTERVAL_SECONDS = 0.5
+ACTIVE_PROBE_GUARD_STALENESS_MS = 5000
 
 
 def _active_probe_contract(path: Path) -> tuple[dict[str, object], str]:
@@ -6256,7 +6257,7 @@ def run_mobile_active_probe(
     minimum_mean = float(cast(float, validity["minimum_mean"]))
     minimum_std = float(cast(float, validity["minimum_standard_deviation"]))
     session = ScrcpyControlSession(guard.serial, 30)
-    watchdog = GuardWatchdog(guard)
+    watchdog = GuardWatchdog(guard, ACTIVE_PROBE_GUARD_INTERVAL_SECONDS)
     joystick = PersistentJoystick(execution_layout, guard.width, guard.height)
     minimap_frames: list[np.ndarray] = []
     scheduled_ms: list[int] = []
