@@ -6130,6 +6130,23 @@ def _active_probe_event_record(event: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _wait_active_probe_scene(
+    frame_source: Callable[[], tuple[int, np.ndarray]],
+    minimum_mean: float,
+    minimum_std: float,
+    timeout_seconds: float = 15.0,
+    period_seconds: float = 0.2,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        _timestamp_ns, frame = frame_source()
+        model_frame = _model_frame(frame)
+        if float(model_frame.mean()) >= minimum_mean and float(model_frame.std()) >= minimum_std:
+            return
+        time.sleep(period_seconds)
+    raise MobileTestbedError("active probe scene is not ready")
+
+
 def _publish_active_probe_session(
     output: Path,
     events: list[dict[str, object]],
@@ -6279,6 +6296,7 @@ def run_mobile_active_probe(
         if session.frame_size != (guard.width, guard.height):
             raise MobileTestbedError("active probe scrcpy frame size differs")
         watchdog.start()
+        _wait_active_probe_scene(session.frame, minimum_mean, minimum_std)
         started = time.monotonic()
         next_frame_due = started
         while time.monotonic() - started < run_seconds:

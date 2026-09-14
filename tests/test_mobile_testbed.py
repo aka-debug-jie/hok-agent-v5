@@ -1548,6 +1548,31 @@ def test_active_probe_final_ms_waits_for_release() -> None:
     assert mobile_testbed._active_probe_final_ms(control, 1000) == 5000
 
 
+def test_active_probe_scene_wait_skips_startup_black_frames() -> None:
+    black = np.zeros((128, 128, 3), dtype=np.uint8)
+    content = np.tile(np.arange(128, dtype=np.uint8)[None, :, None], (128, 1, 3))
+    frames = iter([black, black, content])
+    calls = 0
+
+    def source() -> tuple[int, np.ndarray]:
+        nonlocal calls
+        calls += 1
+        return (0, next(frames))
+
+    mobile_testbed._wait_active_probe_scene(
+        source, 8.0, 5.0, timeout_seconds=5.0, period_seconds=0.0
+    )
+    assert calls == 3
+
+
+def test_active_probe_scene_wait_fails_closed_on_unknown_screen() -> None:
+    black = np.zeros((128, 128, 3), dtype=np.uint8)
+    with pytest.raises(mobile_testbed.MobileTestbedError, match="not ready"):
+        mobile_testbed._wait_active_probe_scene(
+            lambda: (0, black), 8.0, 5.0, timeout_seconds=0.05, period_seconds=0.01
+        )
+
+
 def test_active_probe_schedule_keeps_serialized_observation_windows() -> None:
     contract: dict[str, object] = {
         "directions": ["north", "east", "south", "west"],
