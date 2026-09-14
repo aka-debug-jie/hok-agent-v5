@@ -6,23 +6,23 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 
 ## Current execution state
 
-Updated 2026-09-14: the active-probe preparation is scheduled after the user's four probe requirements.
+Updated 2026-09-14: the active-probe route is closed after two budgeted batches failed the A gate.
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
-STATUS: RUNNING
-NEXT_ACTION: run the bounded non-formal marker-displacement mini-check, then one final session batch only if it passes
-INPUT_EVIDENCE: frozen action-response audit, the four user probe requirements and the authorized sessions
+STATUS: STOPPED
+NEXT_ACTION: none on this route; any further probe work requires a new owner decision outside the stopped contract
+INPUT_EVIDENCE: frozen action-response audit, the four user probe requirements and the two authorized batches
 CHANGED_FILES: probe contract, audit, planner, runner/CLI, runner fixes (scene readiness, guard refresh, advancing observations) and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: A gate FAILED for both sessions: session-001 coverage 0.297, paired 0.125, responsive 0, longest valid 6.6 s (the marker hovered at the base); session-002 coverage 0.0, paired 0 (no marker detected); a post-run read-only check confirms the frozen cue does match the live client when the own marker is rendered; audit ACTIVE_PROBE_GATES_FAILED
+RESULT: two budgeted batches failed the A gate. Batch 2: coverage 1.00/0.972, paired 0.875/0.896, all eight directions, longest valid 96.6/58.4 s, fixed-UI responsive 0, identity switches 0/1, but direction-correct 0.214/0.140 and pulse median projection 0.029/-0.021 px with pulse-minus-control -1.73/-0.91 px; audit ACTIVE_PROBE_GATES_FAILED
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 88,820,785 total (evidence pair 30,278,913; failed/duplicate verification attempts 43,204,209; smoke diagnostics 15,337,663); contract budget 52,428,800
-STOP_REASON: both sessions failed the A gate; the runs did not provide an alive, moving hero in the declared open area (base-area-only displacement; no marker at all in session-002)
-NEXT_DECISION: (b) selected on 2026-09-14; if the final batch fails the A gate, fall back to (c) with no further batch or threshold change
+NEW_BYTES: 118,127,296 total (batch 1: 88,820,785; final batch: 29,306,511); contract budget 52,428,800
+STOP_REASON: two budgeted batches failed the A gate; the pre-declared global stop judges the no-source identity/control direction data-source limited; no further batch, threshold change or rerun
+NEXT_DECISION: option (c) entered by rule: read-only or local scope only; a future restart needs a new owner decision
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
