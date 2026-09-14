@@ -6100,6 +6100,15 @@ def _active_probe_contract(path: Path) -> tuple[dict[str, object], str]:
     return value, digest
 
 
+def _active_probe_final_ms(active: dict[str, object], observation_ms: int) -> int | None:
+    if active["kind"] == "pulse":
+        release_ack_ms = active["release_ack_ms"]
+        if release_ack_ms is None:
+            return None
+        return int(cast(int, release_ack_ms)) + observation_ms
+    return int(cast(int, active["scheduled_window_end_ms"]))
+
+
 def _active_probe_event_record(event: dict[str, object]) -> dict[str, object]:
     if event["kind"] == "pulse":
         return {
@@ -6334,12 +6343,8 @@ def run_mobile_active_probe(
                     hard_stops += 1
                     break
             while active is not None:
-                final_ms = (
-                    int(cast(int, active["release_ack_ms"])) + observation_ms
-                    if active["kind"] == "pulse"
-                    else int(cast(int, active["scheduled_window_end_ms"]))
-                )
-                if elapsed_ms < final_ms:
+                final_ms = _active_probe_final_ms(active, observation_ms)
+                if final_ms is None or elapsed_ms < final_ms:
                     break
                 events.append(_active_probe_event_record(active))
                 active = None

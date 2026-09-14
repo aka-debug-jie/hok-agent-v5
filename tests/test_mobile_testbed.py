@@ -1539,6 +1539,15 @@ def test_active_probe_contract_rejects_tampering(tmp_path: Path) -> None:
         mobile_testbed._active_probe_contract(path)
 
 
+def test_active_probe_final_ms_waits_for_release() -> None:
+    pulse: dict[str, object] = {"kind": "pulse", "release_ack_ms": None}
+    assert mobile_testbed._active_probe_final_ms(pulse, 1000) is None
+    pulse["release_ack_ms"] = 250
+    assert mobile_testbed._active_probe_final_ms(pulse, 1000) == 1250
+    control: dict[str, object] = {"kind": "control", "scheduled_window_end_ms": 5000}
+    assert mobile_testbed._active_probe_final_ms(control, 1000) == 5000
+
+
 def test_active_probe_schedule_keeps_serialized_observation_windows() -> None:
     contract: dict[str, object] = {
         "directions": ["north", "east", "south", "west"],
