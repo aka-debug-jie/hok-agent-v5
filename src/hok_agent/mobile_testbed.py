@@ -6412,6 +6412,8 @@ def run_mobile_active_probe(
             if failure is None:
                 failure = str(exc)
         if active is not None:
+            if active["kind"] == "pulse" and active["press_ack_ms"] is None:
+                active["press_ack_ms"] = int(cast(int, active["scheduled_press_ms"]))
             if (
                 active["kind"] == "pulse"
                 and active["release_ack_ms"] is None
