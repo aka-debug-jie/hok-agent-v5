@@ -12,12 +12,12 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: implement the bounded probe runner over the guarded testbed transport (offline code)
+NEXT_ACTION: run the zero-input active-probe smoke on the authorized testbed, then the two input sessions
 INPUT_EVIDENCE: frozen action-response audit, its NEXT_ACTION and the four user probe requirements
-CHANGED_FILES: active-probe contract config, probe audit/CLI, schedule planner and focused tests
+CHANGED_FILES: active-probe contract config, probe audit, schedule planner, runner/CLI and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: contract frozen at e4e03244... (failure policy, seed); audit plus schedule planner; full check 505 passed
+RESULT: contract at 3b6c29bd... (failure policy, seed, screen validity); audit, planner and runner; full check 507
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
 NEW_BYTES: pending, cap 50 MiB

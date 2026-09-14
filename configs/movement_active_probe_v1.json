@@ -38,7 +38,7 @@
     ],
     "reset_after_missing_frames": 10
   },
-  "contract_sha256": "e4e0324417a39f9aeb0bdf22cd9de0bb2a75efe5a121c18ce36195c7d9a216f6",
+  "contract_sha256": "3b6c29bdc1609971de5d0b4cf37e835c5287456e9514380803809b6d1566a3ae",
   "control_window_ms": 1000,
   "control_windows": 8,
   "corpus_roles": {
@@ -131,6 +131,10 @@
   "purpose": "no-source candidate identity and control relation via released direction pulses",
   "schedule_seed": 0,
   "schema_version": "movement-active-probe-contract-v1",
+  "screen_validity": {
+    "minimum_mean": 8.0,
+    "minimum_standard_deviation": 5.0
+  },
   "session_schema_version": "hok-agent-mobile-active-probe-session-v1",
   "sessions_required": 2,
   "test_allowed": false,

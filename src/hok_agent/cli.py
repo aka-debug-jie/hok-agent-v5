@@ -815,6 +815,21 @@ def _parser() -> argparse.ArgumentParser:
     operation_base.add_argument("--execution-layout", type=Path, required=True)
     operation_base.add_argument("--observation-rois", type=Path, required=True)
     operation_base.add_argument("--output-dir", type=Path, required=True)
+    active_probe = commands.add_parser(
+        "mobile-active-probe",
+        help="run one bounded released-pulse identity probe through the guarded testbed",
+    )
+    active_probe.add_argument("--serial", required=True)
+    active_probe.add_argument(
+        "--config",
+        type=Path,
+        default=Path("configs/movement_active_probe_v1.json"),
+    )
+    active_probe.add_argument("--visual-layout", type=Path, required=True)
+    active_probe.add_argument("--execution-layout", type=Path, required=True)
+    active_probe.add_argument("--observation-rois", type=Path, required=True)
+    active_probe.add_argument("--output-dir", type=Path, required=True)
+    active_probe.add_argument("--enable-input", action="store_true")
     operation_side = commands.add_parser(
         "mobile-operation-team-side",
         help="detect blue or red side from the loading-panel self highlight",
@@ -2932,6 +2947,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 execution_layout_path=args.execution_layout,
                 observation_rois_path=args.observation_rois,
                 output_dir=args.output_dir,
+            )
+        elif args.command == "mobile-active-probe":
+            from hok_agent.mobile_testbed import run_mobile_active_probe
+
+            result = run_mobile_active_probe(
+                serial=args.serial,
+                contract_path=args.config,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                enable_input=args.enable_input,
             )
         elif args.command == "mobile-operation-team-side":
             from hok_agent.mobile_testbed import detect_mobile_operation_team_side

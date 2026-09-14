@@ -6025,6 +6025,384 @@ def plan_active_probe_schedule(contract: dict[str, object]) -> list[dict[str, ob
     return entries
 
 
+ACTIVE_PROBE_CONTRACT_SCHEMA = "movement-active-probe-contract-v1"
+ACTIVE_PROBE_SESSION_SCHEMA = "hok-agent-mobile-active-probe-session-v1"
+
+
+def _active_probe_contract(path: Path) -> tuple[dict[str, object], str]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MobileTestbedError("active probe contract is unavailable") from exc
+    if not isinstance(value, dict):
+        raise MobileTestbedError("active probe contract is invalid")
+    supplied = value.get("contract_sha256")
+    unsigned = {key: item for key, item in value.items() if key != "contract_sha256"}
+    digest = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    expected: dict[str, object] = {
+        "schema_version": ACTIVE_PROBE_CONTRACT_SCHEMA,
+        "session_schema_version": ACTIVE_PROBE_SESSION_SCHEMA,
+        "directions": list(MOVEMENTS[1:]),
+        "movement_names": list(MOVEMENTS),
+        "frame_period_ms": 200,
+        "training_allowed": False,
+        "test_allowed": False,
+    }
+    if supplied != digest or any(value.get(key) != item for key, item in expected.items()):
+        raise MobileTestbedError("active probe contract differs")
+    required = (
+        "pulses_per_direction",
+        "hold_ms",
+        "inter_pulse_gap_ms",
+        "observation_ms",
+        "control_windows",
+        "control_window_ms",
+        "sessions_required",
+        "schedule_seed",
+        "failure_policy",
+        "budgets",
+        "screen_validity",
+    )
+    if any(key not in value for key in required):
+        raise MobileTestbedError("active probe contract fields differ")
+    failure_policy = value["failure_policy"]
+    session_requirements = cast(list[object], value.get("device_session_requirements", []))
+    if (
+        not isinstance(failure_policy, list)
+        or not failure_policy
+        or not session_requirements
+        or value["sessions_required"] != 2
+    ):
+        raise MobileTestbedError("active probe policy differs")
+    validity = cast(dict[str, object], value["screen_validity"])
+    if (
+        float(cast(float, validity["minimum_mean"])) <= 0.0
+        or float(cast(float, validity["minimum_standard_deviation"])) <= 0.0
+    ):
+        raise MobileTestbedError("active probe screen validity differs")
+    budgets = cast(dict[str, object], value["budgets"])
+    schedule = plan_active_probe_schedule(value)
+    pulses = [entry for entry in schedule if entry["kind"] == "pulse"]
+    end_ms = max(
+        int(cast(int, entry["scheduled_release_ms"]))
+        if entry["kind"] == "pulse"
+        else int(cast(int, entry["scheduled_window_end_ms"]))
+        for entry in schedule
+    )
+    if (
+        len(pulses) > int(cast(int, budgets["maximum_pulses_per_session"]))
+        or end_ms + int(cast(int, value["observation_ms"]))
+        > int(cast(int, budgets["maximum_duration_seconds_per_session"])) * 1000
+    ):
+        raise MobileTestbedError("active probe schedule exceeds its budget")
+    return value, digest
+
+
+def _active_probe_event_record(event: dict[str, object]) -> dict[str, object]:
+    if event["kind"] == "pulse":
+        return {
+            "kind": "pulse",
+            "direction": cast(str, event["direction"]),
+            "press_scheduled_ms": int(cast(int, event["scheduled_press_ms"])),
+            "press_ack_ms": int(cast(int, event["press_ack_ms"])),
+            "release_scheduled_ms": int(cast(int, event["scheduled_release_ms"])),
+            "release_ack_ms": int(cast(int, event["release_ack_ms"])),
+            "contaminated": bool(event["contaminated"]),
+            "hard_stop": bool(event["hard_stop"]),
+        }
+    return {
+        "kind": "control",
+        "window_start_ms": int(cast(int, event["scheduled_window_start_ms"])),
+        "window_end_ms": int(cast(int, event["scheduled_window_end_ms"])),
+        "contaminated": bool(event["contaminated"]),
+        "hard_stop": bool(event["hard_stop"]),
+    }
+
+
+def _publish_active_probe_session(
+    output: Path,
+    events: list[dict[str, object]],
+    minimap_frames: list[np.ndarray],
+    scheduled_ms: list[int],
+    frame_elapsed_ms: list[int],
+    screen_valid: list[int],
+    operation_allowed: list[int],
+    movement_ids: list[int],
+    movement_sent: list[int],
+    summary: dict[str, object],
+    shard_size: int = 256,
+) -> None:
+    columns = (
+        minimap_frames,
+        scheduled_ms,
+        frame_elapsed_ms,
+        screen_valid,
+        operation_allowed,
+        movement_ids,
+        movement_sent,
+    )
+    length = len(minimap_frames)
+    if any(len(column) != length for column in columns[1:]):
+        raise MobileTestbedError("active probe arrays differ")
+    with tempfile.TemporaryDirectory(prefix=f".{output.name}-", dir=output.parent) as temporary:
+        staging = Path(temporary)
+        events_path = staging / "pulses.jsonl"
+        events_path.write_text(
+            "".join(
+                json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in events
+            ),
+            encoding="utf-8",
+        )
+        shards_dir = staging / "shards"
+        shards_dir.mkdir()
+        shard_rows: list[dict[str, object]] = []
+        for ordinal, start in enumerate(range(0, length, shard_size)):
+            stop = min(length, start + shard_size)
+            name = f"observations-{ordinal:04d}.npz"
+            path = shards_dir / name
+            np.savez_compressed(
+                path,
+                minimap_rgb=np.stack(minimap_frames[start:stop]),
+                scheduled_elapsed_ms=np.asarray(scheduled_ms[start:stop], dtype=np.int64),
+                frame_elapsed_ms=np.asarray(frame_elapsed_ms[start:stop], dtype=np.int64),
+                screen_valid=np.asarray(screen_valid[start:stop], dtype=np.uint8),
+                operation_allowed=np.asarray(operation_allowed[start:stop], dtype=np.uint8),
+                movement_id=np.asarray(movement_ids[start:stop], dtype=np.int8),
+                movement_input_sent=np.asarray(movement_sent[start:stop], dtype=np.uint8),
+            )
+            shard_rows.append(
+                {
+                    "path": name,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    "rows": stop - start,
+                }
+            )
+        summary.update(
+            {
+                "pulses_sha256": hashlib.sha256(events_path.read_bytes()).hexdigest(),
+                "observation_shards": shard_rows,
+                "derived_roi_rgb_persisted": True,
+                "raw_frames_persisted": False,
+                "coordinates_persisted": False,
+                "roi_names": ["minimap"],
+                "actual_elapsed_timestamps": True,
+            }
+        )
+        summary["summary_sha256"] = _summary_identity(summary)
+        (staging / "summary.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        staging.rename(output)
+
+
+def run_mobile_active_probe(
+    *,
+    serial: str,
+    contract_path: Path,
+    visual_layout_path: Path,
+    execution_layout_path: Path,
+    observation_rois_path: Path,
+    output_dir: Path,
+    enable_input: bool = True,
+) -> dict[str, object]:
+    contract, contract_sha = _active_probe_contract(contract_path)
+    _require_mobile_input_identity()
+    output = _new_large_output(output_dir)
+    guard = _open_device_guard(serial)
+    visual_layout, visual_layout_sha = load_layout(visual_layout_path)
+    execution_layout, execution_layout_sha = load_layout(execution_layout_path)
+    rois, rois_sha = load_observation_rois(observation_rois_path)
+    if (
+        (guard.width, guard.height, guard.rotation) != (rois.width, rois.height, rois.rotation)
+        or (guard.width, guard.height) != (visual_layout.width, visual_layout.height)
+        or (guard.width, guard.height) != (execution_layout.width, execution_layout.height)
+    ):
+        raise MobileTestbedError("active probe layouts differ from display")
+    schedule = plan_active_probe_schedule(contract)
+    frame_period_ms = int(cast(int, contract["frame_period_ms"]))
+    frame_interval = frame_period_ms / 1000
+    hold_ms = int(cast(int, contract["hold_ms"]))
+    observation_ms = int(cast(int, contract["observation_ms"]))
+    validity = cast(dict[str, object], contract["screen_validity"])
+    minimum_mean = float(cast(float, validity["minimum_mean"]))
+    minimum_std = float(cast(float, validity["minimum_standard_deviation"]))
+    session = ScrcpyControlSession(guard.serial, 30)
+    watchdog = GuardWatchdog(guard)
+    joystick = PersistentJoystick(execution_layout, guard.width, guard.height)
+    minimap_frames: list[np.ndarray] = []
+    scheduled_ms: list[int] = []
+    frame_elapsed_ms: list[int] = []
+    screen_valid_flags: list[int] = []
+    allowed_flags: list[int] = []
+    movement_ids: list[int] = []
+    sent_flags: list[int] = []
+    events: list[dict[str, object]] = []
+    pulses_dispatched = 0
+    control_windows = 0
+    hard_stops = 0
+    pointer_messages = 0
+    failure: str | None = None
+    sent_since_frame = False
+    active: dict[str, object] | None = None
+    active_index = 0
+    started = 0.0
+    last_end_ms = max(
+        int(cast(int, entry["scheduled_release_ms"]))
+        if entry["kind"] == "pulse"
+        else int(cast(int, entry["scheduled_window_end_ms"]))
+        for entry in schedule
+    )
+    run_seconds = (last_end_ms + 2 * frame_period_ms) / 1000
+
+    def dispatch(operations: list[TouchOperation]) -> None:
+        nonlocal pointer_messages
+        if not enable_input:
+            return
+        for operation in operations:
+            watchdog.ensure_fresh()
+            session.touch(operation, guard.width, guard.height)
+            pointer_messages += 1
+
+    try:
+        session.start()
+        if session.frame_size != (guard.width, guard.height):
+            raise MobileTestbedError("active probe scrcpy frame size differs")
+        watchdog.start()
+        started = time.monotonic()
+        next_frame_due = started
+        while time.monotonic() - started < run_seconds:
+            now = time.monotonic()
+            elapsed_ms = round((now - started) * 1000)
+            if active is None and active_index < len(schedule):
+                entry = schedule[active_index]
+                start_ms = (
+                    int(cast(int, entry["scheduled_press_ms"]))
+                    if entry["kind"] == "pulse"
+                    else int(cast(int, entry["scheduled_window_start_ms"]))
+                )
+                if elapsed_ms >= start_ms:
+                    active = dict(entry)
+                    active["press_ack_ms"] = None
+                    active["release_ack_ms"] = None
+                    active["contaminated"] = False
+                    active["hard_stop"] = False
+                    if entry["kind"] == "pulse":
+                        pulses_dispatched += 1
+                        if enable_input:
+                            dispatch(joystick.set_direction(cast(str, entry["direction"])))
+                            sent_since_frame = True
+                        active["press_ack_ms"] = round((time.monotonic() - started) * 1000)
+                    else:
+                        control_windows += 1
+            if (
+                active is not None
+                and active["kind"] == "pulse"
+                and active["release_ack_ms"] is None
+                and elapsed_ms >= int(cast(int, active["scheduled_press_ms"])) + hold_ms
+            ):
+                if enable_input and joystick.direction != "wait":
+                    dispatch(joystick.release())
+                active["release_ack_ms"] = round((time.monotonic() - started) * 1000)
+            now = time.monotonic()
+            if now >= next_frame_due:
+                tick_target = next_frame_due
+                next_frame_due += frame_interval
+                watchdog.ensure_fresh()
+                frame_timestamp_ns, frame = session.frame()
+                model_frame = _model_frame(frame)
+                screen_ok = bool(
+                    float(model_frame.mean()) >= minimum_mean
+                    and float(model_frame.std()) >= minimum_std
+                )
+                death_replay = _death_replay_visible(frame, rois)
+                minimap_frames.append(_observation_roi_frame(frame, rois.minimap))
+                scheduled_ms.append(round((tick_target - started) * 1000))
+                frame_elapsed_ms.append(
+                    round(frame_timestamp_ns / 1_000_000 - started * 1000)
+                )
+                screen_valid_flags.append(int(screen_ok))
+                allowed_flags.append(int(not death_replay))
+                movement_ids.append(MOVEMENTS.index(joystick.direction))
+                sent_flags.append(int(sent_since_frame))
+                sent_since_frame = False
+                if death_replay or not screen_ok:
+                    failure = "DEATH_RESPAWN_OR_ENDED" if death_replay else "UNKNOWN_SCREEN"
+                    if active is not None:
+                        active["hard_stop"] = True
+                    hard_stops += 1
+                    break
+            while active is not None:
+                final_ms = (
+                    int(cast(int, active["release_ack_ms"])) + observation_ms
+                    if active["kind"] == "pulse"
+                    else int(cast(int, active["scheduled_window_end_ms"]))
+                )
+                if elapsed_ms < final_ms:
+                    break
+                events.append(_active_probe_event_record(active))
+                active = None
+                active_index += 1
+    except Exception as exc:
+        failure = str(exc)
+    finally:
+        try:
+            if enable_input:
+                for operation in joystick.release():
+                    session.touch(operation, guard.width, guard.height)
+                    pointer_messages += 1
+        except Exception as exc:
+            if failure is None:
+                failure = str(exc)
+        if active is not None:
+            if (
+                active["kind"] == "pulse"
+                and active["release_ack_ms"] is None
+                and started
+            ):
+                active["release_ack_ms"] = round((time.monotonic() - started) * 1000)
+            active["hard_stop"] = True
+            events.append(_active_probe_event_record(active))
+            active = None
+        watchdog.stop()
+        session.close()
+    duration_seconds = round(time.monotonic() - started, 8) if started else 0.0
+    summary: dict[str, object] = {
+        "schema_version": ACTIVE_PROBE_SESSION_SCHEMA,
+        "status": "PASSED" if failure is None else "FAILED",
+        "contract_sha256": contract_sha,
+        "visual_layout_sha256": visual_layout_sha,
+        "execution_layout_sha256": execution_layout_sha,
+        "observation_rois_sha256": rois_sha,
+        "duration_seconds": duration_seconds,
+        "pulses_dispatched": pulses_dispatched,
+        "control_windows_dispatched": control_windows,
+        "input_commands_sent": pointer_messages,
+        "input_enabled": enable_input,
+        "hard_stops": hard_stops,
+        "failure": failure,
+        "raw_frames_persisted": False,
+        "coordinates_persisted": False,
+        "training_eligible": False,
+        "manual_annotation_required": False,
+        "control_output": pointer_messages > 0,
+    }
+    _publish_active_probe_session(
+        output,
+        events,
+        minimap_frames,
+        scheduled_ms,
+        frame_elapsed_ms,
+        screen_valid_flags,
+        allowed_flags,
+        movement_ids,
+        sent_flags,
+        summary,
+    )
+    return summary
+
+
 def run_mobile_operation_base(
     *,
     serial: str,

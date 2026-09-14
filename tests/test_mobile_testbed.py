@@ -1514,6 +1514,31 @@ def test_active_probe_schedule_matches_frozen_contract() -> None:
     assert len(pulses) <= int(contract["budgets"]["maximum_pulses_per_session"])
 
 
+def test_active_probe_contract_binds_frozen_schedule() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._active_probe_contract(
+        root / "configs/movement_active_probe_v1.json"
+    )
+    assert len(digest) == 64
+    assert contract["sessions_required"] == 2
+    assert contract["failure_policy"]
+    schedule = mobile_testbed.plan_active_probe_schedule(contract)
+    assert len([entry for entry in schedule if entry["kind"] == "pulse"]) == 48
+    assert len([entry for entry in schedule if entry["kind"] == "control"]) == 8
+
+
+def test_active_probe_contract_rejects_tampering(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    payload = json.loads(
+        (root / "configs/movement_active_probe_v1.json").read_text(encoding="utf-8")
+    )
+    payload["observation_ms"] = int(payload["observation_ms"]) + 200
+    path = tmp_path / "tampered-contract.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(mobile_testbed.MobileTestbedError, match="differs"):
+        mobile_testbed._active_probe_contract(path)
+
+
 def test_active_probe_schedule_keeps_serialized_observation_windows() -> None:
     contract: dict[str, object] = {
         "directions": ["north", "east", "south", "west"],
