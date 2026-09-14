@@ -12,17 +12,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: re-run the two contract sessions from the scene-qualified open spot under the unchanged frozen contract
+NEXT_ACTION: run the decisive direction-order comparison, then the registered v2 two-session batch from a fresh scene
 INPUT_EVIDENCE: frozen action-response audit, the two failed batches and the owner directive that no internal channel will be provided
-CHANGED_FILES: probe contract, audit, planner, runner/CLI, runner fixes (scene readiness, guard refresh, advancing observations) and focused tests
+CHANGED_FILES: probe contracts v1 and v2, audit, planner (cyclic order), runner/CLI, runner fixes and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: batches 1-2 failed the A gate; batch 2 was structurally clean (coverage 1.00/0.972, paired 0.875/0.896, all eight directions, identity switches 0/1) but its spot did not demonstrate free movement (most pulses ~0); a bounded qualification at an open spot now shows 15/16 correct-direction presses with 2.4-7.3 px displacement
+RESULT: batches 1-3 failed the A gate; diagnosis: smooth 45/90-degree rotations drive 1.4-6.0 px per 0.5-1.0 s press with correct directions, while the seeded permutation drives about 0 px; protocol v2 (cyclic order, 1.0 s hold, same gates) is registered as f120239b
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
 NEW_BYTES: 118,127,296 total (batch 1: 88,820,785; final batch: 29,306,511); contract budget 52,428,800
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: continue the no-source route; the next batch runs from a scene-qualified spot under the unchanged frozen contract
+NEXT_DECISION: v2 runs from a fresh scene; v1 batches stay recorded as failed evidence
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
