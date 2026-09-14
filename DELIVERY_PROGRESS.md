@@ -12,7 +12,7 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: owner decision on the pre-declared A-gate failure options; no further probe run without it
+NEXT_ACTION: run the bounded non-formal marker-displacement mini-check, then one final session batch only if it passes
 INPUT_EVIDENCE: frozen action-response audit, the four user probe requirements and the authorized sessions
 CHANGED_FILES: probe contract, audit, planner, runner/CLI, runner fixes (scene readiness, guard refresh, advancing observations) and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
@@ -22,7 +22,7 @@ ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
 NEW_BYTES: 88,820,785 total (evidence pair 30,278,913; failed/duplicate verification attempts 43,204,209; smoke diagnostics 15,337,663); contract budget 52,428,800
 STOP_REASON: both sessions failed the A gate; the runs did not provide an alive, moving hero in the declared open area (base-area-only displacement; no marker at all in session-002)
-NEXT_DECISION: (a) app-source test reference, (b) one final budgeted new-session batch with a marker-visible precheck, or (c) accept the data-limited local scope
+NEXT_DECISION: (b) selected on 2026-09-14; if the final batch fails the A gate, fall back to (c) with no further batch or threshold change
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
