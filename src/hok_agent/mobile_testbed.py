@@ -6363,16 +6363,16 @@ def run_mobile_active_probe(
                     and float(model_frame.std()) >= minimum_std
                 )
                 death_replay = _death_replay_visible(frame, rois)
-                minimap_frames.append(_observation_roi_frame(frame, rois.minimap))
-                scheduled_ms.append(round((tick_target - started) * 1000))
-                frame_elapsed_ms.append(
-                    round(frame_timestamp_ns / 1_000_000 - started * 1000)
-                )
-                screen_valid_flags.append(int(screen_ok))
-                allowed_flags.append(int(not death_replay))
-                movement_ids.append(MOVEMENTS.index(joystick.direction))
-                sent_flags.append(int(sent_since_frame))
-                sent_since_frame = False
+                observed_ms = round(frame_timestamp_ns / 1_000_000 - started * 1000)
+                if not frame_elapsed_ms or observed_ms > frame_elapsed_ms[-1]:
+                    minimap_frames.append(_observation_roi_frame(frame, rois.minimap))
+                    scheduled_ms.append(round((tick_target - started) * 1000))
+                    frame_elapsed_ms.append(observed_ms)
+                    screen_valid_flags.append(int(screen_ok))
+                    allowed_flags.append(int(not death_replay))
+                    movement_ids.append(MOVEMENTS.index(joystick.direction))
+                    sent_flags.append(int(sent_since_frame))
+                    sent_since_frame = False
                 if death_replay or not screen_ok:
                     failure = "DEATH_RESPAWN_OR_ENDED" if death_replay else "UNKNOWN_SCREEN"
                     if active is not None:
