@@ -12,17 +12,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: run the zero-input active-probe smoke on the authorized testbed, then the two input sessions
-INPUT_EVIDENCE: frozen action-response audit, its NEXT_ACTION and the four user probe requirements
-CHANGED_FILES: active-probe contract config, probe audit, schedule planner, runner/CLI and focused tests
+NEXT_ACTION: owner decision on the pre-declared A-gate failure options; no further probe run without it
+INPUT_EVIDENCE: frozen action-response audit, the four user probe requirements and the authorized sessions
+CHANGED_FILES: probe contract, audit, planner, runner/CLI, runner fixes (scene readiness, guard refresh, advancing observations) and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: contract at 3b6c29bd... (failure policy, seed, screen validity); audit, planner and runner; full check 507
+RESULT: A gate FAILED for both sessions: session-001 coverage 0.297, paired 0.125, responsive 0, longest valid 6.6 s; session-002 coverage 0.0, paired 0; the live own marker renders as a red ring with no green cue, so the frozen detector localized only a static corner blob; audit ACTIVE_PROBE_GATES_FAILED
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: pending, cap 50 MiB
-STOP_REASON: pending
-NEXT_DECISION: after the runner lands offline, request one authorized fresh guarded testbed session
+NEW_BYTES: 88,820,785 total (evidence pair 30,278,913; failed/duplicate verification attempts 43,204,209; smoke diagnostics 15,337,663); contract budget 52,428,800
+STOP_REASON: both sessions failed the A gate; the frozen no-source cue does not match the live minimap rendering
+NEXT_DECISION: (a) app-source test reference, (b) one final budgeted new-session batch with a marker-visible precheck, or (c) accept the data-limited local scope
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
