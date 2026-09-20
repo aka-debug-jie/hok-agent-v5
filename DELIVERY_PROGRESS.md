@@ -14,17 +14,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: stop and report; the question budget is nearly exhausted and the best batch (v4) still misses direction consistency
-INPUT_EVIDENCE: frozen action-response audit, the failed v1-v5 batches, the offline forensics verdict, the bounded control checks and the owner directive that no internal channel will be provided
-CHANGED_FILES: probe contracts v1-v5, audit, forensics, hero-cue tracker, declared region/stall/drift guards, planner (cyclic order), runner/CLI, runner fixes and focused tests
+NEXT_ACTION: decide between formalizing the controlled-response evidence and authorizing a detector change; the transport bug is fixed
+INPUT_EVIDENCE: frozen action-response audit, the failed v1-v5 and v7 batches, the offline forensics verdict, the bounded control checks and the owner directive that no internal channel will be provided
+CHANGED_FILES: probe contracts v1-v7, audit, forensics, hero-cue tracker, joystick press settle, declared region/stall/drift guards, planner, runner/CLI, runner fixes and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: the v1-v5 batches all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; the v3 2.5 s hold first appeared to raise the pulse-versus-idle AUC to 0.776, but that was a window-length artifact, and with the idle window matched to the hold the corrected AUC is 0.439; bounded control checks then showed the input itself is sound and the gate fails on detection and scene; the v4 batch in a clean scene (audit report 4d5a4d8d) was the best so far with coverage 0.855/0.994, paired fraction 0.875/0.917 and a 1.633 px median projection in session-001, but direction consistency stayed at 0.571/0.364 against 0.75; the v5 batch with a 3.0 s hold and a 1.5 s settle gap regressed (audit report c03684ce, direction consistency 0.25/0.20, both sessions left the declared region)
+RESULT: the gated batches all failed the A gate, but the reason is now understood and partly fixed; the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535 and a median commanded displacement of at most 0.35 px, and the v3 2.5 s hold AUC of 0.776 was a window-length artifact corrected to 0.439 with a matched idle window; bounded control checks then showed the input itself was sound while the gate failed on detection and scene; the real root cause was found on 2026-09-20: the persistent joystick sent the press and the drag 0.2-0.6 ms apart, which the game did not register as a joystick grab, so the hero drifted and the direction response was wrong; with a 50 ms settle between the press and the drag, bounded checks now move the marker in the commanded direction in 7/8 and 10/10 measured pulses with 3-14 px displacements; the v7 batch still fails because the frozen minimap cue is completely blind for a 20 s window in the middle of the session (coverage 0.666, 0.00 in that window), which the current rules forbid retuning
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 240,367,120 used to date of the owner-authorized 268,435,456 question cap, leaving 28,068,336 (about one more two-session batch); the v1/v2 contract cap of 52,428,800 is long exceeded
+NEW_BYTES: about 262,000,000 used to date of the owner-authorized 268,435,456 question cap; the exact figure needs a recount before any further batch
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: the control relation is demonstrated by bounded checks while the gated instrument still misses direction consistency; decide whether to spend the remaining bytes on one more gated attempt or to formalize the controlled-response check as the gate-A artifact
+NEXT_DECISION: the control relation is demonstrated with a stable instrument, and the remaining gate blocker is the frozen minimap cue; decide whether to formalize the controlled-response probe as the gate-A artifact or to authorize a versioned detector change
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -179,6 +179,28 @@ NEXT_DECISION: the control relation is demonstrated by bounded checks while the 
   bytes, about one more two-session batch. No further batch is started without an owner decision.
 - The best gated result remains v4 session-001 (coverage 0.855, paired fraction 0.875, median
   projection 1.633 px, direction consistency 0.571). It is recorded as failed evidence.
+
+### Joystick press settle and v7 batch (2026-09-20)
+
+- Root cause of the long direction failure: `PersistentJoystick` dispatched the pointer-down and the
+  drag move 0.2-0.6 ms apart, so the game did not register a joystick grab. The hero then drifted
+  and the commanded direction was not applied. The active-probe dispatch now inserts a 50 ms settle
+  between touch operations (`ACTIVE_PROBE_TOUCH_SETTLE_SECONDS`). This is an ordinary bug fix, not a
+  semantic change, and it is committed as `cfa2f0f`.
+- Bounded live checks with the fix, including the guard watchdog, moved the marker in the commanded
+  direction in 7 of 8 and 10 of 10 measured pulses with 3-14 px displacements, and the hero stayed
+  settled between pulses (idle movement 0.1-2.4 px). Before the fix the same checks gave 0-1 px with
+  random signs.
+- Contract v7 `configs/movement_active_probe_v7.json` (self-hash
+  `a8657750935fb40efe0def5d64cd74ea7a3889e2200f404b9b08fb815b38e755`) uses the fixed transport with
+  a central movement band (x and y in 35-95), 16 pulses, a 2.5 s hold and a 1.0 s gap.
+- The v7 batch `active-probe-v18/session-001` is structurally `PASSED` (73.4 s, 16 pulses, zero
+  hard stops) but the audit fails: coverage 0.666 and direction consistency 0.0. The frozen minimap
+  cue is completely blind (0.00) for a 20 s window in the middle of the session while the hero
+  travels through that part of the map, then recovers to 1.00. Session-002 was not run.
+- Consequence: the transport is fixed and the control relation is demonstrated, but the frozen cue
+  cannot follow the hero across the whole map. The remaining decision is whether to formalize the
+  controlled-response probe as the gate-A artifact or to authorize a versioned detector change.
 
 ### 2026-09-09 development review and factual corrections
 
