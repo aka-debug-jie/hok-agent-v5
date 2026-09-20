@@ -1259,8 +1259,9 @@ def _forensic_indicators(
     idle_abs = [abs(value) for value in idle_projections]
     nonzero = sum(1 for value in pulse_hold_projections if value != 0.0)
     return {
-        "pulse_hold_signal_over_idle_auc": _rank_auc(hold_abs, idle_abs),
+        "pulse_hold_signal_over_matched_idle_auc": _rank_auc(hold_abs, idle_abs),
         "pulse_hold_signal_over_control_auc": _rank_auc(hold_abs, control_displacements),
+        "idle_window_matched_to_hold": True,
         "pulse_hold_nonzero_fraction": nonzero / len(pulse_hold_projections)
         if pulse_hold_projections
         else None,
@@ -1301,6 +1302,7 @@ def run_active_probe_forensics(
     gap_ms = int(cast(int, measurement["maximum_gap_to_analysis_frame_ms"]))
     observation_ms = int(cast(int, contract["observation_ms"]))
     inter_gap_ms = int(cast(int, contract["inter_pulse_gap_ms"]))
+    hold_ms = int(cast(int, contract["hold_ms"]))
     cue_contract: dict[str, object] = {
         "color": contract["color"],
         "components": contract["components"],
@@ -1403,7 +1405,7 @@ def run_active_probe_forensics(
             idle = _forensic_delta(
                 localized_times,
                 localized_positions,
-                press_ack_ms - inter_gap_ms - observation_ms,
+                press_ack_ms - inter_gap_ms - hold_ms,
                 press_ack_ms - inter_gap_ms,
                 gap_ms,
             )

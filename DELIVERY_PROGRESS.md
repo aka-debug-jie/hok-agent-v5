@@ -19,12 +19,12 @@ INPUT_EVIDENCE: frozen action-response audit, the failed v1 batches, the v2 sess
 CHANGED_FILES: probe contracts v1, v2 and v3, audit, forensics, declared region/stall/drift guards, planner (cyclic order), runner/CLI, runner fixes and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: the v1 batches, the v2-protocol session-001 and the v3 two-session batch all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; the v3 2.5 s hold raised the pooled pulse-versus-idle AUC to 0.776 with a 1.40 px median against 0.30 px idle, but only 3 of 23 paired pulses matched the commanded direction, coverage fell to 0.751 and 0.398, and the new guards correctly failed a 2662 ms capture stall and a 26 s detector dropout
+RESULT: the v1 batches, the v2-protocol session-001 and the v3 two-session batch all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; the v3 2.5 s hold first appeared to raise the pulse-versus-idle AUC to 0.776, but that was a window-length artifact, and with the idle window matched to the hold the corrected AUC is 0.439 with a 2.37 px idle median projection above the 1.40 px pulse median, so no control signal is detectable at either hold length; only 3 of 23 paired pulses matched the commanded direction, coverage fell to 0.751 and 0.398, and the new guards correctly failed a 2662 ms capture stall and a 26 s detector dropout
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
 NEW_BYTES: 147,488,091 used to date (earlier batches 118,127,296; v3 batch and its diagnostics 29,360,795); the v1/v2 contract cap 52,428,800 is exceeded and is superseded by an owner-authorized question cap of 268,435,456
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: the measurement problem is solved and the control-attribution problem is isolated; decide whether the commanded direction fails because of the joystick geometry or because the hero is being moved autonomously, and test that offline or with one bounded manual check before another batch
+NEXT_DECISION: the measurement method is now corrected and still shows no commanded displacement, while the owner reports that manual joystick input moves the hero; resolve why the programmatic persistent-joystick sequence produces no commanded displacement before designing another batch
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -91,8 +91,16 @@ NEXT_DECISION: the measurement problem is solved and the control-attribution pro
   with the same serial, identity and layouts as the earlier probe sessions. Both sessions are
   structurally `PASSED` with 24 pulses, eight control windows, zero hard stops and about 96 s each.
 - Batch audit report `47b628eda29d426c` is `ACTIVE_PROBE_GATES_FAILED` for both sessions. The v3
-  hold change worked: the pooled pulse-versus-idle displacement AUC is 0.776 with a 1.40 px median
-  pulse displacement against 0.30 px idle, versus 0.535 and 0.34 px for v8.
+  hold change did not work: the first forensics pass reported a pooled pulse-versus-idle AUC of
+  0.776, but its idle window was only `observation_ms` (0.5 s) while the pulse window was the 2.5 s
+  hold. Comparing unequal windows inflated the AUC.
+- The forensics idle window is now matched to `hold_ms`. With the corrected report `d444dee5` the
+  pooled AUC is 0.439 and the idle median projection is 2.37 px against a 1.40 px pulse median, so
+  the longer hold did not create a detectable control signal. v8's report `286dee75` is unchanged at
+  0.535 because its hold and observation were both 1.0 s.
+- The v3 contract also left `control_window_ms` at 1.0 s while the hold is 2.5 s, so its
+  pulse-versus-control gate compares unequal windows too. That flaw is recorded for a future
+  versioned contract; v3 is not edited after use.
 - The failure is now control attribution rather than measurement. Only 3 of 23 paired pulses moved
   in the commanded direction, the median commanded projection is negative in both sessions, and
   localization coverage is 0.751 and 0.398 against the 0.8 gate.

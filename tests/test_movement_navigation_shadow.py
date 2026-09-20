@@ -486,6 +486,7 @@ def _probe_inputs(
         ],
         "frame_period_ms": 200,
         "observation_ms": 1000,
+        "hold_ms": 500,
         "inter_pulse_gap_ms": 400,
         "sessions_required": 2,
         "measurement": {"maximum_gap_to_analysis_frame_ms": 600},
@@ -652,7 +653,7 @@ def test_active_probe_forensics_is_read_only_and_measures_windows(
     assert metrics["green_only_candidates_per_frame"]["many"] >= 1
     assert report["pooled"]["hold_projection"]["n"] == 6
     indicators = report["pooled"]["indicators"]
-    assert indicators["pulse_hold_signal_over_idle_auc"] is not None
+    assert indicators["pulse_hold_signal_over_matched_idle_auc"] is not None
     assert indicators["pulse_hold_nonzero_fraction"] >= 0.5
     assert all(module not in sys.modules for module in forbidden)
 
