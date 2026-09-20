@@ -6060,6 +6060,7 @@ ACTIVE_PROBE_CONTRACT_SCHEMA = "movement-active-probe-contract-v1"
 ACTIVE_PROBE_SESSION_SCHEMA = "hok-agent-mobile-active-probe-session-v1"
 ACTIVE_PROBE_GUARD_INTERVAL_SECONDS = 0.5
 ACTIVE_PROBE_GUARD_STALENESS_MS = 2000
+ACTIVE_PROBE_TOUCH_SETTLE_SECONDS = 0.05
 
 
 def _active_probe_contract(path: Path) -> tuple[dict[str, object], str]:
@@ -6319,7 +6320,9 @@ def run_mobile_active_probe(
         nonlocal pointer_messages
         if not enable_input:
             return
-        for operation in operations:
+        for index, operation in enumerate(operations):
+            if index:
+                time.sleep(ACTIVE_PROBE_TOUCH_SETTLE_SECONDS)
             watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
             session.touch(operation, guard.width, guard.height)
             pointer_messages += 1
