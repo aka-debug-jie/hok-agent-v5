@@ -919,6 +919,21 @@ def _probe_session_metrics(
         interior = [
             row + extra for row, extra in zip(interior, fallback, strict=True)
         ]
+        extension_boxes = [
+            tuple(int(value) for value in box)
+            for box in cast(list[list[int]], extension.get("fixed_ui_boxes_xyxy", []))
+        ]
+        fixed = [
+            [
+                candidate
+                for candidate in row
+                if not any(
+                    x0 <= candidate[1] < x1 and y0 <= candidate[0] < y1
+                    for x0, y0, x1, y1 in extension_boxes
+                )
+            ]
+            for row in fixed
+        ]
     tracker = contract.get("hero_tracker")
     if isinstance(tracker, dict):
         interior = [
@@ -936,6 +951,11 @@ def _probe_session_metrics(
     frame_period_ms = int(cast(int, contract["frame_period_ms"]))
     components = cast(dict[str, object], contract["components"])
     maximum_jump = float(cast(float, components["maximum_pair_l1_distance"]))
+    tracker_config = contract.get("hero_tracker")
+    if isinstance(tracker_config, dict):
+        maximum_jump = float(
+            cast(float, tracker_config["maximum_association_l1_distance"])
+        )
     identity_switch_events = 0
     previous: tuple[float, float] | None = None
     for index in range(len(frames)):
