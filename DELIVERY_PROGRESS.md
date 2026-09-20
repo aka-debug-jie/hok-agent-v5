@@ -14,17 +14,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: replace the fragile minimap hero-marker detector and constrain the scene to a safe open band, then re-run
-INPUT_EVIDENCE: frozen action-response audit, the failed v1/v2/v3 batches, the offline forensics verdict, the control-relation checks below and the owner directive that no internal channel will be provided
-CHANGED_FILES: probe contracts v1, v2 and v3, audit, forensics, declared region/stall/drift guards, planner (cyclic order), runner/CLI, runner fixes and focused tests
+NEXT_ACTION: raise direction consistency in a clean scene, then re-run the v4 two-session batch
+INPUT_EVIDENCE: frozen action-response audit, the failed v1/v2/v3 batches, the offline forensics verdict, the control-relation checks, the failed v4 batch and the owner directive that no internal channel will be provided
+CHANGED_FILES: probe contracts v1-v4, audit, forensics, hero-cue tracker, declared region/stall/drift guards, planner (cyclic order), runner/CLI, runner fixes and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: the v1 batches, the v2-protocol session-001 and the v3 two-session batch all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; the v3 2.5 s hold first appeared to raise the pulse-versus-idle AUC to 0.776, but that was a window-length artifact, and with the idle window matched to the hold the corrected AUC is 0.439 with a 2.37 px idle median projection above the 1.40 px pulse median, so no control signal is detectable at either hold length; bounded control checks now show the input itself is sound and the gate fails on detection and scene
+RESULT: the v1 batches, the v2-protocol session-001, the v3 two-session batch and the v4 two-session batch all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; the v3 2.5 s hold first appeared to raise the pulse-versus-idle AUC to 0.776, but that was a window-length artifact, and with the idle window matched to the hold the corrected AUC is 0.439, so no control signal is detectable at either hold length; bounded control checks then showed the input itself is sound and the gate fails on detection and scene; the v4 batch in a clean scene (audit report 4d5a4d8d) finally cleared coverage (0.855 and 0.994), paired fraction (0.875 and 0.917) and median projection (1.633 px) in session-001, but direction consistency stayed at 0.571 and 0.364 against the 0.75 gate and session-002 also failed on a capture stall and a press-start drift
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 169,012,612 used to date (earlier batches 118,127,296; v3 batch 29,360,795; control checks and the aborted v10 run 21,524,521); the v1/v2 contract cap 52,428,800 is exceeded and is superseded by an owner-authorized question cap of 268,435,456
+NEW_BYTES: 212,375,367 used to date (earlier batches 118,127,296; v3 batch 29,360,795; control checks and v10 21,524,521; v11/v12 batches and diagnostics 43,362,755); the v1/v2 contract cap 52,428,800 is exceeded and is superseded by an owner-authorized question cap of 268,435,456
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: the control relation is demonstrated by bounded checks, so the next blocker is the minimap hero-marker detector and the scene band; fix those before another gated batch
+NEXT_DECISION: the v4 instrument now measures the commanded displacement above its gate, so the remaining gap is direction consistency; decide whether it is residual scene clutter, hero wander, or the fixed-UI false positive before another batch
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -133,6 +133,32 @@ NEXT_DECISION: the control relation is demonstrated by bounded checks, so the ne
   into terrain, and one re-run aborted at 51 s when the hero died in enemy territory.
 - Consequence: the A gate is measuring an unreliable detector in an unconstrained scene. The next
   work is a robust hero-marker detector plus a safe open scene band, not another gated batch.
+
+### Active-probe v4 batch result (2026-09-20)
+
+- Contract v4 `configs/movement_active_probe_v4.json` (self-hash
+  `9adbfcf52d3519510bf785b195bc32a2edc0d516229714783b61d966ab582666`) keeps the v3 question and
+  fixes two recorded defects: the control window is matched to the hold (`control_window_ms=2500`),
+  and the free-movement region gains `minimum_y=50`. It also declares a versioned hero-cue tracker.
+- The tracker is a temporal association layer over the frozen detector, not a retune of it. It
+  excludes the two fixed minimap UI corners (`[112,0,128,16]` and `[0,104,20,128]`), seeds on the
+  red-paired candidate, and follows the nearest candidate within an 8 px gate. On the existing v9
+  shards it changed coverage by zero because those frames had no candidate to associate; the gain
+  came from the clean scene.
+- Batch `active-probe-v12` ran two sessions, both structurally `PASSED` with 24 pulses, four
+  matched control windows, zero hard stops and about 96 s each. Audit report `4d5a4d8d` is still
+  `ACTIVE_PROBE_GATES_FAILED`, but the instrument now measures:
+  - session-001: coverage 0.855, paired fraction 0.875, median commanded projection 1.633 px
+    (above the 1.0 px gate), 21 paired pulses;
+  - session-002: coverage 0.994, paired fraction 0.917, median projection 0.213 px.
+- The remaining gap is direction consistency: 0.571 and 0.364 against the 0.75 gate. Session-001
+  also failed `pulse_vs_control` (1.633 against a 1.694 px control p95) and a fixed-UI responsive
+  fraction, and session-002 failed on a capture stall and a press-start drift. The guards again
+  caught real defects instead of letting them pass silently.
+- A read-only cue check was used before each session to confirm the frozen cue is clean at the
+  current position; it sends no input and persists nothing.
+- Result is recorded as failed evidence. No threshold was changed and no session is reused as
+  passing evidence.
 
 ### 2026-09-09 development review and factual corrections
 
