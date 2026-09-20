@@ -14,17 +14,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: raise direction consistency in a clean scene, then re-run the v4 two-session batch
-INPUT_EVIDENCE: frozen action-response audit, the failed v1/v2/v3 batches, the offline forensics verdict, the control-relation checks, the failed v4 batch and the owner directive that no internal channel will be provided
-CHANGED_FILES: probe contracts v1-v4, audit, forensics, hero-cue tracker, declared region/stall/drift guards, planner (cyclic order), runner/CLI, runner fixes and focused tests
+NEXT_ACTION: stop and report; the question budget is nearly exhausted and the best batch (v4) still misses direction consistency
+INPUT_EVIDENCE: frozen action-response audit, the failed v1-v5 batches, the offline forensics verdict, the bounded control checks and the owner directive that no internal channel will be provided
+CHANGED_FILES: probe contracts v1-v5, audit, forensics, hero-cue tracker, declared region/stall/drift guards, planner (cyclic order), runner/CLI, runner fixes and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: the v1 batches, the v2-protocol session-001, the v3 two-session batch and the v4 two-session batch all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; the v3 2.5 s hold first appeared to raise the pulse-versus-idle AUC to 0.776, but that was a window-length artifact, and with the idle window matched to the hold the corrected AUC is 0.439, so no control signal is detectable at either hold length; bounded control checks then showed the input itself is sound and the gate fails on detection and scene; the v4 batch in a clean scene (audit report 4d5a4d8d) finally cleared coverage (0.855 and 0.994), paired fraction (0.875 and 0.917) and median projection (1.633 px) in session-001, but direction consistency stayed at 0.571 and 0.364 against the 0.75 gate and session-002 also failed on a capture stall and a press-start drift
+RESULT: the v1-v5 batches all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; the v3 2.5 s hold first appeared to raise the pulse-versus-idle AUC to 0.776, but that was a window-length artifact, and with the idle window matched to the hold the corrected AUC is 0.439; bounded control checks then showed the input itself is sound and the gate fails on detection and scene; the v4 batch in a clean scene (audit report 4d5a4d8d) was the best so far with coverage 0.855/0.994, paired fraction 0.875/0.917 and a 1.633 px median projection in session-001, but direction consistency stayed at 0.571/0.364 against 0.75; the v5 batch with a 3.0 s hold and a 1.5 s settle gap regressed (audit report c03684ce, direction consistency 0.25/0.20, both sessions left the declared region)
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 212,375,367 used to date (earlier batches 118,127,296; v3 batch 29,360,795; control checks and v10 21,524,521; v11/v12 batches and diagnostics 43,362,755); the v1/v2 contract cap 52,428,800 is exceeded and is superseded by an owner-authorized question cap of 268,435,456
+NEW_BYTES: 240,367,120 used to date of the owner-authorized 268,435,456 question cap, leaving 28,068,336 (about one more two-session batch); the v1/v2 contract cap of 52,428,800 is long exceeded
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: the v4 instrument now measures the commanded displacement above its gate, so the remaining gap is direction consistency; decide whether it is residual scene clutter, hero wander, or the fixed-UI false positive before another batch
+NEXT_DECISION: the control relation is demonstrated by bounded checks while the gated instrument still misses direction consistency; decide whether to spend the remaining bytes on one more gated attempt or to formalize the controlled-response check as the gate-A artifact
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -159,6 +159,26 @@ NEXT_DECISION: the v4 instrument now measures the commanded displacement above i
   current position; it sends no input and persists nothing.
 - Result is recorded as failed evidence. No threshold was changed and no session is reused as
   passing evidence.
+
+### Active-probe v5 batch result and question-budget state (2026-09-20)
+
+- Contract v5 `configs/movement_active_probe_v5.json` (self-hash
+  `de1087c437fcf7fb55a9b85d62af758c97dfb25b37c9a8144e61c9f76e2b9ca1`) kept the v4 question and
+  lengthened the hold to 3.0 s and the settle gap to 1.5 s, with two pulses per direction, three
+  matched control windows and the same region and tracker.
+- Batch `active-probe-v13` ran two sessions, both structurally `PASSED` with 16 pulses, zero hard
+  stops and about 92 s each. Audit report `c03684ce` is `ACTIVE_PROBE_GATES_FAILED` and worse than
+  v4: session-001 coverage 0.694, paired fraction 0.5, direction consistency 0.25 and a negative
+  median projection; session-002 coverage 0.998, paired fraction 0.938, direction consistency 0.2
+  and a 8.189 px control p95. Both sessions also left the declared free-movement region.
+- A bounded live settle check under the same 2.5 s hold and 1.0 s gap moved the marker in the
+  commanded direction with large deltas (south +12.2 px, north -11.7 px) and left the hero settled
+  between pulses (idle movement 0.2-0.4 px). The gated instrument therefore still loses the
+  response in a long session even though the input is sound.
+- Question budget: 240,367,120 bytes used of the owner-authorized 268,435,456, leaving 28,068,336
+  bytes, about one more two-session batch. No further batch is started without an owner decision.
+- The best gated result remains v4 session-001 (coverage 0.855, paired fraction 0.875, median
+  projection 1.633 px, direction consistency 0.571). It is recorded as failed evidence.
 
 ### 2026-09-09 development review and factual corrections
 
