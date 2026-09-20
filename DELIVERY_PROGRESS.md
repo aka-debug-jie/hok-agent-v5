@@ -14,17 +14,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: the no-source identity and control gate has passed; select the next milestone from the convergence plan
-INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v9, the offline forensics verdict, the bounded control checks and the passing v9 batch
-CHANGED_FILES: probe contracts v1-v9, audit, forensics, hero-cue tracker and fallback, joystick press settle, paced probe loop, declared region/stall/drift guards, planner, runner/CLI and focused tests
-PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
+NEXT_ACTION: the no-source identity/control gate and the goal-navigation milestone have passed; select the next milestone from the convergence plan
+INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v9, the offline forensics verdict, the bounded control checks, the passing v9 probe batch and the passing goal-navigation sessions
+CHANGED_FILES: probe contracts v1-v9, goal-navigation contract v1, audit, forensics, hero-cue tracker and fallback, joystick press settle, paced probe loop, goal-navigation runner, declared region/stall/drift guards, planner, runner/CLI and focused tests
+PRIMARY_METRIC: pre-registered coverage/fate accounting, pulse-versus-control separation and waypoint arrival
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: the no-source identity and control gate passed on 2026-09-20 with batch `active-probe-v25` under contract v9 (`92594112`), audit report `c1491607`, both sessions verified; session-001 and session-002 each report direction consistency 1.0, median commanded projection 9.87 and 10.12 px, paired responses 7.2-11.2 px, coverage 1.0, paired fraction 1.0 and zero identity switches; the earlier batches failed for three separate reasons that are now fixed: the joystick press and drag were sent 0.2-0.6 ms apart so the game did not register a joystick grab (fixed with a 50 ms settle), the probe loop spun without sleeping and starved the response (fixed with a 2 ms paced loop), and the minimap cue went blind over parts of the map (fixed with a versioned green-ring fallback cue); the frozen player detector was not retuned
+RESULT: two milestones passed on 2026-09-20; the no-source identity and control gate passed with batch `active-probe-v25` under contract v9 (`92594112`), audit report `c1491607`, both sessions verified with direction consistency 1.0, median commanded projection 9.87 and 10.12 px, paired responses 7.2-11.2 px, coverage 1.0 and zero identity switches; the goal-navigation milestone then passed with `goal-navigation-v8-1` and `goal-navigation-v8-2` under contract `b9f53e37`, both reaching all three declared waypoints and stopping on arrival with final errors 3.03 and 2.98 px, localization fractions 0.92 and 0.91, zero identity switches and every gate true; the earlier probe batches failed for three separate reasons that are now fixed (the joystick press and drag were sent 0.2-0.6 ms apart, the probe loop spun without sleeping and starved the response, and the minimap cue went blind over parts of the map), and the frozen player detector was not retuned
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 531,241,179 used by the active-probe lineage to date (530,641,183 in runs plus 599,996 in its audit and forensics reports); the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit
+NEW_BYTES: 531,306,357 used by the active-probe and goal-navigation lineages to date (531,241,179 probe plus 65,178 goal-navigation); the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: the gate evidence is recorded; decide the next milestone
+NEXT_DECISION: both current milestones are recorded; decide the next milestone
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -273,6 +273,31 @@ NEXT_DECISION: the gate evidence is recorded; decide the next milestone
   extension's declared fixed-UI boxes are excluded from the fixed bucket. The passing batch was
   collected after those corrections, so the evidence is clean.
 - This closes the current milestone. The batch is recorded as passed evidence and the next milestone
+  is selected from the convergence plan.
+
+### Goal-navigation milestone passed (2026-09-20)
+
+- Added a closed-loop goal-navigation route through the guarded testbed: observe the hero's minimap
+  position, command the eight-way direction toward the current waypoint, advance when within the
+  arrival tolerance, and stop on the final arrival. It is versioned as
+  `configs/movement_goal_navigation_v1.json` (self-hash
+  `b9f53e37d78689a21abbba9a732ff328eb87b5bd199efd827a73d73bf2964c51`) with a three-waypoint route
+  `(64,88) -> (48,48) -> (64,64)`, a 4 px arrival tolerance, a 1.2 s direction hold, a 300 ms
+  observation period and pre-declared gates.
+- The cue prefers the frozen red-paired candidate and falls back to the green blob nearest the
+  previous position, seeded once, so the tracked position stays continuous; a wrong position is
+  worse than an unknown in a closed loop. The frozen top-right UI box is excluded for every
+  candidate, while the extension's bottom-left box only filters green-only fallback candidates,
+  because the hero's own base marker sits there. The runner also fails fast when the hero leaves
+  the declared movement band.
+- `goal-navigation-v8-1` and `goal-navigation-v8-2` both reach all three waypoints and stop on
+  arrival: final errors 3.03 and 2.98 px, localization fractions 0.92 and 0.91, zero identity
+  switches, every gate true, 28.3 s and 25.8 s.
+- An earlier run `goal-navigation-v5` also passed with a 0.80 px final error and 1.0 localization.
+- The hero cannot be tracked inside its own fountain because the minimap marker there is drawn
+  about 3x9 px, below the frozen cue's 7-24 px extent filter; navigation therefore starts from the
+  open map. This is a scene boundary, not a control failure.
+- This closes the goal-navigation milestone. Both current milestones are recorded and the next one
   is selected from the convergence plan.
 
 ### 2026-09-09 development review and factual corrections
