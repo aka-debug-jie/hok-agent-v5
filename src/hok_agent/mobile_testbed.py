@@ -6076,6 +6076,7 @@ ACTIVE_PROBE_SESSION_SCHEMA = "hok-agent-mobile-active-probe-session-v1"
 ACTIVE_PROBE_GUARD_INTERVAL_SECONDS = 0.5
 ACTIVE_PROBE_GUARD_STALENESS_MS = 2000
 ACTIVE_PROBE_TOUCH_SETTLE_SECONDS = 0.05
+ACTIVE_PROBE_LOOP_SLEEP_SECONDS = 0.002
 
 
 def _active_probe_contract(path: Path) -> tuple[dict[str, object], str]:
@@ -6418,6 +6419,7 @@ def run_mobile_active_probe(
                 events.append(_active_probe_event_record(active))
                 active = None
                 active_index += 1
+            time.sleep(ACTIVE_PROBE_LOOP_SLEEP_SECONDS)
     except Exception as exc:
         failure = str(exc)
     finally:
