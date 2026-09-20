@@ -576,6 +576,44 @@ def _probe_frame_candidates(
     return interior, fixed
 
 
+def _probe_green_candidates(
+    frames: np.ndarray, contract: dict[str, object], extension: dict[str, object]
+) -> list[list[tuple[float, float, float]]]:
+    color = cast(dict[str, object], contract["color"])
+    boxes = [
+        tuple(int(value) for value in box)
+        for box in cast(list[list[int]], extension.get("fixed_ui_boxes_xyxy", []))
+    ]
+    size_range = cast(list[int], extension["green_size"])
+    extent_range = cast(list[int], extension["green_extent"])
+    candidates: list[list[tuple[float, float, float]]] = []
+    for frame in frames:
+        rgb = frame.astype(np.int16)
+        red = rgb[..., 0]
+        green = rgb[..., 1]
+        blue = rgb[..., 2]
+        mask = (
+            (green > int(cast(int, color["green_minimum"])))
+            & (green - red > int(cast(int, color["green_red_margin"])))
+            & (green - blue > int(cast(int, color["green_blue_margin"])))
+        )
+        row: list[tuple[float, float, float]] = []
+        for item in _mask_components(mask):
+            if (
+                size_range[0] <= item[0] <= size_range[1]
+                and extent_range[0] <= item[3] <= extent_range[1]
+                and extent_range[0] <= item[4] <= extent_range[1]
+                and 5 < item[1] < 123
+                and 5 < item[2] < 123
+                and not any(
+                    x0 <= item[2] < x1 and y0 <= item[1] < y1 for x0, y0, x1, y1 in boxes
+                )
+            ):
+                row.append((item[1], item[2], float("inf")))
+        candidates.append(row)
+    return candidates
+
+
 def _probe_tracked_positions(
     interior: list[list[tuple[float, float, float]]],
     analysis: np.ndarray,
@@ -875,6 +913,12 @@ def _probe_session_metrics(
     )
     interior, fixed = _probe_frame_candidates(frames, cue_contract, exclusion)
     analysis = screen_valid & operation_allowed
+    extension = contract.get("hero_cue_extension")
+    if isinstance(extension, dict):
+        fallback = _probe_green_candidates(frames, contract, extension)
+        interior = [
+            row + extra for row, extra in zip(interior, fallback, strict=True)
+        ]
     tracker = contract.get("hero_tracker")
     if isinstance(tracker, dict):
         interior = [

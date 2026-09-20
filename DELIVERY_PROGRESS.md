@@ -202,6 +202,29 @@ NEXT_DECISION: the control relation is demonstrated with a stable instrument, an
   cannot follow the hero across the whole map. The remaining decision is whether to formalize the
   controlled-response probe as the gate-A artifact or to authorize a versioned detector change.
 
+### Versioned green-ring fallback cue and v8 batch (2026-09-20)
+
+- The frozen red-paired cue goes completely blind over parts of the map (0.00 coverage for a 20 s
+  window in `active-probe-v18`), which is the last gate blocker. Rather than retune the frozen
+  detector, a versioned `hero_cue_extension` was added: when the frozen cue yields no candidate in
+  a frame, the analysis falls back to the green ring component outside the two fixed minimap UI
+  corners, associated temporally by the existing tracker. v1-v7 contracts do not declare it, so
+  their behavior is unchanged.
+- Offline replay on the existing shards: the fallback raises coverage from 0.383 to 0.989 on the
+  short session and from 0.663 to 0.910 on the long one, with the short session reaching 6 of 8
+  direction-correct.
+- Contract v8 `configs/movement_active_probe_v8.json` (self-hash
+  `3daeeca63e2263c5cf2e5e1a73f67a42903853834d285c0af99f37c7d3718400`) uses the fixed transport, the
+  fallback cue, the central movement band and a short 8-pulse, 35 s single-cycle sweep.
+- Batch `active-probe-v20/session-001` is structurally `PASSED` but the audit fails: coverage
+  0.806, paired fraction 0.75, direction consistency 0.167 and median projection 0.10. The tracked
+  path shows the fallback losing the hero across a blind window and re-acquiring a different
+  position, so the later pulses are measured against a wrong baseline. Session-002 was not run.
+- Conclusion: the transport is fixed and the bounded checks demonstrate the control relation, but
+  neither the frozen cue nor the green fallback can track the moving hero reliably across the whole
+  map. The remaining decision is whether to authorize a versioned detector change or to formalize
+  the bounded controlled-response check as the gate-A artifact.
+
 ### 2026-09-09 development review and factual corrections
 
 - Code inspection: `run_change_geometry_replay` in movement_goal_canvas.py appends plain step
