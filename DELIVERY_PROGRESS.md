@@ -14,17 +14,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: decide between formalizing the controlled-response evidence and authorizing a detector change; the transport bug is fixed
-INPUT_EVIDENCE: frozen action-response audit, the failed v1-v5 and v7 batches, the offline forensics verdict, the bounded control checks and the owner directive that no internal channel will be provided
-CHANGED_FILES: probe contracts v1-v7, audit, forensics, hero-cue tracker, joystick press settle, declared region/stall/drift guards, planner, runner/CLI, runner fixes and focused tests
+NEXT_ACTION: the no-source identity and control gate has passed; select the next milestone from the convergence plan
+INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v9, the offline forensics verdict, the bounded control checks and the passing v9 batch
+CHANGED_FILES: probe contracts v1-v9, audit, forensics, hero-cue tracker and fallback, joystick press settle, paced probe loop, declared region/stall/drift guards, planner, runner/CLI and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: the gated batches all failed the A gate, but the reason is now understood and partly fixed; the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535 and a median commanded displacement of at most 0.35 px, and the v3 2.5 s hold AUC of 0.776 was a window-length artifact corrected to 0.439 with a matched idle window; bounded control checks then showed the input itself was sound while the gate failed on detection and scene; the real root cause was found on 2026-09-20: the persistent joystick sent the press and the drag 0.2-0.6 ms apart, which the game did not register as a joystick grab, so the hero drifted and the direction response was wrong; with a 50 ms settle between the press and the drag, bounded checks now move the marker in the commanded direction in 7/8 and 10/10 measured pulses with 3-14 px displacements; the v7 batch still fails because the frozen minimap cue is completely blind for a 20 s window in the middle of the session (coverage 0.666, 0.00 in that window), which the current rules forbid retuning
+RESULT: the no-source identity and control gate passed on 2026-09-20 with batch `active-probe-v25` under contract v9 (`92594112`), audit report `c1491607`, both sessions verified; session-001 and session-002 each report direction consistency 1.0, median commanded projection 9.87 and 10.12 px, paired responses 7.2-11.2 px, coverage 1.0, paired fraction 1.0 and zero identity switches; the earlier batches failed for three separate reasons that are now fixed: the joystick press and drag were sent 0.2-0.6 ms apart so the game did not register a joystick grab (fixed with a 50 ms settle), the probe loop spun without sleeping and starved the response (fixed with a 2 ms paced loop), and the minimap cue went blind over parts of the map (fixed with a versioned green-ring fallback cue); the frozen player detector was not retuned
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 444,874,266 used by the active-probe lineage to date (444,365,452 in runs plus 508,814 in its audit and forensics reports), which exceeds the 268,435,456 question cap; the owner has since stated there is no budget limit
+NEW_BYTES: 531,241,179 used by the active-probe lineage to date (530,641,183 in runs plus 599,996 in its audit and forensics reports); the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: the control relation is demonstrated with a stable instrument, and the remaining gate blocker is the frozen minimap cue; decide whether to formalize the controlled-response probe as the gate-A artifact or to authorize a versioned detector change
+NEXT_DECISION: the gate evidence is recorded; decide the next milestone
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -247,6 +247,33 @@ NEXT_DECISION: the control relation is demonstrated with a stable instrument, an
   direction order.
 - This is recorded as failed evidence. The transport fix stands; the gated instrument still does
   not measure the response that the bounded checks show.
+
+### No-source identity and control gate passed (2026-09-20)
+
+- Batch `active-probe-v25` ran two sessions under contract v9 (`92594112`) with the fixed transport
+  and analysis. Audit report `c1491607` is `ACTIVE_PROBE_IDENTITY_AND_CONTROL_VERIFIED` and both
+  sessions pass every per-session check.
+- session-001: 16 paired pulses, direction consistency 1.0, median commanded projection 9.87 px,
+  paired responses `east/west` 11.18, `north/south` 10.91, `north_east/south_west` 9.04,
+  `south_east/north_west` 7.24 px, coverage 1.0, paired fraction 1.0, zero identity switches.
+- session-002: 16 paired pulses, direction consistency 1.0, median commanded projection 10.12 px,
+  paired responses 10.91, 10.85, 9.03 and 9.11 px, coverage 1.0, paired fraction 1.0, zero identity
+  switches.
+- Three independent defects were found and fixed before this pass, none of which retuned the frozen
+  player detector:
+  1. `cfa2f0f` the persistent joystick sent the press and the drag 0.2-0.6 ms apart, so the game did
+     not register a joystick grab; a 50 ms settle was added to the active-probe dispatch.
+  2. `41c5b39` the probe loop spun without sleeping, which starved the response (the same bounded
+     check gave 3/8 correct spinning and 8/8 correct with a 2 ms paced loop); the loop now sleeps
+     `ACTIVE_PROBE_LOOP_SLEEP_SECONDS` each iteration.
+  3. `8d12178` the frozen minimap cue went blind over parts of the map, so a versioned
+     `hero_cue_extension` adds a green-ring fallback candidate outside the declared fixed-UI boxes.
+- Two analysis inconsistencies were also corrected in `1c23d8e`: the identity-jump threshold now
+  matches the tracker's own association gate instead of the frozen 7 px pair distance, and the
+  extension's declared fixed-UI boxes are excluded from the fixed bucket. The passing batch was
+  collected after those corrections, so the evidence is clean.
+- This closes the current milestone. The batch is recorded as passed evidence and the next milestone
+  is selected from the convergence plan.
 
 ### 2026-09-09 development review and factual corrections
 
