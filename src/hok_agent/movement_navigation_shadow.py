@@ -929,6 +929,42 @@ def _probe_session_metrics(
         "identity_switch_events": identity_switch_events
         <= int(cast(int, gates["maximum_identity_switch_events"])),
     }
+    region = contract.get("free_movement_region")
+    region_violation_frames = 0
+    region_maximum_streak = 0
+    if isinstance(region, dict):
+        minimum_y = float(cast(float, region["minimum_y"]))
+        maximum_y = float(cast(float, region["maximum_y"]))
+        minimum_x = float(cast(float, region["minimum_x"]))
+        maximum_x = float(cast(float, region["maximum_x"]))
+        streak = 0
+        for index in range(len(frames)):
+            position = _probe_unique_position(interior[index]) if bool(localized[index]) else None
+            if position is None or (
+                minimum_y <= position[0] <= maximum_y
+                and minimum_x <= position[1] <= maximum_x
+            ):
+                streak = 0
+                continue
+            streak += 1
+            region_violation_frames += 1
+            region_maximum_streak = max(region_maximum_streak, streak)
+        checks["free_movement_region"] = region_maximum_streak <= int(
+            cast(int, region["maximum_consecutive_violation_frames"])
+        )
+    maximum_frame_gap = contract.get("maximum_frame_gap_ms")
+    if isinstance(maximum_frame_gap, (int, float)) and len(elapsed) > 1:
+        checks["capture_stall"] = float(np.diff(elapsed).max()) <= float(maximum_frame_gap)
+    maximum_press_drift = contract.get("maximum_press_start_drift_ms")
+    if isinstance(maximum_press_drift, (int, float)):
+        drifts = [
+            int(cast(int, event["press_ack_ms"])) - int(cast(int, event["press_scheduled_ms"]))
+            for event in pulse_events
+            if "press_scheduled_ms" in event
+        ]
+        checks["press_start_drift"] = (
+            max(drifts) <= float(maximum_press_drift) if drifts else True
+        )
     metrics: dict[str, object] = {
         "status": "PASSED" if all(checks.values()) else "FAILED",
         "passed": all(checks.values()),
@@ -954,6 +990,9 @@ def _probe_session_metrics(
         "hard_stops": sum(bool(row["hard_stop"]) for row in pulse_rows),
         "checks": checks,
     }
+    if isinstance(region, dict):
+        metrics["region_violation_frames"] = region_violation_frames
+        metrics["region_maximum_streak"] = region_maximum_streak
     return metrics, event_rows
 
 

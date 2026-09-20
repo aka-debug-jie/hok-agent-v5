@@ -14,17 +14,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: select a v3 probe design from the forensics verdict before any new device batch
+NEXT_ACTION: run the registered v3 two-session batch from a fresh open-field scene, then audit it
 INPUT_EVIDENCE: frozen action-response audit, the failed v1 batches, the v2 session-001, the offline forensics verdict and the owner directive that no internal channel will be provided
-CHANGED_FILES: probe contracts v1 and v2, audit, forensics, planner (cyclic order), runner/CLI, runner fixes and focused tests
+CHANGED_FILES: probe contracts v1, v2 and v3, audit, forensics, declared region/stall/drift guards, planner (cyclic order), runner/CLI, runner fixes and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: the v1 batches and the v2-protocol session-001 all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region
+RESULT: the v1 batches and the v2-protocol session-001 all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; contract v3 (c67930ce) adds a declared free-movement region, a capture-stall guard, a press-start-drift guard, a 2.5 s hold and a 96 s 24-pulse schedule
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
 NEW_BYTES: 118,127,296 used to date (batch 1: 88,820,785; final batch: 29,306,511); the v1/v2 contract cap 52,428,800 is exceeded and is superseded by an owner-authorized question cap of 268,435,456
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: forensics rules out audit pairing and detector decoy as the main cause and points to scene and measurement; choose a v3 design (runtime free-movement guard, known-direction self-check, shorter sessions) before another device batch
+NEXT_DECISION: run the v3 batch only after the owner resets the hero to the open field; a session that leaves the declared region or stalls in capture now fails its gates instead of passing silently
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -63,6 +63,27 @@ NEXT_DECISION: forensics rules out audit pairing and detector decoy as the main 
 - Verdict: audit pairing is not the cause (corrected localized-baseline windows still show no
   signal), the detector is not simply tracking a decoy, and the failure is scene- and
   measurement-driven. A v3 probe design is required before another device batch.
+
+### Active-probe v3 hardened probe (2026-09-20)
+
+- Contract v3 `configs/movement_active_probe_v3.json` keeps the same question as v1/v2 (no-source
+  candidate identity and control relation via released direction pulses) and changes only the
+  measurement conditions that the forensics showed were broken. Self-hash
+  `c67930ce4f6b952715cc1f8af4736a8d8f3552aa175eaef794a2519c6c9ad66a`.
+- The schedule is 24 pulses over the eight directions, a 2.5 s hold, a 0.5 s observation, a 0.5 s
+  gap and eight 1 s control windows, about 96 s per session. The longer hold follows the measured
+  signal of roughly 1.6 px/s against a 0.5 px/s noise floor instead of the earlier 1.0 s hold that
+  left every direction below 0.35 px.
+- v3 declares three guards that v1/v2 did not have, and the audit enforces them only when the
+  contract declares them, so the frozen v1/v2 reports are unchanged:
+  - `free_movement_region`: a session fails when the tracked marker leaves the declared box
+    (default `y<=100`) for more than the allowed consecutive frames.
+  - `maximum_frame_gap_ms`: a session fails on a capture stall, which previously compressed pulse
+    spacing below the schedule and silently produced incomparable windows.
+  - `maximum_press_start_drift_ms`: a session fails when a pulse starts later than scheduled.
+- Added focused tests for the satisfied and violated region guard, and kept the forensics mode and
+  all earlier probe tests green. Ruff, strict mypy on the touched modules and the project safety
+  check passed. The v3 batch has not run on a device yet.
 
 ### 2026-09-09 development review and factual corrections
 

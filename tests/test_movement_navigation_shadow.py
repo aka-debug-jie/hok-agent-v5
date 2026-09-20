@@ -453,7 +453,12 @@ def _write_probe_session(
     (directory / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
 
 
-def _probe_inputs(tmp_path: Path, *, contaminate: bool = False) -> tuple[Path, Path]:
+def _probe_inputs(
+    tmp_path: Path,
+    *,
+    contaminate: bool = False,
+    extra_contract: dict[str, object] | None = None,
+) -> tuple[Path, Path]:
     session_root = tmp_path / "probe-sessions"
     contract: dict[str, object] = {
         "schema_version": "movement-active-probe-contract-v1",
@@ -517,6 +522,8 @@ def _probe_inputs(tmp_path: Path, *, contaminate: bool = False) -> tuple[Path, P
         "training_allowed": False,
         "test_allowed": False,
     }
+    if extra_contract is not None:
+        contract.update(extra_contract)
     contract["contract_sha256"] = _object_sha256(contract)
     contract_path = tmp_path / "probe-contract.json"
     contract_path.write_text(json.dumps(contract), encoding="utf-8")
@@ -656,3 +663,83 @@ def test_active_probe_forensics_fails_closed_on_existing_output(tmp_path: Path) 
     output.mkdir()
     with pytest.raises(ValueError, match="output already exists"):
         run_active_probe_forensics(contract, session_root, output)
+
+
+def test_active_probe_audit_enforces_declared_guards(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    guards: dict[str, object] = {
+        "free_movement_region": {
+            "minimum_y": 0,
+            "maximum_y": 100,
+            "minimum_x": 0,
+            "maximum_x": 128,
+            "maximum_consecutive_violation_frames": 5,
+        },
+        "maximum_frame_gap_ms": 1000,
+        "maximum_press_start_drift_ms": 300,
+    }
+    contract, session_root = _probe_inputs(tmp_path, extra_contract=guards)
+    output = tmp_path / "probe-audit-guards"
+    assert (
+        main(
+            [
+                "movement-mvp",
+                "--mode",
+                "active-probe-audit",
+                "--config",
+                str(contract),
+                "--session-root",
+                str(session_root),
+                "--output-dir",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "ACTIVE_PROBE_IDENTITY_AND_CONTROL_VERIFIED"
+    metrics = report["session_metrics"]["probe-session-001"]
+    assert metrics["checks"]["free_movement_region"] is True
+    assert metrics["checks"]["capture_stall"] is True
+    assert metrics["checks"]["press_start_drift"] is True
+    assert metrics["region_maximum_streak"] == 0
+    assert metrics["region_violation_frames"] == 0
+
+
+def test_active_probe_audit_rejects_region_violation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    guards: dict[str, object] = {
+        "free_movement_region": {
+            "minimum_y": 0,
+            "maximum_y": 50,
+            "minimum_x": 0,
+            "maximum_x": 128,
+            "maximum_consecutive_violation_frames": 5,
+        },
+    }
+    contract, session_root = _probe_inputs(tmp_path, extra_contract=guards)
+    output = tmp_path / "probe-audit-region"
+    assert (
+        main(
+            [
+                "movement-mvp",
+                "--mode",
+                "active-probe-audit",
+                "--config",
+                str(contract),
+                "--session-root",
+                str(session_root),
+                "--output-dir",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "ACTIVE_PROBE_GATES_FAILED"
+    metrics = report["session_metrics"]["probe-session-001"]
+    assert metrics["checks"]["free_movement_region"] is False
+    assert metrics["region_maximum_streak"] > 5
+    assert "capture_stall" not in metrics["checks"]
