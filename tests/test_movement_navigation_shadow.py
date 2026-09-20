@@ -12,6 +12,7 @@ from hok_agent.cli import main
 from hok_agent.movement_navigation_shadow import (
     _response_candidate_pairs,
     run_action_response_identity_audit,
+    run_active_probe_forensics,
     run_partial_navigation_shadow,
 )
 
@@ -480,6 +481,7 @@ def _probe_inputs(tmp_path: Path, *, contaminate: bool = False) -> tuple[Path, P
         ],
         "frame_period_ms": 200,
         "observation_ms": 1000,
+        "inter_pulse_gap_ms": 400,
         "sessions_required": 2,
         "measurement": {"maximum_gap_to_analysis_frame_ms": 600},
         "color": {
@@ -600,3 +602,57 @@ def test_active_probe_audit_counts_contaminated_denominator(
     assert metrics["fates"]["paired"] == 1
     assert metrics["paired_fraction"] == pytest.approx(1 / 3)
     assert metrics["checks"]["paired_fraction"] is False
+
+
+def test_active_probe_forensics_is_read_only_and_measures_windows(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    contract, session_root = _probe_inputs(tmp_path)
+    output = tmp_path / "probe-forensics"
+    forbidden = ("hok_agent.mobile_testbed", "hok_agent.movement_mvp_train")
+    for module in forbidden:
+        sys.modules.pop(module, None)
+    assert (
+        main(
+            [
+                "movement-mvp",
+                "--mode",
+                "active-probe-forensics",
+                "--config",
+                str(contract),
+                "--session-root",
+                str(session_root),
+                "--output-dir",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["schema_version"] == "movement-active-probe-forensics-report-v1"
+    assert report["sessions_found"] == 2
+    assert report["device_input_commands_sent"] == 0
+    assert report["training_called"] is False
+    assert report["test_frames_read"] == 0
+    assert report["report_sha256"]
+    assert {path.name for path in output.iterdir()} == {"report.json"}
+    metrics = report["session_metrics"]["probe-session-001"]
+    assert metrics["frames"] == 30
+    assert metrics["pulses"] == 3
+    assert metrics["control_windows"] == 1
+    assert metrics["per_direction"]["north"]["pulses"] == 1
+    assert metrics["per_direction"]["north"]["hold_projection_median"] == pytest.approx(3.0)
+    assert metrics["green_only_candidates_per_frame"]["many"] >= 1
+    assert report["pooled"]["hold_projection"]["n"] == 6
+    indicators = report["pooled"]["indicators"]
+    assert indicators["pulse_hold_signal_over_idle_auc"] is not None
+    assert indicators["pulse_hold_nonzero_fraction"] >= 0.5
+    assert all(module not in sys.modules for module in forbidden)
+
+
+def test_active_probe_forensics_fails_closed_on_existing_output(tmp_path: Path) -> None:
+    contract, session_root = _probe_inputs(tmp_path)
+    output = tmp_path / "probe-forensics-existing"
+    output.mkdir()
+    with pytest.raises(ValueError, match="output already exists"):
+        run_active_probe_forensics(contract, session_root, output)

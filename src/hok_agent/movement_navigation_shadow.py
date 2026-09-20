@@ -17,6 +17,7 @@ from hok_agent.movement_real_rgb import (
     _filtered_player_positions,
     _goal_direction,
     _load_bound_json,
+    _mask_components,
     _object_sha256,
     _player_candidates,
 )
@@ -1035,6 +1036,491 @@ def run_active_probe_audit(
             "runtime_wall_seconds": time.monotonic() - started,
         }
         report["report_sha256"] = _object_sha256(report)
+        (staging / "report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return report
+
+
+_FORENSIC_NEAR_DUPLICATE_THRESHOLD = 0.5
+_FORENSIC_BASE_REGION_Y = 110.0
+
+
+def _green_only_candidates(
+    frame: np.ndarray, contract: dict[str, object]
+) -> list[tuple[float, float]]:
+    rgb = frame.astype(np.int16)
+    red = rgb[..., 0]
+    green = rgb[..., 1]
+    blue = rgb[..., 2]
+    color = cast(dict[str, object], contract["color"])
+    config = cast(dict[str, object], contract["components"])
+    mask = (
+        (green > int(cast(int, color["green_minimum"])))
+        & (green - red > int(cast(int, color["green_red_margin"])))
+        & (green - blue > int(cast(int, color["green_blue_margin"])))
+    )
+    green_size = cast(list[int], config["green_size"])
+    green_extent = cast(list[int], config["green_extent"])
+    positions: list[tuple[float, float]] = []
+    for item in _mask_components(mask):
+        if (
+            green_size[0] <= item[0] <= green_size[1]
+            and green_extent[0] <= item[3] <= green_extent[1]
+            and green_extent[0] <= item[4] <= green_extent[1]
+            and 5 < item[1] < 123
+            and 5 < item[2] < 123
+        ):
+            positions.append((item[1], item[2]))
+    return positions
+
+
+def _forensic_delta(
+    times: np.ndarray,
+    positions: np.ndarray,
+    start_ms: int,
+    end_ms: int,
+    gap_ms: int,
+) -> dict[str, object] | None:
+    start_index = int(np.searchsorted(times, start_ms, side="right")) - 1
+    end_index = int(np.searchsorted(times, end_ms, side="right")) - 1
+    if (
+        start_index < 0
+        or end_index < 0
+        or int(times[start_index]) < start_ms - gap_ms
+        or int(times[end_index]) < end_ms - gap_ms
+    ):
+        return None
+    start_y, start_x = float(positions[start_index][0]), float(positions[start_index][1])
+    end_y, end_x = float(positions[end_index][0]), float(positions[end_index][1])
+    return {
+        "start_ms": int(times[start_index]),
+        "end_ms": int(times[end_index]),
+        "start_frame": start_index,
+        "end_frame": end_index,
+        "dy": end_y - start_y,
+        "dx": end_x - start_x,
+    }
+
+
+def _rank_auc(positive: list[float], negative: list[float]) -> float | None:
+    if not positive or not negative:
+        return None
+    greater = 0.0
+    for value in positive:
+        for other in negative:
+            if value > other:
+                greater += 1.0
+            elif value == other:
+                greater += 0.5
+    return greater / (len(positive) * len(negative))
+
+
+def _distribution(values: list[float]) -> dict[str, object]:
+    if not values:
+        return {"n": 0, "median": None, "mean": None, "p90": None, "maximum": None}
+    array = np.asarray(values, dtype=np.float64)
+    return {
+        "n": len(values),
+        "median": float(np.median(array)),
+        "mean": float(array.mean()),
+        "p90": float(np.quantile(array, 0.9)),
+        "maximum": float(array.max()),
+    }
+
+
+def _load_forensic_session(
+    directory: Path, contract: dict[str, object]
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    summary = _load_bound_json(directory / "summary.json", "summary_sha256")
+    if (
+        summary.get("schema_version") != contract["session_schema_version"]
+        or summary.get("contract_sha256") != contract["contract_sha256"]
+        or summary.get("derived_roi_rgb_persisted") is not True
+        or summary.get("raw_frames_persisted") is not False
+    ):
+        raise ValueError("active probe forensics session summary differs")
+    frame_parts: list[np.ndarray] = []
+    elapsed_parts: list[np.ndarray] = []
+    valid_parts: list[np.ndarray] = []
+    allowed_parts: list[np.ndarray] = []
+    movement_parts: list[np.ndarray] = []
+    sent_parts: list[np.ndarray] = []
+    opened: list[dict[str, object]] = []
+    for source_row in cast(list[dict[str, object]], summary["observation_shards"]):
+        shard_name = str(source_row["path"])
+        shard_path = directory / "shards" / shard_name
+        if (
+            Path(shard_name).name != shard_name
+            or shard_path.is_symlink()
+            or _file_sha256(shard_path) != source_row["sha256"]
+        ):
+            raise ValueError("active probe forensics shard differs")
+        with np.load(shard_path, allow_pickle=False) as shard:
+            frame_parts.append(shard["minimap_rgb"].copy())
+            elapsed_parts.append(shard["frame_elapsed_ms"].copy())
+            valid_parts.append(shard["screen_valid"].copy())
+            allowed_parts.append(shard["operation_allowed"].copy())
+            movement_parts.append(shard["movement_id"].copy())
+            sent_parts.append(shard["movement_input_sent"].copy())
+        opened.append(
+            {"session": directory.name, "basename": shard_name, "sha256": source_row["sha256"]}
+        )
+    frames = np.concatenate(frame_parts)
+    times = np.concatenate(elapsed_parts).astype(np.int64)
+    screen_valid = np.concatenate(valid_parts).astype(bool)
+    operation_allowed = np.concatenate(allowed_parts).astype(bool)
+    movement_ids = np.concatenate(movement_parts).astype(np.int64)
+    sent = np.concatenate(sent_parts).astype(bool)
+    if (
+        frames.ndim != 4
+        or frames.shape[1:] != (128, 128, 3)
+        or frames.dtype != np.uint8
+        or times.shape != (frames.shape[0],)
+        or not np.all(np.diff(times) > 0)
+    ):
+        raise ValueError("active probe forensics arrays differ")
+    events: list[dict[str, object]] = []
+    for line in (directory / "pulses.jsonl").read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise ValueError("active probe forensics event is not an object")
+        events.append(cast(dict[str, object], payload))
+    bundle: dict[str, object] = {
+        "frames": frames,
+        "times": times,
+        "screen_valid": screen_valid,
+        "operation_allowed": operation_allowed,
+        "movement_ids": movement_ids,
+        "sent": sent,
+        "events": events,
+        "summary": summary,
+    }
+    return bundle, opened
+
+
+def _forensic_indicators(
+    pulse_hold_projections: list[float],
+    idle_projections: list[float],
+    control_displacements: list[float],
+    tracked_motion: dict[str, object],
+    green_motion: dict[str, object],
+    coverage: dict[str, object],
+) -> dict[str, object]:
+    hold_abs = [abs(value) for value in pulse_hold_projections]
+    idle_abs = [abs(value) for value in idle_projections]
+    nonzero = sum(1 for value in pulse_hold_projections if value != 0.0)
+    return {
+        "pulse_hold_signal_over_idle_auc": _rank_auc(hold_abs, idle_abs),
+        "pulse_hold_signal_over_control_auc": _rank_auc(hold_abs, control_displacements),
+        "pulse_hold_nonzero_fraction": nonzero / len(pulse_hold_projections)
+        if pulse_hold_projections
+        else None,
+        "pulse_hold_median_abs_pixels": float(np.median(hold_abs)) if hold_abs else None,
+        "idle_median_abs_pixels": float(np.median(idle_abs)) if idle_abs else None,
+        "tracked_blob_frame_step": tracked_motion,
+        "green_only_blob_frame_step": green_motion,
+        "effective_update_coverage": coverage,
+    }
+
+
+def run_active_probe_forensics(
+    contract_path: Path, session_root: Path, output_dir: Path
+) -> dict[str, object]:
+    started = time.monotonic()
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    directions = tuple(cast(list[str], contract.get("directions", [])))
+    if (
+        contract.get("schema_version") != "movement-active-probe-contract-v1"
+        or contract.get("training_allowed") is not False
+        or contract.get("test_allowed") is not False
+        or directions != _PROBE_DIRECTIONS
+    ):
+        raise ValueError("active probe forensics contract differs")
+    if session_root.is_symlink() or not session_root.is_dir():
+        raise ValueError("active probe forensics session root differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("active probe forensics output already exists")
+    sessions_required = int(cast(int, contract["sessions_required"]))
+    directories = sorted(
+        path
+        for path in session_root.iterdir()
+        if path.is_dir() and (path / "summary.json").is_file()
+    )
+    if not directories or len(directories) > sessions_required:
+        raise ValueError("active probe forensics session count differs")
+    measurement = cast(dict[str, object], contract["measurement"])
+    gap_ms = int(cast(int, measurement["maximum_gap_to_analysis_frame_ms"]))
+    observation_ms = int(cast(int, contract["observation_ms"]))
+    inter_gap_ms = int(cast(int, contract["inter_pulse_gap_ms"]))
+    cue_contract: dict[str, object] = {
+        "color": contract["color"],
+        "components": contract["components"],
+    }
+    exclusion = cast(
+        tuple[int, int, int, int],
+        tuple(map(int, cast(list[int], contract["excluded_ui_xyxy"]))),
+    )
+    duplicate_threshold = _FORENSIC_NEAR_DUPLICATE_THRESHOLD
+    movement_names = list(cast(list[str], contract["movement_names"]))
+    session_metrics: dict[str, object] = {}
+    opened_shards: list[dict[str, object]] = []
+    pooled_hold_projections: list[float] = []
+    pooled_idle_projections: list[float] = []
+    pooled_control_displacements: list[float] = []
+    pooled_tracked_motion: dict[str, object] = {}
+    pooled_green_motion: dict[str, object] = {}
+    pooled_coverage: dict[str, object] = {}
+    for directory in directories:
+        bundle, opened = _load_forensic_session(directory, contract)
+        opened_shards.extend(opened)
+        frames = cast(np.ndarray, bundle["frames"])
+        times = cast(np.ndarray, bundle["times"])
+        events = cast(list[dict[str, object]], bundle["events"])
+        movement_ids = cast(np.ndarray, bundle["movement_ids"])
+        interior, _fixed = _probe_frame_candidates(frames, cue_contract, exclusion)
+        tracked: list[tuple[float, float]] = []
+        green_counts: list[int] = []
+        green_sets: list[list[tuple[float, float]]] = []
+        for index, frame in enumerate(frames):
+            position = _probe_unique_position(interior[index])
+            tracked.append(position if position is not None else (float("nan"), float("nan")))
+            greens = _green_only_candidates(frame, cue_contract)
+            green_sets.append(greens)
+            green_counts.append(len(greens))
+        tracked_array = np.asarray(tracked, dtype=np.float64)
+        localized = ~np.isnan(tracked_array[:, 0])
+        localized_times = times[localized]
+        localized_positions = tracked_array[localized]
+        tracked_steps = (
+            np.hypot(
+                np.diff(localized_positions[:, 0]), np.diff(localized_positions[:, 1])
+            )
+            if len(localized_positions) > 1
+            else np.asarray([])
+        )
+        green_track: list[tuple[float, float] | None] = []
+        previous: tuple[float, float] | None = None
+        for greens in green_sets:
+            if not greens:
+                green_track.append(None)
+                previous = None
+                continue
+            if previous is None:
+                choice = greens[0]
+            else:
+                reference = previous
+                choice = greens[0]
+                best = abs(choice[0] - reference[0]) + abs(choice[1] - reference[1])
+                for candidate in greens[1:]:
+                    distance = abs(candidate[0] - reference[0]) + abs(
+                        candidate[1] - reference[1]
+                    )
+                    if distance < best:
+                        choice = candidate
+                        best = distance
+            green_track.append(choice)
+            previous = choice
+        green_steps: list[float] = []
+        for index in range(1, len(green_track)):
+            current = green_track[index]
+            previous_green = green_track[index - 1]
+            if current is None or previous_green is None:
+                continue
+            green_steps.append(
+                math.hypot(current[0] - previous_green[0], current[1] - previous_green[1])
+            )
+        pulse_events = [event for event in events if event.get("kind") == "pulse"]
+        control_events = [event for event in events if event.get("kind") == "control"]
+        per_direction: dict[str, dict[str, object]] = {}
+        command_hold_fractions: list[float] = []
+        effective_updates: list[float] = []
+        for event in pulse_events:
+            direction = str(event["direction"])
+            vector_y, vector_x = _MOVEMENT_VECTORS[direction]
+            norm = math.hypot(vector_y, vector_x)
+            direction_id = movement_names.index(direction)
+            press_ack_ms = int(cast(int, event["press_ack_ms"]))
+            release_ack_ms = int(cast(int, event["release_ack_ms"]))
+            hold = _forensic_delta(
+                localized_times, localized_positions, press_ack_ms, release_ack_ms, gap_ms
+            )
+            observation = _forensic_delta(
+                localized_times,
+                localized_positions,
+                press_ack_ms,
+                release_ack_ms + observation_ms,
+                gap_ms,
+            )
+            idle = _forensic_delta(
+                localized_times,
+                localized_positions,
+                press_ack_ms - inter_gap_ms - observation_ms,
+                press_ack_ms - inter_gap_ms,
+                gap_ms,
+            )
+            entry = per_direction.setdefault(
+                direction,
+                {
+                    "pulses": 0,
+                    "hold_projections": [],
+                    "hold_displacements": [],
+                    "observation_displacements": [],
+                },
+            )
+            entry["pulses"] = int(cast(int, entry["pulses"])) + 1
+            if hold is not None:
+                projection = (
+                    float(cast(float, hold["dy"])) * vector_y
+                    + float(cast(float, hold["dx"])) * vector_x
+                ) / norm
+                pooled_hold_projections.append(projection)
+                cast(list[float], entry["hold_projections"]).append(projection)
+                cast(list[float], entry["hold_displacements"]).append(
+                    math.hypot(float(cast(float, hold["dy"])), float(cast(float, hold["dx"])))
+                )
+                hold_index = np.flatnonzero((times >= press_ack_ms) & (times <= release_ack_ms))
+                if len(hold_index):
+                    commanded = movement_ids[hold_index] == direction_id
+                    command_hold_fractions.append(float(commanded.mean()))
+                    if len(hold_index) > 1:
+                        diffs = np.abs(
+                            np.diff(frames[hold_index].astype(np.int16), axis=0)
+                        ).mean(axis=(1, 2, 3))
+                        effective_updates.append(float((diffs >= duplicate_threshold).mean()))
+            if observation is not None:
+                cast(list[float], entry["observation_displacements"]).append(
+                    math.hypot(
+                        float(cast(float, observation["dy"])),
+                        float(cast(float, observation["dx"])),
+                    )
+                )
+            if idle is not None:
+                pooled_idle_projections.append(
+                    (float(cast(float, idle["dy"])) * vector_y
+                     + float(cast(float, idle["dx"])) * vector_x) / norm
+                )
+        for event in control_events:
+            delta = _forensic_delta(
+                localized_times,
+                localized_positions,
+                int(cast(int, event["window_start_ms"])),
+                int(cast(int, event["window_end_ms"])),
+                gap_ms,
+            )
+            if delta is not None:
+                pooled_control_displacements.append(
+                    math.hypot(float(cast(float, delta["dy"])), float(cast(float, delta["dx"])))
+                )
+        mean_diffs = np.abs(np.diff(frames.astype(np.int16), axis=0)).mean(axis=(1, 2, 3))
+        gaps = np.diff(times)
+        stalls = [
+            {"start_ms": int(times[index]), "end_ms": int(times[index + 1])}
+            for index in np.flatnonzero(gaps > 1000)
+        ]
+        base_frames = np.flatnonzero(localized & (tracked_array[:, 0] >= _FORENSIC_BASE_REGION_Y))
+        per_direction_summary = {
+            name: {
+                "pulses": int(cast(int, entry["pulses"])),
+                "hold_projection_median": float(
+                    np.median(cast(list[float], entry["hold_projections"]))
+                )
+                if cast(list[float], entry["hold_projections"])
+                else None,
+                "hold_displacement_median": float(
+                    np.median(cast(list[float], entry["hold_displacements"]))
+                )
+                if cast(list[float], entry["hold_displacements"])
+                else None,
+                "observation_displacement_median": float(
+                    np.median(cast(list[float], entry["observation_displacements"]))
+                )
+                if cast(list[float], entry["observation_displacements"])
+                else None,
+            }
+            for name, entry in sorted(per_direction.items())
+        }
+        hold_projection_values: list[float] = []
+        for entry in per_direction.values():
+            hold_projection_values.extend(cast(list[float], entry["hold_projections"]))
+        session_metrics[directory.name] = {
+            "frames": int(frames.shape[0]),
+            "localized_frames": int(localized.sum()),
+            "pulses": len(pulse_events),
+            "control_windows": len(control_events),
+            "per_direction": per_direction_summary,
+            "hold_projection": _distribution(hold_projection_values),
+            "tracked_frame_step": _distribution([float(value) for value in tracked_steps]),
+            "green_only_frame_step": _distribution([float(value) for value in green_steps]),
+            "green_only_candidates_per_frame": {
+                "zero": int(sum(1 for count in green_counts if count == 0)),
+                "one": int(sum(1 for count in green_counts if count == 1)),
+                "many": int(sum(1 for count in green_counts if count > 1)),
+            },
+            "near_duplicate_fraction": float((mean_diffs < duplicate_threshold).mean())
+            if len(mean_diffs)
+            else 0.0,
+            "frame_gap_ms": {
+                "median": float(np.median(gaps)),
+                "p90": float(np.quantile(gaps, 0.9)),
+                "maximum": int(gaps.max()),
+                "stalls_over_1000ms": stalls,
+            },
+            "command_hold_fraction": _distribution(command_hold_fractions),
+            "effective_update_fraction_in_hold": _distribution(effective_updates),
+            "base_region_frames": int(len(base_frames)),
+            "base_region_first_ms": int(times[base_frames[0]]) if len(base_frames) else None,
+            "trajectory_sample": [
+                {
+                    "ms": int(times[index]),
+                    "y": float(tracked_array[index][0]),
+                    "x": float(tracked_array[index][1]),
+                }
+                for index in range(0, len(times), max(1, len(times) // 12))
+                if localized[index]
+            ],
+        }
+        pooled_tracked_motion = _distribution([float(value) for value in tracked_steps])
+        pooled_green_motion = _distribution([float(value) for value in green_steps])
+        pooled_coverage = _distribution(effective_updates)
+    report: dict[str, object] = {
+        "schema_version": "movement-active-probe-forensics-report-v1",
+        "contract_sha256": contract["contract_sha256"],
+        "sessions_found": len(directories),
+        "session_metrics": session_metrics,
+        "pooled": {
+            "hold_projection": _distribution(pooled_hold_projections),
+            "idle_projection": _distribution(pooled_idle_projections),
+            "control_displacement": _distribution(pooled_control_displacements),
+            "indicators": _forensic_indicators(
+                pooled_hold_projections,
+                pooled_idle_projections,
+                pooled_control_displacements,
+                pooled_tracked_motion,
+                pooled_green_motion,
+                pooled_coverage,
+            ),
+        },
+        "opened_shards": opened_shards,
+        "device_input_commands_sent": 0,
+        "training_called": False,
+        "test_frames_read": 0,
+        "gpu_seconds": 0,
+        "runtime_wall_seconds": time.monotonic() - started,
+    }
+    report["report_sha256"] = _object_sha256(report)
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
+    try:
         (staging / "report.json").write_text(
             json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )

@@ -7,22 +7,24 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 ## Current execution state
 
 Updated 2026-09-14: the owner rejected the data-source-limited stop and re-opened the active-probe route under the same no-source constraint.
+Updated 2026-09-20: the owner raised the byte cap, allowed scene adjustment, and asked for a
+forensics-first plan; the read-only forensics verdict below now governs the next decision.
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: run the decisive direction-order comparison, then the registered v2 two-session batch from a fresh scene
-INPUT_EVIDENCE: frozen action-response audit, the two failed batches and the owner directive that no internal channel will be provided
-CHANGED_FILES: probe contracts v1 and v2, audit, planner (cyclic order), runner/CLI, runner fixes and focused tests
+NEXT_ACTION: select a v3 probe design from the forensics verdict before any new device batch
+INPUT_EVIDENCE: frozen action-response audit, the failed v1 batches, the v2 session-001, the offline forensics verdict and the owner directive that no internal channel will be provided
+CHANGED_FILES: probe contracts v1 and v2, audit, forensics, planner (cyclic order), runner/CLI, runner fixes and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: batches 1-3 failed the A gate; diagnosis: smooth 45/90-degree rotations drive 1.4-6.0 px per 0.5-1.0 s press with correct directions, while the seeded permutation drives about 0 px; protocol v2 (cyclic order, 1.0 s hold, same gates) is registered as f120239b
+RESULT: the v1 batches and the v2-protocol session-001 all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 118,127,296 total (batch 1: 88,820,785; final batch: 29,306,511); contract budget 52,428,800
+NEW_BYTES: 118,127,296 used to date (batch 1: 88,820,785; final batch: 29,306,511); the v1/v2 contract cap 52,428,800 is exceeded and is superseded by an owner-authorized question cap of 268,435,456
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: v2 runs from a fresh scene; v1 batches stay recorded as failed evidence
+NEXT_DECISION: forensics rules out audit pairing and detector decoy as the main cause and points to scene and measurement; choose a v3 design (runtime free-movement guard, known-direction self-check, shorter sessions) before another device batch
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -35,6 +37,32 @@ NEXT_DECISION: v2 runs from a fresh scene; v1 batches stay recorded as failed ev
   new valid source, so this simulator batch is closed and cannot substitute another training cycle.
 - Planning and documentation time for this reset was not instrumented and is UNKNOWN; it is not
   included in the unstarted N1/N2 0/12 h figure.
+
+### Active-probe forensics verdict (2026-09-20)
+
+- Added `movement-mvp --mode active-probe-forensics`, a read-only offline analysis of an already
+  persisted active-probe session. It reuses the frozen shards and pulse log, writes only
+  `report.json`, sends no device input, reads no test frame, trains nothing and opens no model.
+- Ran it on `active-probe-v8/session-001` (contract `f120239b`, ROIs `488d1e4a`). Report self-hash
+  `53b6771d6019c195676bbc0b2ceb403f87ad960af1cb121caebd71e3ac6edd36`, 7,416 bytes, 2.15 s, output
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/active-probe-forensics-v1`.
+- Pulse-versus-idle hold-displacement AUC was 0.535 and pulse-versus-control was 0.602, so the
+  commanded pulse is not separable from idle drift. Pulse-hold median absolute projection was
+  0.344 px against 0.317 px idle.
+- Median commanded-direction displacement was at most 0.35 px in every one of the eight directions.
+  The only large value, a north-east mean of 3.2 px, is an artifact of the recall jump below, not a
+  control response.
+- The tracked marker is the moving hero rather than a fixed decoy: it wandered and ended at the
+  base, and the green-plus-red pairing filter removed a fixed green UI element near `x=8`. Most
+  frames still contain two or more green blobs, so the single-candidate tracker stays fragile.
+- The scene invalidated the probe: a 19.6 px single-frame jump at 86.2 s moved the hero to the base,
+  182 of 609 frames sat at `y>=110`, and 4 of 47 pulse intervals compressed below the 2400 ms
+  schedule after a 5750 ms capture stall.
+- 44.6 percent of consecutive frames were near duplicates and the effective-update fraction inside a
+  hold window was 0.58, so the 1 px gate sits close to the measurement noise floor.
+- Verdict: audit pairing is not the cause (corrected localized-baseline windows still show no
+  signal), the detector is not simply tracking a decoy, and the failure is scene- and
+  measurement-driven. A v3 probe design is required before another device batch.
 
 ### 2026-09-09 development review and factual corrections
 

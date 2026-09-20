@@ -81,6 +81,7 @@ def _parser() -> argparse.ArgumentParser:
             "real-navigation-shadow",
             "action-response-identity-audit",
             "active-probe-audit",
+            "active-probe-forensics",
             "real-player-tracking-audit",
             "real-player-flow-audit",
             "joystick-visibility",
@@ -1822,6 +1823,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 from hok_agent.movement_navigation_shadow import run_active_probe_audit
 
                 result = run_active_probe_audit(
+                    args.config, args.session_root, args.output_dir
+                )
+            elif args.mode == "active-probe-forensics":
+                if args.session_root is None:
+                    raise ValueError("active-probe-forensics requires --session-root")
+                from hok_agent.movement_navigation_shadow import (
+                    run_active_probe_forensics,
+                )
+
+                result = run_active_probe_forensics(
                     args.config, args.session_root, args.output_dir
                 )
             elif args.mode == "real-navigation-shadow":
