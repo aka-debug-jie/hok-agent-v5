@@ -14,17 +14,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: run the registered v3 two-session batch from a fresh open-field scene, then audit it
-INPUT_EVIDENCE: frozen action-response audit, the failed v1 batches, the v2 session-001, the offline forensics verdict and the owner directive that no internal channel will be provided
+NEXT_ACTION: isolate the command-versus-displacement attribution before any further batch
+INPUT_EVIDENCE: frozen action-response audit, the failed v1 batches, the v2 session-001, the offline forensics verdict, the failed v3 batch and the owner directive that no internal channel will be provided
 CHANGED_FILES: probe contracts v1, v2 and v3, audit, forensics, declared region/stall/drift guards, planner (cyclic order), runner/CLI, runner fixes and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: the v1 batches and the v2-protocol session-001 all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; contract v3 (c67930ce) adds a declared free-movement region, a capture-stall guard, a press-start-drift guard, a 2.5 s hold and a 96 s 24-pulse schedule
+RESULT: the v1 batches, the v2-protocol session-001 and the v3 two-session batch all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; the v3 2.5 s hold raised the pooled pulse-versus-idle AUC to 0.776 with a 1.40 px median against 0.30 px idle, but only 3 of 23 paired pulses matched the commanded direction, coverage fell to 0.751 and 0.398, and the new guards correctly failed a 2662 ms capture stall and a 26 s detector dropout
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 118,127,296 used to date (batch 1: 88,820,785; final batch: 29,306,511); the v1/v2 contract cap 52,428,800 is exceeded and is superseded by an owner-authorized question cap of 268,435,456
+NEW_BYTES: 147,488,091 used to date (earlier batches 118,127,296; v3 batch and its diagnostics 29,360,795); the v1/v2 contract cap 52,428,800 is exceeded and is superseded by an owner-authorized question cap of 268,435,456
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: run the v3 batch only after the owner resets the hero to the open field; a session that leaves the declared region or stalls in capture now fails its gates instead of passing silently
+NEXT_DECISION: the measurement problem is solved and the control-attribution problem is isolated; decide whether the commanded direction fails because of the joystick geometry or because the hero is being moved autonomously, and test that offline or with one bounded manual check before another batch
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -84,6 +84,26 @@ NEXT_DECISION: run the v3 batch only after the owner resets the hero to the open
 - Added focused tests for the satisfied and violated region guard, and kept the forensics mode and
   all earlier probe tests green. Ruff, strict mypy on the touched modules and the project safety
   check passed. The v3 batch has not run on a device yet.
+
+### Active-probe v3 batch result (2026-09-20)
+
+- Ran the registered v3 batch `active-probe-v9/session-001` and `session-002` on the owner testbed
+  with the same serial, identity and layouts as the earlier probe sessions. Both sessions are
+  structurally `PASSED` with 24 pulses, eight control windows, zero hard stops and about 96 s each.
+- Batch audit report `47b628eda29d426c` is `ACTIVE_PROBE_GATES_FAILED` for both sessions. The v3
+  hold change worked: the pooled pulse-versus-idle displacement AUC is 0.776 with a 1.40 px median
+  pulse displacement against 0.30 px idle, versus 0.535 and 0.34 px for v8.
+- The failure is now control attribution rather than measurement. Only 3 of 23 paired pulses moved
+  in the commanded direction, the median commanded projection is negative in both sessions, and
+  localization coverage is 0.751 and 0.398 against the 0.8 gate.
+- The new guards earned their place: session-001 failed on a 2662 ms capture stall and a single
+  27.9 px tracker switch, and session-002 failed on a 26 s detector dropout, a press-start drift and
+  one contaminated pulse. Under v2 these defects passed silently.
+- Both sessions stayed inside the declared free-movement region, so the region guard is untested on
+  a real violation but did not block valid data.
+- Result is recorded as failed evidence. No threshold was changed and the v3 batch is not reused as
+  passing evidence. The next question is whether the commanded direction fails from joystick
+  geometry or from autonomous hero movement.
 
 ### 2026-09-09 development review and factual corrections
 
