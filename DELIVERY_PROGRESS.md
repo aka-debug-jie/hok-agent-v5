@@ -14,17 +14,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: isolate the command-versus-displacement attribution before any further batch
-INPUT_EVIDENCE: frozen action-response audit, the failed v1 batches, the v2 session-001, the offline forensics verdict, the failed v3 batch and the owner directive that no internal channel will be provided
+NEXT_ACTION: replace the fragile minimap hero-marker detector and constrain the scene to a safe open band, then re-run
+INPUT_EVIDENCE: frozen action-response audit, the failed v1/v2/v3 batches, the offline forensics verdict, the control-relation checks below and the owner directive that no internal channel will be provided
 CHANGED_FILES: probe contracts v1, v2 and v3, audit, forensics, declared region/stall/drift guards, planner (cyclic order), runner/CLI, runner fixes and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting and pulse-versus-control separation
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: the v1 batches, the v2-protocol session-001 and the v3 two-session batch all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; the v3 2.5 s hold first appeared to raise the pulse-versus-idle AUC to 0.776, but that was a window-length artifact, and with the idle window matched to the hold the corrected AUC is 0.439 with a 2.37 px idle median projection above the 1.40 px pulse median, so no control signal is detectable at either hold length; only 3 of 23 paired pulses matched the commanded direction, coverage fell to 0.751 and 0.398, and the new guards correctly failed a 2662 ms capture stall and a 26 s detector dropout
+RESULT: the v1 batches, the v2-protocol session-001 and the v3 two-session batch all failed the A gate; the cyclic order also drove about 0 px per pulse, so the earlier order diagnosis is overturned; offline forensics of active-probe-v8/session-001 (report 53b6771d) gives a pulse-versus-idle hold-displacement AUC of 0.535, a median commanded displacement of at most 0.35 px in every direction, a recall-to-base jump of 19.6 px at 86.2 s and 182/609 frames in the base region; the v3 2.5 s hold first appeared to raise the pulse-versus-idle AUC to 0.776, but that was a window-length artifact, and with the idle window matched to the hold the corrected AUC is 0.439 with a 2.37 px idle median projection above the 1.40 px pulse median, so no control signal is detectable at either hold length; bounded control checks now show the input itself is sound and the gate fails on detection and scene
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 147,488,091 used to date (earlier batches 118,127,296; v3 batch and its diagnostics 29,360,795); the v1/v2 contract cap 52,428,800 is exceeded and is superseded by an owner-authorized question cap of 268,435,456
+NEW_BYTES: 169,012,612 used to date (earlier batches 118,127,296; v3 batch 29,360,795; control checks and the aborted v10 run 21,524,521); the v1/v2 contract cap 52,428,800 is exceeded and is superseded by an owner-authorized question cap of 268,435,456
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: the measurement method is now corrected and still shows no commanded displacement, while the owner reports that manual joystick input moves the hero; resolve why the programmatic persistent-joystick sequence produces no commanded displacement before designing another batch
+NEXT_DECISION: the control relation is demonstrated by bounded checks, so the next blocker is the minimap hero-marker detector and the scene band; fix those before another gated batch
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -112,6 +112,27 @@ NEXT_DECISION: the measurement method is now corrected and still shows no comman
 - Result is recorded as failed evidence. No threshold was changed and the v3 batch is not reused as
   passing evidence. The next question is whether the commanded direction fails from joystick
   geometry or from autonomous hero movement.
+
+### Active-probe control-relation check (2026-09-20)
+
+- The gated batches could not separate control from detection, so three bounded checks were run
+  outside the formal protocol. They persist no run artifact and change no contract or threshold.
+- Zero-input capture `active-probe-v9-noinput/session-001` ran the full v3 schedule with
+  `--enable-input` absent. It sent zero input commands, the hero never moved (467/467 frames
+  localized at a single position, path 0 px), and the detector was perfect. Every movement seen in
+  the gated batches is therefore caused by our own input, not by the game.
+- A bounded live check held one direction at a time from a static start. North moved the marker up
+  (y decreasing), east moved it right, west moved it left, and release stopped the hero, which then
+  stayed at one position for 15 s. A repeated-cycle check with the same 2.5 s hold and 0.5 s gap,
+  first for the four cardinals and then for the full cyclic order including diagonals, moved the
+  marker in the commanded direction every time, with the guard watchdog running.
+- The gated batches fail on the minimap hero-marker detector, not on control. The red-plus-green
+  pairing detector locates the hero in only 0.75 and 0.40 of frames in the two v3 sessions, and a
+  largest-green or continuity tracker is worse because two fixed green UI blobs sit at the
+  bottom-left and top-right of the minimap. The stored minimap frames also show the hero wandering
+  into terrain, and one re-run aborted at 51 s when the hero died in enemy territory.
+- Consequence: the A gate is measuring an unreliable detector in an unconstrained scene. The next
+  work is a robust hero-marker detector plus a safe open scene band, not another gated batch.
 
 ### 2026-09-09 development review and factual corrections
 
