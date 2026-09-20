@@ -3158,8 +3158,12 @@ def _goal_navigation_cue(
     ]
     green_size = cast(list[int], components["green_size"])
     green_extent = cast(list[int], components["green_extent"])
-    pair_distance = float(cast(float, components["maximum_pair_l1_distance"]))
     extension = contract.get("hero_cue_extension")
+    pair_distance = float(cast(float, components["maximum_pair_l1_distance"]))
+    if isinstance(extension, dict):
+        pair_distance = float(
+            cast(float, extension.get("maximum_pair_l1_distance", pair_distance))
+        )
     fallback_boxes: list[tuple[int, int, int, int]] = []
     allow_green_fallback = False
     if isinstance(extension, dict):
@@ -3414,7 +3418,7 @@ def run_mobile_goal_navigation(
                             failure = "LEFT_FREE_MOVEMENT_REGION"
                             break
                 if position is None:
-                    previous_position = None
+                    pass
                 else:
                     if (
                         previous_position is not None
@@ -3615,18 +3619,10 @@ def run_mobile_goal_navigation_staged(
         "control_output": bool(enable_input),
     }
     summary["summary_sha256"] = _summary_identity(summary)
-    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.tmp-", dir=output.parent))
-    try:
-        (staging / "staged-summary.json").write_text(
-            json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        staging.rename(output)
-    except BaseException:
-        if staging.exists():
-            for path in staging.iterdir():
-                path.unlink()
-            staging.rmdir()
-        raise
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "staged-summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return summary
 
 
