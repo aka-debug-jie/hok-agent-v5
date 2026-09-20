@@ -6006,6 +6006,19 @@ def _active_probe_cyclic_order(directions: list[str], pulses_per_direction: int)
     return list(directions) * pulses_per_direction
 
 
+def _active_probe_opposite_pair_order(
+    directions: list[str], pulses_per_direction: int
+) -> list[str]:
+    if directions != list(MOVEMENTS[1:]) or len(directions) % 2:
+        raise MobileTestbedError("active probe opposite pair order differs")
+    half = len(directions) // 2
+    cycle: list[str] = []
+    for index in range(half):
+        cycle.append(directions[index])
+        cycle.append(directions[index + half])
+    return cycle * pulses_per_direction
+
+
 def plan_active_probe_schedule(contract: dict[str, object]) -> list[dict[str, object]]:
     directions = cast(list[str], contract["directions"])
     pulses_per_direction = int(cast(int, contract["pulses_per_direction"]))
@@ -6022,6 +6035,8 @@ def plan_active_probe_schedule(contract: dict[str, object]) -> list[dict[str, ob
         order = _active_probe_direction_order(directions, pulses_per_direction, seed)
     elif order_kind == "cyclic-rotation-of-all-directions":
         order = _active_probe_cyclic_order(directions, pulses_per_direction)
+    elif order_kind == "opposite-pairs":
+        order = _active_probe_opposite_pair_order(directions, pulses_per_direction)
     else:
         raise MobileTestbedError("active probe direction order differs")
     controls_after = len(order) // control_windows if control_windows else 0

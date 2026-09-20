@@ -225,6 +225,29 @@ NEXT_DECISION: the control relation is demonstrated with a stable instrument, an
   map. The remaining decision is whether to authorize a versioned detector change or to formalize
   the bounded controlled-response check as the gate-A artifact.
 
+### Opposite-pair drift-cancelling design and v9 batch (2026-09-20)
+
+- The gated sessions keep showing a hero drift that the commanded directions cannot explain, so a
+  drift-cancelling design was added: for an opposite pair, `proj(d) + proj(-d) = 2 x commanded
+  response` because the drift term cancels. The planner gained an `opposite-pairs` order
+  (north, south, north_east, south_west, east, west, south_east, north_west) and the audit gained a
+  `paired_response` metric and gate, both opt-in through the contract, so v1-v8 are unchanged.
+- Contract v9 `configs/movement_active_probe_v9.json` (self-hash
+  `92594112f10ca42d972d023f3b1496180bcc143447a50ffe689b5b4c0245eded`) uses the fixed transport, the
+  green-ring fallback cue, the central movement band and two opposite-pair cycles.
+- Batch `active-probe-v21/session-001` dispatched all 16 pulses and the audit is
+  `ACTIVE_PROBE_GATES_FAILED`: coverage 0.997 and paired fraction 0.938, but the paired responses
+  are `east/west` +1.35, `north/south` -1.25, `north_east/south_west` -0.74 and
+  `south_east/north_west` -0.42 px, i.e. the drift-cancelling response is near zero rather than the
+  expected two-times the commanded displacement. Session-002 was not run.
+- The bounded live checks with the same transport and the same 50 ms settle still move the marker in
+  the commanded direction in 7 of 8 and 10 of 10 measured pulses with 3-14 px displacements. The
+  gated runner does not reproduce that, and the difference is not yet explained; the candidates
+  ruled out so far are the watchdog, the settle, the scene, the hero start position and the
+  direction order.
+- This is recorded as failed evidence. The transport fix stands; the gated instrument still does
+  not measure the response that the bounded checks show.
+
 ### 2026-09-09 development review and factual corrections
 
 - Code inspection: `run_change_geometry_replay` in movement_goal_canvas.py appends plain step

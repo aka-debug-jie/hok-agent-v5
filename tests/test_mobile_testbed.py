@@ -1655,3 +1655,19 @@ def test_active_probe_schedule_keeps_serialized_observation_windows() -> None:
         == contract["control_window_ms"]
         for entry in controls
     )
+
+
+def test_active_probe_opposite_pair_order_alternates_opposites() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._active_probe_contract(
+        root / "configs/movement_active_probe_v9.json"
+    )
+    assert len(digest) == 64
+    schedule = mobile_testbed.plan_active_probe_schedule(contract)
+    order = [entry["direction"] for entry in schedule if entry["kind"] == "pulse"]
+    ring = list(mobile_testbed.MOVEMENTS[1:])
+    half = len(ring) // 2
+    assert len(order) == 16
+    for index in range(0, len(order), 2):
+        first, second = order[index], order[index + 1]
+        assert ring.index(second) == (ring.index(first) + half) % len(ring)

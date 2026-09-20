@@ -1000,6 +1000,24 @@ def _probe_session_metrics(
     fixed_responsive = [row for row in fixed_rows if bool(row["fixed_ui_responsive"])]
     fixed_ui_responsive_fraction = len(fixed_responsive) / len(fixed_rows) if fixed_rows else 0.0
     pulse_median_projection = float(np.median(pulse_projections)) if pulse_projections else 0.0
+    paired_response_pixels: dict[str, float] = {}
+    if str(contract.get("direction_order", "")) == "opposite-pairs":
+        directions = list(cast(list[str], contract["directions"]))
+        half = len(directions) // 2
+        by_direction: dict[str, list[float]] = {}
+        for row in paired_rows:
+            value = row["projection_pixels"]
+            if value is None:
+                continue
+            by_direction.setdefault(str(row["direction"]), []).append(float(cast(float, value)))
+        for index in range(half):
+            first = directions[index]
+            second = directions[index + half]
+            if first in by_direction and second in by_direction:
+                paired_response_pixels[f"{first}/{second}"] = (
+                    float(np.median(by_direction[first]))
+                    + float(np.median(by_direction[second]))
+                ) / 2.0
     control_p95 = (
         float(np.quantile(np.asarray(control_displacements), 0.95))
         if control_displacements
@@ -1032,6 +1050,10 @@ def _probe_session_metrics(
         <= int(cast(int, gates["maximum_identity_switch_events"])),
     }
     region = contract.get("free_movement_region")
+    if paired_response_pixels:
+        checks["paired_response"] = min(paired_response_pixels.values()) >= float(
+            cast(float, gates["minimum_paired_response_pixels"])
+        )
     region_violation_frames = 0
     region_maximum_streak = 0
     if isinstance(region, dict):
@@ -1086,6 +1108,7 @@ def _probe_session_metrics(
         "direction_correct_fraction": direction_correct_fraction,
         "paired_directions": dict(sorted(paired_directions.items())),
         "pulse_median_projection_pixels": pulse_median_projection,
+        "paired_response_pixels": dict(sorted(paired_response_pixels.items())),
         "control_p95_displacement_pixels": control_p95,
         "fixed_ui_pairs": len(fixed_rows),
         "fixed_ui_responsive_fraction": fixed_ui_responsive_fraction,
