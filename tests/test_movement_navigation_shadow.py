@@ -10,6 +10,7 @@ import pytest
 
 from hok_agent.cli import main
 from hok_agent.movement_navigation_shadow import (
+    _probe_tracked_positions,
     _response_candidate_pairs,
     run_action_response_identity_audit,
     run_active_probe_forensics,
@@ -744,3 +745,62 @@ def test_active_probe_audit_rejects_region_violation(
     assert metrics["checks"]["free_movement_region"] is False
     assert metrics["region_maximum_streak"] > 5
     assert "capture_stall" not in metrics["checks"]
+
+
+def test_probe_tracked_positions_associates_and_rejects() -> None:
+    tracker: dict[str, object] = {
+        "fixed_ui_boxes_xyxy": [[112, 0, 128, 16]],
+        "maximum_association_l1_distance": 3.0,
+        "seed_pair_l1_distance": 5.0,
+    }
+    analysis = np.asarray([True, True, True, True, False, True], dtype=bool)
+    interior: list[list[tuple[float, float, float]]] = [
+        [(60.0, 60.0, 2.0)],
+        [(60.5, 61.0, 2.0)],
+        [(75.0, 60.0, 2.0)],
+        [(8.0, 120.0, 1.0), (60.0, 60.5, 2.0)],
+        [(60.0, 60.5, 2.0)],
+        [(61.0, 60.0, 2.0)],
+    ]
+    tracked = _probe_tracked_positions(interior, analysis, tracker)
+    assert tracked[0] == (60.0, 60.0, 2.0)
+    assert tracked[1] == (60.5, 61.0, 2.0)
+    assert tracked[2] is None
+    assert tracked[3] == (60.0, 60.5, 2.0)
+    assert tracked[4] is None
+    assert tracked[5] == (61.0, 60.0, 2.0)
+
+
+def test_active_probe_audit_applies_declared_hero_tracker(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tracker: dict[str, object] = {
+        "hero_tracker": {
+            "fixed_ui_boxes_xyxy": [[112, 0, 128, 16]],
+            "maximum_association_l1_distance": 8.0,
+            "seed_pair_l1_distance": 7.0,
+        }
+    }
+    contract, session_root = _probe_inputs(tmp_path, extra_contract=tracker)
+    output = tmp_path / "probe-audit-tracker"
+    assert (
+        main(
+            [
+                "movement-mvp",
+                "--mode",
+                "active-probe-audit",
+                "--config",
+                str(contract),
+                "--session-root",
+                str(session_root),
+                "--output-dir",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    report = json.loads(capsys.readouterr().out)
+    metrics = report["session_metrics"]["probe-session-001"]
+    assert metrics["analysis_coverage"] == 1.0
+    assert metrics["paired"] == 2
+    assert metrics["identity_switch_events"] == 0

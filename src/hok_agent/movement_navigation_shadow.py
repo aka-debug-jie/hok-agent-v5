@@ -576,6 +576,58 @@ def _probe_frame_candidates(
     return interior, fixed
 
 
+def _probe_tracked_positions(
+    interior: list[list[tuple[float, float, float]]],
+    analysis: np.ndarray,
+    tracker: dict[str, object],
+) -> list[tuple[float, float, float] | None]:
+    boxes = [
+        tuple(int(value) for value in box)
+        for box in cast(list[list[int]], tracker.get("fixed_ui_boxes_xyxy", []))
+    ]
+    gate = float(cast(float, tracker["maximum_association_l1_distance"]))
+    seed_gate = float(cast(float, tracker["seed_pair_l1_distance"]))
+    positions: list[tuple[float, float, float] | None] = []
+    previous: tuple[float, float] | None = None
+    for index, row in enumerate(interior):
+        if not bool(analysis[index]):
+            positions.append(None)
+            previous = None
+            continue
+        candidates = [
+            candidate
+            for candidate in row
+            if not any(
+                x0 <= candidate[1] < x1 and y0 <= candidate[0] < y1
+                for x0, y0, x1, y1 in boxes
+            )
+        ]
+        if not candidates:
+            positions.append(None)
+            previous = None
+            continue
+        if previous is None:
+            seeded = [candidate for candidate in candidates if candidate[2] <= seed_gate]
+            pool = seeded if seeded else candidates
+            choice = min(pool, key=lambda candidate: candidate[2])
+        else:
+            reference = previous
+            choice = candidates[0]
+            best = abs(choice[0] - reference[0]) + abs(choice[1] - reference[1])
+            for candidate in candidates[1:]:
+                distance = abs(candidate[0] - reference[0]) + abs(candidate[1] - reference[1])
+                if distance < best:
+                    choice = candidate
+                    best = distance
+            if best > gate:
+                positions.append(None)
+                previous = None
+                continue
+        previous = (choice[0], choice[1])
+        positions.append(choice)
+    return positions
+
+
 def _probe_last_frame(
     times: np.ndarray, analysis: np.ndarray, target_ms: int, gap_ms: int
 ) -> int | None:
@@ -823,6 +875,12 @@ def _probe_session_metrics(
     )
     interior, fixed = _probe_frame_candidates(frames, cue_contract, exclusion)
     analysis = screen_valid & operation_allowed
+    tracker = contract.get("hero_tracker")
+    if isinstance(tracker, dict):
+        interior = [
+            [position] if position is not None else []
+            for position in _probe_tracked_positions(interior, analysis, tracker)
+        ]
     resolved = np.asarray([len(row) == 1 for row in interior], dtype=bool)
     ambiguous = np.asarray([len(row) > 1 for row in interior], dtype=bool)
     localized = analysis & resolved
