@@ -300,6 +300,29 @@ NEXT_DECISION: both current milestones are recorded; decide the next milestone
 - This closes the goal-navigation milestone. Both current milestones are recorded and the next one
   is selected from the convergence plan.
 
+### Staged admission for the A milestone (2026-09-20)
+
+- Added `mobile-goal-navigation-staged`, which runs the fixed start-to-end navigation in staged
+  rounds 1 -> 3 -> 10 and advances only when every round of a stage passed. Takeovers are
+  operator-reported and counted separately from failures, matching the plan's A requirement to
+  report takeover and failure separately. A round is one complete navigation that must stop on
+  arrival. Versioned contract `configs/movement_goal_navigation_a1.json` declares the fixed
+  start-to-end route.
+- The driver, the contract and focused tests are in place and `make check` passes. The rounds do
+  not yet pass their gates, and the blocker is the minimap hero cue rather than the navigation
+  logic:
+  - the hero cue intermittently loses the hero for long stretches (localization 0.04-0.75 on some
+    rounds, against the 0.8 gate) while the same cue locks on instantly in a short live check;
+  - widening the extension's pairing distance to 14 px fixed the seeding in one area and produced
+    correct arrivals (3.12 px error, 0.95 localization) but introduced four identity jumps;
+  - tightening the re-acquisition gate to 8 px removed the jumps and collapsed localization.
+- The earlier goal-navigation milestone remains verified with its own contract
+  (`goal-navigation-v8-1/2`, route `(64,88) -> (48,48) -> (64,64)`, localization 0.92/0.91, zero
+  switches, arrivals 3.03/2.98 px). The A-stage route and session length expose the cue's
+  reliability limit, which the short milestone run did not.
+- Next work is a more reliable hero cue for closed-loop navigation over longer routes; the staged
+  driver itself is ready and unchanged by that work.
+
 ### 2026-09-09 development review and factual corrections
 
 - Code inspection: `run_change_geometry_replay` in movement_goal_canvas.py appends plain step

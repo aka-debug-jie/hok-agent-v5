@@ -34,7 +34,7 @@
     ],
     "reset_after_missing_frames": 10
   },
-  "contract_sha256": "36ecd8f0d02dd1e5608a724b2b029d6572ee7e22c5ec2615c894584bf7c213f1",
+  "contract_sha256": "59a5f31abe4782a7ff25b2b7ffce756b0d007ea9274d635042ab5a25e602d1a2",
   "device_session_requirements": [
     "fresh-guarded-testbed-session",
     "local-identity-and-layout",
@@ -103,6 +103,7 @@
       140
     ],
     "maximum_pair_l1_distance": 14.0,
+    "maximum_reacquisition_l1_distance": 8.0,
     "mode": "green-ring-fallback-when-frozen-cue-is-absent"
   },
   "hero_tracker": {

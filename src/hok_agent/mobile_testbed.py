@@ -3190,8 +3190,12 @@ def _goal_navigation_cue(
         else pair_distance
     )
     paired: tuple[float, float, float] | None = None
+    paired_nearest: tuple[float, float, float] | None = None
     fallback: tuple[float, float, float] | None = None
     largest: tuple[float, float, float] | None = None
+    reacquisition = float(
+        cast(float, extension.get("maximum_reacquisition_l1_distance", 1e9))
+    ) if isinstance(extension, dict) else 1e9
     for component in _goal_navigation_components(green_mask):
         size, mean_y, mean_x, height, width = component
         if not (
@@ -3211,6 +3215,12 @@ def _goal_navigation_cue(
             and (paired is None or size > paired[0])
         ):
             paired = (float(size), mean_y, mean_x)
+            if previous is not None:
+                distance = abs(mean_y - previous[0]) + abs(mean_x - previous[1])
+                if distance <= reacquisition and (
+                    paired_nearest is None or distance < paired_nearest[0]
+                ):
+                    paired_nearest = (float(distance), mean_y, mean_x)
         if not in_box(mean_y, mean_x, frozen_box) and not inside(mean_y, mean_x):
             if largest is None or size > largest[0]:
                 largest = (float(size), mean_y, mean_x)
@@ -3220,13 +3230,13 @@ def _goal_navigation_cue(
                     fallback is None or distance < fallback[0]
                 ):
                     fallback = (float(distance), mean_y, mean_x)
-    if previous is not None:
-        if not allow_green_fallback:
-            return (paired[1], paired[2]) if paired is not None else None
-        return (fallback[1], fallback[2]) if fallback is not None else None
+    if previous is not None and allow_green_fallback and fallback is not None:
+        return (fallback[1], fallback[2])
+    if previous is not None and paired_nearest is not None:
+        return (paired_nearest[1], paired_nearest[2])
     if paired is not None:
         return (paired[1], paired[2])
-    if allow_green_fallback and largest is not None:
+    if previous is None and allow_green_fallback and largest is not None:
         return (largest[1], largest[2])
     return None
 
