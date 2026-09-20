@@ -3529,6 +3529,107 @@ def run_mobile_goal_navigation(
     return summary
 
 
+GOAL_NAVIGATION_STAGED_SCHEMA = "hok-agent-mobile-goal-navigation-staged-v1"
+GOAL_NAVIGATION_DEFAULT_STAGES = (1, 3, 10)
+
+
+def run_mobile_goal_navigation_staged(
+    *,
+    serial: str,
+    contract_path: Path,
+    visual_layout_path: Path,
+    execution_layout_path: Path,
+    observation_rois_path: Path,
+    output_dir: Path,
+    stages: tuple[int, ...] = GOAL_NAVIGATION_DEFAULT_STAGES,
+    takeovers: int = 0,
+    enable_input: bool = True,
+) -> dict[str, object]:
+    """Run the fixed start-to-end navigation in staged rounds 1 -> 3 -> 10.
+
+    A round is one complete navigation from the declared start to the declared end that must stop
+    on arrival. Each stage runs its rounds and the run advances only when every round of the stage
+    passed its gates. Takeovers are operator-reported and counted separately from failures.
+    """
+    contract, contract_sha = _goal_navigation_contract(contract_path)
+    if not stages or any(stage <= 0 for stage in stages):
+        raise MobileTestbedError("goal navigation stages are invalid")
+    if takeovers < 0:
+        raise MobileTestbedError("goal navigation takeovers are invalid")
+    output = _new_large_output(output_dir)
+    stage_results: list[dict[str, object]] = []
+    rounds_total = 0
+    arrivals = 0
+    failures = 0
+    stopped_at: int | None = None
+    for stage in stages:
+        rounds: list[dict[str, object]] = []
+        for index in range(1, stage + 1):
+            round_summary = run_mobile_goal_navigation(
+                serial=serial,
+                contract_path=contract_path,
+                visual_layout_path=visual_layout_path,
+                execution_layout_path=execution_layout_path,
+                observation_rois_path=observation_rois_path,
+                output_dir=output / f"stage-{stage}" / f"round-{index}",
+                enable_input=enable_input,
+            )
+            rounds_total += 1
+            if bool(round_summary.get("arrived")):
+                arrivals += 1
+            if not bool(round_summary.get("gates_passed")):
+                failures += 1
+            rounds.append(
+                {
+                    "round": index,
+                    "status": round_summary.get("status"),
+                    "arrived": round_summary.get("arrived"),
+                    "arrival_error_pixels": round_summary.get("arrival_error_pixels"),
+                    "localized_fraction": round_summary.get("localized_fraction"),
+                    "identity_switch_events": round_summary.get("identity_switch_events"),
+                    "duration_seconds": round_summary.get("duration_seconds"),
+                    "gates_passed": round_summary.get("gates_passed"),
+                    "failure": round_summary.get("failure"),
+                    "summary_sha256": round_summary.get("summary_sha256"),
+                }
+            )
+        passed = all(bool(round.get("gates_passed")) for round in rounds)
+        stage_results.append({"stage": stage, "passed": passed, "rounds": rounds})
+        if not passed:
+            stopped_at = stage
+            break
+    summary: dict[str, object] = {
+        "schema_version": GOAL_NAVIGATION_STAGED_SCHEMA,
+        "status": "PASSED" if stopped_at is None else "FAILED",
+        "contract_sha256": contract_sha,
+        "stages": list(stages),
+        "stopped_at_stage": stopped_at,
+        "stage_results": stage_results,
+        "rounds_total": rounds_total,
+        "arrivals": arrivals,
+        "takeovers": takeovers,
+        "failures": failures,
+        "arrival_rate": (arrivals / rounds_total) if rounds_total else 0.0,
+        "training_eligible": False,
+        "manual_annotation_required": False,
+        "control_output": bool(enable_input),
+    }
+    summary["summary_sha256"] = _summary_identity(summary)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.tmp-", dir=output.parent))
+    try:
+        (staging / "staged-summary.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        staging.rename(output)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return summary
+
+
 def _publish_operation_base_dataset(
     output: Path,
     rows: list[dict[str, object]],

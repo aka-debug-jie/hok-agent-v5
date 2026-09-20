@@ -1707,3 +1707,20 @@ def test_goal_navigation_contract_rejects_tampering(tmp_path: Path) -> None:
     tampered.write_text(json.dumps(value), encoding="utf-8")
     with pytest.raises(mobile_testbed.MobileTestbedError):
         mobile_testbed._goal_navigation_contract(tampered)
+
+
+def test_goal_navigation_staged_rejects_invalid_inputs(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract = root / "configs/movement_goal_navigation_a1.json"
+    for stages, takeovers in (((0,), 0), ((1,), -1)):
+        with pytest.raises(mobile_testbed.MobileTestbedError):
+            mobile_testbed.run_mobile_goal_navigation_staged(
+                serial="unused",
+                contract_path=contract,
+                visual_layout_path=tmp_path,
+                execution_layout_path=tmp_path,
+                observation_rois_path=tmp_path,
+                output_dir=tmp_path / f"out-{stages[0]}-{takeovers}",
+                stages=stages,
+                takeovers=takeovers,
+            )

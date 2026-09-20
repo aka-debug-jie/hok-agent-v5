@@ -842,6 +842,21 @@ def _parser() -> argparse.ArgumentParser:
     goal_navigation.add_argument("--observation-rois", type=Path, required=True)
     goal_navigation.add_argument("--output-dir", type=Path, required=True)
     goal_navigation.add_argument("--enable-input", action="store_true")
+    goal_navigation_staged = commands.add_parser(
+        "mobile-goal-navigation-staged",
+        help="run the fixed start-to-end navigation in staged rounds 1 -> 3 -> 10",
+    )
+    goal_navigation_staged.add_argument("--serial", required=True)
+    goal_navigation_staged.add_argument("--config", type=Path, required=True)
+    goal_navigation_staged.add_argument("--visual-layout", type=Path, required=True)
+    goal_navigation_staged.add_argument("--execution-layout", type=Path, required=True)
+    goal_navigation_staged.add_argument("--observation-rois", type=Path, required=True)
+    goal_navigation_staged.add_argument("--output-dir", type=Path, required=True)
+    goal_navigation_staged.add_argument(
+        "--stages", type=int, nargs="+", default=[1, 3, 10]
+    )
+    goal_navigation_staged.add_argument("--takeovers", type=int, default=0)
+    goal_navigation_staged.add_argument("--enable-input", action="store_true")
     operation_side = commands.add_parser(
         "mobile-operation-team-side",
         help="detect blue or red side from the loading-panel self highlight",
@@ -2992,6 +3007,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 execution_layout_path=args.execution_layout,
                 observation_rois_path=args.observation_rois,
                 output_dir=args.output_dir,
+                enable_input=args.enable_input,
+            )
+        elif args.command == "mobile-goal-navigation-staged":
+            from hok_agent.mobile_testbed import run_mobile_goal_navigation_staged
+
+            result = run_mobile_goal_navigation_staged(
+                serial=args.serial,
+                contract_path=args.config,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                stages=tuple(args.stages),
+                takeovers=args.takeovers,
                 enable_input=args.enable_input,
             )
         elif args.command == "mobile-operation-team-side":
