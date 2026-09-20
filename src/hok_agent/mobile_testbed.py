@@ -3069,6 +3069,466 @@ def _publish_visual_combat_dataset(
         staging.rename(output)
 
 
+GOAL_NAVIGATION_CONTRACT_SCHEMA = "movement-goal-navigation-contract-v1"
+GOAL_NAVIGATION_SESSION_SCHEMA = "hok-agent-mobile-goal-navigation-session-v1"
+GOAL_NAVIGATION_LOOP_SLEEP_SECONDS = 0.002
+
+
+def _goal_navigation_components(
+    mask: np.ndarray,
+) -> list[tuple[int, float, float, int, int]]:
+    height, width = mask.shape
+    seen = np.zeros_like(mask, dtype=bool)
+    rows, columns = np.where(mask)
+    components: list[tuple[int, float, float, int, int]] = []
+    for start_y, start_x in zip(rows.tolist(), columns.tolist(), strict=True):
+        if seen[start_y, start_x]:
+            continue
+        seen[start_y, start_x] = True
+        stack = [(start_y, start_x)]
+        count = 0
+        total_y = 0
+        total_x = 0
+        minimum_y = maximum_y = start_y
+        minimum_x = maximum_x = start_x
+        while stack:
+            y, x = stack.pop()
+            count += 1
+            total_y += y
+            total_x += x
+            minimum_y = min(minimum_y, y)
+            maximum_y = max(maximum_y, y)
+            minimum_x = min(minimum_x, x)
+            maximum_x = max(maximum_x, x)
+            for delta_y in (-1, 0, 1):
+                for delta_x in (-1, 0, 1):
+                    next_y = y + delta_y
+                    next_x = x + delta_x
+                    if (
+                        0 <= next_y < height
+                        and 0 <= next_x < width
+                        and bool(mask[next_y, next_x])
+                        and not bool(seen[next_y, next_x])
+                    ):
+                        seen[next_y, next_x] = True
+                        stack.append((next_y, next_x))
+        components.append(
+            (
+                count,
+                total_y / count,
+                total_x / count,
+                maximum_y - minimum_y + 1,
+                maximum_x - minimum_x + 1,
+            )
+        )
+    return components
+
+
+def _goal_navigation_cue(
+    frame: np.ndarray,
+    contract: dict[str, object],
+    previous: tuple[float, float] | None = None,
+) -> tuple[float, float] | None:
+    if frame.shape != (128, 128, 3):
+        raise MobileTestbedError("goal navigation minimap frame is invalid")
+    color = cast(dict[str, object], contract["color"])
+    components = cast(dict[str, object], contract["components"])
+    rgb = frame.astype(np.int16)
+    red_channel = rgb[..., 0]
+    green_channel = rgb[..., 1]
+    blue_channel = rgb[..., 2]
+    green_mask = (
+        (green_channel > int(cast(int, color["green_minimum"])))
+        & (green_channel - red_channel > int(cast(int, color["green_red_margin"])))
+        & (green_channel - blue_channel > int(cast(int, color["green_blue_margin"])))
+    )
+    red_mask = (
+        (red_channel > int(cast(int, color["red_minimum"])))
+        & (red_channel - green_channel > int(cast(int, color["red_green_margin"])))
+        & (red_channel - blue_channel > int(cast(int, color["red_blue_margin"])))
+    )
+    red_size = cast(list[int], components["red_size"])
+    red_extent = cast(list[int], components["red_extent"])
+    reds = [
+        component
+        for component in _goal_navigation_components(red_mask)
+        if red_size[0] <= component[0] <= red_size[1]
+        and red_extent[0] <= component[3] <= red_extent[1]
+        and red_extent[0] <= component[4] <= red_extent[1]
+    ]
+    green_size = cast(list[int], components["green_size"])
+    green_extent = cast(list[int], components["green_extent"])
+    pair_distance = float(cast(float, components["maximum_pair_l1_distance"]))
+    extension = contract.get("hero_cue_extension")
+    fallback_boxes: list[tuple[int, int, int, int]] = []
+    allow_green_fallback = False
+    if isinstance(extension, dict):
+        allow_green_fallback = bool(extension.get("allow_green_fallback", False))
+        fallback_boxes = [
+            (int(box[0]), int(box[1]), int(box[2]), int(box[3]))
+            for box in cast(list[list[int]], extension.get("fixed_ui_boxes_xyxy", []))
+        ]
+    exclusion = cast(list[int], contract["excluded_ui_xyxy"])
+    frozen_box = (exclusion[0], exclusion[1], exclusion[2], exclusion[3])
+
+    def in_box(candidate_y: float, candidate_x: float, box: tuple[int, int, int, int]) -> bool:
+        return box[0] <= candidate_x < box[2] and box[1] <= candidate_y < box[3]
+
+    def inside(candidate_y: float, candidate_x: float) -> bool:
+        return any(
+            in_box(candidate_y, candidate_x, box) for box in fallback_boxes
+        )
+
+    tracker_config = contract.get("hero_tracker")
+    association = (
+        float(cast(float, tracker_config["maximum_association_l1_distance"]))
+        if isinstance(tracker_config, dict)
+        else pair_distance
+    )
+    paired: tuple[float, float, float] | None = None
+    fallback: tuple[float, float, float] | None = None
+    largest: tuple[float, float, float] | None = None
+    for component in _goal_navigation_components(green_mask):
+        size, mean_y, mean_x, height, width = component
+        if not (
+            green_size[0] <= size <= green_size[1]
+            and green_extent[0] <= height <= green_extent[1]
+            and green_extent[0] <= width <= green_extent[1]
+            and 5 < mean_y < 123
+            and 5 < mean_x < 123
+        ):
+            continue
+        if (
+            not in_box(mean_y, mean_x, frozen_box)
+            and any(
+                abs(mean_y - red[1]) + abs(mean_x - red[2]) <= pair_distance
+                for red in reds
+            )
+            and (paired is None or size > paired[0])
+        ):
+            paired = (float(size), mean_y, mean_x)
+        if not in_box(mean_y, mean_x, frozen_box) and not inside(mean_y, mean_x):
+            if largest is None or size > largest[0]:
+                largest = (float(size), mean_y, mean_x)
+            if previous is not None:
+                distance = abs(mean_y - previous[0]) + abs(mean_x - previous[1])
+                if distance <= association and (
+                    fallback is None or distance < fallback[0]
+                ):
+                    fallback = (float(distance), mean_y, mean_x)
+    if previous is not None:
+        if not allow_green_fallback:
+            return (paired[1], paired[2]) if paired is not None else None
+        return (fallback[1], fallback[2]) if fallback is not None else None
+    if paired is not None:
+        return (paired[1], paired[2])
+    if allow_green_fallback and largest is not None:
+        return (largest[1], largest[2])
+    return None
+
+
+def _goal_navigation_direction(
+    position: tuple[float, float], target: tuple[float, float]
+) -> str:
+    delta_y = target[0] - position[0]
+    delta_x = target[1] - position[1]
+    if abs(delta_y) < 1e-9 and abs(delta_x) < 1e-9:
+        return "wait"
+    angle = math.atan2(delta_x, -delta_y)
+    sector = round(angle / (math.pi / 4)) % 8
+    return MOVEMENTS[1:][sector]
+
+
+def _goal_navigation_contract(path: Path) -> tuple[dict[str, object], str]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MobileTestbedError("goal navigation contract is unavailable") from exc
+    if not isinstance(value, dict):
+        raise MobileTestbedError("goal navigation contract is invalid")
+    supplied = value.get("contract_sha256")
+    unsigned = {key: item for key, item in value.items() if key != "contract_sha256"}
+    digest = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    expected: dict[str, object] = {
+        "schema_version": GOAL_NAVIGATION_CONTRACT_SCHEMA,
+        "session_schema_version": GOAL_NAVIGATION_SESSION_SCHEMA,
+        "directions": list(MOVEMENTS[1:]),
+        "movement_names": list(MOVEMENTS),
+        "training_allowed": False,
+        "test_allowed": False,
+    }
+    if supplied != digest or any(value.get(key) != item for key, item in expected.items()):
+        raise MobileTestbedError("goal navigation contract differs")
+    required = (
+        "targets_minimap_xy",
+        "arrival_tolerance_pixels",
+        "direction_hold_ms",
+        "observation_period_ms",
+        "maximum_duration_seconds",
+        "maximum_commands",
+        "failure_policy",
+        "budgets",
+        "gates",
+    )
+    if any(key not in value for key in required):
+        raise MobileTestbedError("goal navigation contract fields differ")
+    targets = cast(list[object], value["targets_minimap_xy"])
+    if (
+        not isinstance(value["failure_policy"], list)
+        or not value["failure_policy"]
+        or not isinstance(targets, list)
+        or not targets
+        or not all(
+            isinstance(item, list)
+            and len(cast(list[object], item)) == 2
+            and all(
+                isinstance(point, (int, float)) for point in cast(list[object], item)
+            )
+            for item in targets
+        )
+    ):
+        raise MobileTestbedError("goal navigation policy differs")
+    return value, digest
+
+
+def run_mobile_goal_navigation(
+    *,
+    serial: str,
+    contract_path: Path,
+    visual_layout_path: Path,
+    execution_layout_path: Path,
+    observation_rois_path: Path,
+    output_dir: Path,
+    enable_input: bool = True,
+) -> dict[str, object]:
+    contract, contract_sha = _goal_navigation_contract(contract_path)
+    visual_layout, visual_sha = load_layout(visual_layout_path)
+    execution_layout, execution_sha = load_layout(execution_layout_path)
+    rois, rois_sha = load_observation_rois(observation_rois_path)
+    if visual_layout.width != execution_layout.width or visual_layout.height != execution_layout.height:
+        raise MobileTestbedError("goal navigation layouts differ")
+    output = _new_large_output(output_dir)
+    guard = _open_device_guard(serial)
+    if (guard.width, guard.height) != (visual_layout.width, visual_layout.height):
+        raise MobileTestbedError("goal navigation display differs")
+    if rois.width != guard.width or rois.height != guard.height:
+        raise MobileTestbedError("goal navigation rois differ")
+    targets = [
+        (
+            float(cast(float, cast(list[object], item)[0])),
+            float(cast(float, cast(list[object], item)[1])),
+        )
+        for item in cast(list[object], contract["targets_minimap_xy"])
+    ]
+    tolerance = float(cast(float, contract["arrival_tolerance_pixels"]))
+    hold_ms = int(cast(int, contract["direction_hold_ms"]))
+    period_ms = int(cast(int, contract["observation_period_ms"]))
+    maximum_seconds = float(cast(float, contract["maximum_duration_seconds"]))
+    maximum_commands = int(cast(int, contract["maximum_commands"]))
+    joystick = PersistentJoystick(execution_layout, guard.width, guard.height)
+    session = ScrcpyControlSession(guard.serial, 30)
+    watchdog = GuardWatchdog(guard, ACTIVE_PROBE_GUARD_INTERVAL_SECONDS)
+    observations: list[dict[str, object]] = []
+    pointer_messages = 0
+    commands_issued = 0
+    identity_switch_events = 0
+    failure: str | None = None
+    arrived = False
+    waypoint_index = 0
+    started = 0.0
+    components = cast(dict[str, object], contract["components"])
+    maximum_jump = float(cast(float, components["maximum_pair_l1_distance"]))
+    extension_config = contract.get("hero_cue_extension")
+    if isinstance(extension_config, dict):
+        tracker_config = contract.get("hero_tracker")
+        if isinstance(tracker_config, dict):
+            maximum_jump = float(
+                cast(float, tracker_config["maximum_association_l1_distance"])
+            )
+    previous_position: tuple[float, float] | None = None
+    region = contract.get("free_movement_region")
+    region_streak = 0
+
+    def dispatch(operations: list[TouchOperation]) -> None:
+        nonlocal pointer_messages
+        if not enable_input:
+            return
+        for index, operation in enumerate(operations):
+            if index:
+                time.sleep(ACTIVE_PROBE_TOUCH_SETTLE_SECONDS)
+            watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
+            session.touch(operation, guard.width, guard.height)
+            pointer_messages += 1
+
+    try:
+        session.start()
+        if session.frame_size != (guard.width, guard.height):
+            raise MobileTestbedError("goal navigation scrcpy frame size differs")
+        watchdog.start()
+        started = time.monotonic()
+        next_observation = started
+        current_direction = "wait"
+        while time.monotonic() - started < maximum_seconds:
+            now = time.monotonic()
+            if now >= next_observation:
+                next_observation += period_ms / 1000
+                watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
+                frame_timestamp_ns, frame = session.frame()
+                death_replay = _death_replay_visible(frame, rois)
+                if death_replay:
+                    failure = "DEATH_RESPAWN_OR_ENDED"
+                    break
+                minimap = _observation_roi_frame(frame, rois.minimap)
+                position = _goal_navigation_cue(minimap, contract, previous_position)
+                target = targets[waypoint_index]
+                distance = (
+                    None
+                    if position is None
+                    else math.hypot(position[0] - target[0], position[1] - target[1])
+                )
+                observations.append(
+                    {
+                        "elapsed_ms": round((frame_timestamp_ns / 1_000_000) - started * 1000),
+                        "position": None if position is None else [position[0], position[1]],
+                        "distance_pixels": distance,
+                        "direction": current_direction,
+                        "screen_valid": True,
+                    }
+                )
+                if position is not None and isinstance(region, dict):
+                    inside_region = (
+                        float(cast(float, region["minimum_y"])) <= position[0]
+                        <= float(cast(float, region["maximum_y"]))
+                        and float(cast(float, region["minimum_x"])) <= position[1]
+                        <= float(cast(float, region["maximum_x"]))
+                    )
+                    if inside_region:
+                        region_streak = 0
+                    else:
+                        region_streak += 1
+                        if region_streak > int(
+                            cast(int, region["maximum_consecutive_violation_frames"])
+                        ):
+                            failure = "LEFT_FREE_MOVEMENT_REGION"
+                            break
+                if position is None:
+                    previous_position = None
+                else:
+                    if (
+                        previous_position is not None
+                        and abs(position[0] - previous_position[0])
+                        + abs(position[1] - previous_position[1])
+                        > maximum_jump
+                    ):
+                        identity_switch_events += 1
+                    previous_position = position
+                if distance is not None and distance <= tolerance:
+                    waypoint_index += 1
+                    if waypoint_index >= len(targets):
+                        arrived = True
+                        if enable_input and joystick.direction != "wait":
+                            dispatch(joystick.release())
+                        current_direction = "wait"
+                        break
+                if position is not None and commands_issued < maximum_commands:
+                    desired = _goal_navigation_direction(position, target)
+                    if desired != current_direction:
+                        dispatch(joystick.set_direction(desired))
+                        current_direction = desired
+                        commands_issued += 1
+                elif position is None and current_direction != "wait":
+                    if enable_input and joystick.direction != "wait":
+                        dispatch(joystick.release())
+                    current_direction = "wait"
+                hold_deadline = time.monotonic() + hold_ms / 1000
+                while time.monotonic() < hold_deadline:
+                    watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
+                    time.sleep(GOAL_NAVIGATION_LOOP_SLEEP_SECONDS)
+            time.sleep(GOAL_NAVIGATION_LOOP_SLEEP_SECONDS)
+    except Exception as exc:
+        failure = str(exc)
+    finally:
+        try:
+            if enable_input:
+                for operation in joystick.release():
+                    session.touch(operation, guard.width, guard.height)
+                    pointer_messages += 1
+        except Exception as exc:
+            if failure is None:
+                failure = str(exc)
+        watchdog.stop()
+        session.close()
+    localized = [row for row in observations if row["position"] is not None]
+    arrival_error = (
+        float(cast(float, localized[-1]["distance_pixels"])) if localized else None
+    )
+    final_position = localized[-1]["position"] if localized else None
+    summary: dict[str, object] = {
+        "schema_version": GOAL_NAVIGATION_SESSION_SCHEMA,
+        "status": "PASSED" if failure is None else "FAILED",
+        "contract_sha256": contract_sha,
+        "visual_layout_sha256": visual_sha,
+        "execution_layout_sha256": execution_sha,
+        "observation_rois_sha256": rois_sha,
+        "targets_minimap_xy": [list(item) for item in targets],
+        "waypoints_reached": waypoint_index,
+        "arrival_tolerance_pixels": tolerance,
+        "duration_seconds": round(time.monotonic() - started, 8) if started else 0.0,
+        "observations": len(observations),
+        "localized_observations": len(localized),
+        "commands_issued": commands_issued,
+        "input_commands_sent": pointer_messages,
+        "input_enabled": enable_input,
+        "arrived": arrived,
+        "final_position": final_position,
+        "arrival_error_pixels": arrival_error,
+        "failure": failure,
+        "raw_frames_persisted": False,
+        "coordinates_persisted": True,
+        "training_eligible": False,
+        "manual_annotation_required": False,
+        "control_output": pointer_messages > 0,
+    }
+    gates = cast(dict[str, object], contract["gates"])
+    localized_fraction = len(localized) / len(observations) if observations else 0.0
+    duration = round(time.monotonic() - started, 8) if started else 0.0
+    checks = {
+        "localized_fraction": localized_fraction
+        >= float(cast(float, gates["minimum_localized_fraction"])),
+        "arrival": (not bool(gates["arrival_required"])) or arrived,
+        "arrival_error": arrival_error is not None
+        and arrival_error <= float(cast(float, gates["maximum_arrival_error_pixels"])),
+        "identity_switch_events": identity_switch_events
+        <= int(cast(int, gates["maximum_identity_switch_events"])),
+        "valid_run": duration >= float(cast(float, gates["minimum_valid_run_seconds"])),
+        "no_failure": failure is None,
+    }
+    summary["localized_fraction"] = localized_fraction
+    summary["identity_switch_events"] = identity_switch_events
+    summary["checks"] = checks
+    summary["gates_passed"] = all(checks.values())
+    summary["summary_sha256"] = _summary_identity(summary)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.tmp-", dir=output.parent))
+    try:
+        (staging / "observations.jsonl").write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in observations),
+            encoding="utf-8",
+        )
+        (staging / "summary.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        staging.rename(output)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return summary
+
+
 def _publish_operation_base_dataset(
     output: Path,
     rows: list[dict[str, object]],

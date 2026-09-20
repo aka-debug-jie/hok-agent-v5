@@ -1671,3 +1671,39 @@ def test_active_probe_opposite_pair_order_alternates_opposites() -> None:
     for index in range(0, len(order), 2):
         first, second = order[index], order[index + 1]
         assert ring.index(second) == (ring.index(first) + half) % len(ring)
+
+
+def test_goal_navigation_direction_matches_minimap_axes() -> None:
+    target = (64.0, 84.0)
+    assert mobile_testbed._goal_navigation_direction((64.0, 64.0), target) == "east"
+    assert mobile_testbed._goal_navigation_direction((64.0, 90.0), target) == "west"
+    assert mobile_testbed._goal_navigation_direction((50.0, 64.0), target) == "south_east"
+    assert mobile_testbed._goal_navigation_direction((80.0, 64.0), target) == "north_east"
+
+
+def test_goal_navigation_cue_finds_ring_with_red_fill() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._goal_navigation_contract(
+        root / "configs/movement_goal_navigation_v1.json"
+    )
+    assert len(digest) == 64
+    frame = np.zeros((128, 128, 3), dtype=np.uint8)
+    frame[60:72, 60:72] = (0, 200, 0)
+    frame[63:69, 63:69] = (200, 0, 0)
+    position = mobile_testbed._goal_navigation_cue(frame, contract)
+    assert position is not None
+    assert abs(position[0] - 65.5) < 1.0
+    assert abs(position[1] - 65.5) < 1.0
+    assert mobile_testbed._goal_navigation_cue(np.zeros((128, 128, 3), np.uint8), contract) is None
+
+
+def test_goal_navigation_contract_rejects_tampering(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    value = json.loads(
+        (root / "configs/movement_goal_navigation_v1.json").read_text(encoding="utf-8")
+    )
+    value["arrival_tolerance_pixels"] = 0.5
+    tampered = tmp_path / "goal.json"
+    tampered.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(mobile_testbed.MobileTestbedError):
+        mobile_testbed._goal_navigation_contract(tampered)

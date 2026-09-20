@@ -831,6 +831,17 @@ def _parser() -> argparse.ArgumentParser:
     active_probe.add_argument("--observation-rois", type=Path, required=True)
     active_probe.add_argument("--output-dir", type=Path, required=True)
     active_probe.add_argument("--enable-input", action="store_true")
+    goal_navigation = commands.add_parser(
+        "mobile-goal-navigation",
+        help="drive the hero to a declared minimap target through the guarded testbed",
+    )
+    goal_navigation.add_argument("--serial", required=True)
+    goal_navigation.add_argument("--config", type=Path, required=True)
+    goal_navigation.add_argument("--visual-layout", type=Path, required=True)
+    goal_navigation.add_argument("--execution-layout", type=Path, required=True)
+    goal_navigation.add_argument("--observation-rois", type=Path, required=True)
+    goal_navigation.add_argument("--output-dir", type=Path, required=True)
+    goal_navigation.add_argument("--enable-input", action="store_true")
     operation_side = commands.add_parser(
         "mobile-operation-team-side",
         help="detect blue or red side from the loading-panel self highlight",
@@ -2963,6 +2974,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             from hok_agent.mobile_testbed import run_mobile_active_probe
 
             result = run_mobile_active_probe(
+                serial=args.serial,
+                contract_path=args.config,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                enable_input=args.enable_input,
+            )
+        elif args.command == "mobile-goal-navigation":
+            from hok_agent.mobile_testbed import run_mobile_goal_navigation
+
+            result = run_mobile_goal_navigation(
                 serial=args.serial,
                 contract_path=args.config,
                 visual_layout_path=args.visual_layout,
