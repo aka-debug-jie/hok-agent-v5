@@ -1,7 +1,7 @@
 {
   "arrival_tolerance_pixels": 4.0,
   "budgets": {
-    "maximum_commands": 60,
+    "maximum_commands": 120,
     "maximum_duration_seconds": 90,
     "maximum_new_bytes": 268435456,
     "maximum_sessions": 2
@@ -34,7 +34,7 @@
     ],
     "reset_after_missing_frames": 10
   },
-  "contract_sha256": "ab4f5b5089dfd03e2942f5c3fc1bbe4f1b0f726127340eeaaea1ad66a41b8375",
+  "contract_sha256": "6e5401d7fd264c93ade10c5863fc0d7d1a4984dcb783ef13bf40dbc86c72913a",
   "device_session_requirements": [
     "fresh-guarded-testbed-session",
     "local-identity-and-layout",
@@ -42,6 +42,7 @@
     "hero-remains-inside-the-declared-free-movement-region"
   ],
   "direction_hold_ms": 1200,
+  "direction_hysteresis_sectors": 1,
   "directions": [
     "north",
     "north_east",
@@ -127,7 +128,7 @@
     "maximum_association_l1_distance": 14.0,
     "seed_pair_l1_distance": 7.0
   },
-  "maximum_commands": 60,
+  "maximum_commands": 120,
   "maximum_duration_seconds": 90,
   "movement_names": [
     "wait",
@@ -141,7 +142,7 @@
     "north_west"
   ],
   "observation_period_ms": 300,
-  "purpose": "fixed start-to-end navigation round for the staged admission (1 -> 3 -> 10) with the green-ring cue association gate sized to one observation, a wider re-acquisition gate used only after a lost frame, and a shorter final-approach hold so the hero can converge",
+  "purpose": "fixed start-to-end navigation round for the staged admission (1 -> 3 -> 10) with the green-ring cue association gate sized to one observation, a wider re-acquisition gate used only after a lost frame, direction hysteresis to damp the near-target limit cycle, and a shorter final-approach hold so the hero can converge",
   "schema_version": "movement-goal-navigation-contract-v1",
   "session_schema_version": "hok-agent-mobile-goal-navigation-session-v1",
   "targets_minimap_xy": [

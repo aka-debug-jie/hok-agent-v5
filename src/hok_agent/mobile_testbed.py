@@ -3464,7 +3464,10 @@ def _goal_navigation_tracked_cue(
 
 
 def _goal_navigation_direction(
-    position: tuple[float, float], target: tuple[float, float]
+    position: tuple[float, float],
+    target: tuple[float, float],
+    current: str | None = None,
+    hysteresis_sectors: int = 0,
 ) -> str:
     delta_y = target[0] - position[0]
     delta_x = target[1] - position[1]
@@ -3472,6 +3475,11 @@ def _goal_navigation_direction(
         return "wait"
     angle = math.atan2(delta_x, -delta_y)
     sector = round(angle / (math.pi / 4)) % 8
+    if current is not None and current != "wait" and current in MOVEMENTS[1:]:
+        current_sector = MOVEMENTS[1:].index(current)
+        difference = abs(((sector - current_sector + 4) % 8) - 4)
+        if difference <= hysteresis_sectors:
+            return current
     return MOVEMENTS[1:][sector]
 
 
@@ -3528,7 +3536,11 @@ def _goal_navigation_contract(path: Path) -> tuple[dict[str, object], str]:
         raise MobileTestbedError("goal navigation policy differs")
     if any(
         key in value and not isinstance(value[key], (int, float))
-        for key in ("final_approach_distance_pixels", "final_approach_hold_ms")
+        for key in (
+            "final_approach_distance_pixels",
+            "final_approach_hold_ms",
+            "direction_hysteresis_sectors",
+        )
     ):
         raise MobileTestbedError("goal navigation approach policy differs")
     template = value.get("hero_template")
@@ -3590,6 +3602,7 @@ def run_mobile_goal_navigation(
     approach_distance = float(
         cast(float, contract.get("final_approach_distance_pixels", tolerance))
     )
+    hysteresis = int(cast(int, contract.get("direction_hysteresis_sectors", 0)))
     period_ms = int(cast(int, contract["observation_period_ms"]))
     maximum_seconds = float(cast(float, contract["maximum_duration_seconds"]))
     maximum_commands = int(cast(int, contract["maximum_commands"]))
@@ -3718,7 +3731,9 @@ def run_mobile_goal_navigation(
                         current_direction = "wait"
                         break
                 if position is not None and commands_issued < maximum_commands:
-                    desired = _goal_navigation_direction(position, target)
+                    desired = _goal_navigation_direction(
+                        position, target, current_direction, hysteresis
+                    )
                     if desired != current_direction:
                         dispatch(joystick.set_direction(desired))
                         current_direction = desired

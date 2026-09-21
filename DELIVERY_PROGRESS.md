@@ -14,17 +14,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: finish the A-stage staged admission (1 -> 3 -> 10) with contract a3: place the hero on the open map, confirm the final-approach hold removes the near-target limit cycle, then re-run the staged driver
+NEXT_ACTION: the A-stage staged admission (1 -> 3 -> 10) has passed with contract a3 (`6e5401d7`); select the next milestone from the convergence plan
 INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v9, the offline forensics verdict, the bounded control checks, the passing v9 probe batch, the passing goal-navigation sessions, the 704 recorded A-gate minimap frames, the persisted minimap frames of the failed staged rounds, and the live guarded movement, fade and reposition diagnostics
-CHANGED_FILES: probe contracts v1-v9, goal-navigation contracts v1 and a1-a3, audit, forensics, hero-cue tracker and fallback, the masked-ZNCC template tracker and its contract block, re-acquisition gating and event accounting, final-approach hold, opt-in minimap-frame persistence, joystick press settle, paced probe loop, goal-navigation runner, declared region/stall/drift guards, planner, runner/CLI and focused tests
+CHANGED_FILES: probe contracts v1-v9, goal-navigation contracts v1 and a1-a3, audit, forensics, hero-cue tracker and fallback, the masked-ZNCC template tracker and its contract block, re-acquisition gating and event accounting, final-approach hold, direction hysteresis, opt-in minimap-frame persistence, joystick press settle, paced probe loop, goal-navigation runner, declared region/stall/drift guards, planner, runner/CLI and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting, pulse-versus-control separation and waypoint arrival
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: two milestones passed on 2026-09-20; the no-source identity and control gate passed with batch `active-probe-v25` under contract v9 (`92594112`), audit report `c1491607`, both sessions verified with direction consistency 1.0, median commanded projection 9.87 and 10.12 px, paired responses 7.2-11.2 px, coverage 1.0 and zero identity switches; the goal-navigation milestone then passed with `goal-navigation-v8-1` and `goal-navigation-v8-2` under contract `b9f53e37`, both reaching all three declared waypoints and stopping on arrival with final errors 3.03 and 2.98 px, localization fractions 0.92 and 0.91, zero identity switches and every gate true; the earlier probe batches failed for three separate reasons that are now fixed (the joystick press and drag were sent 0.2-0.6 ms apart, the probe loop spun without sleeping and starved the response, and the minimap cue went blind over parts of the map), and the frozen player detector was not retuned; on 2026-09-21 the A-stage blocker was traced to the association gate rather than the detector (the frozen cue localises 704/704 on the recorded A-gate frames and the hero marker was present in every frame of the failing round, while the 8 px gate rejected a 9-13 px legitimate step and then froze the previous position), a masked-ZNCC template tracker was implemented and then rejected on evidence because the adjacent chasing enemy marker contaminates the template, and the corrected contract a3 sizes the association gate to one observation, applies a 30 px re-acquisition gate only after a lost frame, and shortens the final-approach hold to 400 ms; offline replay of the failed rounds raises localisation from 0.230 and 0.027 to 0.986, and the live staged runs reached stage 10 with 11/14 arrivals and stage 3 with 3/4 rounds at localisation 1.000, so the staged 1 -> 3 -> 10 admission has not yet passed
+RESULT: two milestones passed on 2026-09-20; the no-source identity and control gate passed with batch `active-probe-v25` under contract v9 (`92594112`), audit report `c1491607`, both sessions verified with direction consistency 1.0, median commanded projection 9.87 and 10.12 px, paired responses 7.2-11.2 px, coverage 1.0 and zero identity switches; the goal-navigation milestone then passed with `goal-navigation-v8-1` and `goal-navigation-v8-2` under contract `b9f53e37`, both reaching all three declared waypoints and stopping on arrival with final errors 3.03 and 2.98 px, localization fractions 0.92 and 0.91, zero identity switches and every gate true; the earlier probe batches failed for three separate reasons that are now fixed (the joystick press and drag were sent 0.2-0.6 ms apart, the probe loop spun without sleeping and starved the response, and the minimap cue went blind over parts of the map), and the frozen player detector was not retuned; on 2026-09-21 the A-stage blocker was traced to the association gate rather than the detector (the frozen cue localises 704/704 on the recorded A-gate frames and the hero marker was present in every frame of the failing round, while the 8 px gate rejected a 9-13 px legitimate step and then froze the previous position), a masked-ZNCC template tracker was implemented and then rejected on evidence because the adjacent chasing enemy marker contaminates the template, and the corrected contract a3 sizes the association gate to one observation, applies a 30 px re-acquisition gate only after a lost frame, and shortens the final-approach hold to 400 ms; offline replay of the failed rounds raises localisation from 0.230 and 0.027 to 0.986, and the live staged runs reached stage 10 with 11/14 arrivals and stage 3 with 3/4 rounds at localisation 1.000, so the staged 1 -> 3 -> 10 admission had not passed at that point; it passed later the same day with `goal-navigation-a3-staged-5` under contract a3 (`6e5401d7`) at 14 of 14 rounds, arrival rate 1.0, zero failures, zero takeovers, localisation 1.000 in 13 rounds and 0.964 in one, and zero identity switches, after direction hysteresis closed the near-target limit cycle
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 561,628,269 used by the active-probe and goal-navigation lineages to date (531,241,179 probe plus 65,178 goal-navigation plus 30,321,912 for the a2/a3 goal-navigation runs and their persisted minimap frames); the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit
+NEW_BYTES: 580,483,666 used by the active-probe and goal-navigation lineages to date (531,241,179 probe plus 65,178 goal-navigation plus 48,977,309 for the a2/a3 goal-navigation runs and their persisted minimap frames); the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: re-validate the final-approach hold live and complete the staged admission, or keep the A stage blocked and report the remaining control limit cycle
+NEXT_DECISION: the A stage is complete; decide the next milestone from the convergence plan
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -356,10 +356,21 @@ NEXT_DECISION: re-validate the final-approach hold live and complete the staged 
   failing one round on the same 8 px limit cycle. `goal-navigation-a3-staged-3` could not start
   because the hero had respawned at the fountain, whose marker sits inside the declared fixed-UI
   box, so the cue returned nothing and the runner sent no input for the whole run.
-- The staged 1 -> 3 -> 10 admission has not yet passed. Two blockers remain: the near-target limit
-  cycle (addressed by the final-approach hold, not yet re-validated live) and the fountain or
-  out-of-region start, which needs the hero placed on the open map because the fountain marker is
-  excluded and the runner then idles. This run used 30,321,912 new bytes.
+- The staged 1 -> 3 -> 10 admission passed on 2026-09-21 with `goal-navigation-a3-staged-5` under
+  contract a3 (`6e5401d7`): 14 of 14 rounds arrived, arrival rate 1.0, zero failures, zero
+  takeovers, every gate true in every round, localisation 1.000 in 13 rounds and 0.964 in one,
+  zero identity switches, zero re-acquisition events, and 3-8 commands per round against the
+  120 command budget. The two blockers recorded above were closed by direction hysteresis
+  (`direction_hysteresis_sectors` of 1, which stops the bearing from flipping across the 45-degree
+  sector boundary every observation) together with the shorter final-approach hold; the same
+  hysteresis dropped the command count from an exhausted 60 to 3-8 per round. Runs
+  `a3-staged-1` to `a3-staged-4` remain recorded as the failed intermediate evidence.
+- The hero must still be placed on the open map before a run. A run started while the hero sat at
+  the fountain sent no input for its whole duration because the fountain marker lies inside the
+  declared fixed-UI box, and a run started at the region edge exhausted its command budget. Both
+  are operational preconditions, not cue defects.
+- This work used 48,977,309 new bytes (30,321,912 for a2/a3-staged-1 to -3 plus 18,655,397 for
+  a3-staged-4 and -5 and their persisted minimap frames).
 
 ### 2026-09-09 development review and factual corrections
 

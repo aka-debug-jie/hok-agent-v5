@@ -1846,6 +1846,23 @@ def test_goal_navigation_a3_sizes_the_gates_to_measured_displacement() -> None:
     assert contract["free_movement_region"]["maximum_consecutive_violation_frames"] == 10
     assert contract["final_approach_distance_pixels"] == 12.0
     assert contract["final_approach_hold_ms"] == 400
+    assert contract["direction_hysteresis_sectors"] == 1
+    assert contract["maximum_commands"] == 120
+
+
+def test_goal_navigation_direction_hysteresis_keeps_an_adjacent_sector() -> None:
+    target = (64.0, 88.0)
+    position = (54.0, 86.0)
+    best = mobile_testbed._goal_navigation_direction(position, target)
+    assert best == "south"
+    assert (
+        mobile_testbed._goal_navigation_direction(position, target, "south_east", 1)
+        == "south_east"
+    )
+    assert mobile_testbed._goal_navigation_direction(position, target, "south", 1) == "south"
+    assert mobile_testbed._goal_navigation_direction(position, target, "north", 1) == "south"
+    assert mobile_testbed._goal_navigation_direction(position, target, "north", 0) == "south"
+    assert mobile_testbed._goal_navigation_direction(position, target, "south_east", 0) == "south"
 
 
 def test_goal_navigation_cue_reacquires_after_a_large_legitimate_step() -> None:
