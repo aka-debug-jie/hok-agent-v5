@@ -1769,6 +1769,12 @@ def run_traversability_probe_analysis(
     measurement = cast(dict[str, object], contract["measurement"])
     gap_ms = int(cast(int, measurement["maximum_gap_to_analysis_frame_ms"]))
     hold_ms = int(cast(int, contract["hold_ms"]))
+    region = cast(dict[str, object], contract.get("free_movement_region") or {})
+    region_minimum_y = float(cast(float, region.get("minimum_y", float("-inf"))))
+    region_maximum_y = float(cast(float, region.get("maximum_y", float("inf"))))
+    region_minimum_x = float(cast(float, region.get("minimum_x", float("-inf"))))
+    region_maximum_x = float(cast(float, region.get("maximum_x", float("inf"))))
+    maximum_cells = analysis_block.get("maximum_cells_with_bearing_observations")
     cue_contract: dict[str, object] = {
         "color": contract["color"],
         "components": contract["components"],
@@ -1798,6 +1804,26 @@ def run_traversability_probe_analysis(
         localized = ~np.isnan(tracked[:, 0])
         localized_times = times[localized]
         localized_positions = tracked[localized]
+        # The declared containment is evaluated here because nothing else evaluates it on this path.
+        # The probe runner does not enforce free_movement_region - only the goal-navigation runner
+        # and the separate active-probe audit do - so a declared containment on a probe contract is
+        # a statement that only an analysis can hold a session to.
+        region_streak = 0
+        region_maximum_streak = 0
+        region_violation_frames = 0
+        for row, column in localized_positions:
+            inside = (
+                region_minimum_y <= float(row) <= region_maximum_y
+                and region_minimum_x <= float(column) <= region_maximum_x
+            )
+            if inside:
+                region_streak = 0
+                continue
+            region_streak += 1
+            region_violation_frames += 1
+            region_maximum_streak = max(region_maximum_streak, region_streak)
+        region_tolerance = int(cast(int, region["maximum_consecutive_violation_frames"]))
+        region_conformant = region_maximum_streak <= region_tolerance
         pulses = 0
         paired = 0
         refused = 0
@@ -1859,6 +1885,10 @@ def run_traversability_probe_analysis(
             "pulses": pulses,
             "paired_pulses": paired,
             "refused_pulses": refused,
+            "region_violation_frames": region_violation_frames,
+            "region_maximum_streak": region_maximum_streak,
+            "region_tolerance_frames": region_tolerance,
+            "region_conformant": region_conformant,
         }
     # The idle bound comes from windows in which nothing was commanded. A window glued to the
     # previous press is not neutral: under an opposite-pairs schedule it carries the opposite
@@ -1883,9 +1913,25 @@ def run_traversability_probe_analysis(
         nominal_step_pixels=float(cast(float, analysis_block["nominal_step_pixels"])),
         source_sessions=[directory.name for directory in directories],
     )
+    region_conformant = all(
+        bool(cast(dict[str, object], value)["region_conformant"])
+        for value in per_session.values()
+    )
+    observed_cells = len(cast(dict[str, object], analysis["cells"]))
+    # A grid is only as good as its concentration. If the hero spread over many cells the per-cell
+    # sample count falls with it, and a thin cell-bearing estimate can neither confirm nor remove a
+    # bearing, so an over-spread session is rejected instead of being averaged into a mask.
+    concentration_conformant = maximum_cells is None or observed_cells <= int(
+        cast(int, maximum_cells)
+    )
+    conformant = region_conformant and concentration_conformant
     report: dict[str, object] = {
         "schema_version": "hok-agent-traversability-probe-report-v1",
-        "status": "PASSED" if observations else "FAILED",
+        "status": "PASSED" if (observations and conformant) else "FAILED",
+        "region_conformant": region_conformant,
+        "concentration_conformant": concentration_conformant,
+        "observed_cells": observed_cells,
+        "maximum_cells_with_bearing_observations": maximum_cells,
         "contract": str(contract_path),
         "contract_sha256": contract["contract_sha256"],
         "analysis_contract": str(analysis_path),

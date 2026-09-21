@@ -1,0 +1,165 @@
+{
+  "analysis_region": "declared-free-movement-area-without-obstacles-between-probe-points",
+  "analysis_window_requirements": [
+    "screen_valid",
+    "operation_allowed"
+  ],
+  "budgets": {
+    "maximum_duration_seconds_per_session": 480,
+    "maximum_new_bytes": 268435456,
+    "maximum_pulses_per_session": 96,
+    "maximum_sessions": 2
+  },
+  "color": {
+    "green_blue_margin": 10,
+    "green_minimum": 85,
+    "green_red_margin": 18,
+    "red_blue_margin": 18,
+    "red_green_margin": 28,
+    "red_minimum": 105
+  },
+  "components": {
+    "green_extent": [
+      7,
+      24
+    ],
+    "green_size": [
+      20,
+      140
+    ],
+    "maximum_pair_l1_distance": 7.0,
+    "red_extent": [
+      5,
+      24
+    ],
+    "red_size": [
+      20,
+      240
+    ],
+    "reset_after_missing_frames": 10
+  },
+  "contract_sha256": "f35bc69e787c12a0d2bad4e964e4f3eec8a11d4e9cd15766d5ea12d600656593",
+  "control_window_ms": 400,
+  "control_windows": 24,
+  "corpus_roles": {
+    "control_probe": {
+      "policy_training_allowed": false,
+      "purpose": "identity, control relation and coordinate calibration",
+      "role": "control"
+    },
+    "goal_trajectory": {
+      "gate_a_required": true,
+      "policy_training_allowed": true,
+      "purpose": "navigation supervision",
+      "role": "policy"
+    }
+  },
+  "device_session_requirements": [
+    "fresh-guarded-testbed-session",
+    "local-identity-and-layout",
+    "no-other-movement-input-outside-pulses",
+    "hard-stop-on-death-unknown-or-ended-screen",
+    "no-other-hero-marker-overlapping-the-tracked-hero",
+    "the-hero-remains-inside-one-declared-cluster-of-cells-for-the-whole-session",
+    "hero-starts-inside-the-declared-containment-region-around-cell-19-13",
+    "the-analysis-refuses-a-session-that-leaves-the-declared-region"
+  ],
+  "direction_order": "opposite-pairs",
+  "directions": [
+    "north",
+    "north_east",
+    "east",
+    "south_east",
+    "south",
+    "south_west",
+    "west",
+    "north_west"
+  ],
+  "excluded_ui_xyxy": [
+    112,
+    0,
+    128,
+    16
+  ],
+  "failure_policy": [
+    "no-threshold-changes",
+    "no-observation-window-shortening",
+    "no-session-substitution",
+    "no-reuse-of-a-failed-session-as-passing-evidence",
+    "the-probe-grid-does-not-replace-the-domain-harness"
+  ],
+  "frame_period_ms": 200,
+  "free_movement_region": {
+    "maximum_consecutive_violation_frames": 5,
+    "maximum_x": 70,
+    "maximum_y": 92,
+    "minimum_x": 38,
+    "minimum_y": 64
+  },
+  "gates_per_session": {
+    "maximum_fixed_ui_responsive_fraction": 0.05,
+    "maximum_identity_switch_events": 0,
+    "maximum_unknown_streak_seconds": 10.0,
+    "minimum_analysis_coverage_fraction": 0.8,
+    "minimum_balanced_directions": 6,
+    "minimum_direction_correct_fraction": 0.75,
+    "minimum_dispatched_pulses": 20,
+    "minimum_paired_fraction": 0.7,
+    "minimum_projection_pixels": 1.0,
+    "minimum_pulse_median_minus_control_p95_pixels": 0.0,
+    "minimum_valid_run_seconds": 10.0
+  },
+  "hold_ms": 400,
+  "inter_pulse_gap_ms": 500,
+  "maximum_frame_gap_ms": 1000,
+  "maximum_press_start_drift_ms": 300,
+  "measurement": {
+    "baseline": "last_analysis_frame_before_press_ack",
+    "contamination_interval": "press_ack_to_response_end",
+    "maximum_gap_to_analysis_frame_ms": 600,
+    "response_end": "release_ack_plus_observation_ms"
+  },
+  "movement_names": [
+    "wait",
+    "north",
+    "north_east",
+    "east",
+    "south_east",
+    "south",
+    "south_west",
+    "west",
+    "north_west"
+  ],
+  "observation_ms": 500,
+  "pulse_fate_values": [
+    "paired",
+    "no_candidate_baseline",
+    "no_candidate_observation",
+    "ambiguous_baseline",
+    "ambiguous_observation",
+    "contaminated",
+    "outside_analysis_window"
+  ],
+  "pulses_per_direction": 12,
+  "purpose": "controlled response probe for traversability at the press tier the Router actually uses. Run v11 measured with a 2500 ms press because that tier clears the noise floor, and that was the wrong instrument: at 2500 ms the hero has time to slide past a partial obstruction, so cell 14:12 read north at 0.315 px per 100 ms - level with its north-east and east neighbours - while the incidental grid removes north there at 0.080 with n=36. A terrain gap that a long press works through does not help a 400 ms press. This version therefore holds for 400 ms, the declared final-approach press, and matches the control window to it so the idle bound is measured over the same window length. Repeats rise to twelve per direction because the shorter press also means less drift per pulse, which is what lets 96 pulses stay in one cluster. The target is cell 19:13, where the frozen grid removes north-east with the largest sample count in the whole grid (n=178, rate 0.011) and north with n=12; cell 14:11's north decision follows in the next version. Run v11 also proved that a declared containment is not enforced by the probe runner, which is why the analysis now evaluates it and refuses a non-conformant session.",
+  "schedule_seed": 23,
+  "schema_version": "movement-active-probe-contract-v1",
+  "screen_validity": {
+    "minimum_mean": 8.0,
+    "minimum_standard_deviation": 5.0
+  },
+  "session_schema_version": "hok-agent-mobile-active-probe-session-v1",
+  "sessions_required": 2,
+  "test_allowed": false,
+  "training_allowed": false,
+  "traversability_analysis": {
+    "cell_pixels": 4.0,
+    "idle_margin_pixels": 0.5,
+    "maximum_cells_with_bearing_observations": 8,
+    "minimum_pulses": 3,
+    "minimum_rate_per_100ms": 0.05,
+    "mode": "measured_probe",
+    "nominal_step_pixels": 6.0,
+    "note": "the rate denominator is this probe's own 400 ms press, which is the declared final-approach tier; probe rates are per 100 ms and are not comparable with a 2500 ms probe run"
+  }
+}

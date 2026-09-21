@@ -279,6 +279,78 @@ def traversability_masked_direction(
     return desired
 
 
+def tier_restricted_rates(
+    runs_root: Path, runs: Sequence[str], cell_pixels: float
+) -> dict[str, object]:
+    """Per-cell, per-bearing rates restricted to the bounded presses the Router itself issues.
+
+    Normalising by the declared press makes an unbounded sample comparable in units, but it does not
+    make the tiers interchangeable: at cell 14:11 a bounded north press moves the hero at 0.060 px
+    per 100 ms while a 2500 ms north press over the same city block moves it at 0.315. The long
+    press works through a partial obstruction that the short one never gets past, so a mask that
+    guards the Router has to be judged on the bounded tier alone. Restricting here is what makes the
+    comparison matched: at 14:11 the mask removes north on 125 bounded samples while keeping
+    north-east at 0.307 on 137 of them, so the contrast is same-cell, same-tier and near-equal-n.
+    This is evidence from the recorded transitions rather than from a new session, and it is
+    reported separately so the mixed-tier grid the mask reads is never mistaken for it.
+    """
+    every: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    bounded: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    for run in runs:
+        if not (runs_root / run).is_dir():
+            raise MobileTestbedError(f"traversability source run is missing: {run}")
+        for episode in sorted(os.listdir(runs_root / run)):
+            log = runs_root / run / episode / "steps.jsonl"
+            if not log.is_file():
+                continue
+            rows = [
+                json.loads(line)
+                for line in log.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            for earlier, later in zip(rows, rows[1:], strict=False):
+                if earlier["position"] is None or later["position"] is None:
+                    continue
+                direction = earlier["applied_movement"]
+                if direction not in BEARING_STEPS:
+                    continue
+                press = earlier.get("approach_press_ms")
+                movement_ms = float(press) if press else UNBOUNDED_MOVEMENT_MS
+                if movement_ms <= 0:
+                    continue
+                step_y, step_x = BEARING_STEPS[direction]
+                projection = (
+                    (later["position"][0] - earlier["position"][0]) * step_y
+                    + (later["position"][1] - earlier["position"][1]) * step_x
+                )
+                key = _cell_key(
+                    (float(earlier["position"][0]), float(earlier["position"][1])), cell_pixels
+                )
+                value = projection / movement_ms * 100.0
+                every[key][direction].append(value)
+                if press:
+                    bounded[key][direction].append(value)
+    cells: dict[str, object] = {}
+    for key in sorted(set(every) | set(bounded)):
+        entry: dict[str, object] = {}
+        for direction in MOVEMENT_ORDER:
+            all_values = every[key].get(direction, [])
+            bounded_values = bounded[key].get(direction, [])
+            if not all_values:
+                continue
+            entry[direction] = {
+                "n": len(all_values),
+                "rate": round(sum(all_values) / len(all_values), 4),
+                "bounded_n": len(bounded_values),
+                "bounded_rate": (
+                    round(sum(bounded_values) / len(bounded_values), 4) if bounded_values else None
+                ),
+            }
+        if entry:
+            cells[key] = entry
+    return {"cell_pixels": cell_pixels, "cells": cells}
+
+
 def traversability_coverage(block: dict[str, object]) -> dict[str, object]:
     """Report how much of the grid is actually known, so partial coverage is never hidden."""
     grid = cast(dict[str, object], block["grid"])

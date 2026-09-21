@@ -120,12 +120,12 @@ MOBILE_NAV_IDENTITY ?=configs/mobile_testbed_identity.local.json
 MOBILE_NAV_RUNS ?=$(HOK_RUNS_ROOT)/hierarchical-movement-mvp
 MOBILE_NAV_STORE ?=$(MOBILE_NAV_RUNS)/route-b-v15-store
 MOBILE_NAV_EPISODES ?=3
-MOBILE_PROBE_CONTRACT ?=configs/movement_active_probe_v11.json
+MOBILE_PROBE_CONTRACT ?=configs/movement_active_probe_v12.json
 # Run names are their own sequence, independent of the contract version: active-probe-v10 is an
 # older run that used probe contract v3, so a new probe must not be named after its contract.
-MOBILE_PROBE_ROOT ?=$(MOBILE_NAV_RUNS)/active-probe-v27
+MOBILE_PROBE_ROOT ?=$(MOBILE_NAV_RUNS)/active-probe-v28
 MOBILE_PROBE_SESSION ?=session-001
-MOBILE_PROBE_AUDIT ?=$(HOK_AUDIT_ROOT)/hierarchical-movement-mvp/traversability-probe-v27-analysis
+MOBILE_PROBE_AUDIT ?=$(HOK_AUDIT_ROOT)/hierarchical-movement-mvp/traversability-probe-v28-analysis
 TRAVERSABILITY_CELL_PIXELS ?=4.0
 TRAVERSABILITY_MINIMUM_SAMPLES ?=3
 TRAVERSABILITY_MINIMUM_RATE ?=0.08
