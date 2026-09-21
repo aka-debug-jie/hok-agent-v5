@@ -14,7 +14,7 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: close R1 as data-source limited after the 5 Hz read-only measurement refuted its target, and keep the delivered deterministic no-source chain frozen
 STATUS: DATA_SOURCE_LIMITED
-NEXT_ACTION: the single-arbiter planner is validated as far as control goes (three of four waypoints twice) and the binding limit is now the frozen cue's coverage, which may not be retuned; route B stays recorded as the generalisation limit unless a separate versioned perception decision is funded, and the validated scope remains the two-waypoint diagonal
+NEXT_ACTION: none. Both route B dimensions are now measured and closed - control by the single-arbiter planner and perception by the frozen cue's blind regions, with the authorised temporal alternative tested and rejected at 45 % recovery and a wrong-lock mode. The validated scope is the two-waypoint diagonal; reopening needs a new data source (an independent reference) or a funded perception decision with its own validation
 INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v9, the offline forensics verdict, the bounded control checks, the passing v9 probe batch, the passing goal-navigation sessions, the 704 recorded A-gate minimap frames, the persisted minimap frames of the failed staged rounds, and the live guarded movement, fade and reposition diagnostics
 CHANGED_FILES: AGENTS.md and BOUNDARIES.md (owner-authorized R1 scope extension), the R1 panel-gating contract and policy module, the read-only panel capture, the store-runner termination fixes, store contract v2, the route B contracts v1-v6, the declared progress guard, the region-safety filter, the declared deceleration table and the single-arbiter path planner,
 PRIMARY_METRIC: feedback coverage over every step and the agreement between the recorded signal and an independent reference, with the unverified remainder stated explicitly
@@ -24,7 +24,7 @@ ENGINEERING_HOURS_USED_AND_CAP: UNKNOWN used; engineering effective time is stil
 GPU_SECONDS: 0, cap 0; automated run wall clock for the store-bound runtime work is 142.3 s over 7 instrumented episodes (19.6 + 45.3 + 77.4), excluding the un-instrumented reposition and diagnostics runs
 NEW_BYTES: 903,258,517 used by the active-probe and goal-navigation lineages to date; the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit (this total adds 24,298,168 for the single-arbiter planner batch to the previous 885,124,179)
 STOP_REASON: data-source limited. At 5 Hz the panel ROI measures as a continuous pulse (0.403 Hz, 2.48 s period, range 14.92 against 36.6-38.9 in the batch-3 scene) and subsampling at the 1.2 s cadence does not reproduce bimodality, so the R0 two-states reading was a median split of a pulse and R1's target is not a discrete state; the other two feedback lines were already refuted and no independent reference exists
-NEXT_DECISION: fund one planner with a single objective and explicit feasibility (reachable waypoints, a path reference per leg and a terminal approach inside the same objective) to reopen route B, or obtain an external independent reference to reopen R; otherwise the deterministic chain stays frozen at the two-waypoint diagonal
+NEXT_DECISION: obtain an external independent reference (which would also reopen R and allow a replacement cue to be validated), or accept the deterministic chain at its validated scope; no further control or perception layers will be added on the current evidence
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -1000,6 +1000,34 @@ NEXT_DECISION: fund one planner with a single objective and explicit feasibility
   the control dimension it named - the applied direction no longer fights the objective - and the next
   binding limit is the frozen cue's coverage. Route B still stands as the generalisation limit. This
   step used 24,298,168 new bytes.
+
+### Authorised versioned perception decision: tested and rejected (2026-09-21)
+
+- The owner authorised one versioned perception decision to address the blind-region limit the
+  single-arbiter planner exposed. The decision was spent on the cheapest decisive test first, before
+  any code: on the frames where the frozen cue returned no position, can a **temporal change cue**
+  (the same controlled-visual-response paradigm the A gate used, not another colour threshold)
+  recover the hero inside the declared blind boxes?
+- The test used `route-b-batch-10` itself: **36 of 121 steps** had no position, clustering in runs
+  (episode 01 steps 41-51, episode 02 steps 47-52), which is the bottom-left own-base region.
+- Result: **45 % recovery and a visible wrong-lock mode.** Of 33 blind steps with a usable frame
+  pair, the change cue produced a position for only **15**. Worse, several of those are demonstrably
+  wrong: episode 01 step 41 and episode 02 steps 47-51 lock onto (113.5, 123.8) and (116.5, 119.4)
+  while the last known position is about (49, 88), so the cue is tracking an animated UI or base
+  element in the bottom-right corner, more than 60 px away and outside the declared free-movement
+  region. Only a minority are plausible (episode 02 step 1 recovers (50.7, 68.7) against a last
+  known (52.6, 71.0), an L1 error of 3 px).
+- **Decision: not implemented.** A re-acquisition channel that fires on 45 % of the blind steps and
+  can lock onto a static-UI animation more than 60 px away would be worse than the explicit
+  `CAPTURE_FAILURE` it replaces, and its wrong locks sit outside the region, so it would also fight
+  the region filter. Nothing was wired into the control loop and the frozen cue is untouched, so the
+  forbidden "retune the frozen detector" path was not taken either.
+- Recorded conclusion for the perception dimension: the blind-region coverage limit stands, there is
+  no admissible alternative channel on this route with the current evidence, and there is still no
+  independent reference to validate one against. The two-waypoint diagonal remains the validated
+  scope and route B remains the generalisation limit, now with both dimensions measured: control
+  fixed by the single-arbiter planner, perception limited by the frozen cue's blind regions. This
+  step used 0 new bytes because the test ran on already-persisted frames.
 
 ### 2026-09-09 development review and factual corrections
 
