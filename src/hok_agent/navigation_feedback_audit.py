@@ -474,7 +474,10 @@ def run_navigation_feedback_audit(
     return report
 
 
-R0_RESPONSE_SCHEMA = "hok-agent-r0-response-task-contract-v1"
+R0_RESPONSE_SCHEMAS = (
+    "hok-agent-r0-response-task-contract-v1",
+    "hok-agent-r0-response-task-contract-v2",
+)
 RESPONSE_AUDIT_SCHEMA = "hok-agent-command-response-audit-v1"
 RESPONSE_REQUIRED_SIGNALS = (
     "patch_displacement",
@@ -490,6 +493,13 @@ RESPONSE_REQUIRED_GATES = (
     "minimum_episodes_within_net_error",
     "minimum_dead_reckoning_steps",
     "maximum_exact_agreement_fraction",
+)
+RESPONSE_ESTIMATORS = ("plain_patch_ncc", "background_residual_ncc")
+RESPONSE_OPTIONAL_GATES = (
+    "maximum_step_l1_median_px",
+    "maximum_step_l1_p95_px",
+    "minimum_step_agreement_fraction",
+    "maximum_step_bias_px",
 )
 PATCH_HALF = 11
 PATCH_SEARCH = 16
@@ -511,11 +521,12 @@ def load_response_task_contract(path: Path) -> tuple[dict[str, object], str]:
     gates = payload.get("gates")
     names = {cast(dict[str, object], item)["name"] for item in cast(list[object], signals or [])}
     if (
-        payload.get("schema_version") != R0_RESPONSE_SCHEMA
+        payload.get("schema_version") not in R0_RESPONSE_SCHEMAS
         or not isinstance(signals, list)
         or not isinstance(gates, dict)
         or names != set(RESPONSE_REQUIRED_SIGNALS)
         or any(key not in gates for key in RESPONSE_REQUIRED_GATES)
+        or payload.get("estimator", "plain_patch_ncc") not in RESPONSE_ESTIMATORS
         or cast(dict[str, object], payload.get("independence", {})).get("duplication_guard") is None
     ):
         raise FeedbackAuditError("r0 response task contract differs")
@@ -529,10 +540,27 @@ def _grey(frame: np.ndarray) -> np.ndarray:
     return cast(np.ndarray, frame.astype(np.float64).mean(axis=2))
 
 
+def _session_background(frames: list[np.ndarray]) -> np.ndarray:
+    """Per-pixel median over every persisted frame of the store.
+
+    The minimap is a fixed map, so the median is the static background; a mover is an outlier
+    unless it occupies the same pixel for most of the sample. An episode-local median is too small
+    a sample: when the hero is nearly stationary its own marker passes the 50 % threshold and the
+    subtraction erases the object being tracked.
+    """
+    return np.median(np.stack(frames).astype(np.float64), axis=0)
+
+
 def _patch_displacement(
-    current: np.ndarray, following: np.ndarray, position: tuple[float, float]
+    current: np.ndarray,
+    following: np.ndarray,
+    position: tuple[float, float],
+    background: np.ndarray | None = None,
 ) -> tuple[float, float, float] | None:
     """Best zero-mean correlation shift of the hero patch; a frame measurement, not a cue delta."""
+    if background is not None:
+        current = current.astype(np.float64) - background
+        following = following.astype(np.float64) - background
     center_y = int(round(position[0]))
     center_x = int(round(position[1]))
     margin = PATCH_HALF + PATCH_SEARCH
@@ -572,6 +600,7 @@ def _patch_displacement(
     return best
 
 
+
 def run_command_response_audit(
     *,
     response_contract_path: Path,
@@ -583,6 +612,7 @@ def run_command_response_audit(
     contract, contract_sha = load_response_task_contract(response_contract_path)
     _navigation, navigation_sha = _goal_navigation_contract(navigation_contract_path)
     gates = cast(dict[str, object], contract["gates"])
+    estimator = str(contract.get("estimator", "plain_patch_ncc"))
     output = _new_large_output(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     with UnifiedTransitionStore(store_path) as store:
@@ -606,6 +636,18 @@ def run_command_response_audit(
     step_errors: list[float] = []
     step_bias_y = 0.0
     step_bias_x = 0.0
+    background = (
+        _session_background(
+            [
+                _minimap(frame_root, record[label]["frame_bundle_ref"])
+                for episode_id in episode_ids
+                for record in episodes[episode_id]
+                for label in ("observation", "next_observation")
+            ]
+        )
+        if estimator == "background_residual_ncc"
+        else None
+    )
     for episode_id in episode_ids:
         records = episodes[episode_id]
         dead_reckoned_y = 0.0
@@ -638,7 +680,7 @@ def run_command_response_audit(
                 compare = None
             current = _minimap(frame_root, record["observation"]["frame_bundle_ref"])
             following = _minimap(frame_root, record["next_observation"]["frame_bundle_ref"])
-            displacement = _patch_displacement(current, following, cue)
+            displacement = _patch_displacement(current, following, cue, background)
             if command == "wait" or command is None:
                 stop_steps += 1
             else:
@@ -716,6 +758,39 @@ def run_command_response_audit(
         failures.append("minimum_episodes_within_net_error")
     if duplicate_fraction > float(cast(float, gates["maximum_exact_agreement_fraction"])):
         failures.append("displacement_duplicates_the_cue_delta")
+    step_median = (
+        float(np.median(np.asarray(step_errors, dtype=np.float64))) if step_errors else None
+    )
+    step_p95 = (
+        float(np.quantile(np.asarray(step_errors, dtype=np.float64), 0.95))
+        if step_errors
+        else None
+    )
+    within_3px = (
+        sum(1 for value in step_errors if value <= 3.0) / len(step_errors) if step_errors else 0.0
+    )
+    bias_y = step_bias_y / compared_steps if compared_steps else 0.0
+    bias_x = step_bias_x / compared_steps if compared_steps else 0.0
+    if (
+        "maximum_step_l1_median_px" in gates
+        and step_median is not None
+        and step_median > float(cast(float, gates["maximum_step_l1_median_px"]))
+    ):
+        failures.append("maximum_step_l1_median_px")
+    if (
+        "maximum_step_l1_p95_px" in gates
+        and step_p95 is not None
+        and step_p95 > float(cast(float, gates["maximum_step_l1_p95_px"]))
+    ):
+        failures.append("maximum_step_l1_p95_px")
+    if "minimum_step_agreement_fraction" in gates and within_3px < float(
+        cast(float, gates["minimum_step_agreement_fraction"])
+    ):
+        failures.append("minimum_step_agreement_fraction")
+    if "maximum_step_bias_px" in gates and max(abs(bias_y), abs(bias_x)) > float(
+        cast(float, gates["maximum_step_bias_px"])
+    ):
+        failures.append("maximum_step_bias_px")
     report: dict[str, object] = {
         "schema_version": RESPONSE_AUDIT_SCHEMA,
         "status": "PASSED" if not failures and integrity == "ok" else "FAILED",
@@ -745,23 +820,14 @@ def run_command_response_audit(
             ),
             "per_episode": per_episode,
         },
+        "estimator": estimator,
         "step_diagnostic": {
             "compared_steps": len(step_errors),
-            "l1_median_px": float(np.median(np.asarray(step_errors, dtype=np.float64)))
-            if step_errors
-            else None,
-            "l1_p95_px": float(np.quantile(np.asarray(step_errors, dtype=np.float64), 0.95))
-            if step_errors
-            else None,
-            "fraction_within_3px": sum(1 for value in step_errors if value <= 3.0)
-            / len(step_errors)
-            if step_errors
-            else 0.0,
-            "mean_bias_per_step": [
-                step_bias_y / compared_steps if compared_steps else None,
-                step_bias_x / compared_steps if compared_steps else None,
-            ],
-            "note": "reported diagnostic only; the cumulative gate is unchanged and stays failed",
+            "l1_median_px": step_median,
+            "l1_p95_px": step_p95,
+            "fraction_within_3px": within_3px,
+            "mean_bias_per_step": [bias_y, bias_x],
+            "gated": "maximum_step_l1_median_px" in gates,
         },
         "duplication": {
             "compared_steps": compared_steps,

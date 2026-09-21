@@ -1,0 +1,109 @@
+{
+  "schema_version": "hok-agent-r0-response-task-contract-v2",
+  "status": "frozen_for_independent_check",
+  "frozen_at": "2026-09-21",
+  "task_id": "commanded_response_recovery",
+  "task_statement": "choose one joystick direction each step so the hero keeps producing the commanded displacement and keeps closing on the declared target, including after terrain or an enemy has blocked it or pushed it off the route",
+  "task_replaces": "the R0 navigation-feedback task whose reward was the cue-derived arrival and whose only reference duplicated it",
+  "observation_period_ms": 300,
+  "action_space": [
+    "STOP",
+    "N",
+    "NE",
+    "E",
+    "SE",
+    "S",
+    "SW",
+    "W",
+    "NW"
+  ],
+  "action_vocabulary_source": "hok_agent.transition_store.MovementAction",
+  "declared_goal_source": "the versioned navigation contract bound by policy_bundle_sha256",
+  "signals": [
+    {
+      "name": "patch_displacement",
+      "role": "reward_measurement",
+      "source_class": "rgb_colour_agnostic",
+      "derivation": "zero-mean normalised correlation of the background-subtracted hero patch between consecutive observations, no colour threshold",
+      "reference": "commanded_direction",
+      "reference_class": "execution_stream"
+    },
+    {
+      "name": "commanded_response",
+      "role": "reward",
+      "source_class": "derived_cross_source",
+      "derivation": "projection of patch_displacement on the unit vector of the direction actually dispatched for that step",
+      "reference": "the dispatched joystick direction recorded at dispatch time",
+      "reference_class": "execution_stream"
+    },
+    {
+      "name": "progress",
+      "role": "task_condition",
+      "source_class": "rgb_derived",
+      "derivation": "change in the distance from the frozen green-ring cue position to the declared target",
+      "reference": "dead_reckoned_progress",
+      "reference_class": "independent_measurement_same_frames"
+    },
+    {
+      "name": "dead_reckoned_progress",
+      "role": "independent_reference",
+      "source_class": "rgb_colour_agnostic",
+      "derivation": "running sum of the per-step patch displacements, projected on the goal direction",
+      "reference": "progress",
+      "reference_class": "independent_measurement_same_frames"
+    },
+    {
+      "name": "terminal",
+      "role": "reward",
+      "source_class": "rule_outcome",
+      "derivation": "declared tolerance reached on every target in order",
+      "reference": "store_terminal_reason",
+      "reference_class": "same_source"
+    }
+  ],
+  "independence": {
+    "structural": "the reward compares an execution-stream quantity (the dispatched direction) with a colour-agnostic image measurement (the patch displacement); neither authors the other",
+    "cross_measurement": "the cue-derived progress is compared with a dead-reckoned progress built from the patch displacements, so the two sides use different features of the same frames",
+    "not_independent": [
+      "terminal against its own rule outcome"
+    ],
+    "duplication_guard": "if the patch displacement is derived from the cue position rather than measured on the frame, the audit must fail",
+    "forbidden": "the same unvalidated detector must not both author a reward and prove its own accuracy"
+  },
+  "gates": {
+    "minimum_response_coverage": 0.9,
+    "minimum_positive_response_fraction": 0.6,
+    "maximum_step_l1_median_px": 2.0,
+    "maximum_step_l1_p95_px": 4.0,
+    "minimum_step_agreement_fraction": 0.8,
+    "maximum_step_bias_px": 0.5,
+    "maximum_episode_net_displacement_error_px": 12.0,
+    "minimum_episodes_within_net_error": 1.0,
+    "minimum_dead_reckoning_steps": 8,
+    "maximum_exact_agreement_fraction": 0.9
+  },
+  "reported_denominators": [
+    "episodes",
+    "steps",
+    "move_steps",
+    "stop_steps",
+    "steps_without_displacement",
+    "episodes_within_net_error"
+  ],
+  "stop_conditions": [
+    "response coverage below the frozen gate",
+    "positive response fraction below the frozen gate",
+    "per-step agreement below the frozen gate",
+    "per-axis mean bias above the frozen gate",
+    "any episode whose dead-reckoned net displacement differs from the cue net displacement beyond the gate",
+    "any reward component whose only reference is the same unvalidated detector"
+  ],
+  "estimator": "background_residual_ncc",
+  "revision_reason": "v1 established the structural independence of the commanded-response reward but its plain patch correlation carried a measured (-0.45,-0.85) px per-step bias because the static minimap terrain dominates the patch. v2 removes the static background by subtracting an episode background model before correlating, and pre-declares per-step gates plus an explicit per-axis bias gate so the diagnosed cause is judged directly.",
+  "claim_boundary": {
+    "semantic_position_accuracy_verified": false,
+    "independent_map_reference_available": false,
+    "reward_allowed": false,
+    "training_allowed_before_this_report_passes": false
+  }
+}
