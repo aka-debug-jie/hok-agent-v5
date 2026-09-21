@@ -1,0 +1,62 @@
+{
+  "schema_version": "hok-agent-r1-panel-gating-contract-v1",
+  "status": "frozen",
+  "frozen_at": "2026-09-21",
+  "milestone": "R1",
+  "task_id": "panel_gating_one_step_ahead",
+  "task_statement": "propose, once per observation, whether to dispatch an action, using only the recent derived RGB views of the panel ROI, so that no action is dispatched while the panel reports unavailable and as many actions as possible are dispatched while it reports available",
+  "learnable_component": "one small temporal model that predicts the panel state one observation ahead; the deterministic Router turns that prediction into the applied gate and the model never sends anything",
+  "feedback_contract": "game_rules/r0_panel_feedback_contract_v2.json",
+  "feedback_verification_class": "owner_authorized_bar",
+  "feedback_caveat": "the panel signal passed under an owner-authorized bar, not an independent verification, and the discrete-state structural test still reports not_resolvable_at_this_cadence; R1 may compare candidates but may not claim the feedback is independently verified",
+  "policy_input": {
+    "kind": "last_k_derived_equipment_views",
+    "k": 4,
+    "colour_space": "rgb",
+    "excluded": [
+      "device coordinates",
+      "execution timestamps",
+      "action records",
+      "reward components",
+      "event records",
+      "the current measured panel state"
+    ]
+  },
+  "target": {
+    "name": "panel_state_one_step_ahead",
+    "derivation": "the frozen two-statistic label of the next persisted frame",
+    "authorship": "measured by the frozen rule on a future frame, so the label is neither model-authored nor visible to the policy input"
+  },
+  "baseline": {
+    "name": "myopic_persistence",
+    "rule": "predict the next state as the current measured state and dispatch if and only if it reports available",
+    "frozen": true
+  },
+  "data": {
+    "source": "read-only bounded capture on the owner-authorized route; the capture sends no device input and adds no input transport",
+    "sample_rate_hz": 5.0,
+    "minimum_samples": 1200,
+    "split": "by episode; no frame from a held-out episode may appear in training",
+    "label_authorship": "frozen statistic rule applied to the next persisted frame"
+  },
+  "primary_metric": "held-out one-step-ahead panel-state accuracy and the resulting wrong-phase dispatch count",
+  "pre_declared_requirements": {
+    "minimum_candidate_accuracy_gain": 0.05,
+    "maximum_candidate_wrong_phase_dispatch_count": 0,
+    "maximum_ambiguous_step_fraction": 0.15
+  },
+  "retain_rule_if": "the candidate fails the pre-declared accuracy gain, or its wrong-phase dispatch count is not lower than the baseline's, or the ambiguous-step fraction exceeds the frozen bound",
+  "claim_boundary": {
+    "comparison_only": true,
+    "semantic_panel_semantics_verified": false,
+    "independent_feedback_verification_claimed": false,
+    "promotion_allowed": false,
+    "device_input_added": false,
+    "semantic_accuracy_verified": false
+  },
+  "budget": {
+    "engineering_hours_cap": 24,
+    "gpu_hours_cap": 4,
+    "bytes_cap": null
+  }
+}
