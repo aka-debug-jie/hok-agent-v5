@@ -859,6 +859,24 @@ def _parser() -> argparse.ArgumentParser:
     goal_navigation_staged.add_argument("--takeovers", type=int, default=0)
     goal_navigation_staged.add_argument("--enable-input", action="store_true")
     goal_navigation_staged.add_argument("--persist-minimap-frames", action="store_true")
+    navigation_store = commands.add_parser(
+        "mobile-navigation-store",
+        help="run one device navigation episode bound to the single UnifiedTransitionStore",
+    )
+    navigation_store.add_argument("--serial", required=True)
+    navigation_store.add_argument("--config", type=Path, required=True)
+    navigation_store.add_argument("--visual-layout", type=Path, required=True)
+    navigation_store.add_argument("--execution-layout", type=Path, required=True)
+    navigation_store.add_argument("--observation-rois", type=Path, required=True)
+    navigation_store.add_argument("--output-dir", type=Path, required=True)
+    navigation_store.add_argument("--enable-input", action="store_true")
+    navigation_verify = commands.add_parser(
+        "mobile-navigation-verify",
+        help="reload one committed device navigation episode and verify its frames",
+    )
+    navigation_verify.add_argument("--store", type=Path, required=True)
+    navigation_verify.add_argument("--episode-id", required=True)
+    navigation_verify.add_argument("--frame-root", type=Path, required=True)
     operation_side = commands.add_parser(
         "mobile-operation-team-side",
         help="detect blue or red side from the loading-panel self highlight",
@@ -3026,6 +3044,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 takeovers=args.takeovers,
                 enable_input=args.enable_input,
                 persist_minimap_frames=args.persist_minimap_frames,
+            )
+        elif args.command == "mobile-navigation-store":
+            from hok_agent.mobile_navigation_store import run_mobile_navigation_episode
+
+            result = run_mobile_navigation_episode(
+                serial=args.serial,
+                contract_path=args.config,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                enable_input=args.enable_input,
+            )
+        elif args.command == "mobile-navigation-verify":
+            from hok_agent.mobile_navigation_store import verify_mobile_navigation_episode
+
+            result = verify_mobile_navigation_episode(
+                store_path=args.store,
+                episode_id=args.episode_id,
+                frame_root=args.frame_root,
             )
         elif args.command == "mobile-operation-team-side":
             from hok_agent.mobile_testbed import detect_mobile_operation_team_side
