@@ -786,6 +786,37 @@ NEXT_DECISION: only an external independent reference or a scene with a genuinel
   chain stays frozen. This step added no run bytes; the walk and the two validation runs used the
   existing guarded chain.
 
+### Route B exposes that the delivered chain does not generalise (2026-09-21)
+
+- A second declared route was frozen: `configs/movement_goal_navigation_route_b_v1.json`
+  (`634c26f5`), a four-waypoint rectangle (44,44) -> (88,44) -> (88,84) -> (44,84) inside the
+  free-movement region, carrying the same store block, gates and machinery as the first route so the
+  only change is the path shape, length and waypoint count.
+- **The chain did not generalise.** `route-b-batch-1` ran three consecutive episodes and arrived in
+  **none** (arrival rate 0.0), while every infrastructure gate passed: 194 transitions,
+  3 terminal transitions, store integrity ok, `mobile-navigation-verify --all` reports
+  `recoverable=true` with no findings, backlog-free, zero retries, zero unacked dispatches and a
+  stable policy binding. The failure is behavioural, not runtime.
+- Two distinct failure modes, both measured:
+  - **Stall against terrain.** Episodes 02 and 03 made essentially no progress. Episode 02 has
+    **47 zero-displacement steps out of 55** with a longest zero run of **36 steps** (about 43 s),
+    holding `KEEP` at (82.6, 58.6) and then (82.1, 60.8). The rule keeps pushing the same bearing into
+    a wall and the runner has no stall detection, so the episode ends on the duration cap with 41 px
+    still to go.
+  - **Near-target oscillation.** Episode 01 did reach waypoints 0 and 1 (arrival distances 1.5 and
+    6.8 px) but then oscillated around waypoint (88,84) for 64 steps with the distance never inside
+    the 4 px tolerance (6.6-10.4 px), because the per-step displacement in the final-approach zone is
+    comparable to the remaining distance and the bearing alternates between two adjacent sectors.
+- Consequence for the recorded claims: the earlier 14/14 staged admission and the L2 batch prove the
+  chain on the two-waypoint diagonal only. Route B shows that claim does not extend to a different
+  path shape, and it names the missing mechanism - the runner has no stall or blocked-direction
+  detection. This differs from the deleted recovery sweep: there the trigger could not be reached at
+  all, whereas here the trigger is directly observable and reproducible, because the hero is still
+  stuck at about (82, 60) after the run.
+- Recorded next step, not taken here: add a declared stall guard (detect zero commanded displacement
+  over a bounded window and change the bearing), which is now evidence-driven rather than defensive,
+  then re-run route B under unchanged gates. This step used 28,607,477 new bytes.
+
 ### 2026-09-09 development review and factual corrections
 
 - Code inspection: `run_change_geometry_replay` in movement_goal_canvas.py appends plain step
