@@ -921,6 +921,17 @@ def _parser() -> argparse.ArgumentParser:
     panel_audit.add_argument("--store", type=Path, required=True)
     panel_audit.add_argument("--frame-root", type=Path, required=True)
     panel_audit.add_argument("--output-dir", type=Path, required=True)
+    panel_capture = commands.add_parser(
+        "mobile-panel-capture",
+        help="read-only bounded capture of the panel ROI for R1 samples",
+    )
+    panel_capture.add_argument("--serial", required=True)
+    panel_capture.add_argument("--visual-layout", type=Path, required=True)
+    panel_capture.add_argument("--observation-rois", type=Path, required=True)
+    panel_capture.add_argument("--output-dir", type=Path, required=True)
+    panel_capture.add_argument("--episode-id", required=True)
+    panel_capture.add_argument("--seconds", type=float, required=True)
+    panel_capture.add_argument("--sample-hz", type=float, default=5.0)
     operation_side = commands.add_parser(
         "mobile-operation-team-side",
         help="detect blue or red side from the loading-panel self highlight",
@@ -3119,6 +3130,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             else:
                 raise SystemExit("mobile-navigation-verify needs --episode-id or --all")
+        elif args.command == "mobile-panel-capture":
+            from hok_agent.mobile_navigation_store import capture_panel_samples
+
+            result = capture_panel_samples(
+                serial=args.serial,
+                visual_layout_path=args.visual_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                episode_id=args.episode_id,
+                seconds=args.seconds,
+                sample_hz=args.sample_hz,
+            )
         elif args.command == "navigation-panel-audit":
             from hok_agent.navigation_feedback_audit import run_panel_feedback_audit
 

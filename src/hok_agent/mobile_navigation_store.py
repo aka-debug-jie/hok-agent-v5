@@ -941,3 +941,108 @@ def verify_mobile_navigation_episode(
         "recoverable": not findings,
         "findings": sorted(set(findings)),
     }
+
+
+PANEL_CAPTURE_SCHEMA = "hok-agent-panel-capture-v1"
+
+
+def capture_panel_samples(
+    *,
+    serial: str,
+    visual_layout_path: Path,
+    observation_rois_path: Path,
+    output_dir: Path,
+    episode_id: str,
+    seconds: float,
+    sample_hz: float,
+) -> dict[str, object]:
+    """Read-only bounded capture of the panel ROI for R1.
+
+    This function deliberately constructs no input sender: it has no joystick, sends no touch and
+    cannot dispatch anything. It writes only the derived panel view and its capture timestamps.
+    """
+    if seconds <= 0 or sample_hz <= 0:
+        raise MobileTestbedError("panel capture duration and rate must be positive")
+    if sample_hz > 30:
+        raise MobileTestbedError("panel capture rate is above the capture ceiling")
+    visual_layout, visual_sha = load_layout(visual_layout_path)
+    rois, rois_sha = load_observation_rois(observation_rois_path)
+    output = _new_large_output(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    guard = _open_device_guard(serial)
+    if (guard.width, guard.height) != (visual_layout.width, visual_layout.height):
+        raise MobileTestbedError("panel capture display differs")
+    if rois.width != guard.width or rois.height != guard.height:
+        raise MobileTestbedError("panel capture rois differ")
+    session = ScrcpyControlSession(guard.serial, 30)
+    watchdog = GuardWatchdog(guard, ACTIVE_PROBE_GUARD_INTERVAL_SECONDS)
+    views: list[np.ndarray] = []
+    capture_ns: list[int] = []
+    interval = 1.0 / sample_hz
+    failure: str | None = None
+    started = 0.0
+    try:
+        session.start()
+        if session.frame_size != (guard.width, guard.height):
+            raise MobileTestbedError("panel capture scrcpy frame size differs")
+        watchdog.start()
+        started = time.monotonic()
+        deadline = started + seconds
+        next_at = started
+        while time.monotonic() < deadline:
+            watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
+            timestamp_ns, frame = session.frame()
+            views.append(
+                np.ascontiguousarray(
+                    _observation_roi_frame(frame, rois.recommended_equipment)
+                )
+            )
+            capture_ns.append(int(timestamp_ns))
+            next_at += interval
+            sleep_for = next_at - time.monotonic()
+            while sleep_for > 0:
+                time.sleep(min(sleep_for, GOAL_NAVIGATION_LOOP_SLEEP_SECONDS))
+                sleep_for = next_at - time.monotonic()
+    except Exception as exc:  # noqa: BLE001
+        failure = str(exc)
+    finally:
+        watchdog.stop()
+        session.close()
+    shards: list[dict[str, object]] = []
+    if views:
+        shards_dir = output / "shards"
+        shards_dir.mkdir(parents=True, exist_ok=True)
+        for index in range(0, len(views), 256):
+            name = f"panel-{index // 256:04d}.npz"
+            np.savez_compressed(
+                shards_dir / name,
+                equipment=np.stack(views[index : index + 256]),
+                capture_ns=np.asarray(capture_ns[index : index + 256], dtype=np.int64),
+            )
+            shards.append(
+                {
+                    "path": name,
+                    "sha256": hashlib.sha256((shards_dir / name).read_bytes()).hexdigest(),
+                    "rows": len(views[index : index + 256]),
+                }
+            )
+    summary: dict[str, object] = {
+        "schema_version": PANEL_CAPTURE_SCHEMA,
+        "status": "PASSED" if failure is None and views else "FAILED",
+        "episode_id": episode_id,
+        "purpose": "r1_panel_gating_samples",
+        "visual_layout_sha256": visual_sha,
+        "observation_rois_sha256": rois_sha,
+        "seconds": seconds,
+        "sample_hz": sample_hz,
+        "samples": len(views),
+        "shards": shards,
+        "device_input_sent": False,
+        "input_sender_constructed": False,
+        "derived_views_persisted": True,
+        "failure": failure,
+    }
+    (output / "summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return summary
