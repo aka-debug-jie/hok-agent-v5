@@ -457,3 +457,83 @@ def test_store_v2_contract_carries_the_localisation_gap_guard() -> None:
     assert block["maximum_localization_gap_frames"] == 10
     v1, _ = _goal_navigation_contract(ROOT / "configs/movement_goal_navigation_store_v1.json")
     assert "maximum_localization_gap_frames" not in cast(dict, v1["store"])
+
+
+def test_recovery_direction_sweeps_the_declared_order() -> None:
+    order = ["north", "east", "south", "west"]
+    assert policy_direction(0, order) == "north"
+    assert policy_direction(3, order) == "west"
+    assert policy_direction(4, order) == "north"
+    assert policy_direction(11, order) == "west"
+    with pytest.raises(store_runner.MobileTestbedError):
+        store_runner._recovery_direction(0, [])
+    with pytest.raises(store_runner.MobileTestbedError):
+        store_runner._recovery_direction(-1, order)
+
+
+def policy_direction(attempt: int, order: list[str]) -> str:
+    return store_runner._recovery_direction(attempt, order)
+
+
+def test_recovery_suspends_the_gap_failure_while_it_runs() -> None:
+    """A bounded sweep must be allowed to run past the plain gap limit, then fail if it cannot recover."""
+    outcome = store_runner._episode_outcome
+    assert outcome(
+        arrived=False,
+        death=False,
+        outside_region=False,
+        missing_streak=40,
+        maximum_gap=10,
+        budget_exhausted=False,
+        recovery_active=True,
+    ) == (False, "NOT_DONE", "NOT_DONE", None)
+    assert outcome(
+        arrived=False,
+        death=False,
+        outside_region=False,
+        missing_streak=40,
+        maximum_gap=10,
+        budget_exhausted=False,
+        recovery_active=False,
+    ) == (True, "CAPTURE_FAILURE", "ERROR", "localization_gap")
+
+
+def test_store_v3_contract_declares_the_bounded_recovery() -> None:
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    contract, sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_store_v3.json"
+    )
+    assert len(sha) == 64
+    recovery = cast(dict, contract["recovery"])
+    assert recovery["mode"] == "bounded_direction_sweep"
+    assert len(recovery["direction_order"]) == 8
+    assert recovery["maximum_attempts_per_event"] > recovery["trigger_missing_frames"]
+
+
+def test_store_v3_contract_rejects_a_broken_recovery_block(tmp_path: Path) -> None:
+
+    value = json.loads(
+        (ROOT / "configs/movement_goal_navigation_store_v3.json").read_text(encoding="utf-8")
+    )
+    tampered = tmp_path / "store-v3.json"
+    for mutate in (
+        lambda item: item["recovery"].__setitem__("mode", "ad_hoc"),
+        lambda item: item["recovery"].__setitem__("direction_order", ["north", "up"]),
+        lambda item: item["recovery"].__setitem__("direction_order", ["north"]),
+        lambda item: item["recovery"].__setitem__("maximum_attempts_per_event", 0),
+    ):
+        value = json.loads(
+            (ROOT / "configs/movement_goal_navigation_store_v3.json").read_text(encoding="utf-8")
+        )
+        mutate(value)
+        tampered.write_text(json.dumps(value), encoding="utf-8")
+        with pytest.raises(MobileTestbedError):
+            store_runner._store_contract(value, "0" * 64)
+    v1 = store_runner._store_contract(
+        json.loads(
+            (ROOT / "configs/movement_goal_navigation_store_v1.json").read_text(encoding="utf-8")
+        ),
+        "0" * 64,
+    )
+    assert v1.get("recovery") is None
