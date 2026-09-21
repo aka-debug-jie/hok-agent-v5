@@ -130,11 +130,46 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
         or block.get("schema_version") != MOBILE_NAVIGATION_STORE_CONTRACT_SCHEMA
     ):
         raise MobileTestbedError("mobile navigation store contract differs")
+    planner_raw = contract.get("planner")
+    planner = cast(dict[str, object] | None, planner_raw)
+    if planner_raw is not None and (
+        not isinstance(planner_raw, dict)
+        or planner_raw.get("mode") != "path_progress_with_feasibility"
+        or any(
+            not isinstance(planner_raw.get(key), (int, float))
+            or float(cast(float, planner_raw[key])) <= 0
+            for key in (
+                "nominal_step_pixels",
+                "margin_pixels",
+                "lookahead_pixels",
+                "stall_bias",
+            )
+        )
+        or contract.get("region_filter") is not None
+        or (
+            isinstance(contract.get("progress_guard"), dict)
+            and cast(dict[str, object], contract["progress_guard"]).get("escape_offsets_sectors")
+            is not None
+        )
+    ):
+        raise MobileTestbedError("mobile navigation store planner differs")
     guard_raw = contract.get("progress_guard")
     if guard_raw is not None and not isinstance(guard_raw, dict):
         raise MobileTestbedError("mobile navigation store progress guard differs")
     progress_guard = cast(dict[str, object] | None, guard_raw)
-    if progress_guard is not None:
+    if progress_guard is not None and progress_guard.get("mode") == "stall_trigger_only":
+        if any(
+            not isinstance(progress_guard.get(key), (int, float))
+            or float(cast(float, progress_guard[key])) <= 0
+            for key in (
+                "minimum_improvement_pixels",
+                "confirmation_steps",
+                "stall_steps",
+                "maximum_events_per_episode",
+            )
+        ):
+            raise MobileTestbedError("mobile navigation store progress guard differs")
+    elif progress_guard is not None:
         offsets = progress_guard.get("escape_offsets_sectors")
         if (
             progress_guard.get("mode") != "bounded_bearing_escape"
@@ -206,6 +241,7 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
             raise MobileTestbedError("mobile navigation store final approach differs")
     resolved = dict(block)
     resolved["progress_guard"] = progress_guard
+    resolved["planner"] = planner
     resolved["final_approach"] = final_approach
     resolved["region_filter"] = region_filter
     resolved["policy_bundle_sha256"] = contract_sha
@@ -444,6 +480,80 @@ def _rotate_direction(direction: str, sectors: int) -> str:
     return _MOVEMENT_ORDER[(index + sectors) % len(_MOVEMENT_ORDER)]
 
 
+def _path_reference(
+    position: tuple[float, float],
+    route: list[tuple[float, float]],
+    waypoint_index: int,
+    start: tuple[float, float],
+    lookahead_pixels: float,
+) -> tuple[float, float]:
+    """The point on the current leg the planner aims at: the path projection plus a lookahead."""
+    index = min(max(waypoint_index, 0), len(route) - 1)
+    leg_start = start if index == 0 else route[index - 1]
+    leg_end = route[index]
+    span_y = leg_end[0] - leg_start[0]
+    span_x = leg_end[1] - leg_start[1]
+    length_squared = span_y * span_y + span_x * span_x
+    if length_squared <= 1e-9:
+        return leg_end
+    along = (
+        (position[0] - leg_start[0]) * span_y + (position[1] - leg_start[1]) * span_x
+    ) / length_squared
+    along = min(max(along, 0.0), 1.0)
+    length = float(np.sqrt(length_squared))
+    lead = min(1.0, along + lookahead_pixels / length)
+    return (leg_start[0] + span_y * lead, leg_start[1] + span_x * lead)
+
+
+def _planner_direction(
+    position: tuple[float, float],
+    route: list[tuple[float, float]],
+    waypoint_index: int,
+    start: tuple[float, float],
+    region: dict[str, object],
+    *,
+    nominal_step_pixels: float,
+    margin_pixels: float,
+    lookahead_pixels: float,
+    stall_active: bool,
+    stall_bias: float,
+) -> tuple[str, tuple[float, float]]:
+    """One arbiter: maximise progress along the path subject to staying inside the region.
+
+    Feasibility and progress live in the same objective, so no layer can override another. While the
+    progress guard reports a stall the objective additionally rewards a lateral component, which is
+    a sidestep along the objective rather than a rotation of the bearing.
+    """
+    reference = _path_reference(position, route, waypoint_index, start, lookahead_pixels)
+    aim_y = reference[0] - position[0]
+    aim_x = reference[1] - position[1]
+    aim_norm = float(np.hypot(aim_y, aim_x))
+    if aim_norm <= 1e-9:
+        return "wait", reference
+    aim_y /= aim_norm
+    aim_x /= aim_norm
+    minimum_y = float(cast(float, region["minimum_y"])) + margin_pixels
+    maximum_y = float(cast(float, region["maximum_y"])) - margin_pixels
+    minimum_x = float(cast(float, region["minimum_x"])) + margin_pixels
+    maximum_x = float(cast(float, region["maximum_x"])) - margin_pixels
+    scored: list[tuple[bool, float, str]] = []
+    for name, (step_y, step_x) in _DIRECTION_STEPS.items():
+        target_y = position[0] + step_y * nominal_step_pixels
+        target_x = position[1] + step_x * nominal_step_pixels
+        feasible = (
+            minimum_y <= target_y <= maximum_y and minimum_x <= target_x <= maximum_x
+        )
+        progress = step_y * aim_y + step_x * aim_x
+        if stall_active:
+            lateral = abs(step_y * aim_x - step_x * aim_y)
+            progress = (1.0 - stall_bias) * progress + stall_bias * lateral
+        scored.append((feasible, progress, name))
+    feasible_steps = [item for item in scored if item[0]]
+    if feasible_steps:
+        return max(feasible_steps, key=lambda item: item[1])[2], reference
+    return max(scored, key=lambda item: item[1])[2], reference
+
+
 def _approach_hold_ms(
     distance: float | None, tiers: list[tuple[float, int]], default_hold_ms: int
 ) -> int:
@@ -568,6 +678,7 @@ class _NavigationRuntime:
     maximum_duration_seconds: float
     progress_guard: dict[str, object] | None
     region_filter: dict[str, object] | None
+    planner: dict[str, object] | None
     approach_tiers: list[tuple[float, int]]
     approach_default_hold_ms: int
     guard: DeviceGuard
@@ -637,6 +748,7 @@ def _prepare_navigation_runtime(
         ),
         progress_guard=cast(dict[str, object] | None, store_contract.get("progress_guard")),
         region_filter=cast(dict[str, object] | None, store_contract.get("region_filter")),
+        planner=cast(dict[str, object] | None, store_contract.get("planner")),
         approach_tiers=(
             [
                 (
@@ -688,6 +800,7 @@ def _run_episode(
     previous_joystick = "wait"
     region_streak = 0
     missing_streak = 0
+    start_position: tuple[float, float] | None = None
     progress_guard = runtime.progress_guard
     guard_offsets = (
         [
@@ -695,10 +808,13 @@ def _run_episode(
             for item in cast(list[object], progress_guard["escape_offsets_sectors"])
         ]
         if progress_guard is not None
+        and progress_guard.get("mode") == "bounded_bearing_escape"
         else []
     )
     guard_hold = (
         int(cast(int, progress_guard["escape_hold_steps"]))
+        if progress_guard is not None and progress_guard.get("mode") == "bounded_bearing_escape"
+        else 1
         if progress_guard is not None
         else 0
     )
@@ -717,7 +833,13 @@ def _run_episode(
         if progress_guard is not None
         else 0
     )
-    guard_escape_steps = len(guard_offsets) * guard_hold
+    guard_escape_steps = (
+        len(guard_offsets) * guard_hold
+        if guard_offsets
+        else int(cast(int, progress_guard["stall_steps"])) * guard_hold
+        if progress_guard is not None and progress_guard.get("mode") == "stall_trigger_only"
+        else 0
+    )
     best_distance: float | None = None
     no_progress_streak = 0
     escape_active = False
@@ -821,33 +943,49 @@ def _run_episode(
                     best_distance = distance
                     no_progress_streak = 0
             requested_joystick = "wait"
-            if position is not None and not death and not outside_region:
+            planner = runtime.planner
+            if planner is not None and position is not None and not death and not outside_region:
+                if start_position is None:
+                    start_position = position
+                requested_joystick, _reference = _planner_direction(
+                    position,
+                    runtime.targets,
+                    waypoint_index,
+                    start_position,
+                    region,
+                    nominal_step_pixels=float(cast(float, planner["nominal_step_pixels"])),
+                    margin_pixels=float(cast(float, planner["margin_pixels"])),
+                    lookahead_pixels=float(cast(float, planner["lookahead_pixels"])),
+                    stall_active=escape_active,
+                    stall_bias=float(cast(float, planner["stall_bias"])),
+                )
+            elif position is not None and not death and not outside_region:
                 requested_joystick = _goal_navigation_direction(
                     position, target, previous_joystick, runtime.hysteresis
                 )
             applied_joystick, owner, reason = _route(
                 requested_joystick, known=known, death=death, outside_region=outside_region
             )
-            if (
-                escape_active
-                and progress_guard is not None
-                and not death
-                and applied_joystick != "wait"
-                and escape_steps < guard_escape_steps
-            ):
-                offset = _progress_guard_offset(escape_steps, guard_hold, guard_offsets)
-                applied_joystick = _rotate_direction(applied_joystick, offset)
+            if escape_active and progress_guard is not None and not death:
+                if (
+                    runtime.planner is None
+                    and applied_joystick != "wait"
+                    and escape_steps < guard_escape_steps
+                ):
+                    offset = _progress_guard_offset(escape_steps, guard_hold, guard_offsets)
+                    applied_joystick = _rotate_direction(applied_joystick, offset)
+                    owner = "deterministic_router"
+                    reason = "progress_guard_escape"
                 escape_steps += 1
                 guard_escape_steps_total += 1
-                owner = "deterministic_router"
-                reason = "progress_guard_escape"
-            elif escape_active and escape_steps >= guard_escape_steps:
-                escape_active = False
-                escape_steps = 0
+                if escape_steps >= guard_escape_steps:
+                    escape_active = False
+                    escape_steps = 0
             region_filter = runtime.region_filter
             region_filter_applied = False
             if (
-                region_filter is not None
+                runtime.planner is None
+                and region_filter is not None
                 and position is not None
                 and not death
                 and applied_joystick != "wait"

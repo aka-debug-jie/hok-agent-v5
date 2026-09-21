@@ -638,3 +638,143 @@ def test_route_b_v4_contract_rejects_a_broken_deceleration_table() -> None:
         mutate(value)
         with pytest.raises(MobileTestbedError):
             store_runner._store_contract(value, "0" * 64)
+
+
+def test_path_reference_projects_and_leads_along_the_leg() -> None:
+    # route entries are (y, x); this leg runs along x from (50, 50) to (50, 80)
+    route = [(50.0, 50.0), (50.0, 80.0)]
+    start = (50.0, 50.0)
+    reference = store_runner._path_reference((60.0, 50.0), route, 1, start, 10.0)
+    assert abs(reference[0] - 50.0) < 1e-9
+    assert abs(reference[1] - 60.0) < 1e-6
+    at_end = store_runner._path_reference((50.0, 79.0), route, 1, start, 10.0)
+    assert abs(at_end[1] - 80.0) < 1e-9
+    before = store_runner._path_reference((50.0, 40.0), route, 1, start, 10.0)
+    assert before[1] >= 50.0
+
+
+def test_planner_maximises_progress_and_never_leaves_the_region() -> None:
+    route = [(50.0, 50.0), (60.0, 60.0)]
+    region = {"minimum_y": 35.0, "maximum_y": 95.0, "minimum_x": 35.0, "maximum_x": 95.0}
+    position = (50.0, 50.0)
+    chosen, reference = store_runner._planner_direction(
+        position,
+        route,
+        1,
+        position,
+        region,
+        nominal_step_pixels=6.0,
+        margin_pixels=4.0,
+        lookahead_pixels=10.0,
+        stall_active=False,
+        stall_bias=0.6,
+    )
+    aim_y = reference[0] - position[0]
+    aim_x = reference[1] - position[1]
+    norm = (aim_y * aim_y + aim_x * aim_x) ** 0.5
+    aim_y /= norm
+    aim_x /= norm
+    best = max(
+        store_runner._DIRECTION_STEPS.items(),
+        key=lambda item: item[1][0] * aim_y + item[1][1] * aim_x,
+    )[0]
+    assert chosen == best
+    corner, _ = store_runner._planner_direction(
+        (93.0, 93.0),
+        route,
+        1,
+        position,
+        region,
+        nominal_step_pixels=6.0,
+        margin_pixels=4.0,
+        lookahead_pixels=10.0,
+        stall_active=False,
+        stall_bias=0.6,
+    )
+    step_y, step_x = store_runner._DIRECTION_STEPS[corner]
+    assert 39.0 <= 93.0 + step_y * 6.0 <= 91.0
+    assert 39.0 <= 93.0 + step_x * 6.0 <= 91.0
+
+
+def test_planner_stall_mode_rewards_a_lateral_component() -> None:
+    route = [(50.0, 50.0), (50.0, 80.0)]
+    region = {"minimum_y": 35.0, "maximum_y": 95.0, "minimum_x": 35.0, "maximum_x": 95.0}
+    position = (50.0, 60.0)
+    straight, reference = store_runner._planner_direction(
+        position, route, 1, (50.0, 50.0), region,
+        nominal_step_pixels=6.0, margin_pixels=4.0, lookahead_pixels=10.0,
+        stall_active=False, stall_bias=0.6,
+    )
+    stalled, _ = store_runner._planner_direction(
+        position, route, 1, (50.0, 50.0), region,
+        nominal_step_pixels=6.0, margin_pixels=4.0, lookahead_pixels=10.0,
+        stall_active=True, stall_bias=0.6,
+    )
+    aim_y = reference[0] - position[0]
+    aim_x = reference[1] - position[1]
+    norm = (aim_y * aim_y + aim_x * aim_x) ** 0.5
+    aim_y /= norm
+    aim_x /= norm
+    assert set(store_runner._DIRECTION_STEPS) == set(store_runner._MOVEMENT_ORDER)
+    for step_y, step_x in store_runner._DIRECTION_STEPS.values():
+        assert (step_y * step_y + step_x * step_x) > 0.0
+    straight_lateral = abs(
+        store_runner._DIRECTION_STEPS[straight][0] * aim_x
+        - store_runner._DIRECTION_STEPS[straight][1] * aim_y
+    )
+    stalled_lateral = abs(
+        store_runner._DIRECTION_STEPS[stalled][0] * aim_x
+        - store_runner._DIRECTION_STEPS[stalled][1] * aim_y
+    )
+    assert stalled_lateral > straight_lateral
+
+
+def test_route_b_v6_contract_declares_the_single_arbiter_planner() -> None:
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    contract, sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v6.json"
+    )
+    assert len(sha) == 64
+    planner = cast(dict, contract["planner"])
+    assert planner["mode"] == "path_progress_with_feasibility"
+    assert planner["lookahead_pixels"] > 0 and 0.0 < planner["stall_bias"] < 1.0
+    guard = cast(dict, contract["progress_guard"])
+    assert guard["mode"] == "stall_trigger_only"
+    assert "escape_offsets_sectors" not in guard
+    assert "region_filter" not in contract
+    resolved = store_runner._store_contract(contract, sha)
+    assert resolved["planner"] == planner
+
+
+def test_route_b_v6_rejects_two_arbiters() -> None:
+    value = json.loads(
+        (ROOT / "configs/movement_goal_navigation_route_b_v6.json").read_text(encoding="utf-8")
+    )
+    value["region_filter"] = {
+        "mode": "feasible_direction_within_region",
+        "nominal_step_pixels": 6.0,
+        "margin_pixels": 4.0,
+    }
+    with pytest.raises(MobileTestbedError):
+        store_runner._store_contract(value, "0" * 64)
+    value = json.loads(
+        (ROOT / "configs/movement_goal_navigation_route_b_v6.json").read_text(encoding="utf-8")
+    )
+    value["progress_guard"]["escape_offsets_sectors"] = [1, -1]
+    with pytest.raises(MobileTestbedError):
+        store_runner._store_contract(value, "0" * 64)
+
+
+def test_stall_trigger_guard_has_no_escape_schedule() -> None:
+    """A stall-trigger-only guard must not require the escape schedule the planner replaces."""
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    contract, sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v6.json"
+    )
+    resolved = store_runner._store_contract(contract, sha)
+    guard = cast(dict, resolved["progress_guard"])
+    assert guard["mode"] == "stall_trigger_only"
+    assert "escape_offsets_sectors" not in guard
+    assert resolved["planner"] is not None
