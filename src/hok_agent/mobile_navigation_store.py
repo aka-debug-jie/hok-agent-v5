@@ -955,6 +955,7 @@ def _run_episode(
         "abort_reason": abort_reason,
         "progress_guard_events": guard_events,
         "progress_guard_escape_steps": guard_escape_steps_total,
+        "region_filter_masked_steps": region_filter_masked_steps,
         "duration_seconds": round(time.monotonic() - started, 8),
         "step_rows": steps,
     }
