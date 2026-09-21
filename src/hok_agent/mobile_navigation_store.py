@@ -532,9 +532,10 @@ def _run_episode(
             applied = JOYSTICK_TO_STORE_DIRECTION[applied_joystick]
             command = _movement_command(previous_applied, applied)
             before_messages = pointer_messages
+            dispatched_direction = applied_joystick if command in {"DOWN", "MOVE", "UP"} else None
             operations = (
-                joystick.set_direction(applied_joystick)
-                if command in {"DOWN", "MOVE", "UP"}
+                joystick.set_direction(dispatched_direction)
+                if dispatched_direction is not None
                 else []
             )
             (
@@ -613,6 +614,7 @@ def _run_episode(
                 )
             steps.append(
                 {
+                    "episode_id": episode_id,
                     "step_id": step_id,
                     "frame_timestamp_ns": frame_timestamp_ns,
                     "goal_index": waypoint_index,
@@ -626,6 +628,7 @@ def _run_episode(
                     "router_owner": owner,
                     "router_reason": reason,
                     "movement_command": command,
+                    "dispatched_direction": dispatched_direction,
                     "dispatch_start_ns": dispatch_start_ns,
                     "dispatch_ack_ns": dispatch_ack_ns,
                     "settle_end_ns": settle_end_ns,

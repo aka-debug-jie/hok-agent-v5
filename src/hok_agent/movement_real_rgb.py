@@ -2065,6 +2065,46 @@ def _write_localization_contact_sheet(
     canvas.save(path, format="PNG", optimize=False)
 
 
+def write_marker_contact_sheet(
+    path: Path,
+    frames: np.ndarray,
+    markers: list[list[tuple[float, float, str]]],
+    labels: list[str] | None = None,
+) -> None:
+    """Write a non-interactive offline QA contact sheet with labelled markers per frame.
+
+    Each marker is (y, x, colour_name); the colour names are fixed so the sheet has no
+    free-form annotation surface.
+    """
+    from PIL import Image, ImageDraw
+
+    palette = {"a": (0, 255, 255), "b": (255, 0, 255), "motion": (255, 225, 0)}
+    columns = 4
+    scale = 2
+    rows = math.ceil(len(frames) / columns)
+    canvas = Image.new("RGB", (columns * 128 * scale, rows * 128 * scale))
+    for ordinal, frame in enumerate(frames):
+        image = Image.fromarray(np.ascontiguousarray(frame).copy())
+        draw = ImageDraw.Draw(image)
+        for y, x, colour in markers[ordinal]:
+            outline = palette.get(colour, (255, 255, 255))
+            draw.ellipse((x - 6, y - 6, x + 6, y + 6), outline=outline, width=2)
+        if labels is not None:
+            draw.text(
+                (2, 2),
+                labels[ordinal],
+                fill=(255, 255, 255),
+                stroke_width=1,
+                stroke_fill=(0, 0, 0),
+            )
+        image = image.resize((128 * scale, 128 * scale), Image.Resampling.NEAREST)
+        canvas.paste(
+            image,
+            ((ordinal % columns) * 128 * scale, (ordinal // columns) * 128 * scale),
+        )
+    canvas.save(path, format="PNG", optimize=False)
+
+
 def run_real_player_localization_audit_v2(
     contract_path: Path,
     prior_report_path: Path,

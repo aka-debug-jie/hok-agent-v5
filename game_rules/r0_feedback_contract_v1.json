@@ -1,0 +1,115 @@
+{
+  "schema_version": "hok-agent-r0-feedback-contract-v1",
+  "status": "frozen_for_independent_check",
+  "frozen_at": "2026-09-21",
+  "task_id": "goal_directed_navigation_with_recovery",
+  "task_statement": "drive the hero to each declared minimap target in order and stop, on one device session and one transition store, when the perception is reliable and when it is not",
+  "observation_period_ms": 300,
+  "action_space": [
+    "STOP",
+    "N",
+    "NE",
+    "E",
+    "SE",
+    "S",
+    "SW",
+    "W",
+    "NW"
+  ],
+  "action_vocabulary_source": "hok_agent.transition_store.MovementAction",
+  "terminal_reasons": [
+    "NAVIGATION_GOAL_REACHED",
+    "SAFETY_STOP",
+    "TIMEOUT"
+  ],
+  "declared_goal_source": "the versioned navigation contract bound by policy_bundle_sha256; a task condition, not human intent",
+  "rule_baseline": "the frozen geometry rule of the navigation contract, replayed on the same scenario",
+  "signals": [
+    {
+      "name": "hero_position",
+      "role": "task_condition",
+      "source_class": "rgb_derived",
+      "derivation": "frozen green-ring cue on the minimap view of the FramePacket",
+      "reference": "independent_position_derivation",
+      "reference_class": "implementation_independent_same_sensor"
+    },
+    {
+      "name": "hero_motion",
+      "role": "task_condition",
+      "source_class": "rgb_derived",
+      "derivation": "largest inter-observation change region inside the minimap interior",
+      "reference": "hero_position",
+      "reference_class": "independent_feature_same_sensor"
+    },
+    {
+      "name": "action_dispatch",
+      "role": "action_record",
+      "source_class": "execution_stream",
+      "derivation": "the joystick direction actually passed to set_direction at dispatch time",
+      "reference": "store_executed_action",
+      "reference_class": "independent_source"
+    },
+    {
+      "name": "terminal",
+      "role": "reward",
+      "source_class": "rule_outcome",
+      "derivation": "arrival when the goal distance is within the declared tolerance for every target in order",
+      "reference": "store_terminal_reason",
+      "reference_class": "same_source"
+    },
+    {
+      "name": "death_or_ended",
+      "role": "abort_condition",
+      "source_class": "rgb_derived",
+      "derivation": "death or replay banner ROI",
+      "reference": "not_independently_checked",
+      "reference_class": "unvalidated"
+    }
+  ],
+  "independence": {
+    "independent_sources": [
+      "action_dispatch against the Store record",
+      "hero_motion against hero_position"
+    ],
+    "implementation_independent_only": [
+      "independent_position_derivation against hero_position"
+    ],
+    "not_independent": [
+      "terminal against its own rule outcome",
+      "death_or_ended has no independent reference"
+    ],
+    "forbidden": "the same unvalidated detector must not both author a reward and prove its own accuracy",
+    "duplication_guard": "if the second position derivation agrees with the recorded signal exactly on most steps it is a duplicate of that signal, not an independent reference, and the audit must fail"
+  },
+  "gates": {
+    "minimum_position_coverage": 0.8,
+    "maximum_reference_l1_median_px": 3.0,
+    "maximum_reference_l1_p95_px": 6.0,
+    "minimum_reference_agreement": 0.8,
+    "minimum_motion_agreement": 0.6,
+    "minimum_action_agreement": 1.0,
+    "minimum_terminal_agreement": 1.0,
+    "maximum_exact_agreement_fraction": 0.9
+  },
+  "reported_denominators": [
+    "episodes",
+    "steps",
+    "position_lost_steps",
+    "aborted_steps",
+    "steps_without_reference"
+  ],
+  "stop_conditions": [
+    "the second derivation duplicates the recorded signal instead of checking it",
+    "position coverage below the frozen gate",
+    "reference agreement below the frozen gate",
+    "action agreement below the frozen gate",
+    "terminal agreement below the frozen gate",
+    "any reward component whose only reference is the same unvalidated detector"
+  ],
+  "claim_boundary": {
+    "semantic_position_accuracy_verified": false,
+    "independent_map_reference_available": false,
+    "reward_allowed": false,
+    "training_allowed_before_this_report_passes": false
+  }
+}

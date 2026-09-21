@@ -894,6 +894,16 @@ def _parser() -> argparse.ArgumentParser:
     navigation_store_batch.add_argument("--output-dir", type=Path, required=True)
     navigation_store_batch.add_argument("--episodes", type=int, default=3)
     navigation_store_batch.add_argument("--enable-input", action="store_true")
+    feedback_audit = commands.add_parser(
+        "navigation-feedback-audit",
+        help="R0: check the device navigation feedback against independent references",
+    )
+    feedback_audit.add_argument("--feedback-contract", type=Path, required=True)
+    feedback_audit.add_argument("--navigation-contract", type=Path, required=True)
+    feedback_audit.add_argument("--store", type=Path, required=True)
+    feedback_audit.add_argument("--frame-root", type=Path, required=True)
+    feedback_audit.add_argument("--output-dir", type=Path, required=True)
+    feedback_audit.add_argument("--qa-samples", type=int, default=12)
     operation_side = commands.add_parser(
         "mobile-operation-team-side",
         help="detect blue or red side from the loading-panel self highlight",
@@ -3092,6 +3102,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             else:
                 raise SystemExit("mobile-navigation-verify needs --episode-id or --all")
+        elif args.command == "navigation-feedback-audit":
+            from hok_agent.navigation_feedback_audit import run_navigation_feedback_audit
+
+            result = run_navigation_feedback_audit(
+                feedback_contract_path=args.feedback_contract,
+                navigation_contract_path=args.navigation_contract,
+                store_path=args.store,
+                frame_root=args.frame_root,
+                output_dir=args.output_dir,
+                qa_samples=args.qa_samples,
+            )
         elif args.command == "mobile-navigation-store-batch":
             from hok_agent.mobile_navigation_store import run_mobile_navigation_episodes
 
