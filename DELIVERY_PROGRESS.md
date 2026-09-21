@@ -871,6 +871,11 @@ NEXT_DECISION: either fund the region-aware escape and the route B re-run, or re
   parameters are added, and the outcome is recorded as the architecture limit - a goal attractor plus
   a safety filter is insufficient for this route, and the missing piece is a local planner that
   treats blockage as a first-class state.
+- The device then came back but on a different blocker: `adb devices` reports
+  `[redacted-serial] no permissions` with the node at `/dev/bus/usb/001/015` owned `root:root` mode
+  `0666`-minus-group-write, and non-interactive `sudo` is unavailable, so the permission fix is an
+  owner step (`sudo chmod 666 /dev/bus/usb/001/015`, or a udev rule). No run bytes were created and
+  the code state is unchanged and green.
 
 ### 2026-09-09 development review and factual corrections
 
