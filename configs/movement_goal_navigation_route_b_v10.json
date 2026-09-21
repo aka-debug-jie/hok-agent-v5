@@ -1,0 +1,223 @@
+{
+  "arrival_tolerance_pixels": 4.0,
+  "budgets": {
+    "maximum_commands": 120,
+    "maximum_duration_seconds": 90,
+    "maximum_new_bytes": 268435456,
+    "maximum_sessions": 2
+  },
+  "color": {
+    "green_blue_margin": 10,
+    "green_minimum": 85,
+    "green_red_margin": 18,
+    "red_blue_margin": 18,
+    "red_green_margin": 28,
+    "red_minimum": 105
+  },
+  "components": {
+    "green_extent": [
+      7,
+      24
+    ],
+    "green_size": [
+      20,
+      140
+    ],
+    "maximum_pair_l1_distance": 7.0,
+    "red_extent": [
+      5,
+      24
+    ],
+    "red_size": [
+      20,
+      240
+    ],
+    "reset_after_missing_frames": 10
+  },
+  "contract_sha256": "43297e0dd42a88809d6ff4dfe795d698160054e22c0f27361b76f0c327ce7e77",
+  "device_session_requirements": [
+    "fresh-guarded-testbed-session",
+    "local-identity-and-layout",
+    "hard-stop-on-death-unknown-or-ended-screen",
+    "hero-remains-inside-the-declared-free-movement-region"
+  ],
+  "direction_hold_ms": 1200,
+  "direction_hysteresis_sectors": 1,
+  "directions": [
+    "north",
+    "north_east",
+    "east",
+    "south_east",
+    "south",
+    "south_west",
+    "west",
+    "north_west"
+  ],
+  "excluded_ui_xyxy": [
+    112,
+    0,
+    128,
+    16
+  ],
+  "failure_policy": [
+    "no-threshold-changes-after-the-run",
+    "no-observation-window-shortening",
+    "no-session-substitution",
+    "arrival-is-required-when-the-contract-requires-it",
+    "unknown-is-not-arrival",
+    "the-declared-recovery-is-bounded-and-never-a-silent-success"
+  ],
+  "final_approach": {
+    "default_hold_ms": 1200,
+    "mode": "declared_deceleration",
+    "press_release_maximum_distance_pixels": 16.0,
+    "tiers": [
+      {
+        "hold_ms": 200,
+        "maximum_distance_pixels": 8.0
+      },
+      {
+        "hold_ms": 400,
+        "maximum_distance_pixels": 16.0
+      },
+      {
+        "hold_ms": 800,
+        "maximum_distance_pixels": 32.0
+      }
+    ]
+  },
+  "final_approach_distance_pixels": 12.0,
+  "final_approach_hold_ms": 400,
+  "free_movement_region": {
+    "maximum_consecutive_violation_frames": 10,
+    "maximum_x": 95,
+    "maximum_y": 95,
+    "minimum_x": 35,
+    "minimum_y": 35
+  },
+  "gates": {
+    "arrival_required": true,
+    "maximum_arrival_error_pixels": 4.0,
+    "maximum_identity_switch_events": 0,
+    "minimum_localized_fraction": 0.8,
+    "minimum_valid_run_seconds": 10.0
+  },
+  "hero_cue_extension": {
+    "allow_green_fallback": true,
+    "fixed_ui_boxes_xyxy": [
+      [
+        112,
+        0,
+        128,
+        16
+      ],
+      [
+        0,
+        104,
+        20,
+        128
+      ]
+    ],
+    "green_extent": [
+      7,
+      24
+    ],
+    "green_size": [
+      20,
+      140
+    ],
+    "maximum_pair_l1_distance": 7.0,
+    "maximum_reacquisition_l1_distance": 30.0,
+    "mode": "green-ring-fallback-when-frozen-cue-is-absent"
+  },
+  "hero_tracker": {
+    "fixed_ui_boxes_xyxy": [
+      [
+        112,
+        0,
+        128,
+        16
+      ],
+      [
+        0,
+        104,
+        20,
+        128
+      ]
+    ],
+    "maximum_association_l1_distance": 14.0,
+    "seed_pair_l1_distance": 7.0
+  },
+  "maximum_commands": 120,
+  "maximum_duration_seconds": 90,
+  "movement_names": [
+    "wait",
+    "north",
+    "north_east",
+    "east",
+    "south_east",
+    "south",
+    "south_west",
+    "west",
+    "north_west"
+  ],
+  "observation_period_ms": 300,
+  "planner": {
+    "lookahead_pixels": 10.0,
+    "margin_pixels": 4.0,
+    "mode": "path_progress_with_feasibility",
+    "nominal_step_pixels": 6.0,
+    "stall_bias": 0.6
+  },
+  "progress_guard": {
+    "confirmation_steps": 3,
+    "maximum_events_per_episode": 8,
+    "minimum_improvement_pixels": 0.5,
+    "mode": "stall_trigger_only",
+    "stall_steps": 8
+  },
+  "purpose": "route B v10 keeps the single-arbiter planner, the press-release approach of v9 and the bounded unknown-position recovery, and adds one declared exception inside that recovery. Measured on the v9 device run, the recovery fires on the short four-step blind windows that sit inside a map band at y about 48-57 where the hero marker stops being detectable, and the retrace bearing - which by construction reverses the last displacement - then walks the hero away from the waypoint it was about to reach, costing 2.7 to 4.7 px of progress each time. Inside waypoint_bearing_within_distance_pixels the recovery therefore re-aims at the current waypoint instead of retracing, reusing the same region check at the current depth and the same step cap, while the retrace stays the bearing everywhere else and the localization-gap guard still bounds every recovery.",
+  "route_id": "route-b-press-release-waypoint-recovery-10",
+  "schema_version": "movement-goal-navigation-contract-v1",
+  "session_schema_version": "hok-agent-mobile-goal-navigation-session-v1",
+  "store": {
+    "backlog_free_maximum_pointer_messages": 3,
+    "episode_prefix": "mobile-nav-ep",
+    "event_engine_version": "mobile-navigation-no-visual-event-v1",
+    "maximum_localization_gap_frames": 10,
+    "maximum_steps": 400,
+    "policy_bundle_version": "mobile-goal-navigation-rule-v1",
+    "replay_source": "controller",
+    "reward_version": "mobile-navigation-arrival-reward-v1",
+    "schema_version": "movement-goal-navigation-store-contract-v1",
+    "settle_ms": 300
+  },
+  "targets_minimap_xy": [
+    [
+      50.0,
+      50.0
+    ],
+    [
+      80.0,
+      50.0
+    ],
+    [
+      80.0,
+      80.0
+    ],
+    [
+      50.0,
+      80.0
+    ]
+  ],
+  "test_allowed": false,
+  "training_allowed": false,
+  "unknown_recovery": {
+    "hold_ms": 800,
+    "maximum_recovery_steps": 6,
+    "mode": "bounded_retrace_or_waypoint",
+    "nominal_step_pixels": 6.0,
+    "trigger_after_missing_frames": 3,
+    "waypoint_bearing_within_distance_pixels": 16.0
+  }
+}

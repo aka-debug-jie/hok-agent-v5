@@ -12,6 +12,7 @@ from hok_agent import mobile_navigation_store as store_runner
 from hok_agent.frame_bus import FramePacket, RgbView
 from hok_agent.mobile_testbed import MobileTestbedError, _goal_navigation_contract
 from hok_agent.transition_store import UnifiedTransitionStore, validate_transition
+from hok_agent.traversability import discover_route_b_runs
 
 ROOT = Path(__file__).resolve().parents[1]
 STORE_CONTRACT = ROOT / "configs" / "movement_goal_navigation_store_v1.json"
@@ -382,6 +383,7 @@ def test_episode_outcome_ends_a_sustained_localisation_gap() -> None:
         death=False,
         outside_region=False,
         missing_streak=3,
+        no_advance=False,
         maximum_gap=10,
         budget_exhausted=False,
     ) == (False, "NOT_DONE", "NOT_DONE", None)
@@ -390,6 +392,7 @@ def test_episode_outcome_ends_a_sustained_localisation_gap() -> None:
         death=False,
         outside_region=False,
         missing_streak=11,
+        no_advance=False,
         maximum_gap=10,
         budget_exhausted=False,
     ) == (True, "CAPTURE_FAILURE", "ERROR", "localization_gap")
@@ -398,9 +401,44 @@ def test_episode_outcome_ends_a_sustained_localisation_gap() -> None:
         death=False,
         outside_region=False,
         missing_streak=99,
+        no_advance=False,
         maximum_gap=0,
         budget_exhausted=False,
     ) == (False, "NOT_DONE", "NOT_DONE", None)
+
+
+def test_localisation_cutoff_is_the_stop_rule_not_a_death_classifier() -> None:
+    """Pin the boundary: the 11th missing step is the stop rule, not a life-state observation.
+
+    The route B diagnosis rests on this. A sustained localisation gap ends the episode one step
+    past ``maximum_gap`` and is reported as a capture failure; it carries no death information,
+    so a run that ends on its 11th blind step has not been classified as a dead hero.
+    """
+    outcome = store_runner._episode_outcome
+    common = {
+        "arrived": False,
+        "death": False,
+        "outside_region": False,
+        "no_advance": False,
+        "maximum_gap": 10,
+        "budget_exhausted": False,
+    }
+    assert outcome(missing_streak=10, **common) == (False, "NOT_DONE", "NOT_DONE", None)
+    assert outcome(missing_streak=11, **common) == (
+        True,
+        "CAPTURE_FAILURE",
+        "ERROR",
+        "localization_gap",
+    )
+    # Only a positive life-state observation may produce the death reason; a gap never does.
+    assert outcome(missing_streak=99, **common)[3] != "death_or_ended_screen"
+    death = dict(common, death=True)
+    assert outcome(missing_streak=99, **death) == (
+        True,
+        "SAFETY_STOP",
+        "ERROR",
+        "death_or_ended_screen",
+    )
 
 
 def test_episode_outcome_priority_keeps_arrival_and_safety_first() -> None:
@@ -410,6 +448,7 @@ def test_episode_outcome_priority_keeps_arrival_and_safety_first() -> None:
         death=True,
         outside_region=True,
         missing_streak=99,
+        no_advance=False,
         maximum_gap=10,
         budget_exhausted=True,
     )[1] == "NAVIGATION_GOAL_REACHED"
@@ -418,6 +457,7 @@ def test_episode_outcome_priority_keeps_arrival_and_safety_first() -> None:
         death=True,
         outside_region=False,
         missing_streak=0,
+        no_advance=False,
         maximum_gap=10,
         budget_exhausted=False,
     ) == (True, "SAFETY_STOP", "ERROR", "death_or_ended_screen")
@@ -426,6 +466,7 @@ def test_episode_outcome_priority_keeps_arrival_and_safety_first() -> None:
         death=False,
         outside_region=True,
         missing_streak=0,
+        no_advance=False,
         maximum_gap=10,
         budget_exhausted=False,
     ) == (True, "SAFETY_STOP", "ERROR", "outside_free_movement_region")
@@ -439,6 +480,7 @@ def test_episode_outcome_truncates_an_exhausted_budget() -> None:
         death=False,
         outside_region=False,
         missing_streak=0,
+        no_advance=False,
         maximum_gap=10,
         budget_exhausted=True,
     )
@@ -778,3 +820,885 @@ def test_stall_trigger_guard_has_no_escape_schedule() -> None:
     assert guard["mode"] == "stall_trigger_only"
     assert "escape_offsets_sectors" not in guard
     assert resolved["planner"] is not None
+
+
+def test_retrace_direction_reverses_the_last_known_displacement() -> None:
+    """The declared recovery walks back over ground the hero has just covered."""
+    retrace = store_runner._retrace_direction
+    region = {"minimum_y": 35.0, "maximum_y": 95.0, "minimum_x": 35.0, "maximum_x": 95.0}
+    # the hero walked west, so the retreat bearing is east
+    assert retrace((50.0, 80.0), (50.0, 86.0), region, 6.0) == "east"
+    # the hero walked south, so the retreat bearing is north
+    assert retrace((50.0, 80.0), (44.0, 80.0), region, 6.0) == "north"
+    # a south-west approach retraces north-east
+    assert retrace((50.0, 80.0), (46.0, 84.0), region, 6.0) == "north_east"
+
+
+def test_retrace_direction_declines_without_a_usable_displacement() -> None:
+    """A standing hero, or one below the displacement floor, has no bearing to reverse."""
+    retrace = store_runner._retrace_direction
+    region = {"minimum_y": 35.0, "maximum_y": 95.0, "minimum_x": 35.0, "maximum_x": 95.0}
+    assert retrace((50.0, 80.0), (50.0, 80.0), region, 6.0) is None
+    assert retrace((50.0, 80.0), (50.2, 80.1), region, 6.0) is None
+    # the measured batch-10 episode-01 terminal onset: the hero held its final approach, so the
+    # last two known positions differ by 0.02 px and there is nothing to retrace
+    assert retrace((49.21, 87.52), (49.19, 87.53), region, 6.0) is None
+
+
+def test_retrace_direction_declines_a_step_that_would_leave_the_declared_region() -> None:
+    """The recovery declines rather than guessing when the retreat would leave the region.
+
+    The check is against the declared region itself, which is the invariant ``outside_region``
+    already enforces, so a retreat can never trip that guard.
+    """
+    retrace = store_runner._retrace_direction
+    region = {"minimum_y": 35.0, "maximum_y": 95.0, "minimum_x": 35.0, "maximum_x": 95.0}
+    # reversing east from x=80 lands at 86, inside the declared region
+    assert retrace((50.0, 80.0), (50.0, 84.0), region, 6.0) == "east"
+    # the same bearing becomes unsafe as the retreat deepens: 80 + 3*6 = 98 leaves the region
+    assert retrace((50.0, 80.0), (50.0, 84.0), region, 6.0, 2) is None
+    # and a reversal that would overshoot the eastern edge from x=91 is declined outright
+    assert retrace((50.0, 91.0), (50.0, 95.0), region, 6.0) is None
+
+
+def test_router_applies_the_declared_recovery_only_while_unknown() -> None:
+    """The recovery is a Router masking rule, not a new policy layer."""
+    route = store_runner._route
+    assert route(
+        "east", known=False, death=False, outside_region=False,
+        recovery=("west", "unknown_recovery_retrace"),
+    ) == ("west", "deterministic_router", "unknown_recovery_retrace")
+    assert route(
+        "east", known=False, death=False, outside_region=False,
+        recovery=("west", "unknown_recovery_waypoint"),
+    ) == ("west", "deterministic_router", "unknown_recovery_waypoint")
+    # a located hero never takes a recovery bearing
+    assert route(
+        "east", known=True, death=False, outside_region=False,
+        recovery=("west", "unknown_recovery_retrace"),
+    ) == ("east", "geometry_rule", "geometry_rule")
+    # without a declared recovery the wait-on-unknown behaviour is unchanged
+    assert route("east", known=False, death=False, outside_region=False) == (
+        "wait",
+        "deterministic_router",
+        "unknown_position",
+    )
+    # death and region safety still outrank the recovery
+    assert (
+        route(
+            "east", known=False, death=True, outside_region=False,
+            recovery=("west", "unknown_recovery_waypoint"),
+        )[2]
+        == "death_or_ended_screen"
+    )
+    assert (
+        route(
+            "east", known=False, death=False, outside_region=True,
+            recovery=("west", "unknown_recovery_waypoint"),
+        )[2]
+        == "outside_free_movement_region"
+    )
+
+
+def test_unknown_recovery_step_is_bounded_and_resets_after_a_fix() -> None:
+    """Pin the sequencing: trigger, budget, decline and the reset a returned fix must cause."""
+    step = store_runner._unknown_recovery_step
+    region = {"minimum_y": 35.0, "maximum_y": 95.0, "minimum_x": 35.0, "maximum_x": 95.0}
+    config = {
+        "mode": "bounded_retrace_or_waypoint",
+        "trigger_after_missing_frames": 3,
+        "maximum_recovery_steps": 6,
+        "hold_ms": 800,
+        "nominal_step_pixels": 6.0,
+    }
+    target = (50.0, 80.0)
+    # a roomy anchor: the hero walked west into x=50, so the retreat bearing is east with room
+    previous_known, last_known = (50.0, 56.0), (50.0, 50.0)
+    # no anchor at all: the recovery cannot act, which is the whole all-blind-from-start class
+    assert step(
+        last_known=None,
+        previous_known=None,
+        target=target,
+        missing_streak=5,
+        recovery_steps=0,
+        config=config,
+        region=region,
+    ) == (None, False)
+    # before the trigger, the Router keeps waiting: not eligible at all
+    assert step(
+        last_known=last_known,
+        previous_known=previous_known,
+        target=target,
+        missing_streak=2,
+        recovery_steps=0,
+        config=config,
+        region=region,
+    ) == (None, False)
+    # at the trigger the retreat starts, and stays eligible while the declared budget holds
+    assert step(
+        last_known=last_known,
+        previous_known=previous_known,
+        target=target,
+        missing_streak=3,
+        recovery_steps=0,
+        config=config,
+        region=region,
+    ) == (("east", "unknown_recovery_retrace"), True)
+    assert step(
+        last_known=last_known,
+        previous_known=previous_known,
+        target=target,
+        missing_streak=8,
+        recovery_steps=5,
+        config=config,
+        region=region,
+    ) == (("east", "unknown_recovery_retrace"), True)
+    # past the declared budget the recovery stops trying, so the gap guard owns the ending
+    assert step(
+        last_known=last_known,
+        previous_known=previous_known,
+        target=target,
+        missing_streak=9,
+        recovery_steps=6,
+        config=config,
+        region=region,
+    ) == (None, False)
+    # an eligible step that would leave the region is reported as declined, not as waiting
+    assert step(
+        last_known=(50.0, 91.0),
+        previous_known=(50.0, 95.0),
+        target=(50.0, 150.0),
+        missing_streak=4,
+        recovery_steps=0,
+        config=config,
+        region=region,
+    ) == (None, True)
+    # without a declared block nothing changes for the existing contracts
+    assert step(
+        last_known=last_known,
+        previous_known=previous_known,
+        target=target,
+        missing_streak=9,
+        recovery_steps=0,
+        config=None,
+        region=region,
+    ) == (None, False)
+    # a returned fix zeroes recovery_steps in the caller, so the next loss retraces from depth 0
+    assert step(
+        last_known=last_known,
+        previous_known=previous_known,
+        target=target,
+        missing_streak=3,
+        recovery_steps=0,
+        config=config,
+        region=region,
+    )[0] == ("east", "unknown_recovery_retrace")
+
+
+def test_unknown_recovery_re_aims_at_the_waypoint_when_there_is_nothing_to_retrace() -> None:
+    """The measured replacement: a hero that held its final approach still gets a bounded action.
+
+    These are the recorded batch-10 terminal-loss coordinates. The hero was stationary at the last
+    known position, so the retrace has no displacement to reverse and v7 declined every eligible
+    step; the waypoint fallback turns the same steps into a bounded, region-checked re-aim.
+    """
+    step = store_runner._unknown_recovery_step
+    region = {"minimum_y": 35.0, "maximum_y": 95.0, "minimum_x": 35.0, "maximum_x": 95.0}
+    base = {
+        "trigger_after_missing_frames": 3,
+        "maximum_recovery_steps": 6,
+        "hold_ms": 800,
+        "nominal_step_pixels": 6.0,
+    }
+    # the recorded episode-01 onset: last two known positions differ by 0.02 px
+    stationary_last, stationary_previous = (49.21, 87.52), (49.19, 87.53)
+    target = (50.0, 80.0)
+    # v7 declined here; v8 re-aims at the waypoint, which lies west with ample region room
+    assert step(
+        last_known=stationary_last,
+        previous_known=stationary_previous,
+        target=target,
+        missing_streak=3,
+        recovery_steps=0,
+        config={**base, "mode": "bounded_retrace_or_waypoint"},
+        region=region,
+    ) == (("west", "unknown_recovery_waypoint"), True)
+    # the pure-retrace mode still declines that same step, so the version difference is the fix
+    assert step(
+        last_known=stationary_last,
+        previous_known=stationary_previous,
+        target=target,
+        missing_streak=3,
+        recovery_steps=0,
+        config={**base, "mode": "bounded_retrace"},
+        region=region,
+    ) == (None, True)
+    # the fallback is region-checked at depth too: 87.52 - 8*6 = 39.52 is still inside, and
+    # one step deeper the predicted x leaves the declared region, so it stops rather than guessing
+    deep = {**base, "mode": "bounded_retrace_or_waypoint", "maximum_recovery_steps": 9}
+    assert step(
+        last_known=stationary_last,
+        previous_known=stationary_previous,
+        target=target,
+        missing_streak=9,
+        recovery_steps=7,
+        config=deep,
+        region=region,
+    ) == (("west", "unknown_recovery_waypoint"), True)
+    assert step(
+        last_known=stationary_last,
+        previous_known=stationary_previous,
+        target=target,
+        missing_streak=10,
+        recovery_steps=8,
+        config=deep,
+        region=region,
+    ) == (None, True)
+    assert step(
+        last_known=(50.0, 40.0),
+        previous_known=(50.0, 40.0),
+        target=(50.0, 20.0),
+        missing_streak=4,
+        recovery_steps=0,
+        config={**base, "mode": "bounded_retrace_or_waypoint"},
+        region=region,
+    ) == (None, True)
+    # a target the hero is already standing on yields no bearing, so the step declines
+    assert step(
+        last_known=(50.0, 80.0),
+        previous_known=(50.0, 80.0),
+        target=(50.0, 80.0),
+        missing_streak=4,
+        recovery_steps=0,
+        config={**base, "mode": "bounded_retrace_or_waypoint"},
+        region=region,
+    ) == (None, True)
+
+
+def test_route_b_v9_declares_the_press_release_band() -> None:
+    """v9 makes the declared approach hold bound the press instead of only the sampling period."""
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    v8, v8_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v8.json"
+    )
+    v9, v9_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v9.json"
+    )
+    assert v8_sha == "3c41d5bbbfb1ccd18115953c8d3a5427db9b31edfabbe2ee4c7f23aa914fd0f4"
+    assert "press_release_maximum_distance_pixels" not in cast(dict, v8["final_approach"])
+    assert "backlog_free_maximum_pointer_messages" not in cast(dict, v8["store"])
+    approach = cast(dict, v9["final_approach"])
+    # the press band must sit inside the declared deceleration tiers
+    tiers = [cast(dict, item)["maximum_distance_pixels"] for item in cast(list, approach["tiers"])]
+    assert approach["press_release_maximum_distance_pixels"] == 16.0
+    assert approach["press_release_maximum_distance_pixels"] <= max(tiers)
+    assert approach["mode"] == "declared_deceleration"
+    # a pulse step issues one press and one release
+    assert cast(dict, v9["store"])["backlog_free_maximum_pointer_messages"] == 3
+    # nothing else moved: the planner, recovery, targets, gates and gap guard are carried over
+    ignored = {"final_approach", "store", "purpose", "route_id", "contract_sha256"}
+    assert {k: v for k, v in v9.items() if k not in ignored} == {
+        k: v for k, v in v8.items() if k not in ignored
+    }
+    resolved = store_runner._store_contract(v9, v9_sha)
+    assert (
+        cast(dict, resolved["final_approach"])["press_release_maximum_distance_pixels"] == 16.0
+    )
+    assert resolved["backlog_free_maximum_pointer_messages"] == 3
+
+
+def test_route_b_v9_rejects_a_press_band_outside_the_tiers_or_a_zero_ceiling() -> None:
+    value = cast(
+        dict,
+        json.loads(
+            (ROOT / "configs/movement_goal_navigation_route_b_v9.json").read_text(encoding="utf-8")
+        ),
+    )
+    cast(dict, value["final_approach"])["press_release_maximum_distance_pixels"] = 64.0
+    with pytest.raises(MobileTestbedError):
+        store_runner._store_contract(value, "0" * 64)
+    value = cast(
+        dict,
+        json.loads(
+            (ROOT / "configs/movement_goal_navigation_route_b_v9.json").read_text(encoding="utf-8")
+        ),
+    )
+    cast(dict, value["final_approach"])["press_release_maximum_distance_pixels"] = 0.0
+    with pytest.raises(MobileTestbedError):
+        store_runner._store_contract(value, "0" * 64)
+    value = cast(
+        dict,
+        json.loads(
+            (ROOT / "configs/movement_goal_navigation_route_b_v9.json").read_text(encoding="utf-8")
+        ),
+    )
+    value["store"]["backlog_free_maximum_pointer_messages"] = 0
+    with pytest.raises(MobileTestbedError):
+        store_runner._store_contract(value, "0" * 64)
+
+
+def test_route_b_v10_prefers_the_waypoint_bearing_inside_the_declared_band() -> None:
+    """Measured on the v9 run: near the target the retrace walks the hero away, so the band wins."""
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    v9, v9_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v9.json"
+    )
+    v10, v10_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v10.json"
+    )
+    assert v9_sha == "03339a7b57e52cfd5724bb354b07d036caf13bb6b63d05cb0f3887ddcdfa802a"
+    assert "waypoint_bearing_within_distance_pixels" not in cast(dict, v9["unknown_recovery"])
+    recovery_v9 = cast(dict, v9["unknown_recovery"])
+    recovery_v10 = cast(dict, v10["unknown_recovery"])
+    assert recovery_v10["waypoint_bearing_within_distance_pixels"] == 16.0
+    # only the band is added: the recovery, the press band, the planner and the gates are carried over
+    assert {k: v for k, v in recovery_v10.items() if k != "waypoint_bearing_within_distance_pixels"} == {
+        k: v for k, v in recovery_v9.items() if k != "waypoint_bearing_within_distance_pixels"
+    }
+    ignored = {"unknown_recovery", "purpose", "route_id", "contract_sha256"}
+    assert {k: v for k, v in v10.items() if k not in ignored} == {
+        k: v for k, v in v9.items() if k not in ignored
+    }
+    assert store_runner._store_contract(v10, v10_sha)["unknown_recovery"] == recovery_v10
+    # a non-positive band is rejected
+    value = cast(
+        dict,
+        json.loads(
+            (ROOT / "configs/movement_goal_navigation_route_b_v10.json").read_text(encoding="utf-8")
+        ),
+    )
+    cast(dict, value["unknown_recovery"])["waypoint_bearing_within_distance_pixels"] = 0.0
+    with pytest.raises(MobileTestbedError):
+        store_runner._store_contract(value, "0" * 64)
+
+
+def test_unknown_recovery_prefers_the_waypoint_bearing_inside_the_band() -> None:
+    step = store_runner._unknown_recovery_step
+    region = {"minimum_y": 35.0, "maximum_y": 95.0, "minimum_x": 35.0, "maximum_x": 95.0}
+    config = {
+        "mode": "bounded_retrace_or_waypoint",
+        "trigger_after_missing_frames": 3,
+        "maximum_recovery_steps": 6,
+        "hold_ms": 800,
+        "nominal_step_pixels": 6.0,
+        "waypoint_bearing_within_distance_pixels": 16.0,
+    }
+    # the recorded v9 final-leg onset: 6.6 px from the waypoint, so the re-aim wins over the retrace
+    assert step(
+        last_known=(56.6, 80.1),
+        previous_known=(57.0, 79.5),
+        target=(50.0, 80.0),
+        missing_streak=3,
+        recovery_steps=0,
+        config=config,
+        region=region,
+    ) == (("north", "unknown_recovery_waypoint"), True)
+    # farther out the retrace is still preferred, because escaping the blind area is the point
+    assert step(
+        last_known=(80.0, 80.0),
+        previous_known=(79.0, 79.0),
+        target=(50.0, 80.0),
+        missing_streak=3,
+        recovery_steps=0,
+        config=config,
+        region=region,
+    )[0][1] == "unknown_recovery_retrace"
+    # the band is measured from the last known position to the current waypoint: at exactly the
+    # declared 16 px it still applies, and just outside it the retrace returns
+    assert step(
+        last_known=(66.0, 80.0),
+        previous_known=(67.0, 79.0),
+        target=(50.0, 80.0),
+        missing_streak=3,
+        recovery_steps=0,
+        config=config,
+        region=region,
+    )[0][1] == "unknown_recovery_waypoint"
+    assert step(
+        last_known=(68.0, 80.0),
+        previous_known=(67.0, 79.0),
+        target=(50.0, 80.0),
+        missing_streak=3,
+        recovery_steps=0,
+        config=config,
+        region=region,
+    )[0][1] == "unknown_recovery_retrace"
+
+
+def test_route_b_v11_declares_the_direct_final_approach() -> None:
+    """v11 aims at the waypoint itself inside the declared approach band instead of the path reference."""
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    v10, v10_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v10.json"
+    )
+    v11, v11_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v11.json"
+    )
+    assert v10_sha == "43297e0dd42a88809d6ff4dfe795d698160054e22c0f27361b76f0c327ce7e77"
+    assert "direct_bearing" not in cast(dict, v10["final_approach"])
+    assert cast(dict, v11["final_approach"])["direct_bearing"] is True
+    # the declared approach band is the boundary the direct bearing uses
+    assert cast(dict, v11)["final_approach_distance_pixels"] == 12.0
+    assert store_runner._store_contract(v11, v11_sha)["final_approach"] == cast(
+        dict, v11["final_approach"]
+    )
+    # a non-boolean value is rejected
+    value = cast(
+        dict,
+        json.loads(
+            (ROOT / "configs/movement_goal_navigation_route_b_v11.json").read_text(encoding="utf-8")
+        ),
+    )
+    cast(dict, value["final_approach"])["direct_bearing"] = "yes"
+    with pytest.raises(MobileTestbedError):
+        store_runner._store_contract(value, "0" * 64)
+
+
+def test_no_advance_guard_detects_a_dead_screen_and_ignores_live_steps() -> None:
+    """A held bearing with a frozen localised position is a dead state, not a slow approach."""
+    guard = store_runner._no_advance_detected
+    # the measured dead run: 12 applied steps with the position inside a 0.2 px box
+    anchor = None
+    steps = 0
+    detected = False
+    for _ in range(12):
+        anchor, steps, detected = guard(anchor, steps, (78.4, 55.5), True, 12, 1.0)
+    assert detected is True and steps == 12
+    # one more step without travel keeps it latched
+    assert guard(anchor, steps, (78.5, 55.4), True, 12, 1.0)[2] is True
+    # the measured working runs travel at least 2.76 px per 12 steps, so they must never trip
+    anchor = None
+    steps = 0
+    detected = False
+    for index in range(12):
+        anchor, steps, detected = guard(anchor, steps, (78.0 - index * 0.25, 55.5), True, 12, 1.0)
+    assert detected is False
+    # travel beyond the declared bound resets the run rather than latching
+    anchor, steps, detected = guard(None, 0, (60.0, 60.0), True, 12, 1.0)
+    for _ in range(10):
+        anchor, steps, detected = guard(anchor, steps, (60.0, 60.0), True, 12, 1.0)
+    assert detected is False and steps == 11
+    anchor, steps, detected = guard(anchor, steps, (60.0, 65.0), True, 12, 1.0)
+    assert detected is False and steps == 1 and anchor == (60.0, 65.0)
+    # a blind step or a released bearing resets the run, so a lost marker is never a dead screen
+    anchor, steps, _ = guard(None, 0, (70.0, 70.0), True, 12, 1.0)
+    anchor, steps, detected = guard(anchor, steps, None, True, 12, 1.0)
+    assert (anchor, steps, detected) == (None, 0, False)
+    anchor, steps, detected = guard(anchor, steps, (70.0, 70.0), False, 12, 1.0)
+    assert (anchor, steps, detected) == (None, 0, False)
+    # an alternating blind/live pattern can never accumulate to the window
+    anchor = None
+    steps = 0
+    detected = False
+    for index in range(40):
+        anchor, steps, detected = guard(
+            anchor, steps, None if index % 3 == 0 else (70.0, 70.0), True, 12, 1.0
+        )
+    assert detected is False
+
+
+def test_episode_outcome_reports_a_no_advance_stall() -> None:
+    """The stall is a distinct outcome, and arrival and safety still outrank it."""
+    outcome = store_runner._episode_outcome
+    common = {
+        "death": False,
+        "outside_region": False,
+        "no_advance": False,
+        "missing_streak": 0,
+        "maximum_gap": 10,
+        "budget_exhausted": False,
+    }
+    assert outcome(arrived=False, **{**common, "no_advance": True}) == (
+        True,
+        "ACTION_FAILURE",
+        "ERROR",
+        "no_advance_detected",
+    )
+    # a stall must never be reported as a captured-budget or a localisation-gap ending
+    assert outcome(arrived=False, **{**common, "no_advance": True})[3] != "localization_gap"
+    assert outcome(arrived=False, **{**common, "no_advance": True})[1] != "TIMEOUT"
+    # arrival and the safety stops keep their priority
+    assert outcome(arrived=True, **{**common, "no_advance": True})[1] == "NAVIGATION_GOAL_REACHED"
+    assert outcome(arrived=False, **{**common, "no_advance": True, "death": True})[3] == (
+        "death_or_ended_screen"
+    )
+    assert outcome(arrived=False, **{**common, "no_advance": True, "outside_region": True})[3] == (
+        "outside_free_movement_region"
+    )
+    # and a normal episode is untouched by the new input
+    assert outcome(arrived=False, **common) == (False, "NOT_DONE", "NOT_DONE", None)
+
+
+def test_route_b_v14_declares_the_no_advance_guard() -> None:
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    v13, v13_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v13.json"
+    )
+    v14, v14_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v14.json"
+    )
+    assert v13_sha == "393dd82ba7c62d0d6a09dcec48e8d2defd2e2e53919525cd30e93cb093e7c193"
+    assert "no_advance_guard" not in v13
+    guard = cast(dict, v14["no_advance_guard"])
+    assert guard["mode"] == "flat_localised_position"
+    assert guard["window_steps"] == 12
+    assert guard["maximum_travel_pixels"] == 1.0
+    # the working runs travel at least 2.76 px per window, so the bound has real headroom
+    assert guard["maximum_travel_pixels"] < 2.76
+    # nothing else moved: the targets, planner, press band, recovery and gates are carried over
+    ignored = {"no_advance_guard", "purpose", "route_id", "contract_sha256"}
+    assert {k: v for k, v in v14.items() if k not in ignored} == {
+        k: v for k, v in v13.items() if k not in ignored
+    }
+    assert cast(dict, v14)["targets_minimap_xy"] == [[50.0, 50.0], [80.0, 50.0], [80.0, 80.0], [50.0, 70.0]]
+    assert store_runner._store_contract(v14, v14_sha)["no_advance_guard"] == guard
+    for mutation in (
+        {"mode": "anything"},
+        {"window_steps": 1},
+        {"window_steps": "twelve"},
+        {"maximum_travel_pixels": 0.0},
+    ):
+        value = cast(
+            dict,
+            json.loads(
+                (ROOT / "configs/movement_goal_navigation_route_b_v14.json").read_text(
+                    encoding="utf-8"
+                )
+            ),
+        )
+        cast(dict, value["no_advance_guard"]).update(mutation)
+        with pytest.raises(MobileTestbedError):
+            store_runner._store_contract(value, "0" * 64)
+
+
+def test_commit_approach_holds_the_bearing_for_the_declared_window() -> None:
+    """The finest press tier is near the position noise floor, so a held bearing must not re-aim."""
+    commit = store_runner._commit_approach
+    committed: str | None = None
+    steps = 0
+    held: list[bool] = []
+    requested: list[str] = []
+    for index in range(6):
+        asked = ("N", "NE", "E", "SE", "S", "SW")[index]
+        applied, committed, steps, was_held = commit(asked, committed, steps, 3, in_band=True)
+        requested.append(applied)
+        held.append(was_held)
+    # the first step chooses, the next two hold, then a new choice is made
+    assert requested == ["N", "N", "N", "SE", "SE", "SE"]
+    assert held == [False, True, True, False, True, True]
+    # leaving the declared band clears the commitment, and a commitment of one is a no-op
+    assert commit("N", "NE", 2, 3, in_band=False) == ("N", None, 0, False)
+    assert commit("N", "NE", 2, 1, in_band=True) == ("N", None, 0, False)
+
+
+def _grid_block() -> dict[str, object]:
+    return {
+        "mode": "measured_grid_mask",
+        "minimum_rate_per_100ms": 0.08,
+        "nominal_step_pixels": 6.0,
+        "grid": {
+            "schema_version": "hok-agent-traversability-grid-v1",
+            "cell_pixels": 4.0,
+            "minimum_samples": 3,
+            "unbounded_movement_ms": 890.0,
+            "cells": {
+                # the measured v14 stall cell: north is ineffective, north-east is normal
+                "14:11": {
+                    "N": {"n": 125, "rate": 0.0711},
+                    "NE": {"n": 132, "rate": 0.304},
+                },
+                # too few samples to judge: must never be masked
+                "20:20": {"N": {"n": 2, "rate": 0.01}},
+            },
+        },
+    }
+
+
+def test_traversability_mask_removes_only_measured_ineffective_bearings() -> None:
+    from hok_agent.traversability import (
+        traversability_coverage,
+        traversability_masked_direction,
+        validate_traversability,
+    )
+
+    block = _grid_block()
+    validate_traversability(block)
+    mask = traversability_masked_direction
+    # the hero stands in the stall cell: an ineffective north press is replaced by the nearest
+    # bearing that was measured effective
+    assert mask((57.0, 45.0), "N", block) == "NE"
+    # a bearing that was measured effective is untouched
+    assert mask((57.0, 45.0), "NE", block) == "NE"
+    # a cell with no data at all fails open
+    assert mask((66.0, 66.0), "N", block) == "N"
+    # and a cell whose sample count is below the declared minimum also fails open
+    assert mask((81.0, 81.0), "N", block) == "N"
+    # a bearing outside the eight-way vocabulary is returned unchanged
+    assert mask((57.0, 45.0), "wait", block) == "wait"
+    assert traversability_coverage(block)["cell_bearing_above_minimum_samples"] == 2
+
+
+def test_traversability_grid_normalises_the_estimate_by_the_declared_press(tmp_path: Path) -> None:
+    """A short bounded press also moves the hero little, so the estimate must divide it out."""
+    from hok_agent.traversability import build_traversability_grid
+
+    run = tmp_path / "route-b-batch-synthetic" / "episode-01"
+    run.mkdir(parents=True)
+    rows = [
+        # a 400 ms bounded press that moved 0.8 px -> 0.2 px per 100 ms
+        {"step_id": 0, "position": [56.0, 44.0], "applied_movement": "N", "approach_press_ms": 400},
+        {"step_id": 1, "position": [55.2, 44.0], "applied_movement": "NE", "approach_press_ms": 400},
+        {"step_id": 2, "position": [55.2, 44.8], "applied_movement": "NE", "approach_press_ms": 400},
+        # an unbounded step that moved 1.78 px -> 0.2 px per 100 ms
+        {"step_id": 3, "position": [55.2, 46.58]},
+    ]
+    (run / "steps.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
+    grid = build_traversability_grid(
+        runs_root=tmp_path,
+        runs=("route-b-batch-synthetic",),
+        cell_pixels=4.0,
+        minimum_samples=1,
+    )
+    cells = cast(dict, grid["cells"])
+    north = cells["14:11"]["N"]
+    assert north["n"] == 1
+    assert abs(north["rate"] - 0.2) < 0.01
+    # discovery is for a human picking a source list, and never reaches a build
+    assert discover_route_b_runs(tmp_path) == ("route-b-batch-synthetic",)
+
+
+def test_traversability_build_needs_an_explicit_and_present_source_list(tmp_path: Path) -> None:
+    """A grid must depend on a declared input list, never on whichever runs happen to exist."""
+    from hok_agent.traversability import build_traversability_grid
+
+    build = build_traversability_grid
+    with pytest.raises(MobileTestbedError):
+        build(runs_root=tmp_path, runs=(), cell_pixels=4.0, minimum_samples=1)
+    with pytest.raises(MobileTestbedError):
+        build(runs_root=tmp_path, runs=("route-b-batch-absent",), cell_pixels=4.0, minimum_samples=1)
+    assert discover_route_b_runs(tmp_path / "nowhere") == ()
+
+
+def test_traversability_block_pins_the_sources_it_was_built_from(tmp_path: Path) -> None:
+    """The block carries its own source list, so a later contract regenerates without a glob."""
+    from hok_agent.traversability import (
+        make_traversability_block,
+        verify_traversability_grid,
+    )
+
+    run = tmp_path / "route-b-batch-pinned" / "episode-01"
+    run.mkdir(parents=True)
+    rows = [
+        {"step_id": 0, "position": [56.0, 44.0], "applied_movement": "N", "approach_press_ms": 400},
+        {"step_id": 1, "position": [55.2, 44.0]},
+    ]
+    (run / "steps.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
+    block = make_traversability_block(
+        runs_root=tmp_path,
+        runs=("route-b-batch-pinned",),
+        cell_pixels=4.0,
+        minimum_samples=1,
+        minimum_rate_per_100ms=0.08,
+        nominal_step_pixels=6.0,
+    )
+    assert block["source_runs"] == ["route-b-batch-pinned"]
+    checked = verify_traversability_grid(
+        runs_root=tmp_path, runs=("route-b-batch-pinned",), block=block
+    )
+    assert checked["matches_frozen_grid"] is True
+    # a grid rebuilt from a different source set must not be reported as matching
+    other = tmp_path / "route-b-batch-other" / "episode-01"
+    other.mkdir(parents=True)
+    (other / "steps.jsonl").write_text(
+        "".join(
+            json.dumps(row) + "\n"
+            for row in [
+                {"step_id": 0, "position": [80.0, 80.0], "applied_movement": "S"},
+                {"step_id": 1, "position": [83.0, 80.0]},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    drifted = verify_traversability_grid(
+        runs_root=tmp_path, runs=("route-b-batch-other",), block=block
+    )
+    assert drifted["matches_frozen_grid"] is False
+    assert drifted["differing_cell_count"] > 0
+
+
+def test_mask_joystick_bearing_converts_between_the_two_vocabularies() -> None:
+    """The grid is keyed by store bearings, so a joystick name must never reach it directly.
+
+    This is the defect the first v15 device run exposed: the mask was wired to the joystick
+    vocabulary, the grid matched none of it, and the mask silently did nothing for a whole run.
+    """
+    from hok_agent.traversability import traversability_masked_direction
+
+    block = _grid_block()
+    mask = store_runner._mask_joystick_bearing
+    assert mask((57.0, 45.0), "north", block) == "north_east"
+    assert mask((57.0, 45.0), "north_east", block) == "north_east"
+    assert mask((66.0, 66.0), "north", block) == "north"
+    assert mask((57.0, 45.0), "wait", block) == "wait"
+    assert mask((57.0, 45.0), "not_a_bearing", block) == "not_a_bearing"
+    # the raw grid call with a joystick name does nothing, which is exactly why the helper exists
+    assert traversability_masked_direction((57.0, 45.0), "north", block) == "north"
+
+
+def test_route_b_v15_declares_the_mask_and_the_commitment() -> None:
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+    from hok_agent.traversability import traversability_coverage, validate_traversability
+
+    v14, v14_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v14.json"
+    )
+    v15, v15_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v15.json"
+    )
+    assert v14_sha == "caa0a58d67b323b7613b9b73b7053ebbdad6959dee2c9a175312756907acef89"
+    assert "traversability" not in v14
+    assert "commitment_steps" not in cast(dict, v14["final_approach"])
+    # the grid is frozen with the contract, so the run and the grid cannot drift apart
+    block = cast(dict, v15["traversability"])
+    validate_traversability(block)
+    coverage = traversability_coverage(block)
+    assert coverage["cells"] > 100
+    assert coverage["cell_bearing_above_minimum_samples"] > 100
+    assert cast(dict, v15["final_approach"])["commitment_steps"] == 3
+    # the grid must flag the measured stall and must not flag a bearing it barely sampled
+    assert cast(dict, block["grid"])["cells"]["14:11"]["N"]["rate"] < block["minimum_rate_per_100ms"]
+    assert cast(dict, block["grid"])["cells"]["14:11"]["NE"]["rate"] > block["minimum_rate_per_100ms"]
+    # nothing else moved
+    ignored = {"traversability", "final_approach", "purpose", "route_id", "contract_sha256"}
+    assert {k: v for k, v in v15.items() if k not in ignored} == {
+        k: v for k, v in v14.items() if k not in ignored
+    }
+    resolved = store_runner._store_contract(v15, v15_sha)
+    assert resolved["traversability"] == block
+    # a malformed grid must be rejected rather than silently ignored
+    for mutation in (
+        {"mode": "anything"},
+        {"minimum_rate_per_100ms": 0.0},
+    ):
+        value = cast(
+            dict,
+            json.loads(
+                (ROOT / "configs/movement_goal_navigation_route_b_v15.json").read_text(
+                    encoding="utf-8"
+                )
+            ),
+        )
+        cast(dict, value["traversability"]).update(mutation)
+        with pytest.raises(MobileTestbedError):
+            store_runner._store_contract(value, "0" * 64)
+    broken = cast(
+        dict,
+        json.loads(
+            (ROOT / "configs/movement_goal_navigation_route_b_v15.json").read_text(encoding="utf-8")
+        ),
+    )
+    cast(dict, cast(dict, broken["traversability"])["grid"])["cell_pixels"] = 0
+    with pytest.raises(MobileTestbedError):
+        store_runner._store_contract(broken, "0" * 64)
+
+
+def _route_b_contract(name: str) -> dict[str, object]:
+    return cast(
+        dict[str, object],
+        json.loads((ROOT / "configs" / name).read_text(encoding="utf-8")),
+    )
+
+
+def test_route_b_v8_declares_the_measured_replacement_bearing() -> None:
+    """v7 stays on disk as the recorded inert experiment; v8 changes only the bearing rule."""
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    v7, v7_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v7.json"
+    )
+    v8, v8_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v8.json"
+    )
+    assert v7_sha == "13465a1194a666ccc2de774fb631fd7d20909959a8ac86053304204eb6da0642"
+    recovery_v7 = cast(dict, v7["unknown_recovery"])
+    recovery_v8 = cast(dict, v8["unknown_recovery"])
+    assert recovery_v7["mode"] == "bounded_retrace"
+    assert recovery_v8["mode"] == "bounded_retrace_or_waypoint"
+    # only the bearing rule differs inside the block
+    assert {k: v for k, v in recovery_v8.items() if k != "mode"} == {
+        k: v for k, v in recovery_v7.items() if k != "mode"
+    }
+    # and only the recovery differs between the two contracts
+    ignored = {"unknown_recovery", "purpose", "route_id", "contract_sha256"}
+    assert {k: v for k, v in v8.items() if k not in ignored} == {
+        k: v for k, v in v7.items() if k not in ignored
+    }
+    gap = cast(dict, v8["store"])["maximum_localization_gap_frames"]
+    assert recovery_v8["trigger_after_missing_frames"] + recovery_v8["maximum_recovery_steps"] <= gap
+    assert store_runner._store_contract(v8, v8_sha)["unknown_recovery"] == recovery_v8
+
+
+def test_route_b_v8_rejects_a_recovery_that_outlives_the_guard() -> None:
+    for trigger, maximum in ((3, 8), (11, 1)):
+        value = _route_b_contract("movement_goal_navigation_route_b_v8.json")
+        recovery = cast(dict, value["unknown_recovery"])
+        recovery["trigger_after_missing_frames"] = trigger
+        recovery["maximum_recovery_steps"] = maximum
+        with pytest.raises(MobileTestbedError):
+            store_runner._store_contract(value, "0" * 64)
+    for mutation in (
+        {"mode": "spin_in_place"},
+        {"maximum_recovery_steps": 0},
+        {"trigger_after_missing_frames": 0},
+        {"hold_ms": 0},
+        {"nominal_step_pixels": 0.0},
+    ):
+        value = _route_b_contract("movement_goal_navigation_route_b_v8.json")
+        cast(dict, value["unknown_recovery"]).update(mutation)
+        with pytest.raises(MobileTestbedError):
+            store_runner._store_contract(value, "0" * 64)
+
+
+def test_route_b_v7_declares_the_bounded_retrace_recovery() -> None:
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    contract, sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v7.json"
+    )
+    assert len(sha) == 64
+    recovery = cast(dict, contract["unknown_recovery"])
+    assert recovery["mode"] == "bounded_retrace"
+    assert recovery["trigger_after_missing_frames"] == 3
+    assert recovery["maximum_recovery_steps"] == 6
+    assert recovery["hold_ms"] > 0
+    assert recovery["nominal_step_pixels"] > 0
+    gap = cast(dict, contract["store"])["maximum_localization_gap_frames"]
+    assert recovery["trigger_after_missing_frames"] + recovery["maximum_recovery_steps"] <= gap
+    # v7 keeps the v6 planner and adds nothing that replaces it
+    assert cast(dict, contract["planner"])["mode"] == "path_progress_with_feasibility"
+    resolved = store_runner._store_contract(contract, sha)
+    assert resolved["unknown_recovery"] == recovery
+
+
+def test_route_b_v7_keeps_v6_unchanged() -> None:
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    v6, v6_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v6.json"
+    )
+    assert v6_sha == "fcb4d8086a91eae4f1f84c4a8dff173b5f95527f534e49d69fdcd32a9e41400c"
+    assert "unknown_recovery" not in v6
+    # v7 is preserved on disk as the recorded inert-bearing experiment
+    v7, v7_sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v7.json"
+    )
+    assert v7_sha == "13465a1194a666ccc2de774fb631fd7d20909959a8ac86053304204eb6da0642"
+    assert cast(dict, v7["unknown_recovery"])["mode"] == "bounded_retrace"

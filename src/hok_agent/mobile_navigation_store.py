@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import time
 from contextlib import suppress
@@ -77,6 +78,10 @@ from hok_agent.transition_store import (
     TerminalReason,
     UnifiedTransitionStore,
     validate_transition,
+)
+from hok_agent.traversability import (
+    traversability_masked_direction,
+    validate_traversability,
 )
 
 MOBILE_NAVIGATION_STORE_SCHEMA = "hok-agent-mobile-navigation-store-session-v1"
@@ -204,6 +209,50 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
         )
     ):
         raise MobileTestbedError("mobile navigation store region filter differs")
+    recovery_raw = contract.get("unknown_recovery")
+    if recovery_raw is not None and not isinstance(recovery_raw, dict):
+        raise MobileTestbedError("mobile navigation store unknown recovery differs")
+    unknown_recovery = cast(dict[str, object] | None, recovery_raw)
+    if recovery_raw is not None:
+        recovery_block = cast(dict[str, object], recovery_raw)
+        trigger = recovery_block.get("trigger_after_missing_frames")
+        maximum = recovery_block.get("maximum_recovery_steps")
+        hold = recovery_block.get("hold_ms")
+        if (
+            recovery_block.get("mode") not in {"bounded_retrace", "bounded_retrace_or_waypoint"}
+            or not isinstance(trigger, int)
+            or not isinstance(maximum, int)
+            or not isinstance(hold, int)
+            or int(trigger) <= 0
+            or int(maximum) <= 0
+            or int(hold) <= 0
+            or any(
+                not isinstance(recovery_block.get(key), (int, float))
+                or float(cast(float, recovery_block[key])) <= 0
+                for key in ("nominal_step_pixels",)
+            )
+            or (
+                recovery_block.get("waypoint_bearing_within_distance_pixels") is not None
+                and (
+                    not isinstance(
+                        recovery_block["waypoint_bearing_within_distance_pixels"], (int, float)
+                    )
+                    or float(
+                        cast(float, recovery_block["waypoint_bearing_within_distance_pixels"])
+                    )
+                    <= 0
+                )
+            )
+        ):
+            raise MobileTestbedError("mobile navigation store unknown recovery differs")
+        # The recovery must fit inside the declared localisation guard, so a failed retreat can
+        # never extend the episode past the gap the guard already bounds.
+        declared_gap = block.get("maximum_localization_gap_frames")
+        if (
+            not isinstance(declared_gap, int)
+            or int(trigger) + int(maximum) > int(declared_gap)
+        ):
+            raise MobileTestbedError("mobile navigation store unknown recovery differs")
     approach_raw = contract.get("final_approach")
     final_approach = cast(dict[str, object] | None, approach_raw)
     if approach_raw is not None:
@@ -239,11 +288,47 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
         ordered.sort()
         if any(later[1] < earlier[1] for earlier, later in zip(ordered, ordered[1:], strict=False)):
             raise MobileTestbedError("mobile navigation store final approach differs")
+        commitment = approach_raw.get("commitment_steps")
+        if commitment is not None and (not isinstance(commitment, int) or int(commitment) < 1):
+            raise MobileTestbedError("mobile navigation store final approach differs")
+        direct_bearing = approach_raw.get("direct_bearing")
+        if direct_bearing is not None and not isinstance(direct_bearing, bool):
+            raise MobileTestbedError("mobile navigation store final approach differs")
+        press_distance = approach_raw.get("press_release_maximum_distance_pixels")
+        if press_distance is not None and (
+            not isinstance(press_distance, (int, float))
+            or float(press_distance) <= 0
+            or float(press_distance) > ordered[-1][0]
+        ):
+            # A press-release band outside the declared deceleration tiers would shorten a press
+            # that no tier describes, so it is rejected rather than silently introduced.
+            raise MobileTestbedError("mobile navigation store final approach differs")
+    if contract.get("traversability") is not None:
+        validate_traversability(contract["traversability"])
+    advance_raw = contract.get("no_advance_guard")
+    no_advance_guard = cast(dict[str, object] | None, advance_raw)
+    if advance_raw is not None and (
+        not isinstance(advance_raw, dict)
+        or advance_raw.get("mode") != "flat_localised_position"
+        or not isinstance(advance_raw.get("window_steps"), int)
+        or not isinstance(advance_raw.get("maximum_travel_pixels"), (int, float))
+        or int(advance_raw["window_steps"]) <= 1
+        or float(cast(float, advance_raw["maximum_travel_pixels"])) <= 0
+    ):
+        raise MobileTestbedError("mobile navigation store no-advance guard differs")
+    backlog_raw = block.get("backlog_free_maximum_pointer_messages")
+    if backlog_raw is not None and (not isinstance(backlog_raw, int) or int(backlog_raw) < 1):
+        raise MobileTestbedError("mobile navigation store contract differs")
     resolved = dict(block)
     resolved["progress_guard"] = progress_guard
     resolved["planner"] = planner
     resolved["final_approach"] = final_approach
     resolved["region_filter"] = region_filter
+    resolved["unknown_recovery"] = unknown_recovery
+    resolved["no_advance_guard"] = no_advance_guard
+    resolved["traversability"] = cast(
+        dict[str, object] | None, contract.get("traversability")
+    )
     resolved["policy_bundle_sha256"] = contract_sha
     resolved["event_engine_sha256"] = hashlib.sha256(
         json.dumps(block, sort_keys=True, separators=(",", ":")).encode()
@@ -345,18 +430,28 @@ def _movement_command(previous: str, current: str) -> str:
 
 
 def _route(
-    requested: str, *, known: bool, death: bool, outside_region: bool
+    requested: str,
+    *,
+    known: bool,
+    death: bool,
+    outside_region: bool,
+    recovery: tuple[str, str] | None = None,
 ) -> tuple[str, str, str]:
     """Deterministic Router: masks the geometry proposal and keeps requested versus applied.
 
     Both the request and the result stay in the joystick vocabulary; the store vocabulary is
-    applied at the transition boundary only.
+    applied at the transition boundary only. ``recovery`` is a declared bounded
+    ``(bearing, reason)`` pair that the Router may apply instead of waiting while the marker is
+    unknown; it is still the Router that decides, so the geometry proposal stays masked as before.
     """
     if death:
         return "wait", "deterministic_router", "death_or_ended_screen"
     if outside_region:
         return "wait", "deterministic_router", "outside_free_movement_region"
     if not known:
+        if recovery is not None:
+            bearing, reason = recovery
+            return bearing, "deterministic_router", reason
         return "wait", "deterministic_router", "unknown_position"
     return requested, "geometry_rule", "geometry_rule"
 
@@ -554,6 +649,68 @@ def _planner_direction(
     return max(scored, key=lambda item: item[1])[2], reference
 
 
+def _mask_joystick_bearing(
+    position: tuple[float, float],
+    joystick_bearing: str,
+    block: dict[str, object],
+) -> str:
+    """Apply the measured grid to a joystick-vocabulary bearing and return a joystick bearing.
+
+    The grid is keyed by the recorded store vocabulary, so the caller must not hand a joystick name
+    straight to it: the two vocabularies overlap on nothing, and a direct call silently masks
+    nothing at all. This is the single conversion point.
+    """
+    stored = JOYSTICK_TO_STORE_DIRECTION.get(joystick_bearing)
+    if stored is None:
+        return joystick_bearing
+    masked = traversability_masked_direction(position, stored, block)
+    return STORE_TO_JOYSTICK_DIRECTION.get(masked, joystick_bearing)
+
+
+def _commit_approach(
+    requested: str,
+    committed: str | None,
+    committed_steps: int,
+    commitment: int,
+    in_band: bool,
+) -> tuple[str, str | None, int, bool]:
+    """Hold a chosen approach bearing for the declared commitment, or choose a new one.
+
+    Returns the bearing to request, the new commitment state, and whether this step was a held one.
+    Outside the declared band, or with a commitment of one, everything is as it was.
+    """
+    if commitment <= 1 or not in_band:
+        return requested, None, 0, False
+    if committed is not None and committed_steps < commitment:
+        return committed, committed, committed_steps + 1, True
+    return requested, requested, 1, False
+
+
+def _no_advance_detected(
+    previous_anchor: tuple[float, float] | None,
+    previous_steps: int,
+    position: tuple[float, float] | None,
+    advanced: bool,
+    window_steps: int,
+    maximum_travel_pixels: float,
+) -> tuple[tuple[float, float] | None, int, bool]:
+    """Track a run of applied-bearing steps whose localised position never travels.
+
+    Returns the updated anchor, the updated run length and whether the declared window was
+    exceeded. A step that is blind, or that applies no bearing, resets the run, so a lost marker, a
+    deliberate release or a fine final-approach pulse can never be read as a dead screen.
+    """
+    if not advanced or position is None:
+        return None, 0, False
+    if previous_anchor is None:
+        return position, 1, False
+    travel = math.hypot(position[0] - previous_anchor[0], position[1] - previous_anchor[1])
+    if travel > maximum_travel_pixels:
+        return position, 1, False
+    steps = previous_steps + 1
+    return previous_anchor, steps, steps >= window_steps
+
+
 def _approach_hold_ms(
     distance: float | None, tiers: list[tuple[float, int]], default_hold_ms: int
 ) -> int:
@@ -615,6 +772,135 @@ def _region_safe_direction(
     )
 
 
+_RETRACE_MINIMUM_DISPLACEMENT = 0.5
+
+
+def _retrace_direction(
+    last_known: tuple[float, float],
+    previous_known: tuple[float, float],
+    region: dict[str, object],
+    nominal_step_pixels: float,
+    retreat_steps: int = 0,
+) -> str | None:
+    """The reversed, quantized bearing of the last known displacement, or None when it is unsafe.
+
+    Retracing walks back over ground the hero has just occupied, so it is the cheapest bounded way
+    out of a detection blind area while the marker is unknown. The bearing is the exact reversal of
+    the last known displacement, quantized to the eight-way vocabulary. The step is predicted from
+    the last known position at the depth already retreated, and the recovery declines to act rather
+    than guess when the predicted point would leave the declared region, or when the last two known
+    positions imply no usable displacement. The check is against the declared region itself, which
+    is the same invariant ``outside_region`` enforces, so a retreat can never trip that guard.
+    """
+    delta_y = previous_known[0] - last_known[0]
+    delta_x = previous_known[1] - last_known[1]
+    if (
+        abs(delta_y) < _RETRACE_MINIMUM_DISPLACEMENT
+        and abs(delta_x) < _RETRACE_MINIMUM_DISPLACEMENT
+    ):
+        return None
+    angle = math.atan2(delta_x, -delta_y)
+    sector = round(angle / (math.pi / 4)) % 8
+    bearing = _MOVEMENT_ORDER[sector]
+    step_y, step_x = _DIRECTION_STEPS[bearing]
+    depth = float(retreat_steps + 1) * nominal_step_pixels
+    predicted_y = last_known[0] + step_y * depth
+    predicted_x = last_known[1] + step_x * depth
+    if not (
+        float(cast(float, region["minimum_y"]))
+        <= predicted_y
+        <= float(cast(float, region["maximum_y"]))
+        and float(cast(float, region["minimum_x"]))
+        <= predicted_x
+        <= float(cast(float, region["maximum_x"]))
+    ):
+        return None
+    return bearing
+
+
+def _toward_target_direction(
+    last_known: tuple[float, float],
+    target: tuple[float, float],
+    region: dict[str, object],
+    nominal_step_pixels: float,
+    retreat_steps: int = 0,
+) -> str | None:
+    """The quantized bearing toward the current waypoint, region-checked at the given depth.
+
+    This is the fallback the declared recovery uses when there is nothing to retrace, which the
+    offline replay shows is the common case: a hero that lost its marker while holding its final
+    approach has no usable displacement to reverse. The bearing is a plain re-aim at the declared
+    waypoint, so it never invents a destination, and it is declined when the predicted step would
+    leave the declared region, exactly as the retrace is.
+    """
+    bearing = _goal_navigation_direction(last_known, target, None, 0)
+    if bearing == "wait":
+        return None
+    step_y, step_x = _DIRECTION_STEPS[bearing]
+    depth = float(retreat_steps + 1) * nominal_step_pixels
+    predicted_y = last_known[0] + step_y * depth
+    predicted_x = last_known[1] + step_x * depth
+    if not (
+        float(cast(float, region["minimum_y"]))
+        <= predicted_y
+        <= float(cast(float, region["maximum_y"]))
+        and float(cast(float, region["minimum_x"]))
+        <= predicted_x
+        <= float(cast(float, region["maximum_x"]))
+    ):
+        return None
+    return bearing
+
+
+def _unknown_recovery_step(
+    *,
+    last_known: tuple[float, float] | None,
+    previous_known: tuple[float, float] | None,
+    target: tuple[float, float] | None,
+    missing_streak: int,
+    recovery_steps: int,
+    config: dict[str, object] | None,
+    region: dict[str, object],
+) -> tuple[tuple[str, str] | None, bool]:
+    """Decide one unknown step of the declared recovery.
+
+    Returns ``(recovery, eligible)``, where ``recovery`` is ``(bearing, reason)`` to apply or None.
+    ``eligible`` is True only once the declared trigger has fired and the declared step budget still
+    allows an attempt, so the caller can tell "waiting" from "tried and declined".
+
+    The declared rule is: retrace the reversed last-known displacement whenever that is usable and
+    region-safe, and otherwise - only in ``bounded_retrace_or_waypoint`` - re-aim at the current
+    waypoint. Inside ``waypoint_bearing_within_distance_pixels`` the re-aim wins outright, because a
+    measured run showed the retrace walking the hero away from the waypoint it was about to reach on
+    the short blind windows that sit on the final leg. Both bearings are declined when the predicted
+    step would leave the declared region, so an unanchored episode, or one with no room left, still
+    waits rather than guessing.
+    """
+    if config is None or last_known is None:
+        return None, False
+    if missing_streak < int(cast(int, config["trigger_after_missing_frames"])):
+        return None, False
+    if recovery_steps >= int(cast(int, config["maximum_recovery_steps"])):
+        return None, False
+    nominal = float(cast(float, config["nominal_step_pixels"]))
+    band_raw = config.get("waypoint_bearing_within_distance_pixels")
+    within_band = (
+        target is not None
+        and band_raw is not None
+        and math.hypot(last_known[0] - target[0], last_known[1] - target[1])
+        <= float(cast(float, band_raw))
+    )
+    if not within_band and previous_known is not None:
+        bearing = _retrace_direction(last_known, previous_known, region, nominal, recovery_steps)
+        if bearing is not None:
+            return (bearing, "unknown_recovery_retrace"), True
+    if config["mode"] == "bounded_retrace_or_waypoint" and target is not None:
+        bearing = _toward_target_direction(last_known, target, region, nominal, recovery_steps)
+        if bearing is not None:
+            return (bearing, "unknown_recovery_waypoint"), True
+    return None, True
+
+
 def _progress_guard_offset(escape_step: int, hold_steps: int, offsets: list[int]) -> int:
     """The bearing offset for one step of a bounded escape schedule."""
     if hold_steps <= 0 or not offsets or escape_step < 0:
@@ -630,6 +916,7 @@ def _episode_outcome(
     arrived: bool,
     death: bool,
     outside_region: bool,
+    no_advance: bool,
     missing_streak: int,
     maximum_gap: int,
     budget_exhausted: bool,
@@ -646,6 +933,11 @@ def _episode_outcome(
         return True, "SAFETY_STOP", "ERROR", "death_or_ended_screen"
     if outside_region:
         return True, "SAFETY_STOP", "ERROR", "outside_free_movement_region"
+    if no_advance:
+        # The applied action produced no advance at all, which is a different failure from a lost
+        # marker: the hero is localised, a bearing is held, and the world is not moving. Ending here
+        # is an explicit truncation of a dead state rather than a spent budget.
+        return True, "ACTION_FAILURE", "ERROR", "no_advance_detected"
     if maximum_gap > 0 and missing_streak > maximum_gap:
         return True, "CAPTURE_FAILURE", "ERROR", "localization_gap"
     if budget_exhausted:
@@ -679,6 +971,13 @@ class _NavigationRuntime:
     progress_guard: dict[str, object] | None
     region_filter: dict[str, object] | None
     planner: dict[str, object] | None
+    unknown_recovery: dict[str, object] | None
+    approach_press_distance: float | None
+    approach_direct_bearing: bool
+    no_advance_guard: dict[str, object] | None
+    traversability: dict[str, object] | None
+    approach_commitment: int
+    backlog_free_maximum_messages: int
     approach_tiers: list[tuple[float, int]]
     approach_default_hold_ms: int
     guard: DeviceGuard
@@ -749,6 +1048,46 @@ def _prepare_navigation_runtime(
         progress_guard=cast(dict[str, object] | None, store_contract.get("progress_guard")),
         region_filter=cast(dict[str, object] | None, store_contract.get("region_filter")),
         planner=cast(dict[str, object] | None, store_contract.get("planner")),
+        unknown_recovery=cast(dict[str, object] | None, contract.get("unknown_recovery")),
+        approach_press_distance=(
+            None
+            if store_contract.get("final_approach") is None
+            or cast(dict[str, object], store_contract["final_approach"]).get(
+                "press_release_maximum_distance_pixels"
+            )
+            is None
+            else float(
+                cast(
+                    float,
+                    cast(dict[str, object], store_contract["final_approach"])[
+                        "press_release_maximum_distance_pixels"
+                    ],
+                )
+            )
+        ),
+        approach_direct_bearing=(
+            store_contract.get("final_approach") is not None
+            and bool(
+                cast(dict[str, object], store_contract["final_approach"]).get("direct_bearing")
+            )
+        ),
+        no_advance_guard=cast(dict[str, object] | None, contract.get("no_advance_guard")),
+        traversability=cast(dict[str, object] | None, contract.get("traversability")),
+        approach_commitment=int(
+            cast(
+                int,
+                (
+                    cast(dict[str, object], store_contract["final_approach"]).get(
+                        "commitment_steps", 1
+                    )
+                    if store_contract.get("final_approach") is not None
+                    else 1
+                ),
+            )
+        ),
+        backlog_free_maximum_messages=int(
+            cast(int, store_contract.get("backlog_free_maximum_pointer_messages", 2))
+        ),
         approach_tiers=(
             [
                 (
@@ -796,8 +1135,6 @@ def _run_episode(
     state = _GoalNavigationTemplateState()
     steps: list[dict[str, object]] = []
     previous_position: tuple[float, float] | None = None
-    previous_applied = "STOP"
-    previous_joystick = "wait"
     region_streak = 0
     missing_streak = 0
     start_position: tuple[float, float] | None = None
@@ -847,8 +1184,34 @@ def _run_episode(
     guard_events = 0
     guard_escape_steps_total = 0
     region_filter_masked_steps = 0
+    recovery_block = runtime.unknown_recovery
+    recovery_hold_ms = int(cast(int, recovery_block["hold_ms"])) if recovery_block else 0
+    retrace_from: tuple[float, float] | None = None
+    retrace_to: tuple[float, float] | None = None
+    recovery_steps = 0
+    recovery_steps_total = 0
+    recovery_events = 0
+    recovery_declined_steps = 0
+    approach_press_steps = 0
+    advance_guard = runtime.no_advance_guard
+    advance_window = int(cast(int, advance_guard["window_steps"])) if advance_guard else 0
+    advance_travel = (
+        float(cast(float, advance_guard["maximum_travel_pixels"])) if advance_guard else 0.0
+    )
+    committed_approach: str | None = None
+    committed_steps = 0
+    traversability_masked_steps = 0
+    approach_committed_steps = 0
+    advance_anchor: tuple[float, float] | None = None
+    advance_steps = 0
+    no_advance = False
     waypoint_index = 0
     pointer_messages = 0
+    # The joystick is a physical pointer that outlives an episode, so the runner must adopt its
+    # real direction instead of assuming a released pointer. Assuming STOP while the touch is
+    # still down makes the first command a phantom DOWN that emits no message.
+    previous_applied = JOYSTICK_TO_STORE_DIRECTION.get(joystick.direction, "STOP")
+    previous_joystick = joystick.direction
     retry_total = 0
     failure: str | None = None
     arrived = False
@@ -904,6 +1267,16 @@ def _run_episode(
             last_position = position
             known = position is not None
             missing_streak = 0 if known else missing_streak + 1
+            if known:
+                if recovery_steps:
+                    # The retreat walked the hero backwards, so the progress guard must not read
+                    # that as a stall. Clearing the baseline rescores progress from the new fix.
+                    best_distance = None
+                    no_progress_streak = 0
+                    escape_active = False
+                    escape_steps = 0
+                retrace_from, retrace_to = retrace_to, position
+                recovery_steps = 0
             outside_region = False
             if position is not None:
                 inside = (
@@ -947,7 +1320,20 @@ def _run_episode(
             if planner is not None and position is not None and not death and not outside_region:
                 if start_position is None:
                     start_position = position
-                requested_joystick, _reference = _planner_direction(
+                if (
+                    runtime.approach_direct_bearing
+                    and distance is not None
+                    and distance <= runtime.approach_distance
+                ):
+                    # Inside the declared final approach the aim is the waypoint itself. The planner
+                    # otherwise aims at its path reference plus a lookahead, which at a few pixels
+                    # out keeps correcting across the leg instead of closing the remaining gap.
+                    # Hysteresis is deliberately not applied here: the first version of this rule
+                    # passed the previous bearing, which pinned the aim to a neighbouring sector
+                    # whose measured y response was about zero, so the hero could only move across.
+                    requested_joystick = _goal_navigation_direction(position, target)
+                else:
+                    requested_joystick, _reference = _planner_direction(
                     position,
                     runtime.targets,
                     waypoint_index,
@@ -963,9 +1349,69 @@ def _run_episode(
                 requested_joystick = _goal_navigation_direction(
                     position, target, previous_joystick, runtime.hysteresis
                 )
-            applied_joystick, owner, reason = _route(
-                requested_joystick, known=known, death=death, outside_region=outside_region
+            recovery: tuple[str, str] | None = None
+            if not known and not death and not outside_region:
+                recovery, eligible = _unknown_recovery_step(
+                    last_known=retrace_to,
+                    previous_known=retrace_from,
+                    target=target,
+                    missing_streak=missing_streak,
+                    recovery_steps=recovery_steps,
+                    config=recovery_block,
+                    region=region,
+                )
+                if eligible:
+                    if recovery is None:
+                        recovery_declined_steps += 1
+                    else:
+                        if recovery_steps == 0:
+                            recovery_events += 1
+                        recovery_steps += 1
+                        recovery_steps_total += 1
+            in_approach_band = (
+                position is not None
+                and not death
+                and not outside_region
+                and distance is not None
+                and distance <= runtime.approach_distance
             )
+            if (
+                runtime.traversability is not None
+                and position is not None
+                and not death
+                and not outside_region
+            ):
+                masked_joystick = _mask_joystick_bearing(
+                    position, requested_joystick, runtime.traversability
+                )
+                if masked_joystick != requested_joystick:
+                    traversability_masked_steps += 1
+                    requested_joystick = masked_joystick
+            # The finest press tier moves the hero about 0.65 px, near the position noise floor,
+            # so re-aiming every step lets the steps cancel. Hold the chosen bearing for the
+            # declared commitment instead of re-deciding from a noisy position.
+            (
+                requested_joystick,
+                committed_approach,
+                committed_steps,
+                was_committed,
+            ) = _commit_approach(
+                requested_joystick,
+                committed_approach,
+                committed_steps,
+                runtime.approach_commitment,
+                in_approach_band,
+            )
+            if was_committed:
+                approach_committed_steps += 1
+            applied_joystick, owner, reason = _route(
+                requested_joystick,
+                known=known,
+                death=death,
+                outside_region=outside_region,
+                recovery=recovery,
+            )
+            recovery_applied = reason in {"unknown_recovery_retrace", "unknown_recovery_waypoint"}
             if escape_active and progress_guard is not None and not death:
                 if (
                     runtime.planner is None
@@ -1006,6 +1452,15 @@ def _run_episode(
             requested = JOYSTICK_TO_STORE_DIRECTION[requested_joystick]
             applied = JOYSTICK_TO_STORE_DIRECTION[applied_joystick]
             command = _movement_command(previous_applied, applied)
+            step_hold_ms = (
+                _approach_hold_ms(
+                    distance, runtime.approach_tiers, runtime.approach_default_hold_ms
+                )
+                if runtime.approach_tiers
+                else runtime.approach_hold_ms
+                if distance is not None and distance <= runtime.approach_distance
+                else runtime.hold_ms
+            )
             before_messages = pointer_messages
             dispatched_direction = applied_joystick if command in {"DOWN", "MOVE", "UP"} else None
             operations = (
@@ -1020,8 +1475,36 @@ def _run_episode(
                 retry_count,
                 status,
             ) = dispatch(operations)
+            approach_press_ms = 0
+            if (
+                runtime.approach_press_distance is not None
+                and distance is not None
+                and distance <= runtime.approach_press_distance
+                and applied_joystick != "wait"
+            ):
+                # The declared deceleration has to bound the press itself. The persistent joystick
+                # holds the touch down until its direction changes, so without this explicit release
+                # the declared hold only sets the sampling period: the hero travels for the whole
+                # step, and near a 4 px arrival tolerance that makes the final leg oscillate instead
+                # of converging. The press lasts exactly the declared tier hold, then the bearing is
+                # released and the step is not extended afterwards.
+                approach_press_ms = step_hold_ms
+                time.sleep(approach_press_ms / 1000)
+                (
+                    _release_start_ns,
+                    _release_ack_ns,
+                    release_settle_end_ns,
+                    _release_retries,
+                    release_status,
+                ) = dispatch(joystick.set_direction("wait"))
+                if release_status not in {"acknowledged", "noop"}:
+                    raise MobileTestbedError("mobile navigation store approach release failed")
+                settle_end_ns = release_settle_end_ns
+                approach_press_steps += 1
+                previous_applied = "STOP"
+            else:
+                previous_applied = applied
             step_messages = pointer_messages - before_messages
-            previous_applied = applied
             previous_joystick = applied_joystick
             while time.monotonic_ns() < settle_end_ns:
                 watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
@@ -1054,10 +1537,19 @@ def _run_episode(
                 waypoint_index += 1
                 if waypoint_index >= len(runtime.targets):
                     arrived = True
+            advance_anchor, advance_steps, no_advance = _no_advance_detected(
+                advance_anchor,
+                advance_steps,
+                position,
+                applied_joystick != "wait" and not death and not outside_region,
+                advance_window,
+                advance_travel,
+            )
             done, terminal_reason, end_kind, abort_reason = _episode_outcome(
                 arrived=arrived,
                 death=death,
                 outside_region=outside_region,
+                no_advance=no_advance,
                 missing_streak=missing_streak,
                 maximum_gap=runtime.maximum_gap,
                 budget_exhausted=time.monotonic() >= episode_deadline
@@ -1118,6 +1610,14 @@ def _run_episode(
                     "progress_guard_escape": escape_active,
                     "progress_guard_escape_step": escape_steps,
                     "region_filter_masked_steps": region_filter_masked_steps,
+                    "unknown_recovery_events": recovery_events,
+                    "unknown_recovery_steps": recovery_steps_total,
+                    "unknown_recovery_depth": recovery_steps,
+                    "unknown_recovery_declined_steps": recovery_declined_steps,
+                    "approach_press_ms": approach_press_ms,
+                    "no_advance_steps": advance_steps,
+                    "traversability_masked_steps": traversability_masked_steps,
+                    "approach_committed_steps": approach_committed_steps,
         "progress_guard_events": guard_events,
                     "terminal_reason": terminal_reason,
                     "training_eligible": stored.payload["training_eligible"],
@@ -1126,19 +1626,23 @@ def _run_episode(
             if done:
                 break
             step_id += 1
+            # A pulse step already released the bearing and waited out the release settle, so it is
+            # not extended further; otherwise the declared hold or the recovery hold owns the wait.
             hold = (
-                _approach_hold_ms(
-                    distance, runtime.approach_tiers, runtime.approach_default_hold_ms
-                )
-                if runtime.approach_tiers
-                else runtime.approach_hold_ms
-                if distance is not None and distance <= runtime.approach_distance
-                else runtime.hold_ms
+                0
+                if approach_press_ms
+                else recovery_hold_ms
+                if recovery_applied
+                else step_hold_ms
             )
             deadline = time.monotonic() + hold / 1000
             while time.monotonic() < deadline:
                 watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
                 time.sleep(GOAL_NAVIGATION_LOOP_SLEEP_SECONDS)
+        # Release the pointer between episodes so each episode starts from rest rather than
+        # inheriting a held bearing, and count the messages like any other dispatch.
+        with suppress(Exception):
+            dispatch(joystick.set_direction("wait"))
         committed = store.load_episode(episode_id)
     except Exception as exc:
         failure = str(exc)
@@ -1165,13 +1669,20 @@ def _run_episode(
         "steps_without_ack": sum(
             1 for row in steps if row["final_status"] not in {"acknowledged", "noop"}
         ),
-        "backlog_free": max_messages <= 2
+        "backlog_free": max_messages <= runtime.backlog_free_maximum_messages
         and all(row["final_status"] in {"acknowledged", "noop"} for row in steps),
         "failure": failure,
         "abort_reason": abort_reason,
         "progress_guard_events": guard_events,
         "progress_guard_escape_steps": guard_escape_steps_total,
         "region_filter_masked_steps": region_filter_masked_steps,
+        "unknown_recovery_events": recovery_events,
+        "unknown_recovery_steps": recovery_steps_total,
+        "unknown_recovery_declined_steps": recovery_declined_steps,
+        "approach_press_steps": approach_press_steps,
+        "no_advance_events": int(no_advance),
+        "traversability_masked_steps": traversability_masked_steps,
+        "approach_committed_steps": approach_committed_steps,
         "duration_seconds": round(time.monotonic() - started, 8),
         "step_rows": steps,
     }

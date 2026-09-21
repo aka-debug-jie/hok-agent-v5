@@ -894,6 +894,28 @@ def _parser() -> argparse.ArgumentParser:
     navigation_store_batch.add_argument("--output-dir", type=Path, required=True)
     navigation_store_batch.add_argument("--episodes", type=int, default=3)
     navigation_store_batch.add_argument("--enable-input", action="store_true")
+    traversability_build = commands.add_parser(
+        "traversability-build",
+        help="rebuild the measured traversability grid from an explicit, pinned run list",
+    )
+    traversability_build.add_argument("--runs-root", type=Path, required=True)
+    traversability_build.add_argument(
+        "--runs", nargs="+", required=True, help="the exact source run directories to aggregate"
+    )
+    traversability_build.add_argument("--output", type=Path, required=True)
+    traversability_build.add_argument("--cell-pixels", type=float, default=4.0)
+    traversability_build.add_argument("--minimum-samples", type=int, default=3)
+    traversability_build.add_argument("--minimum-rate-per-100ms", type=float, default=0.08)
+    traversability_build.add_argument("--nominal-step-pixels", type=float, default=6.0)
+    traversability_check = commands.add_parser(
+        "traversability-check",
+        help="rebuild a frozen traversability grid and fail on any difference",
+    )
+    traversability_check.add_argument("--runs-root", type=Path, required=True)
+    traversability_check.add_argument("--contract", type=Path, required=True)
+    traversability_check.add_argument(
+        "--runs", nargs="+", help="override the pinned source list recorded in the contract"
+    )
     feedback_audit = commands.add_parser(
         "navigation-feedback-audit",
         help="R0: check the device navigation feedback against independent references",
@@ -3185,6 +3207,63 @@ def main(argv: Sequence[str] | None = None) -> int:
                 episodes=args.episodes,
                 enable_input=args.enable_input,
             )
+        elif args.command == "traversability-build":
+            from hok_agent.traversability import make_traversability_block
+
+            block = make_traversability_block(
+                runs_root=args.runs_root,
+                runs=tuple(args.runs),
+                cell_pixels=args.cell_pixels,
+                minimum_samples=args.minimum_samples,
+                minimum_rate_per_100ms=args.minimum_rate_per_100ms,
+                nominal_step_pixels=args.nominal_step_pixels,
+            )
+            args.output.write_text(
+                json.dumps(block, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            result = {
+                "status": "PASSED",
+                "output": str(args.output),
+                "source_runs": list(args.runs),
+                "coverage": block["coverage"],
+            }
+        elif args.command == "traversability-check":
+            from hok_agent.traversability import (
+                validate_traversability,
+                verify_traversability_grid,
+            )
+
+            contract = json.loads(args.contract.read_text(encoding="utf-8"))
+            block = contract.get("traversability")
+            if not isinstance(block, dict):
+                result = {
+                    "status": "FAILED",
+                    "error": "the contract declares no traversability block",
+                }
+            else:
+                validate_traversability(block)
+                recorded = block.get("source_runs")
+                pinned = recorded if isinstance(recorded, list) else []
+                runs = (
+                    tuple(args.runs) if args.runs else tuple(str(name) for name in pinned)
+                )
+                if not runs:
+                    result = {
+                        "status": "FAILED",
+                        "error": (
+                            "the contract records no source_runs and no --runs override was given, "
+                            "so this grid cannot be regenerated"
+                        ),
+                    }
+                else:
+                    checked = verify_traversability_grid(
+                        runs_root=args.runs_root, runs=runs, block=block
+                    )
+                    result = {
+                        "status": "PASSED" if checked["matches_frozen_grid"] else "FAILED",
+                        "contract": str(args.contract),
+                        **checked,
+                    }
         elif args.command == "mobile-operation-team-side":
             from hok_agent.mobile_testbed import detect_mobile_operation_team_side
 

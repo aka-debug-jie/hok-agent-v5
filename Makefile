@@ -111,6 +111,29 @@ OPERATION_MOVEMENT_SPATIAL_CONTRACT ?=configs/operation_movement_spatial_policy_
 OPERATION_MOVEMENT_SPATIAL_SPLIT ?=$(OPERATION_TEACHER_DATASET)/movement-pilot-split-v1.1.json
 OPERATION_MOVEMENT_OVERFIT_RUN ?=$(HOK_RUNS_ROOT)/operation-movement-policy-v1.1/overfit32-spatial-v1
 OPERATION_MOVEMENT_SPATIAL_RUN ?=$(HOK_RUNS_ROOT)/operation-movement-policy-v1.1/pilot-seed0-spatial-v1
+MOBILE_NAV_SERIAL ?=$(T8_SERIAL)
+MOBILE_NAV_ROUTE ?=configs/movement_goal_navigation_route_b_v15.json
+MOBILE_NAV_VISUAL_LAYOUT ?=configs/mobile_testbed_layout_calibrated_v3.json
+MOBILE_NAV_EXECUTION_LAYOUT ?=configs/mobile_testbed_layout_all_actions_corrected.local.json
+MOBILE_NAV_ROIS ?=configs/mobile_observation_rois.local.json
+MOBILE_NAV_IDENTITY ?=configs/mobile_testbed_identity.local.json
+MOBILE_NAV_RUNS ?=$(HOK_RUNS_ROOT)/hierarchical-movement-mvp
+MOBILE_NAV_STORE ?=$(MOBILE_NAV_RUNS)/route-b-v15-store
+MOBILE_NAV_EPISODES ?=3
+TRAVERSABILITY_CELL_PIXELS ?=4.0
+TRAVERSABILITY_MINIMUM_SAMPLES ?=3
+TRAVERSABILITY_MINIMUM_RATE ?=0.08
+TRAVERSABILITY_NOMINAL_STEP ?=6.0
+TRAVERSABILITY_OUTPUT ?=$(MOBILE_NAV_RUNS)/traversability-grid-v1.json
+# The exact source runs whose transitions produced the grid frozen in route B v15. Pinning this
+# list is what makes that grid regenerable; discovery by glob would let later batches silently
+# change a grid that a contract already froze, which is how the first freeze became unreproducible.
+TRAVERSABILITY_RUNS ?=route-b-batch-1 route-b-batch-2 route-b-batch-3 route-b-batch-5 \
+	route-b-batch-6 route-b-batch-7 route-b-batch-9 route-b-batch-10 \
+	route-b-batch-11-stage1 route-b-batch-12-stage1 route-b-batch-13-stage1 \
+	route-b-batch-14-stage1 route-b-batch-15-stage1 route-b-batch-16-stage1 \
+	route-b-batch-17-stage3x route-b-batch-18-stage3
+
 GLOBAL_AGENT_DATASET ?=$(HOK_DATASETS_ROOT)/global-agent-v1/pilot-40-10-v1
 GLOBAL_AGENT_BC_RUN ?=$(HOK_RUNS_ROOT)/global-agent-v1/bc-seed0-v1
 GLOBAL_AGENT_DAGGER_RUN ?=$(HOK_RUNS_ROOT)/global-agent-v1/dagger-round1-v1
@@ -477,6 +500,25 @@ operation-movement-v11-overfit32: storage-preflight
 
 operation-movement-v11-pilot: storage-preflight
 	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-movement-pilot --dataset-root "$(OPERATION_TEACHER_DATASET)" --split "$(OPERATION_MOVEMENT_SPATIAL_SPLIT)" --contract "$(OPERATION_MOVEMENT_SPATIAL_CONTRACT)" --adapter-checkpoint "$(OPERATION_POLICY_ADAPTER)" --output-dir "$(OPERATION_MOVEMENT_SPATIAL_RUN)" --device cuda --batch-size 128
+
+.PHONY: mobile-navigation-store mobile-navigation-store-batch mobile-navigation-verify traversability-build traversability-check
+
+mobile-navigation-store: storage-preflight
+	@test -n "$(MOBILE_NAV_SERIAL)" || { echo "set MOBILE_NAV_SERIAL (or T8_SERIAL)" >&2; exit 2; }
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(MOBILE_NAV_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-navigation-store --serial "$(MOBILE_NAV_SERIAL)" --config "$(MOBILE_NAV_ROUTE)" --visual-layout "$(MOBILE_NAV_VISUAL_LAYOUT)" --execution-layout "$(MOBILE_NAV_EXECUTION_LAYOUT)" --observation-rois "$(MOBILE_NAV_ROIS)" --output-dir "$(MOBILE_NAV_STORE)" --enable-input
+
+mobile-navigation-store-batch: storage-preflight
+	@test -n "$(MOBILE_NAV_SERIAL)" || { echo "set MOBILE_NAV_SERIAL (or T8_SERIAL)" >&2; exit 2; }
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(MOBILE_NAV_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-navigation-store-batch --serial "$(MOBILE_NAV_SERIAL)" --config "$(MOBILE_NAV_ROUTE)" --visual-layout "$(MOBILE_NAV_VISUAL_LAYOUT)" --execution-layout "$(MOBILE_NAV_EXECUTION_LAYOUT)" --observation-rois "$(MOBILE_NAV_ROIS)" --output-dir "$(MOBILE_NAV_STORE)-batch" --episodes "$(MOBILE_NAV_EPISODES)" --enable-input
+
+mobile-navigation-verify: storage-preflight
+	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" $(RUN_PYTHON) -m hok_agent mobile-navigation-verify --store "$(MOBILE_NAV_STORE)/transitions.sqlite3" --frame-root "$(MOBILE_NAV_STORE)/frames" --all
+
+traversability-build: storage-preflight
+	$(RUN_PYTHON) -m hok_agent traversability-build --runs-root "$(MOBILE_NAV_RUNS)" --runs $(TRAVERSABILITY_RUNS) --output "$(TRAVERSABILITY_OUTPUT)" --cell-pixels "$(TRAVERSABILITY_CELL_PIXELS)" --minimum-samples "$(TRAVERSABILITY_MINIMUM_SAMPLES)" --minimum-rate-per-100ms "$(TRAVERSABILITY_MINIMUM_RATE)" --nominal-step-pixels "$(TRAVERSABILITY_NOMINAL_STEP)"
+
+traversability-check: storage-preflight
+	$(RUN_PYTHON) -m hok_agent traversability-check --runs-root "$(MOBILE_NAV_RUNS)" --contract "$(MOBILE_NAV_ROUTE)" --runs $(TRAVERSABILITY_RUNS)
 
 t8-data-smoke:
 	$(RUN_PYTHON) -m pytest -q tests/test_mobile_testbed.py tests/test_t8.py
