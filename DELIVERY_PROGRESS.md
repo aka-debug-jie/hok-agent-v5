@@ -12,9 +12,9 @@ forensics-first plan; the read-only forensics verdict below now governs the next
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text
-OBJECTIVE: close R1 as data-source limited after the 5 Hz read-only measurement refuted its target, and keep the delivered deterministic no-source chain frozen
+OBJECTIVE: hold the delivered deterministic chain at its validated scope (two-waypoint diagonal) while the route B limits are closed with measurements, and settle whether the terminal blind runs are a missing death signal
 STATUS: DATA_SOURCE_LIMITED
-NEXT_ACTION: none. Both route B dimensions are now measured and closed - control by the single-arbiter planner and perception by the frozen cue's blind regions, with the authorised temporal alternative tested and rejected at 45 % recovery and a wrong-lock mode. The validated scope is the two-waypoint diagonal; reopening needs a new data source (an independent reference) or a funded perception decision with its own validation
+NEXT_ACTION: test an in-match death/absence signal on the already-persisted hud views across the terminal 11-step blind runs; if a stable death-state feature exists, add it as a separate declared state signal so a death is reported as DEATH rather than CAPTURE_FAILURE. No new data source, no capture and no retuning of the frozen detector is required, and either outcome is a recorded result
 INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v9, the offline forensics verdict, the bounded control checks, the passing v9 probe batch, the passing goal-navigation sessions, the 704 recorded A-gate minimap frames, the persisted minimap frames of the failed staged rounds, and the live guarded movement, fade and reposition diagnostics
 CHANGED_FILES: AGENTS.md and BOUNDARIES.md (owner-authorized R1 scope extension), the R1 panel-gating contract and policy module, the read-only panel capture, the store-runner termination fixes, store contract v2, the route B contracts v1-v6, the declared progress guard, the region-safety filter, the declared deceleration table and the single-arbiter path planner,
 PRIMARY_METRIC: feedback coverage over every step and the agreement between the recorded signal and an independent reference, with the unverified remainder stated explicitly
@@ -872,7 +872,7 @@ NEXT_DECISION: obtain an external independent reference (which would also reopen
   a safety filter is insufficient for this route, and the missing piece is a local planner that
   treats blockage as a first-class state.
 - The device then came back but on a different blocker: `adb devices` reports
-  `[redacted-serial] no permissions` with the node at `/dev/bus/usb/001/015` owned `root:root` mode
+  `no permissions` for the authorized serial (redacted before publication) with the USB node owned `root:root` mode
   `0666`-minus-group-write, and non-interactive `sudo` is unavailable, so the permission fix is an
   owner step (`sudo chmod 666 /dev/bus/usb/001/015`, or a udev rule). No run bytes were created and
   the code state is unchanged and green.
@@ -1028,6 +1028,55 @@ NEXT_DECISION: obtain an external independent reference (which would also reopen
   scope and route B remains the generalisation limit, now with both dimensions measured: control
   fixed by the single-arbiter planner, perception limited by the frozen cue's blind regions. This
   step used 0 new bytes because the test ran on already-persisted frames.
+
+### Publication redaction (2026-09-21)
+
+- Before pushing this branch, the one occurrence of the authorized device serial in
+  `DELIVERY_PROGRESS.md` was replaced with a redacted placeholder. The repository's own
+  `.gitignore` already treats the local identity and layout files as private, and the serial is an
+  operator/device identifier rather than a measurement, so nothing about the recorded evidence
+  changes. No username, home path or other device identifier was present in the tracked content.
+
+### Wrap-up summary: delivered scope, measured limits and the newest refinement (2026-09-21)
+
+- What is delivered and frozen, all on the owner-authorized no-source route with no internal API,
+  backend or internal reference:
+  - the no-source identity and control gate, `active-probe-v25` under contract v9 (`92594112`);
+  - declared-target navigation including the staged `1 -> 3 -> 10` admission,
+    `goal-navigation-a3-staged-5` under contract `6e5401d7`, 14 of 14 rounds arrived with errors
+    1.69-4.00 px and zero identity switches;
+  - the Store-bound runtime at L1 and L2, `mobile-navigation-store-2` and
+    `mobile-navigation-store-batch-2` under contract `0e603fcc`, terminal transition written before
+    the episode ends, every step causal-order valid, reload verifiable, three consecutive episodes
+    with no action backlog and no frame-reference or store damage;
+  - and the termination guarantees added in this session: the declared duration cap is enforced, an
+    episode always ends with a terminal transition, and a sustained localisation gap now fails
+    explicitly as `CAPTURE_FAILURE` in about 17 s instead of silently burning 90 s.
+- What is measured and closed, each with evidence rather than a threshold change:
+  - R (learning) is `DATA_SOURCE_LIMITED`: no independent map reference exists, the navigation
+    feedback's second derivation is an exact duplicate, the commanded-response estimator keeps a
+    sub-pixel tail (p95 5.63 px) with one correction refuted, and the discrete panel turned out to be
+    a continuous pulse (0.403 Hz) whose "two states" were a median split. R1 does not train.
+  - Route B is the generalisation limit and both of its dimensions are now measured: control is
+    fixed by the single-arbiter path planner (three of four waypoints twice, against two or three
+    before, and the applied direction no longer fights the objective), and the authorised temporal
+    perception alternative was tested and rejected at 45 % recovery with a wrong-lock mode more than
+    60 px away.
+- Newest refinement from the final analysis, which supersedes the earlier "blind region" reading:
+  the terminal blind runs are exactly **11 steps** in three of three episodes, the guard threshold
+  being 10, they begin at the same place (about (48, 88)) on the final leg toward (50,80), and no
+  blind run after the last one is ever re-acquired. That pattern fits the hero being **dead or
+  unrendered** rather than a colour-threshold blind spot, and the runner's only death signal is the
+  end/replay banner check, which does not fire for an ordinary in-match death. If that reading holds,
+  the episodes are being mislabelled: a death is reported as `CAPTURE_FAILURE`.
+- Named next step, not taken here, and cheap because it needs no new data source or capture: test an
+  in-match death/absence signal on the already-persisted `hud` views across those terminal runs, and
+  if a stable death-state feature is found, add it as a separate declared state signal (which does
+  not retune the frozen player detector) so the episode reports `DEATH` and can be declared to wait
+  for a respawn. If no stable feature is found, that is the negative result.
+- Total recorded cost across the probe and goal-navigation lineages: 903,258,517 bytes, 0 GPU
+  seconds, engineering effective time UNKNOWN because it was never instrumented. The repository is
+  published on `hierarchical-policy-v0-prep` with the device serial redacted.
 
 ### 2026-09-09 development review and factual corrections
 
