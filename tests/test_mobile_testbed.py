@@ -269,6 +269,59 @@ def test_operation_base_roi_loader_and_persistent_joystick(tmp_path: Path) -> No
     assert mobile_testbed._death_replay_visible(death, rois)
 
 
+def test_death_banner_box_must_cover_the_measured_banner_extent(tmp_path: Path) -> None:
+    """A hard stop is only as good as the box it reads, so a clipping box must not load.
+
+    The owner's death reference (1600x720) shows the "view death replay" banner spanning
+    x 688-911, y 0-37. The box this project declared was x 720-880, y 0-22, which clips it on all
+    four sides: on that real frame it read 1583 red pixels against a minimum of 2000 and 76 white
+    against 80, so `_death_replay_visible` returned False on a frame where the hero was
+    demonstrably dead. A hard-stop gate that cannot see a death is worse than no gate, so the
+    measured extent is declared beside the box and the loader refuses a box that clips it.
+    """
+    measured = [688, 0, 911, 37]
+
+    def write(box: list[int], extent: list[int] | None) -> Path:
+        path = tmp_path / f"rois-{box[0]}-{box[2]}.json"
+        death: dict[str, object] = {
+            "pixel_box_xyxy": box,
+            "minimum_red_pixels": 2000,
+            "minimum_white_text_pixels": 80,
+        }
+        if extent is not None:
+            death["death_banner_extent_xyxy"] = extent
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": mobile_testbed.OBSERVATION_ROI_SCHEMA,
+                    "screen": {"width": 1600, "height": 720, "rotation": 1},
+                    "main_view": {"pixel_box_xyxy": [312, 60, 1280, 650]},
+                    "minimap": {"pixel_box_xyxy": [80, 0, 312, 232]},
+                    "hud": {"pixel_box_xyxy": [832, 216, 1600, 720]},
+                    "recommended_equipment": {"pixel_box_xyxy": [160, 240, 260, 345]},
+                    "death_replay_banner": death,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    # the box that shipped, against the measured extent: must be refused
+    with pytest.raises(mobile_testbed.MobileTestbedError):
+        mobile_testbed.load_observation_rois(write([720, 0, 880, 22], measured))
+    # a box that covers the measured banner loads, and its thresholds are the declared ones
+    rois, _sha = mobile_testbed.load_observation_rois(write([683, 0, 937, 46], measured))
+    assert rois.death_replay_banner == (683, 0, 937, 46)
+    assert rois.death_minimum_red_pixels == 2000
+    assert rois.death_minimum_white_pixels == 80
+    # a malformed extent is refused rather than ignored
+    with pytest.raises(mobile_testbed.MobileTestbedError):
+        mobile_testbed.load_observation_rois(write([683, 0, 937, 46], [688, 0, 911]))
+    # the extent is optional, so an existing config that does not declare one still loads
+    rois, _sha = mobile_testbed.load_observation_rois(write([720, 0, 880, 22], None))
+    assert rois.death_replay_banner == (720, 0, 880, 22)
+
+
 def test_operation_movement_teacher_contract_and_state_filter() -> None:
     root = Path(__file__).resolve().parents[1]
     contract, digest = mobile_testbed._movement_teacher_contract(

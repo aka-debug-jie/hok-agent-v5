@@ -1697,6 +1697,27 @@ def load_observation_rois(path: Path) -> tuple[ObservationROIs, str]:
         return x0, y0, x1, y1
 
     death = cast(dict[str, object], value["death_replay_banner"])
+    # A hard stop is only as good as the box it reads. The owner's death reference (1600x720) shows
+    # the "view death replay" banner spanning x 688-911, y 0-37, while the box this project
+    # originally declared was x 720-880, y 0-22: on that real frame it read 1583 red pixels against
+    # a minimum of 2000 and 76 white against 80, two near misses that both fail, so the stop
+    # reported no death on a frame where the hero was demonstrably dead. The measured extent is
+    # therefore declared beside the box and enforced here, so a box that clips the banner cannot
+    # load at all rather than silently failing to see deaths.
+    extent_raw = death.get("death_banner_extent_xyxy")
+    if extent_raw is not None:
+        if (
+            not isinstance(extent_raw, list)
+            or len(extent_raw) != 4
+            or not all(isinstance(item, int) for item in extent_raw)
+        ):
+            raise MobileTestbedError("mobile observation ROI death banner extent is invalid")
+        ex0, ey0, ex1, ey1 = cast(list[int], extent_raw)
+        dx0, dy0, dx1, dy1 = cast(list[int], cast(dict[str, object], value["death_replay_banner"])["pixel_box_xyxy"])
+        if not (dx0 <= ex0 and dy0 <= ey0 and dx1 >= ex1 and dy1 >= ey1):
+            raise MobileTestbedError(
+                "mobile observation ROI death banner box does not cover the measured banner extent"
+            )
     minimum_red = death.get("minimum_red_pixels")
     minimum_white = death.get("minimum_white_text_pixels")
     if not isinstance(minimum_red, int) or not isinstance(minimum_white, int):
