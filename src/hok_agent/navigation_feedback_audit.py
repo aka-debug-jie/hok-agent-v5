@@ -854,3 +854,194 @@ def run_command_response_audit(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return report
+
+
+R0_PANEL_SCHEMA = "hok-agent-r0-panel-feedback-contract-v1"
+PANEL_AUDIT_SCHEMA = "hok-agent-panel-feedback-audit-v1"
+PANEL_REQUIRED_GATES = (
+    "minimum_steps",
+    "minimum_label_agreement",
+    "minimum_transitions",
+    "maximum_statistic_correlation",
+)
+PANEL_REQUIRED_STATISTICS = ("roi_mean_brightness", "roi_bright_pixel_count")
+BRIGHT_PIXEL_LEVEL = 128
+
+
+def load_panel_feedback_contract(path: Path) -> tuple[dict[str, object], str]:
+    payload = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+    gates = payload.get("gates")
+    statistics = payload.get("statistics")
+    if (
+        payload.get("schema_version") != R0_PANEL_SCHEMA
+        or not isinstance(gates, dict)
+        or not isinstance(statistics, list)
+        or {str(item) for item in cast(list[object], statistics)}
+        != set(PANEL_REQUIRED_STATISTICS)
+        or any(key not in gates for key in PANEL_REQUIRED_GATES)
+        or cast(dict[str, object], payload.get("independence", {})).get("duplication_guard")
+        is None
+        or cast(dict[str, object], payload.get("claim_boundary", {})).get("reward_allowed")
+        is not False
+    ):
+        raise FeedbackAuditError("r0 panel feedback contract differs")
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    return payload, digest
+
+
+def _panel_view(frame_root: Path, ref: str) -> np.ndarray:
+    with np.load(frame_root / ref, allow_pickle=False) as saved:
+        return np.ascontiguousarray(saved["equipment"]).astype(np.float64)
+
+
+def _panel_statistics(view: np.ndarray) -> tuple[float, float]:
+    return float(view.mean()), float((view.max(axis=2) > BRIGHT_PIXEL_LEVEL).sum())
+
+
+def run_panel_feedback_audit(
+    *,
+    panel_contract_path: Path,
+    store_path: Path,
+    frame_root: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract, contract_sha = load_panel_feedback_contract(panel_contract_path)
+    gates = cast(dict[str, object], contract["gates"])
+    output = _new_large_output(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    with UnifiedTransitionStore(store_path) as store:
+        episode_ids = store.episode_ids()
+        episodes: dict[str, tuple[HierarchicalTransitionRecord, ...]] = {
+            episode_id: store.load_episode(episode_id) for episode_id in episode_ids
+        }
+        integrity = store.integrity()
+    measured: list[float] = []
+    counted: list[float] = []
+    per_episode: list[dict[str, object]] = []
+    for episode_id in episode_ids:
+        rows = episodes[episode_id]
+        series: list[tuple[int, float, float]] = []
+        for record in rows:
+            view = _panel_view(frame_root, record["observation"]["frame_bundle_ref"])
+            mean_brightness, bright_pixels = _panel_statistics(view)
+            series.append((int(record["step_id"]), mean_brightness, bright_pixels))
+        measured.extend(item[1] for item in series)
+        counted.extend(item[2] for item in series)
+        per_episode.append(
+            {
+                "episode_id": episode_id,
+                "steps": len(series),
+                "mean_brightness_range": [
+                    min(item[1] for item in series),
+                    max(item[1] for item in series),
+                ]
+                if series
+                else None,
+                "bright_pixels_range": [
+                    min(item[2] for item in series),
+                    max(item[2] for item in series),
+                ]
+                if series
+                else None,
+            }
+        )
+    steps = len(measured)
+    if steps == 0:
+        raise FeedbackAuditError("panel feedback audit found no steps")
+    median_a = float(np.median(np.asarray(measured)))
+    median_b = float(np.median(np.asarray(counted)))
+    labels_a = [value > median_a for value in measured]
+    labels_b = [value > median_b for value in counted]
+    agreement = (
+        sum(1 for left, right in zip(labels_a, labels_b, strict=True) if left == right) / steps
+    )
+    array_a = np.asarray(measured, dtype=np.float64)
+    array_b = np.asarray(counted, dtype=np.float64)
+    if float(array_a.std()) <= 1e-9 or float(array_b.std()) <= 1e-9:
+        correlation = 1.0
+    else:
+        correlation = float(np.corrcoef(array_a, array_b)[0, 1])
+    transitions = sum(
+        1 for index in range(1, len(labels_a)) if labels_a[index] != labels_a[index - 1]
+    )
+    on_steps = sum(1 for label in labels_a if label)
+    # Sharper structural test than the agreement rate: if the disagreement were only a transition
+    # artefact, every ambiguous step would sit next to a label change. An isolated ambiguous step
+    # means the panel is not resolvable into a discrete state at the observation cadence.
+    ambiguous = [index for index in range(steps) if labels_a[index] != labels_b[index]]
+    isolated = [
+        index
+        for index in ambiguous
+        if not (
+            (index > 0 and labels_a[index - 1] != labels_a[index])
+            or (index + 1 < steps and labels_a[index + 1] != labels_a[index])
+        )
+    ]
+    ambiguous_levels = [measured[index] for index in ambiguous]
+    failures: list[str] = []
+    if steps < int(cast(int, gates["minimum_steps"])):
+        failures.append("minimum_steps")
+    if agreement < float(cast(float, gates["minimum_label_agreement"])):
+        failures.append("minimum_label_agreement")
+    if transitions < int(cast(int, gates["minimum_transitions"])):
+        failures.append("minimum_transitions")
+    if abs(correlation) > float(cast(float, gates["maximum_statistic_correlation"])):
+        failures.append("maximum_statistic_correlation")
+    report: dict[str, object] = {
+        "schema_version": PANEL_AUDIT_SCHEMA,
+        "status": "PASSED" if not failures and integrity == "ok" else "FAILED",
+        "panel_contract_sha256": contract_sha,
+        "store_path": store_path.name,
+        "store_integrity": integrity,
+        "episodes": len(episode_ids),
+        "denominators": {
+            "episodes": len(episode_ids),
+            "steps": steps,
+            "on_steps": on_steps,
+            "off_steps": steps - on_steps,
+            "transitions": transitions,
+            "steps_without_label": 0,
+        },
+        "discrete_state_test": {
+            "ambiguous_steps": len(ambiguous),
+            "isolated_ambiguous_steps": len(isolated),
+            "isolated_indices": isolated,
+            "ambiguous_mean_brightness": [
+                min(ambiguous_levels) if ambiguous_levels else None,
+                max(ambiguous_levels) if ambiguous_levels else None,
+            ],
+            "verdict": "resolvable" if not isolated else "not_resolvable_at_this_cadence",
+        },
+        "label": {
+            "agreement": agreement,
+            "median_mean_brightness": median_a,
+            "median_bright_pixel_count": median_b,
+            "statistic_correlation": correlation,
+            "duty_cycle": on_steps / steps,
+        },
+        "per_episode": per_episode,
+        "gate_failures": failures,
+        "unverified_remainder": [
+            "the audit verifies that the ROI carries a periodic strongly bimodal signal; the "
+            "isolated-ambiguous test shows it is not resolvable into a discrete state at the "
+            "1.2 s observation cadence",
+            "the audit verifies that the ROI carries a discrete two-state signal; it does not "
+            "verify what the panel means or that a purchase changes it",
+            "the label rule is each statistic against its own session median, which assumes a "
+            "roughly balanced duty cycle",
+            "no dispatched action is correlated with the panel in this audit; the gating task "
+            "needs its own run",
+        ],
+        "claim_boundary": {
+            "panel_semantics_verified": False,
+            "purchase_effect_verified": False,
+            "reward_allowed": False,
+            "training_allowed": not failures and integrity == "ok",
+        },
+    }
+    (output / "report.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return report

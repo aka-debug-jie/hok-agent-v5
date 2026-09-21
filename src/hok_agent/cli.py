@@ -913,6 +913,14 @@ def _parser() -> argparse.ArgumentParser:
     response_audit.add_argument("--store", type=Path, required=True)
     response_audit.add_argument("--frame-root", type=Path, required=True)
     response_audit.add_argument("--output-dir", type=Path, required=True)
+    panel_audit = commands.add_parser(
+        "navigation-panel-audit",
+        help="R0 revision: verify the discrete panel-state feedback signal",
+    )
+    panel_audit.add_argument("--panel-contract", type=Path, required=True)
+    panel_audit.add_argument("--store", type=Path, required=True)
+    panel_audit.add_argument("--frame-root", type=Path, required=True)
+    panel_audit.add_argument("--output-dir", type=Path, required=True)
     operation_side = commands.add_parser(
         "mobile-operation-team-side",
         help="detect blue or red side from the loading-panel self highlight",
@@ -3111,6 +3119,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             else:
                 raise SystemExit("mobile-navigation-verify needs --episode-id or --all")
+        elif args.command == "navigation-panel-audit":
+            from hok_agent.navigation_feedback_audit import run_panel_feedback_audit
+
+            result = run_panel_feedback_audit(
+                panel_contract_path=args.panel_contract,
+                store_path=args.store,
+                frame_root=args.frame_root,
+                output_dir=args.output_dir,
+            )
         elif args.command == "navigation-response-audit":
             from hok_agent.navigation_feedback_audit import run_command_response_audit
 

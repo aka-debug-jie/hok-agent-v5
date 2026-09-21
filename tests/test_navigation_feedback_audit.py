@@ -152,3 +152,54 @@ def test_patch_displacement_rejects_an_edge_patch() -> None:
     frame = np.zeros((128, 128, 3), dtype=np.uint8)
     assert audit._patch_displacement(frame, frame, (4.0, 4.0)) is None
     assert audit._patch_displacement(frame, frame, (60.0, 60.0)) is None
+
+
+PANEL = ROOT / "game_rules" / "r0_panel_feedback_contract_v1.json"
+
+
+def test_panel_contract_loads_and_hashes() -> None:
+    contract, sha = audit.load_panel_feedback_contract(PANEL)
+    assert len(sha) == 64
+    assert set(cast(list, contract["statistics"])) == set(audit.PANEL_REQUIRED_STATISTICS)
+    assert cast(dict, contract["claim_boundary"])["reward_allowed"] is False
+    assert cast(dict, contract["independence"])["duplication_guard"]
+
+
+def test_panel_contract_rejects_tampering(tmp_path: Path) -> None:
+    tampered = tmp_path / "panel.json"
+    for mutate in (
+        lambda value: value["gates"].pop("minimum_label_agreement"),
+        lambda value: value["independence"].pop("duplication_guard"),
+        lambda value: value.__setitem__("statistics", ["roi_mean_brightness"]),
+        lambda value: value["claim_boundary"].__setitem__("reward_allowed", True),
+    ):
+        value = json.loads(PANEL.read_text(encoding="utf-8"))
+        mutate(value)
+        tampered.write_text(json.dumps(value), encoding="utf-8")
+        with pytest.raises(audit.FeedbackAuditError):
+            audit.load_panel_feedback_contract(tampered)
+
+
+def test_panel_statistics_separate_a_bright_and_a_dark_view() -> None:
+    dark = np.full((8, 8, 3), 40, dtype=np.uint8)
+    bright = np.full((8, 8, 3), 220, dtype=np.uint8)
+    dark_mean, dark_count = audit._panel_statistics(dark.astype(np.float64))
+    bright_mean, bright_count = audit._panel_statistics(bright.astype(np.float64))
+    assert dark_mean < bright_mean
+    assert dark_count == 0.0
+    assert bright_count == 8 * 8
+    assert audit.BRIGHT_PIXEL_LEVEL == 128
+
+
+def test_panel_view_reads_the_equipment_channel(tmp_path: Path) -> None:
+    view = np.full((4, 5, 3), 77, dtype=np.uint8)
+    np.savez_compressed(
+        tmp_path / "b.npz",
+        main=np.zeros((2, 2, 3), dtype=np.uint8),
+        minimap=np.zeros((2, 2, 3), dtype=np.uint8),
+        hud=np.zeros((2, 2, 3), dtype=np.uint8),
+        equipment=view,
+    )
+    loaded = audit._panel_view(tmp_path, "b.npz")
+    assert loaded.shape == (4, 5, 3)
+    assert float(loaded.mean()) == 77.0

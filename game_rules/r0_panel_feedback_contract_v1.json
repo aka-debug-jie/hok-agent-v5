@@ -1,0 +1,46 @@
+{
+  "schema_version": "hok-agent-r0-panel-feedback-contract-v1",
+  "status": "frozen_for_independent_check",
+  "frozen_at": "2026-09-21",
+  "signal_id": "recommended_equipment_panel_state",
+  "roi": "recommended_equipment",
+  "why_this_replaces_continuous_displacement": "the response estimator has a sub-pixel tail (p95 5.63 px) that no available reference can settle; a panel state is a discrete variable, so a feedback built on it is judged by counting, not by sub-pixel agreement",
+  "task_intent": "an action may be dispatched only while the panel reports available, and a dispatch is wrong exactly when the panel reports unavailable, so the reward is a count of correctly gated dispatches",
+  "reference": "the dispatched action record (execution stream), already recorded per step",
+  "statistics": [
+    "roi_mean_brightness",
+    "roi_bright_pixel_count"
+  ],
+  "label_rule": "each statistic is compared with its own session median, which is the unbiased split for a square-wave signal",
+  "independence": {
+    "why_two_statistics": "the binary label is only usable if it does not depend on one arbitrary brightness threshold; two different statistics must agree on the label for nearly every step",
+    "duplication_guard": "if the two statistics are proportional they are the same measurement and their agreement is vacuous, so the audit reports their correlation and fails above the frozen bound",
+    "forbidden": "the same unvalidated detector must not both author a reward and prove its own accuracy"
+  },
+  "gates": {
+    "minimum_steps": 20,
+    "minimum_label_agreement": 0.95,
+    "minimum_transitions": 2,
+    "maximum_statistic_correlation": 0.99
+  },
+  "reported_denominators": [
+    "episodes",
+    "steps",
+    "on_steps",
+    "off_steps",
+    "transitions",
+    "steps_without_label"
+  ],
+  "stop_conditions": [
+    "label agreement below the frozen gate",
+    "fewer transitions than the frozen gate, which means the panel is not a usable state variable",
+    "statistic correlation above the frozen gate, which means the two statistics are one measurement",
+    "any reward component whose only reference is the same unvalidated detector"
+  ],
+  "claim_boundary": {
+    "panel_semantics_verified": false,
+    "purchase_effect_verified": false,
+    "reward_allowed": false,
+    "training_allowed_before_this_report_passes": false
+  }
+}
