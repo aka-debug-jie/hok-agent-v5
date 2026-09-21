@@ -25,6 +25,15 @@ internal API, backend or internal reference:
   terminal transition written before the episode ends, every step causal-order valid, a reload
   verifier that reports the episodes recoverable, and three consecutive episodes with no action
   backlog, no frame-reference damage and store integrity ok.
+- The separately declared four-waypoint route B passed its staged `1 -> 3 -> 10` admission
+  under contract `ba46e2b21624`: 14 arrivals in 14 attempts, four of four waypoints each,
+  `arrival_rate` 1.0, no action backlog and store integrity ok on the independent reload
+  verifier. Its two declared rules are a measured traversability mask, built from the
+  already-recorded transitions and normalised by the declared press duration, and a
+  three-step final-approach commitment. Two limits travel with it: the pass holds from the
+  measured starting positions only, and the fourth waypoint is `(50, 70)` rather than
+  `(50, 80)` because `(50, 80)` measured unobservable. Versions and digests are indexed in
+  [docs/ROUTE_B_CONTRACT_INDEX.md](docs/ROUTE_B_CONTRACT_INDEX.md).
 
 Single-policy post-training is closed as `DATA_SOURCE_LIMITED`, not left open: R0 tested three
 feedback lines and all three failed for a reportable reason - the navigation feedback has no

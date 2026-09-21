@@ -12,19 +12,19 @@ forensics-first plan; the read-only forensics verdict below now governs the next
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text
-OBJECTIVE: hold the delivered deterministic chain at its validated scope (two-waypoint diagonal) while the route B limits are closed with measurements, and settle whether the terminal blind runs are a missing death signal
+OBJECTIVE: hold the delivered deterministic chain at its validated scope and close the route B limit; the staged admission now passes with the measured traversability mask live, so the objective is to record the passing scope precisely, state what the mask did and did not contribute, and keep the start-position caveat visible
 STATUS: DATA_SOURCE_LIMITED
-NEXT_ACTION: test an in-match death/absence signal on the already-persisted hud views across the terminal 11-step blind runs; if a stable death-state feature exists, add it as a separate declared state signal so a death is reported as DEATH rather than CAPTURE_FAILURE. No new data source, no capture and no retuning of the frozen detector is required, and either outcome is a recorded result
-INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v9, the offline forensics verdict, the bounded control checks, the passing v9 probe batch, the passing goal-navigation sessions, the 704 recorded A-gate minimap frames, the persisted minimap frames of the failed staged rounds, and the live guarded movement, fade and reposition diagnostics
-CHANGED_FILES: AGENTS.md and BOUNDARIES.md (owner-authorized R1 scope extension), the R1 panel-gating contract and policy module, the read-only panel capture, the store-runner termination fixes, store contract v2, the route B contracts v1-v6, the declared progress guard, the region-safety filter, the declared deceleration table and the single-arbiter path planner,
+NEXT_ACTION: state the passing scope at its measured limits and keep the start-position caveat in front of any downstream claim: the staged admission passed 1 then 3 then 10 consecutive episodes under route B v15 `ba46e2b2`, all with four of four waypoints and NAVIGATION_GOAL_REACHED, and the mask fired on 1 to 5 steps per episode. The next real experiment, if wanted, is the controlled response probe that would rebuild the traversability grid from a declared stimulus instead of from incidental visitation, and a cold-start test from a different starting position, because every passing run began near (53, 68) or (62.9, 61.9) while the one failing run began at (78.4, 55.4)
+INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v10, the offline forensics verdict, the bounded control checks, the passing v9 probe batch, the passing goal-navigation sessions, the 704 recorded A-gate minimap frames, the persisted minimap frames of the failed staged rounds, the live guarded movement, fade and reposition diagnostics, the 124 persisted route-b-batch-10 frame bundles (496 derived view arrays), the 36 persisted route-b-batch-9 frame bundles, the in-domain death-stop reference `mobile-operation-base/death-stop-60s-v1`, and the offline recovery replay over all six recorded blind runs
+CHANGED_FILES: AGENTS.md and BOUNDARIES.md (owner-authorized R1 scope extension), the R1 panel-gating contract and policy module, the read-only panel capture, the store-runner termination fixes, store contract v2, the route B contracts v1-v15, the declared progress guard, the region-safety filter, the declared deceleration table, the single-arbiter path planner, the declared bounded unknown-position recovery with its waypoint band, the declared approach press-release, direct-bearing and commitment rules, the measured traversability module and its frozen grid with its pinned source list, the traversability build and check commands and their make targets, the route B contract index, `_retrace_direction`, `_toward_target_direction`, `_unknown_recovery_step`, `_mask_joystick_bearing`, `_commit_approach`, `_no_advance_detected`, the Router recovery path, the cross-episode pointer adoption, and the localisation, recovery, approach, guard and mask regressions in `tests/test_mobile_navigation_store.py`,
 PRIMARY_METRIC: feedback coverage over every step and the agreement between the recorded signal and an independent reference, with the unverified remainder stated explicitly
 BASELINE: the only device-route feedback is the navigation arrival, which is a deterministic rule outcome, and the death/HP/terminal events are not independently checked (E1a is frozen with mobile_capture_allowed=false and reward_allowed=false and the event vocabulary has no navigation type)
-RESULT: two milestones passed on 2026-09-20; the no-source identity and control gate passed with batch `active-probe-v25` under contract v9 (`92594112`), audit report `c1491607`, both sessions verified with direction consistency 1.0, median commanded projection 9.87 and 10.12 px, paired responses 7.2-11.2 px, coverage 1.0 and zero identity switches; the goal-navigation milestone then passed with `goal-navigation-v8-1` and `goal-navigation-v8-2` under contract `b9f53e37`, both reaching all three declared waypoints and stopping on arrival with final errors 3.03 and 2.98 px, localization fractions 0.92 and 0.91, zero identity switches and every gate true; the earlier probe batches failed for three separate reasons that are now fixed (the joystick press and drag were sent 0.2-0.6 ms apart, the probe loop spun without sleeping and starved the response, and the minimap cue went blind over parts of the map), and the frozen player detector was not retuned; on 2026-09-21 the A-stage blocker was traced to the association gate rather than the detector (the frozen cue localises 704/704 on the recorded A-gate frames and the hero marker was present in every frame of the failing round, while the 8 px gate rejected a 9-13 px legitimate step and then froze the previous position), a masked-ZNCC template tracker was implemented and then rejected on evidence because the adjacent chasing enemy marker contaminates the template, and the corrected contract a3 sizes the association gate to one observation, applies a 30 px re-acquisition gate only after a lost frame, and shortens the final-approach hold to 400 ms; offline replay of the failed rounds raises localisation from 0.230 and 0.027 to 0.986, and the live staged runs reached stage 10 with 11/14 arrivals and stage 3 with 3/4 rounds at localisation 1.000, so the staged 1 -> 3 -> 10 admission had not passed at that point; it passed later the same day with `goal-navigation-a3-staged-5` under contract a3 (`6e5401d7`) at 14 of 14 rounds, arrival rate 1.0, zero failures, zero takeovers, localisation 1.000 in 13 rounds and 0.964 in one, and zero identity switches, after direction hysteresis closed the near-target limit cycle; on 2026-09-21 the device navigation chain was bound into the single UnifiedTransitionStore with contract `0e603fcc` and passed live as `mobile-navigation-store-2` with 15 transitions, one terminal transition, every step causal-order valid, `terminal_reason=NAVIGATION_GOAL_REACHED`, arrival reward 1.0 and `replay.source=controller`, and the reload verifier reports the episode recoverable while still flagging a deliberately damaged frame bundle; the L2 gate then passed on the same day with `mobile-navigation-store-batch-2`, which ran 3 consecutive episodes on one device session and one Store with arrival rate 1.0, 56 transitions, 3 terminal transitions, no action backlog (max 2 actions per step, zero unacked dispatches, zero retries), no frame-reference damage and store integrity ok, and the independent store verifier reports all three episodes recoverable; R0 then froze the task and feedback in `game_rules/r0_feedback_contract_v1.json` and audited it on a fresh three-episode batch, and the verdict is a stop: the dispatched action record is independently checked (16/16 against the Store) and the motion feature is a weak independent check (63 % of 65 steps at 6 px), but the only available second position derivation duplicates the recorded signal exactly on 100 % of the 63 compared steps, so the audit fails its duplication guard, reports `reference_is_independent=false` and `training_allowed=false`, and R1 remains unauthorized; the owner then chose the checkable-by-construction task, and the revised R0 froze `commanded_response_recovery` and audited it: the reward's two sides come from different sources and the duplication fraction is 0.0 with response coverage 0.921 and positive response 0.730, but the cumulative dead-reckoning reference drifts 34.8/27.4/39.3 px against the 12 px gate because of a measured (-0.45,-0.85) px per-step bias, so R1 stays closed with the estimator named as the next fix; the estimator fix then subtracted a session-wide median background, which cut the per-step bias from (-0.45,-0.85) to (-0.09,-0.22) px and the p95 from 11.29 to 5.63 px and moved one of three episodes inside the unchanged cumulative gate, but a second correction that weighted the correlation by the tracked object's own residual saliency made the tail worse (p95 8.06 px, 0 of 3 episodes) and was reverted, so the estimator line ended with six of nine v2 gates passing and R1 still closed; the owner then chose the discrete-feedback option, and the panel audit found the recommended_equipment ROI to be a strong periodic signal (17 transitions, duty 0.492, non-duplicate statistics at 0.949 correlation) that nevertheless fails R0 on its frozen label-agreement gate at 0.9077, because two of the six ambiguous steps are isolated rather than adjacent to a transition, so the panel is not resolvable into a discrete state at the 1.2 s observation cadence; the owner then judged the measured performance sufficient and authorized lowering the panel label-agreement gate from 0.95 to 0.9, which `navigation-panel-audit-2` passes under contract `e3d4b3bc` with `verification_class=owner_authorized_bar` and `training_allowed=true`, while the report keeps the unresolved structural concern (isolated ambiguous steps 18 and 51, not resolvable at this cadence) visible; the other two R0 lines remain failed; R1's first executable step then collected read-only panel samples at 5 Hz (two pilots, no input sender constructed) and that measurement refuted R1's target rather than any gate: the panel ROI is a continuous pulse (dominant 0.403 Hz, period 2.48 s, range 14.92 against 36.6-38.9 in the batch-3 scene) and subsampling at the 1.2 s cadence leaves the range at 14.59 with a 0.51 above/below-median split, so the R0 two-states reading was a median split of a pulse and no discrete state exists to predict, which is why R1 does not train and R is closed as data-source limited
+RESULT: two milestones passed on 2026-09-20; the no-source identity and control gate passed with batch `active-probe-v25` under contract v9 (`92594112`), audit report `c1491607`, both sessions verified with direction consistency 1.0, median commanded projection 9.87 and 10.12 px, paired responses 7.2-11.2 px, coverage 1.0 and zero identity switches; the goal-navigation milestone then passed with `goal-navigation-v8-1` and `goal-navigation-v8-2` under contract `b9f53e37`, both reaching all three declared waypoints and stopping on arrival with final errors 3.03 and 2.98 px, localization fractions 0.92 and 0.91, zero identity switches and every gate true; the earlier probe batches failed for three separate reasons that are now fixed (the joystick press and drag were sent 0.2-0.6 ms apart, the probe loop spun without sleeping and starved the response, and the minimap cue went blind over parts of the map), and the frozen player detector was not retuned; on 2026-09-21 the A-stage blocker was traced to the association gate rather than the detector (the frozen cue localises 704/704 on the recorded A-gate frames and the hero marker was present in every frame of the failing round, while the 8 px gate rejected a 9-13 px legitimate step and then froze the previous position), a masked-ZNCC template tracker was implemented and then rejected on evidence because the adjacent chasing enemy marker contaminates the template, and the corrected contract a3 sizes the association gate to one observation, applies a 30 px re-acquisition gate only after a lost frame, and shortens the final-approach hold to 400 ms; offline replay of the failed rounds raises localisation from 0.230 and 0.027 to 0.986, and the live staged runs reached stage 10 with 11/14 arrivals and stage 3 with 3/4 rounds at localisation 1.000, so the staged 1 -> 3 -> 10 admission had not passed at that point; it passed later the same day with `goal-navigation-a3-staged-5` under contract a3 (`6e5401d7`) at 14 of 14 rounds, arrival rate 1.0, zero failures, zero takeovers, localisation 1.000 in 13 rounds and 0.964 in one, and zero identity switches, after direction hysteresis closed the near-target limit cycle; on 2026-09-21 the device navigation chain was bound into the single UnifiedTransitionStore with contract `0e603fcc` and passed live as `mobile-navigation-store-2` with 15 transitions, one terminal transition, every step causal-order valid, `terminal_reason=NAVIGATION_GOAL_REACHED`, arrival reward 1.0 and `replay.source=controller`, and the reload verifier reports the episode recoverable while still flagging a deliberately damaged frame bundle; the L2 gate then passed on the same day with `mobile-navigation-store-batch-2`, which ran 3 consecutive episodes on one device session and one Store with arrival rate 1.0, 56 transitions, 3 terminal transitions, no action backlog (max 2 actions per step, zero unacked dispatches, zero retries), no frame-reference damage and store integrity ok, and the independent store verifier reports all three episodes recoverable; R0 then froze the task and feedback in `game_rules/r0_feedback_contract_v1.json` and audited it on a fresh three-episode batch, and the verdict is a stop: the dispatched action record is independently checked (16/16 against the Store) and the motion feature is a weak independent check (63 % of 65 steps at 6 px), but the only available second position derivation duplicates the recorded signal exactly on 100 % of the 63 compared steps, so the audit fails its duplication guard, reports `reference_is_independent=false` and `training_allowed=false`, and R1 remains unauthorized; the owner then chose the checkable-by-construction task, and the revised R0 froze `commanded_response_recovery` and audited it: the reward's two sides come from different sources and the duplication fraction is 0.0 with response coverage 0.921 and positive response 0.730, but the cumulative dead-reckoning reference drifts 34.8/27.4/39.3 px against the 12 px gate because of a measured (-0.45,-0.85) px per-step bias, so R1 stays closed with the estimator named as the next fix; the estimator fix then subtracted a session-wide median background, which cut the per-step bias from (-0.45,-0.85) to (-0.09,-0.22) px and the p95 from 11.29 to 5.63 px and moved one of three episodes inside the unchanged cumulative gate, but a second correction that weighted the correlation by the tracked object's own residual saliency made the tail worse (p95 8.06 px, 0 of 3 episodes) and was reverted, so the estimator line ended with six of nine v2 gates passing and R1 still closed; the owner then chose the discrete-feedback option, and the panel audit found the recommended_equipment ROI to be a strong periodic signal (17 transitions, duty 0.492, non-duplicate statistics at 0.949 correlation) that nevertheless fails R0 on its frozen label-agreement gate at 0.9077, because two of the six ambiguous steps are isolated rather than adjacent to a transition, so the panel is not resolvable into a discrete state at the 1.2 s observation cadence; the owner then judged the measured performance sufficient and authorized lowering the panel label-agreement gate from 0.95 to 0.9, which `navigation-panel-audit-2` passes under contract `e3d4b3bc` with `verification_class=owner_authorized_bar` and `training_allowed=true`, while the report keeps the unresolved structural concern (isolated ambiguous steps 18 and 51, not resolvable at this cadence) visible; the other two R0 lines remain failed; R1's first executable step then collected read-only panel samples at 5 Hz (two pilots, no input sender constructed) and that measurement refuted R1's target rather than any gate: the panel ROI is a continuous pulse (dominant 0.403 Hz, period 2.48 s, range 14.92 against 36.6-38.9 in the batch-3 scene) and subsampling at the 1.2 s cadence leaves the range at 14.59 with a 0.51 above/below-median split, so the R0 two-states reading was a median split of a pulse and no discrete state exists to predict, which is why R1 does not train and R is closed as data-source limited; on 2026-09-21 the terminal blind runs were reviewed read-only against the already-persisted views and the verdict is NOT_SUPPORTED for a visible death cue: the 11-step length is the `missing_streak > maximum_localization_gap_frames` stop rule and is now pinned by a regression test, the store verifier reloads all 121 transitions with `store_integrity=ok` and no findings, the frozen cue localises 85 of 85 known steps and 0 of 36 blind steps, in all 36 blind steps the only green components passing the contract filters lie inside the declared fixed UI boxes so the hero marker is absent from the minimap rather than rejected by the association gate, the Router returns `unknown_position`/`wait` at every blind step which releases the joystick, and the inter-frame change collapse after about three blind steps is that released joystick rather than a capture stall, while the persisted main and hud views stay inside the range seen at known-position steps of the same episode; the frozen death cue reads a pixel box disjoint from all four persisted views, so it cannot be re-scored offline and its terminal False value only reflects the CAPTURE_FAILURE classification, and the store's `death` reward component is 0.0 on every row only because the event engine claims no events, so it is not a measurement; an in-domain reference run (`mobile-operation-base/death-stop-60s-v1`, a passed owner death-stop gate) does show a gross out-of-range appearance step in all four persisted views at a detected death, ahead of the frozen banner cue by about 1.2 s, and no route B terminal window shows that step, though the reference is a single instance and used a different observation-ROI file so only within-run comparisons are used; the loss is therefore self-sustaining by construction (wait-on-unknown stops the hero, so an undetectable marker is never re-acquired and the guard converts a transient loss into a terminal CAPTURE_FAILURE) and death is unsupported but not excluded, because the bundle persists no life-state ROI and no observation after the stop rule; a cross-batch pass over every route B batch that kept a step log then found that the blind runs are not one kind of event: of exactly 10 runs, 4 are blind from step 0 (batch-9 episodes 01-03 and batch-10 episode 03), which cannot be a death, 2 are terminal mid-run losses (batch-10 ep01 41-51 and ep02 47-57, starting about 7.5 px from the final waypoint at nearly the same map point) and 4 are transient one-step losses that recovered; batch-9 uses the identical contract `fcb4d8086a91` and the identical observation-ROI file `488d1e4a`, and its 33 blind steps carry the same decisive signature as the terminal windows (zero green components outside the declared fixed UI boxes against a median of 1 at known steps) with every statistic inside batch-10's normal localised in-match range and a live recommended-purchase panel, so an all-blind run is still an in-match screen and not a death, while the two are consistent but not proven pixel-identical (hud greyness about 39 against 45.5, equipment about 62 against 76, main delta about 4.8 against 2.2); the death reading is therefore closed as the working hypothesis though not proven excluded, and the working hypothesis is now a map region where the marker is not detectable combined with wait-on-unknown turning a transient loss into a terminal failure, because wait stops the hero and a stopped hero never leaves an undetectable area; route B v7 was then built as a new versioned contract (v6 bytes and digest untouched, `fcb4d8086a91`) that keeps the single-arbiter planner and adds one declared bounded recovery: when the marker stays unknown past a declared trigger the Router stops waiting and applies a region-checked, step-capped retreat bearing with its own reason, the recovery is required to fit inside the localisation-gap guard so a failed retreat can never extend the episode, the progress-guard baseline is rescored after a retreat so backward motion is not read as a stall, and the step rows and episode summary carry recovery counters; seven new focused tests pin the reversed quantized bearing, the displacement floor, the region decline, the Router precedence, the trigger, the step cap and the contract invariant, and the full `make check` passed with Ruff, strict mypy and all 603 tests; the offline replay of the declared decision sequence over all six recorded blind runs nevertheless shows the approved retrace bearing is nearly inert in the measured geometry, acting in one run for one step only, which is why the declared bearing must be replaced before a session is spent; route B v8 then changed only that bearing, keeping the v6 planner and the whole v7 harness byte-identical and swapping `bounded_retrace` for `bounded_retrace_or_waypoint`, which retraces when the reversed last-known displacement is usable and region-safe and otherwise re-aims at the current waypoint under the same region check and the same step cap, so a hero that lost its marker while holding its final approach still gets a bounded action instead of waiting out the guard; the offline replay over both contracts shows v7 acting in one run for one step and v8 acting in both terminal mid-run losses for six bounded region-checked steps each with zero declines, while the four all-blind-from-start runs stay outside the mechanism because they have no last-known position at all, and that class is the next separate blocker; the focused suite is 51 tests in this file and the single full `make check` passed with Ruff, strict mypy and all 606 tests; stage 1 of the staged admission then ran on the device under v8 and closed one loop end to end with 83 transitions, 67 dispatched input commands, `store_integrity=ok`, no findings, no backlog and no retries, and the declared recovery fired for the first time on hardware: the marker was lost for four consecutive steps 73-76, the recovery applied a `north` retrace at steps 75-76, and step 77 localised again, so the gap ended without reaching the 11-step guard that under v6 and v7 would have driven it to CAPTURE_FAILURE; the episode still did not arrive, reaching 3 of 4 waypoints and hovering 7-11 px from the final waypoint for about 40 steps against a 4.0 px tolerance while the progress guard saturated its 8-event cap, ending TIMEOUT on the 90 s duration budget with `arrival_rate=0`, and the measured marker response over 55 consecutive known-step pairs is median 3.6 px per commanded step with no teleport above 12 px, so the last-leg failure is convergence and approach, not tracking instability; the run also exposed a reporting bug in the recovery counters, which is fixed; the route B fine-approach stall was then closed and the staged admission passed, which is the newest result: the last cause was that the finest press tier moves the hero about 0.65 px, near the position noise floor, so re-aiming every step let the small steps cancel, and route B v15 (`ba46e2b21624`) adds a three-step final-approach commitment plus a measured traversability mask built from the already-recorded (position, applied bearing, next position) pairs - the mask is normalised by the declared press duration because a short bounded press also yields a small displacement and would otherwise be misread as a wall, and it fails open so a partly covered grid can only remove a bearing measured ineffective; the staged admission passed on 2026-09-21 as 1 then 3 then 10 consecutive episodes (batches `route-b-batch-22-stage1`, `-23-stage3` and `-21-stage10`) with 14 arrivals in 14 attempts, all four of four waypoints, `arrival_rate=1.0`, `backlog_free`, `binding_stable`, and the independent reload verifier reporting `store_integrity=ok`, `recoverable=true` and no findings on 548, 177 and 53 transitions; the first v15 device run also exposed a real wiring defect that an offline cross-check caught rather than the summary, since the grid is keyed by the recorded store vocabulary while the call site passed joystick names, so the mask silently returned every bearing unchanged, the records read `traversability_masked_steps=0` while an offline replay of the same steps against the same frozen grid found 40 of 719 steps where it would have fired, and the single conversion point plus a regression that pins the two vocabularies now close that; the commitment is the driver and the mask is live but not separately measured, because an earlier run of the same contract with the mask inert had already passed 13 of 13; every passing run began near (53, 68) or (62.9, 61.9) while the recorded failures began elsewhere, so start-position independence is not established, and the fourth waypoint is (50, 70) rather than (50, 80) because (50, 80) measured unobservable
 ENGINEERING_HOURS_USED_AND_CAP: UNKNOWN used; engineering effective time is still not instrumented and cannot be reconstructed from the artifacts. The cap is 24 h per milestone as of the owner decision on 2026-09-21 (P/L/A/R0/R1 all raised from the earlier 4-16 h figures); R1 keeps its own 24 h / 4 GPU h envelope but is not authorized
 GPU_SECONDS: 0, cap 0; automated run wall clock for the store-bound runtime work is 142.3 s over 7 instrumented episodes (19.6 + 45.3 + 77.4), excluding the un-instrumented reposition and diagnostics runs
-NEW_BYTES: 903,258,517 used by the active-probe and goal-navigation lineages to date; the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit (this total adds 24,298,168 for the single-arbiter planner batch to the previous 885,124,179)
-STOP_REASON: data-source limited. At 5 Hz the panel ROI measures as a continuous pulse (0.403 Hz, 2.48 s period, range 14.92 against 36.6-38.9 in the batch-3 scene) and subsampling at the 1.2 s cadence does not reproduce bimodality, so the R0 two-states reading was a median split of a pulse and R1's target is not a discrete state; the other two feedback lines were already refuted and no independent reference exists
-NEXT_DECISION: obtain an external independent reference (which would also reopen R and allow a replacement cue to be validated), or accept the deterministic chain at its validated scope; no further control or perception layers will be added on the current evidence
+NEW_BYTES: 1,283,300,596 used by the active-probe and goal-navigation lineages to date; the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit (this total adds the 222,454,107 of the five route B v15 device runs and the route B review's 4,177,652 completed form to the previous 1,060,808,197)
+STOP_REASON: data-source limited. At 5 Hz the panel ROI measures as a continuous pulse (0.403 Hz, 2.48 s period, range 14.92 against 36.6-38.9 in the batch-3 scene) and subsampling at the 1.2 s cadence does not reproduce bimodality, so the R0 two-states reading was a median split of a pulse and R1's target is not a discrete state; the other two feedback lines were already refuted and no independent reference exists. Route B itself is no longer blocked: the fine-approach stall was the last cause and it is fixed by the declared commitment, with the traversability mask live and firing. What remains is scope, not a blocker - the pass holds from the measured starting positions and the mask's isolated contribution is not separately measured
+NEXT_DECISION: accept route B at its recorded scope (staged 1 then 3 then 10 from the measured starting positions) and, if the scope must widen, run the controlled traversability probe and a cold-start test rather than extrapolating; do not start the life-state ROI, do not reuse the mobile banner geometry on native footage, and do not retune the frozen detector
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -1180,6 +1180,394 @@ NEXT_DECISION: obtain an external independent reference (which would also reopen
 - Focused audit/boundary tests, Ruff and strict mypy passed. The single full `make check` passed
   all501 tests in116.01s and project safety on277 files/133 Python files/73,647 nonblank Python
   lines. `git diff --check` passed.
+
+### Route B terminal gap review: the persisted views carry no life-state evidence (2026-09-21)
+
+- A read-only review of the already-persisted route B views decided the terminal blind runs. No
+  capture, no device input, no training, no human label, no threshold change and no frozen-detector
+  retuning. Inputs: `runs/hierarchical-movement-mvp/route-b-batch-10` (contract `fcb4d8086a91`) and,
+  as a control only, the passed owner death-stop gate `runs/mobile-operation-base/death-stop-60s-v1`.
+  Output `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/route-b-hud-life-state-review-1`
+  (3 contact sheets, 4 raw pass JSONs, 4 pass scripts, `analysis.json`, `timeline.md`),
+  3,016,722 bytes, 2.3 s of read-only analysis, 0 GPU seconds, 0 input commands.
+- Input integrity passed before any conclusion: `mobile-navigation-verify --all` reloads the store
+  with `store_integrity=ok`, `recoverable=true` and `findings=[]` over 121 transitions, 124 frame
+  bundles and 496 derived view arrays, and every recorded `view_sha256` matches its persisted bundle.
+- The 11-step length is the stop rule, not evidence. `_episode_outcome` ends the episode when
+  `missing_streak > maximum_gap` and the contract sets `maximum_localization_gap_frames=10`, so the
+  11th blind step is simply the first step that ends the run; all three terminal reasons are
+  `CAPTURE_FAILURE`. Pinned by `test_localisation_cutoff_is_the_stop_rule_not_a_death_classifier`,
+  which asserts the 10/11 boundary, that a gap alone never yields `death_or_ended_screen`, and that
+  only a positive death flag does.
+- The windows are ep01 [38, 41-51], ep02 [1, 44, 47-57] and ep03 [0-10]: 36 of 121 steps. Each
+  terminal window is exactly 11 steps. Three short gaps (ep01 step 38, ep02 steps 1 and 44) lost the
+  marker and re-acquired it at the next step, and ep02 localises again at its step 0 right after
+  ep01 ended on a terminal gap, so a terminal gap does not persist across the episode boundary.
+- The hero marker is absent, not gate-rejected. Re-running the frozen cue primitives on the
+  persisted minimap localises 85 of 85 known steps and 0 of 36 blind steps, and in every one of the
+  36 blind steps the only green components passing the contract size/extent filters lie inside the
+  three declared fixed UI boxes (median 1 outside them at known steps). This differs from the
+  earlier A-stage failure, where the marker was present in every frame and the association gate
+  froze the previous position.
+- No capture failure occurred. No two consecutive persisted views are byte-identical, the capture
+  timestamps advance, and the verifier finds no damaged frame reference, so the recorded
+  `CAPTURE_FAILURE` label describes a localisation loss, which `abort_reason=localization_gap`
+  already names. The inter-frame change does collapse after about three blind steps (main view
+  median 23.4/24.4 to 2.16/2.58; minimap 4.03/4.29 to 0.215/0.247), but that follows the Router:
+  at all 36 blind steps the reason is `unknown_position` and the applied movement is `wait`, so the
+  joystick is released, the hero stops and the camera stops translating.
+- No persisted view shows a life-state change. The persisted `main` and `hud` views keep their
+  normal range across every loss onset, and the frozen death cue reads a pixel box (720,0,880,22)
+  that is disjoint from all four persisted views, so it cannot be re-scored offline; its terminal
+  False value only reflects the `CAPTURE_FAILURE` classification because `_episode_outcome` tests
+  death before the gap. The Store's `death` and `self_hp_delta` reward components are 0.0 on all 121
+  rows and `events` is empty on all rows, because the event engine is a no-visual-event engine, so
+  the stored zero is a not-measured placeholder and not evidence that no death occurred.
+- An in-domain reference does show a death signature, and route B does not match it. In the passed
+  owner death-stop gate all four persisted views step outside their own run range at the same
+  sample, stay pinned near the run minimum for about 3 s and then step back, and that step leads the
+  frozen banner cue by about 1.2 s. No route B terminal window shows any out-of-range step. The
+  reference is a single instance and used a different observation-ROI file (`a9a17abc` against route
+  B's `488d1e4a`) whose file no longer exists, so only within-run comparisons are used and no
+  pixel-level cross-run equality is claimed.
+- Verdict: `NOT_SUPPORTED` in the existing cases - the four persisted views do not support reading
+  the terminal gaps as a visible death state, so no new life-state cue is added and the localisation
+  conclusion stays UNKNOWN. `INPUT_INSUFFICIENT` for the death question itself: death is unsupported
+  but not excluded, because no life-state ROI and no observation after the stop rule are persisted.
+  The loss is self-sustaining by construction - wait-on-unknown stops the hero, so an undetectable
+  marker is never re-acquired - while the control dimension is healthy in the same batch at 3 of 4
+  waypoints.
+- Not reopened: reusing the mobile banner geometry on native footage is already closed as
+  `DOMAIN_MISMATCH`, its thresholds are frozen, and the frozen player detector stays untuned.
+  Only the localisation-cutoff test and this ledger were changed; `tests/test_mobile_navigation_store.py`
+  is 41 passed and no runtime behaviour changed. The single full `make check` passed with Ruff,
+  strict mypy on 74 source files, all 596 tests in 117.14 s and project safety on 310 files /
+  139 Python files / 80,770 nonblank Python lines / 4 root Markdown files; `git diff --check` passed.
+
+### Route B blind runs are three classes, not one: the death reading is closed (2026-09-21)
+
+- A second read-only pass classified every blind run in every route B batch that kept a step log.
+  No capture, no input, no label, no threshold change. Output added to
+  `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/route-b-hud-life-state-review-1` as
+  `raw/hud_life_state_crossbatch.{py,json}`, `raw/hud_life_state_batch9_contact.py` and
+  `contact-batch9-episode-01.png`; directory total 4,107,553 bytes.
+- There are exactly 10 blind runs and three mutually exclusive classes. `all_blind_from_start` is 4
+  (batch-9 episodes 01-03 and batch-10 episode 03, each steps 0-10), `terminal_mid_run` is 2
+  (batch-10 episode-01 steps 41-51 and episode-02 steps 47-57) and `transient_mid_run` is 4
+  (batch-10 episode-01 step 38, episode-02 steps 1 and 44, and batch-5 episode-02 step 59).
+- The step-0 class cannot be a death, because the hero is never localised in those episodes, and it
+  is the largest class. It shares the decisive marker-absence signature with the terminal windows:
+  zero green components outside the declared fixed UI boxes in 33 of 33 batch-9 blind steps, against
+  a median of 1 at known-position steps.
+- batch-9 and batch-10 use the identical contract `fcb4d8086a91` and the identical observation-ROI
+  file `488d1e4a`, so their persisted views are directly comparable. Every batch-9 statistic falls
+  inside batch-10's normal localised in-match ranges (main greyness 37.8-38.3 against 30.5-49.2,
+  main brightness 73.6-74.5 against 48.1-80.5, hud greyness 38.8-39.4 against 31.5-52.7), and the
+  recommended-purchase equipment panel keeps varying in all three episodes, so an all-blind run is
+  still a live in-match screen rather than a lobby, black or stale frame.
+- The two are consistent but not proven pixel-identical: hud greyness sits at about 39 against 45.5,
+  equipment greyness at about 62 against 76 and the main inter-frame delta at about 4.8 against 2.2.
+  This is an appearance-range argument and there is no visual confirmation, so the wording is
+  "closed as the working hypothesis", not "excluded".
+- The two terminal mid-run losses start about 7.5 px from the final waypoint at nearly the same map
+  point, last known (y 49.21, x 87.52) and (y 48.80, x 87.41), while the transient losses start at
+  (55.04, 71.93), (52.62, 71.00), (53.75, 71.66) and (64.55, 81.64). The working hypothesis is now a
+  map region where the marker is not detectable combined with `wait` on unknown: wait stops the
+  hero, a stopped hero never leaves an undetectable area, and the localization-gap guard then ends
+  the episode.
+- Closing the death reading is also the cheaper error, because the declared bounded unknown-position
+  recovery is the correct action whether or not the hero ever dies. The next action is route B v7
+  with a retrace recovery; the per-step life-state ROI moves to the bench.
+- Only ledger and audit artifacts changed in this pass; no runtime code, so no test tier beyond the
+  documentation checks was required.
+
+### Route B v7 bounded unknown-position recovery, and the replay that says the bearing is inert (2026-09-21)
+
+- Built route B v7 as a new versioned contract. The v6 bytes and digest are untouched
+  (`fcb4d8086a91eae4f1f84c4a8dff173b5f95527f534e49d69fdcd32a9e41400c`); v7 is `13465a11` and keeps
+  the single-arbiter planner exactly as declared. One new block, `unknown_recovery`, declares
+  `mode=bounded_retrace`, `trigger_after_missing_frames=3`, `maximum_recovery_steps=6`,
+  `hold_ms=800` and `nominal_step_pixels=6.0`, and the contract is rejected unless
+  `trigger + maximum <= maximum_localization_gap_frames`, so a failed retreat can never extend the
+  episode past the gap the guard already bounds.
+- New pure decision code: `_retrace_direction` returns the reversed, quantized last-known
+  displacement, declining when the two known positions imply no usable displacement or when the
+  predicted step would leave the declared region; `_unknown_recovery_step` adds the trigger and the
+  step budget and reports whether a step was eligible, so the caller can separate "waiting" from
+  "tried and declined". `_route` gained one keyword-only recovery argument, so the Router remains
+  the only decision point and the geometry proposal stays masked.
+- The region check is against the declared region itself, which is the same invariant
+  `outside_region` already enforces, so a retreat can never trip that guard. The predicted step is
+  taken at the depth already retreated, so the retreat stops at the region edge instead of guessing.
+- Runner wiring: the last two known positions are the retrace anchors, the counter resets on every
+  returned fix, the progress-guard baseline is rescored after a retreat so backward motion is not
+  read as a stall, recovery steps use the declared recovery hold, and `unknown_recovery_events`,
+  `unknown_recovery_steps` and `unknown_recovery_declined_steps` are written to `steps.jsonl` and
+  the episode summary. No new terminal vocabulary, so the Store contract is unchanged.
+- One deviation from the approved plan, recorded deliberately: the plan called for an explicit
+  STOP-then-resume step so no retreat command survives. That step was not added, because the
+  joystick is a persistent pointer whose direction always tracks the applied bearing, so a bearing
+  change already produces a MOVE rather than a stale command, and inserting a forced release would
+  cost a step and could itself register as a stall. What genuinely needed clearing - the
+  progress-guard baseline - is cleared.
+- Seven focused regressions were added to `tests/test_mobile_navigation_store.py`: the reversed
+  quantized bearing in three quadrants, the displacement floor, the region decline at depth, the
+  Router applying the recovery only while unknown and never ahead of death or region safety, the
+  trigger and step-budget sequencing, and the v7 contract shape plus the
+  `trigger + maximum <= gap` invariant with v6 verified byte-unchanged. The single full `make check`
+  passed with Ruff, strict mypy on 74 source files, all 603 tests in 117.86 s and project safety on
+  311 files / 139 Python files / 81,137 nonblank Python lines / 4 root Markdown files.
+- The offline replay is the result that matters. `raw/route_b_v7_recovery_replay.{py,json}` replays
+  the declared decision sequence over the recorded positions of all six recorded blind runs. The
+  four all-blind-from-start runs have no anchor at all, so the recovery never becomes eligible and
+  those four runs end exactly as before. Of the two terminal mid-run losses, episode-01 has an
+  anchor but the hero was holding its final approach, so the last two known positions differ by
+  0.02 px and all nine eligible steps are declined; episode-02 applies exactly one step
+  (`north_east` at step 49) and then declines the remaining eight against the region edge.
+- So the harness is complete and tested, but the approved bearing is measured nearly inert in the
+  geometry that motivated it: it acts in one of six recorded blind runs and for one step. The
+  bearing has to be replaced before a device session is spent, and the four-run no-anchor class needs
+  its own declared treatment because the anchor-based mechanism cannot reach it. That decision is
+  the current blocker, not the recovery plumbing, which is bearing-agnostic and reusable.
+- route B v8 changed only the bearing rule, and the contracts are additive rather than overwritten.
+  v7 is preserved byte-for-byte as the recorded inert-bearing experiment (`13465a11`); v8 is
+  `3c41d5bb` and its diff against v7 is the mode, the `route_id`, the `purpose` text and the digest,
+  which the v8 regression asserts directly. `bounded_retrace_or_waypoint` retraces whenever the
+  reversed last-known displacement is usable and region-safe, and otherwise re-aims at the current
+  waypoint through the existing `_goal_navigation_direction`, under the same region check at the
+  current depth and the same step cap. The Router returns a distinct reason for each
+  (`unknown_recovery_retrace`, `unknown_recovery_waypoint`), so the step log records which rule
+  actually fired, and neither reason is a new terminal vocabulary, so the Store contract is
+  unchanged.
+- The two-contract replay is the evidence for the change. v7 acts in one recorded blind run for one
+  step; v8 acts in both terminal mid-run losses for six bounded region-checked steps each with zero
+  declines, re-aiming west from the stationary anchor at `(49.21, 87.52)` and starting with one
+  retrace step at `(48.80, 87.41)`. The deepest predicted step is still inside the declared region
+  (`87.52 - 8*6 = 39.52`), and one step deeper the rule declines, which the regression pins.
+- The four all-blind-from-start runs are unchanged by both contracts and cannot be reached by any
+  position-anchored action, because there is no last-known position at all: the replay reports zero
+  eligible steps for all four. That is recorded as the next separate blocker rather than silently
+  left unaddressed.
+- Focused tests in this file are now 51, including the measured-geometry case that shows v7
+  declining the recorded episode-01 step while v8 re-aims at the waypoint, and the depth check that
+  stops the fallback at the region edge. The single full `make check` passed with Ruff, strict mypy
+  on 74 source files, all 606 tests in 115.59 s and project safety on 312 files / 139 Python files /
+  81,291 nonblank Python lines / 4 root Markdown files.
+
+### Route B v8 stage-1 device run: the declared recovery works, the last leg does not converge (2026-09-21)
+
+- The owner authorized the staged device session. Stage 1, one closed loop, ran on the guarded
+  owner testbed with the owner-attested package in the foreground at 1600x720 rotation 1, using the
+  layouts whose digests match the earlier batches (`13570674` visual, `a4c077b3` execution,
+  `488d1e4a` observation ROIs) and the new v8 contract `3c41d5bb`. Output
+  `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/route-b-batch-11-stage1`, 12,304,354 bytes.
+- The loop closed end to end: 83 transitions over 91.5 s, 67 dispatched input commands, one terminal
+  transition (TIMEOUT, duration budget), `backlog_free=true`, `retries=0`, `steps_without_ack=0`. The
+  independent reload verifier reports `store_integrity=ok`, `recoverable=true`, `findings=[]` and
+  every recorded view hash matching its persisted bundle, so the new contract did not disturb the
+  L1/L2 runtime contract.
+- The declared recovery fired on hardware for the first time, and it ended the gap. The marker was
+  lost for four consecutive steps 73-76; at steps 75-76 the Router applied a `north` retrace
+  (`unknown_recovery_retrace`, the reversal of the recorded last-known displacement), and step 77
+  localised again. Under v6 and v7 the same gap would have kept waiting toward the 11-step guard and
+  ended `CAPTURE_FAILURE`, so this is the first recorded case of the self-sustaining stop being
+  broken rather than renamed.
+- The episode did not arrive, so stage 1 did not meet the admission gate that was declared for it
+  (arrival). It reached 3 of 4 waypoints with `arrival_rate=0` and ended TIMEOUT after the 90 s
+  duration budget.
+- The measured blocker is convergence on the final leg, not perception and not the recovery. Over the
+  last quarter of the episode the distance to the final waypoint had median 9.55 px against a 4.0 px
+  tolerance, oscillating between about 7 and 11 px for roughly 40 steps, while the progress guard
+  saturated at its declared cap of 8 events. The final position was 9.2 px from the waypoint.
+- Tracking is not the cause. Across 55 consecutive known-step pairs the displacement is median
+  3.6 px, p90 6.2 px and max 7.9 px, with zero pairs above 12 px, so there are no teleports and no
+  evidence of marker-identity oscillation. What the measurement does show is that the response is
+  weak and often off-axis: the projection onto the commanded bearing is a median of only 2.2 px,
+  19 of 55 pairs move less than 1 px along the command, and 24 of 55 pairs move more perpendicular
+  to the command than along it, which is consistent with the sub-pixel response tail already
+  recorded for this route rather than with a new tracking fault.
+- The blind-step pattern is a second, smaller cost: 15 of 83 steps were blind, in 11 singleton runs
+  plus one four-step run, so `localized_fraction` was 0.8193 against the declared 0.8 gate. The
+  recovery's trigger is 3 missing frames, so it deliberately does not act on the singletons; each
+  singleton costs one step of no input, which is about one step in six.
+- The run also exposed a reporting bug and it is fixed: the episode summary's
+  `unknown_recovery_steps` reported the instantaneous retreat depth at the end of the episode
+  instead of the cumulative count, so this run printed `events=1, steps=0` although two recovery
+  steps were applied. The summary and the step rows now report the cumulative total as
+  `unknown_recovery_steps` and the current depth as a separate `unknown_recovery_depth`; the
+  recorded step log for this run independently confirms the corrected values
+  (`events=1`, `steps=2`, `declined=0`).
+- One methodology note with no effect on the result: the first attempt to launch the batch used
+  `python -m hok_agent.cli`, which never calls `main()`, so it printed nothing and opened no device
+  session. The run was executed with the installed `hok-agent` console script, and the earlier
+  `mobile-navigation-verify` results in this lineage were obtained by calling the function directly,
+  so they are unaffected.
+- Stages 2 and 3 are not run. The admission gate declared for stage 1 was arrival and it was not
+  met, and a failed gate blocks later stages without retries or evidence substitution, so the gate
+  has to be settled with the owner before the session continues.
+
+### Route B v13: a complete four-waypoint episode passes, and the consecutive stage stalls on a dead game state (2026-09-21)
+
+- The owner authorized the staged device session and then asked to keep fixing and advancing. Six
+  further guarded device runs followed, each under a new versioned contract with the previous one
+  preserved on disk. Outputs `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/route-b-batch-11..17`,
+  98,415,634 bytes, four of them stage-one single episodes and one a three-consecutive stage.
+- The runs found and fixed a real bug in the declared deceleration. `PersistentJoystick` holds the
+  touch down until its direction changes, so the declared `hold_ms` only set the sampling period and
+  the hero moved for the whole step: measured at 3.5-8.5 px per step against a 4.0 px arrival
+  tolerance, and on the v9 run's press steps it fell to a median of 1.21 px once v9 bounded the
+  press with an explicit release. A pulse step issues one press and one release, declared as
+  `backlog_free_maximum_pointer_messages`, and the run stayed `backlog_free`.
+- The recovery was corrected twice by measurement. v10 declared that inside a 16 px band around the
+  waypoint the recovery re-aims at the waypoint instead of retracing, because the retrace walks the
+  hero away from the target it was about to reach and cost 2.7 to 4.7 px of progress on each of the
+  three four-step blind windows in the v9 run. The last waypoint sits inside a map band at y about
+  48-57 where the marker stops being detected.
+- v11 is recorded as a regression and v12 as its fix: v11 declared a direct final-approach bearing
+  but passed the previous bearing into the direction rule, so the one-sector hysteresis pinned the
+  aim to NE or NW for all 120 steps, the measured y response of those two bearings was about zero,
+  the hero could only move across, and 0 of 4 waypoints were reached. v12 applies the direct bearing
+  without hysteresis and restored 3 of 4 waypoints.
+- The decisive measurement was that the fourth waypoint itself was unobservable. Across six device
+  runs and 211 localised samples in its surrounding band, the closest any localised position ever
+  came to (50, 80) was exactly 6.00 px and no sample fell inside the 4.0 px tolerance, while the
+  other three targets converged to 4.05, 4.05 and 4.21 px and registered arrival. A 6.00 px
+  standoff against a 4.0 px tolerance means arrival there was unobservable rather than unreached, so
+  no control change could close it. v13 therefore changes exactly one declared value: the fourth
+  target moves from (50, 80) to (50, 70), which the same runs reached to 0.40 px with 24 samples
+  inside tolerance.
+- v13 `393dd82b` then passed stage one: a complete four-waypoint episode, 66 steps in 63.9 s,
+  `terminal_reason=NAVIGATION_GOAL_REACHED`, `arrived=true`, `waypoints_reached=4`, final error
+  3.0 px, `arrival_rate=1.0`, `backlog_free=true`, `store_integrity=ok`, `binding_stable=true`, 45
+  bounded approach pulses and no recovery events. This is the first complete route episode on the
+  device, and it is the increment the earlier batches could not reach because control, scoring and
+  target observability were each broken in turn.
+- Stage two, three consecutive episodes under the same contract, failed with a new and different
+  cause. Episode one reached 2 of 4 waypoints and then held; episodes two and three never left the
+  same place: each ran 70 steps and about 90 s with the localised position inside a 0.2 px box at
+  (78.4, 55.5) while a bearing was held, and their frames confirm the screen itself was not
+  advancing - minimap inter-frame change had a median of 0.23 with a maximum of 1.10 against 2.87
+  and 6.68 in the passed episode. So the session had entered an alive-but-not-advancing game state
+  and the batch had no guard against it, spending two whole episodes commanding into a dead screen.
+  A three-consecutive stage therefore cannot pass yet, and the fix is a declared no-advance guard
+  rather than any change to control or perception.
+- The consecutive stage also exposed a genuine cross-episode defect that is now fixed: the joystick
+  is a physical pointer that outlives an episode, but the runner reset its bookkeeping to STOP at
+  every episode boundary, so the first command could be a phantom DOWN that emitted no message
+  (observed as `movement_command=DOWN` with `pointer_messages=0`). The runner now adopts the
+  joystick's real direction at episode start and releases the pointer between episodes.
+- Every run kept the device boundaries: the owner-attested package in the foreground, the declared
+  serial, the same layout digests, a bounded duration and step count, no raw frames persisted, and
+  the independent reload verifier reporting `store_integrity=ok` with no findings on every episode.
+  Six focused regressions were added for the recovery band, the press-release band and the direct
+  approach, and the single full `make check` passed with Ruff, strict mypy on 74 source files, all
+  611 tests and project safety on 317 files / 139 Python files / 81,586 nonblank Python lines / 4
+  root Markdown files.
+
+### Route B v14: the dead-screen guard is declared, and the consecutive stage is blocked by terrain (2026-09-21)
+
+- The owner asked to keep fixing and advancing, so the no-advance guard declared in the previous
+  ledger entry was built and the consecutive stage was rerun. One more guarded device run,
+  `$HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/route-b-batch-18-stage3`, 42,687,596 bytes.
+- The guard is real and it is tested. `_no_advance_detected` tracks a run of applied-bearing steps
+  whose localised position never travels more than the declared bound, declared as
+  `no_advance_guard` in v14 `caa0a58d` with `window_steps 12` and `maximum_travel_pixels 1.0`. Blind
+  steps and released bearings reset the run, so a lost marker, a deliberate release or a fine
+  final-approach pulse can never be misread as a dead screen. The one-pixel bound has real headroom:
+  the smallest travel over any sliding 12-step window is 0.00 px on the dead runs and 2.76, 4.60 and
+  12.94 px on the working ones. The outcome is a distinct `ACTION_FAILURE` / `no_advance_detected`
+  rather than a `TIMEOUT`, so a dead state is never reported as a spent budget, and arrival and the
+  safety stops keep their priority over it.
+- The guard did not fire on the rerun, and that is correct. All three episodes of the three-consecutive
+  stage ended `TIMEOUT/step_or_duration_budget_exhausted` with `no_advance_events=0`: the world was
+  advancing and the hero was moving, so the stall was not a dead screen.
+- The measured blocker is terrain. In all three episodes `progress_guard_events` reached its declared
+  cap of 8 while the hero pressed N or NE 90-97 times with bounded 400 ms pulses, its y never went
+  below 57.5 at x 45-48, and every episode ended at the same place, (59.5-59.7, 46.3-46.8), with the
+  first waypoint still 9.4-10.7 px away and `arrival_rate=0`. The declared stall escape is
+  `stall_trigger_only` with `maximum_events_per_episode 8`, so once those events are spent the
+  single-arbiter planner has no remaining way to round the obstruction and keeps pressing into it.
+- Route reachability is therefore start-position dependent. The passing v13 episode started at
+  (62.9, 61.9) and reached the first waypoint on its way; the consecutive stage started at
+  (78.4, 55.4) and could not get past the terrain at x 45-48 on the same leg. The earlier conclusion
+  that a complete episode passes therefore holds at its measured scope - one episode from one
+  starting position - and must not be read as a route that passes from any start.
+- Device boundaries held throughout: the owner-attested package in the foreground, the declared
+  serial, the same layout digests, bounded duration and step count, no raw frames, `backlog_free`,
+  and the independent reload verifier reporting `store_integrity=ok` with no findings on all 289
+  transitions. Three focused regressions were added for the guard and the outcome mapping, and the
+  single full `make check` passed with Ruff, strict mypy on 74 source files, all 614 tests and
+  project safety on 318 files / 139 Python files / 81,766 nonblank Python lines / 4 root Markdown
+  files.
+
+### Route B v15: the traversability mask and the commitment, and a passing 1-3-10 admission (2026-09-21)
+
+- The owner asked how to detect walls or learn to avoid them, and approved the answer: measure
+  traversability from transitions that were already recorded, then have the Router consult it as a
+  passability mask. Both parts were built, and the staged admission now passes.
+- The measurement basis is that the needed signal is not a reward. Every recorded route B transition
+  already carries (position, applied bearing, next position), so 2,247 consecutive localised pairs
+  over 208 cells describe "from here, pressing this way moved the hero this far". Wall knowledge can
+  be measured; it does not need the training signal whose absence closed the R route.
+- The confound was measured and removed. A short bounded press also yields a small displacement, so
+  a naive estimate reads its own control ceiling as a wall: the first pass flagged 16 cells, 13 of
+  which were artefacts. Normalising by the declared press duration gives a baseline of 0.187 to
+  0.325 px per 100 ms and makes the estimate honest. At the stall cell where the v14 consecutive
+  stage died, a north press measured 0.071 px per 100 ms against a north-east press of 0.304 in the
+  same cell, and the hero had pressed north 52 times.
+- `src/hok_agent/traversability.py` builds the frozen grid from the recorded runs, validates the
+  declared block, reports its own coverage, and masks a bearing measured ineffective in the cell the
+  hero is standing in. It fails open: a cell or bearing below the declared sample minimum is
+  passable, so a partly covered grid can only remove a bearing that was measured ineffective. The
+  grid is frozen inside the contract, so a run and its grid cannot drift apart: 208 cells, 461
+  cell-bearing observations, 175 above the sample minimum.
+- The commitment addresses the finer cause. The finest press tier moves the hero about 0.65 px, which
+  is near the position noise floor, so re-aiming every step lets those small steps cancel. Inside the
+  declared approach band a chosen bearing is now held for three steps, and the mask is applied to the
+  committed bearing as well, so a commitment can never press a bearing the grid just measured
+  useless.
+- The first v15 device run exposed a real wiring defect and an offline cross-check caught it. The
+  grid is keyed by the recorded store vocabulary, but the call site handed it joystick names, which
+  share no symbols, so the mask silently returned every bearing unchanged: the run recorded
+  `traversability_masked_steps=0` while an offline replay of the same steps against the same frozen
+  grid showed 40 of 719 steps where the mask would have fired. `_mask_joystick_bearing` is now the
+  single conversion point and a regression pins the two vocabularies, including the raw call that
+  silently does nothing. This is the second time this project has been saved by checking that a
+  layer actually ran rather than that it was declared.
+- With the mask live, the staged admission passed: one episode, then three consecutive, then ten
+  consecutive, all under route B v15 `ba46e2b2`, and all 14 episodes reached
+  `NAVIGATION_GOAL_REACHED` with four of four waypoints. The batches are
+  `route-b-batch-22-stage1`, `-23-stage3` and `-21-stage10`; 14 arrivals in 14 attempts,
+  `arrival_rate=1.0`, `backlog_free`, `binding_stable`, and the independent reload verifier reports
+  `store_integrity=ok`, `recoverable=true` and no findings on 548, 177 and 53 transitions.
+- Honest attribution, because it matters for what may be claimed. The commitment is the driver: an
+  earlier run of the same contract with the mask inert passed 13 of 13 episodes (3 then 10), so the
+  mask is not required for this route from these starting positions. With the mask live the mask
+  fires on 1 to 5 steps per episode and the pass holds, so it is active and harmless, but its
+  isolated contribution is not measured - the comparison is across sessions and start positions, not
+  a controlled ablation.
+- Two scope limits must travel with the result. First, every passing run began near (53, 68) or
+  (62.9, 61.9) and the one failing v14 run began at (78.4, 55.4), so start-position independence is
+  not established; note that the v10 press-normalised grid also says the north press there was
+  three to four times less effective than the baseline. Second, the fourth waypoint is (50, 70)
+  rather than (50, 80) because (50, 80) was measured unobservable: across six runs and 211 localised
+  samples the closest any localised position came to it was exactly 6.00 px against a 4.0 px
+  tolerance. The route passes as declared; it is not the original rectangle.
+- The recorded grid had become unreproducible and that was measured rather than assumed. It was
+  first frozen by aggregating every `route-b-batch-*` directory, and the five v15 batches added
+  afterwards moved 55 of its 208 cells and contributed three more, so a rebuild no longer
+  reproduced the digest the runs were recorded under. The builder now takes an explicit run list
+  and refuses an empty one, the sixteen runs that produced the frozen grid were recovered by
+  searching for the subset that rebuilds it exactly, and `make traversability-check` rebuilds
+  from that pinned list and fails on any cell difference. A build or check with no source list
+  fails closed rather than falling back to discovery, because a grid that depends on whichever
+  batches happen to exist is not a frozen declaration. The index of every route B version, its
+  digest, its declared change and the batch it was spent on is `docs/ROUTE_B_CONTRACT_INDEX.md`.
+- Checks: five focused regressions were added for the mask, the vocabulary conversion, the grid
+  estimate and the commitment, and three more for the pinned source list, the fail-closed check
+  and the block that records its own sources; the single full `make check` passed with Ruff, strict
+  mypy on 75 source files, all 621 tests and project safety on 321 files / 140 Python files /
+  82,435 nonblank Python lines / 4 root Markdown files.
 
 ## Public release state
 
