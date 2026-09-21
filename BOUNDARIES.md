@@ -206,6 +206,12 @@ input admission.
   preferences over complete PixelArena game pairs. It cannot use action, frame, HUD,
   tracking, or temporal labels, and it cannot operate on a live commercial-client
   feedback loop.
+- R1 panel-gated dispatch (owner-authorized 2026-09-21) may train and evaluate one small policy
+  offline through `panel_gating_policy.py`, from derived views and transitions already persisted
+  under `HOK_LARGE_ROOT`, against the owner-authorized panel-state feedback. It adds no capture
+  source, input transport or device loop; its output is a proposal the deterministic Router must
+  still apply. Device coordinates, execution timestamps, action records, reward components and
+  event records may be used only as training targets, Router-applied masks or audit labels.
 
 ## Never part of the executable surface
 
@@ -310,5 +316,8 @@ PixelArena task. V4–V6 may prove only read-only decoding and zero-label domain
 temporal diagnostics. T8 may eventually prove only bounded execution in the owner-authorized
 self-built test app under its frozen layout and evaluation contract; it has no trained-policy or
 gameplay-quality claim yet. Future preference post-training remains a separate offline claim scope.
+R1 panel-gated dispatch may prove only a same-scenario comparison of one small policy against the
+frozen myopic rule on that task; it establishes no navigation, combat or gameplay skill and
+authorizes no promotion beyond that comparison.
 Nothing in this repository establishes Honor of Kings skill, GameCore equivalence, suitability
 for any unapproved client, tactical optimality, or transfer outside the fixed abstract vocabulary.

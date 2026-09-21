@@ -44,8 +44,10 @@ create another research branch under a renamed contract.
   reproducible at their frozen commit. New runner changes require a fresh run, not old partial state.
 - Do not infer remaining historical budget. Record actual new costs and use null for unknowns.
   Do not report tests, hashes, files or parameter count as gameplay progress.
-- Do not connect a phone, decode old test, start RL, add human labels/recordings, paid services or
-  a new input transport. The existing runtime protections remain as documented below.
+- Do not connect a phone, decode old test, add human labels/recordings, paid services or a new input
+  transport. Do not start an online RL loop that drives the device; offline post-training of one
+  policy on already-persisted transitions, as scoped for R1 below, is allowed. The existing runtime
+  protections remain as documented below.
 - Local commits stay on hierarchical-policy-v0-prep; no automatic GitHub push or cross-project edits.
 
 ## Documentation and verification
@@ -169,6 +171,14 @@ descriptions preserve past authorization and failure scope; they are not future 
   single recommended purchase. Its 60-second, five-minute, and live death-stop gates passed. It
   cannot add enemy semantics, target selection, aiming, tactics, another package, or another input
   transport without a new contract.
+- R1 panel-gated dispatch is the owner-authorized post-training route opened on 2026-09-21. It may
+  train and evaluate one small policy offline through `panel_gating_policy.py` from derived views
+  and transitions already persisted under `HOK_LARGE_ROOT`, with the owner-authorized panel-state
+  feedback frozen. It may not add an input transport, change the `mobile_testbed` chain or its
+  guards, or send a model decision to the device: the learned output is a proposal that the
+  deterministic Router still gates. Every R1 artifact keeps `semantic_accuracy_verified=false` and
+  `promotion_allowed=false` until a same-scenario comparison against the frozen myopic rule is
+  reported, and the frozen rule is retained when the learned candidate shows no gain.
 - Operation Policy v1 does not modify any frozen T8 lineage. Its only learned outputs are
   nine-class movement and five-class combat against automatic inverse-dynamics targets. Every
   first-contract artifact keeps `semantic_accuracy_verified=false`, `promotion_allowed=false`,
@@ -217,6 +227,13 @@ descriptions preserve past authorization and failure scope; they are not future 
   diagnostics, checkpoint freeze, and evaluation; evaluation modules contain no optimizer or backward path.
   `hierarchical_p0.py` may use frozen Torch/torchvision encoders and train only its small probe head.
   `hierarchical_p0_temporal_probe.py` has the same frozen-encoder boundary.
+  `panel_gating_policy.py` may use Torch/torchvision/safetensors only to train and evaluate one
+  small panel-gating policy offline, from derived views and transition records already persisted
+  under `HOK_LARGE_ROOT`. It opens no capture source and adds no input sender; its output is a
+  gating proposal that the deterministic Router must still apply. Device coordinates, execution
+  timestamps, action records, reward components and event records may be used only as training
+  targets, Router-applied masks or audit labels, never by an encoder, temporal hidden state or
+  policy input.
   `global_shadow.py` and `test_global_shadow.py` may use the same frozen Global Agent model only for
   authorized zero-control Shadow; they may never add an input sender.
 - PyAV is allowed only in `shadow.py`, `capture.py`, `alignment.py`, `pre_ingest.py`,
