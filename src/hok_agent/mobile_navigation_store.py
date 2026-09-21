@@ -130,31 +130,7 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
         or block.get("schema_version") != MOBILE_NAVIGATION_STORE_CONTRACT_SCHEMA
     ):
         raise MobileTestbedError("mobile navigation store contract differs")
-    recovery_raw = contract.get("recovery")
-    if recovery_raw is not None and not isinstance(recovery_raw, dict):
-        raise MobileTestbedError("mobile navigation store recovery block differs")
-    recovery = cast(dict[str, object] | None, recovery_raw)
-    if recovery is not None:
-        order = recovery.get("direction_order")
-        if (
-            recovery.get("mode") != "bounded_direction_sweep"
-            or not isinstance(order, list)
-            or len(cast(list[object], order)) < 4
-            or any(str(item) not in _RECOVERY_DIRECTIONS for item in cast(list[object], order))
-            or any(
-                not isinstance(recovery.get(key), int)
-                or int(cast(int, recovery.get(key))) <= 0
-                for key in (
-                    "trigger_missing_frames",
-                    "pulse_ms",
-                    "maximum_attempts_per_event",
-                    "maximum_events_per_episode",
-                )
-            )
-        ):
-            raise MobileTestbedError("mobile navigation store recovery block differs")
     resolved = dict(block)
-    resolved["recovery"] = recovery
     resolved["policy_bundle_sha256"] = contract_sha
     resolved["event_engine_sha256"] = hashlib.sha256(
         json.dumps(block, sort_keys=True, separators=(",", ":")).encode()
@@ -366,21 +342,6 @@ def _transition(
     }
 
 
-_RECOVERY_DIRECTIONS = {
-    "north", "north_east", "east", "south_east",
-    "south", "south_west", "west", "north_west",
-}
-
-
-def _recovery_direction(attempt: int, order: list[str]) -> str:
-    """The sweep direction for one bounded recovery attempt."""
-    if not order:
-        raise MobileTestbedError("recovery direction order is empty")
-    if attempt < 0:
-        raise MobileTestbedError("recovery attempt is negative")
-    return order[attempt % len(order)]
-
-
 def _episode_outcome(
     *,
     arrived: bool,
@@ -389,7 +350,6 @@ def _episode_outcome(
     missing_streak: int,
     maximum_gap: int,
     budget_exhausted: bool,
-    recovery_active: bool = False,
 ) -> tuple[bool, str, str, str | None]:
     """Decide whether the episode ends and why.
 
@@ -403,7 +363,7 @@ def _episode_outcome(
         return True, "SAFETY_STOP", "ERROR", "death_or_ended_screen"
     if outside_region:
         return True, "SAFETY_STOP", "ERROR", "outside_free_movement_region"
-    if maximum_gap > 0 and missing_streak > maximum_gap and not recovery_active:
+    if maximum_gap > 0 and missing_streak > maximum_gap:
         return True, "CAPTURE_FAILURE", "ERROR", "localization_gap"
     if budget_exhausted:
         # An episode must always end with a terminal transition; a step or duration cap is a
@@ -433,7 +393,6 @@ class _NavigationRuntime:
     maximum_steps: int
     maximum_gap: int
     maximum_duration_seconds: float
-    recovery: dict[str, object] | None
     guard: DeviceGuard
     session: ScrcpyControlSession
     joystick: PersistentJoystick
@@ -499,7 +458,6 @@ def _prepare_navigation_runtime(
         maximum_duration_seconds=float(
             cast(float, contract.get("maximum_duration_seconds", 0.0))
         ),
-        recovery=cast(dict[str, object] | None, store_contract.get("recovery")),
         guard=guard,
         session=ScrcpyControlSession(guard.serial, 30),
         joystick=PersistentJoystick(execution_layout, guard.width, guard.height),
@@ -527,10 +485,6 @@ def _run_episode(
     previous_joystick = "wait"
     region_streak = 0
     missing_streak = 0
-    recovery_active = False
-    recovery_attempts = 0
-    recovery_attempts_total = 0
-    recovery_events = 0
     waypoint_index = 0
     pointer_messages = 0
     retry_total = 0
@@ -588,26 +542,6 @@ def _run_episode(
             last_position = position
             known = position is not None
             missing_streak = 0 if known else missing_streak + 1
-            if runtime.recovery is not None:
-                trigger = int(cast(int, runtime.recovery["trigger_missing_frames"]))
-                maximum_events = int(cast(int, runtime.recovery["maximum_events_per_episode"]))
-                maximum_attempts = int(
-                    cast(int, runtime.recovery["maximum_attempts_per_event"])
-                )
-                if recovery_active and known:
-                    recovery_events += 1
-                    recovery_active = False
-                    recovery_attempts = 0
-                elif (
-                    not recovery_active
-                    and not known
-                    and missing_streak >= trigger
-                    and recovery_events < maximum_events
-                ):
-                    recovery_active = True
-                    recovery_attempts = 0
-                elif recovery_active and recovery_attempts >= maximum_attempts:
-                    recovery_active = False
             outside_region = False
             if position is not None:
                 inside = (
@@ -634,16 +568,6 @@ def _run_episode(
             applied_joystick, owner, reason = _route(
                 requested_joystick, known=known, death=death, outside_region=outside_region
             )
-            if recovery_active and runtime.recovery is not None and not death:
-                order = [
-                    str(item)
-                    for item in cast(list[object], runtime.recovery["direction_order"])
-                ]
-                applied_joystick = _recovery_direction(recovery_attempts, order)
-                recovery_attempts += 1
-                recovery_attempts_total += 1
-                owner = "deterministic_router"
-                reason = "localization_recovery"
             requested = JOYSTICK_TO_STORE_DIRECTION[requested_joystick]
             applied = JOYSTICK_TO_STORE_DIRECTION[applied_joystick]
             command = _movement_command(previous_applied, applied)
@@ -703,7 +627,6 @@ def _run_episode(
                 maximum_gap=runtime.maximum_gap,
                 budget_exhausted=time.monotonic() >= episode_deadline
                 or step_id + 1 >= runtime.maximum_steps,
-                recovery_active=recovery_active,
             )
             row = _transition(
                 store_contract=runtime.store_contract,
@@ -756,9 +679,6 @@ def _run_episode(
                     "final_status": status,
                     "done": done,
                     "abort_reason": abort_reason,
-                    "recovery_active": recovery_active,
-                    "recovery_attempt": recovery_attempts,
-                    "recovery_events": recovery_events,
                     "terminal_reason": terminal_reason,
                     "training_eligible": stored.payload["training_eligible"],
                 }
@@ -805,8 +725,6 @@ def _run_episode(
         and all(row["final_status"] in {"acknowledged", "noop"} for row in steps),
         "failure": failure,
         "abort_reason": abort_reason,
-        "recovery_events": recovery_events,
-        "recovery_attempts": recovery_attempts_total,
         "duration_seconds": round(time.monotonic() - started, 8),
         "step_rows": steps,
     }
