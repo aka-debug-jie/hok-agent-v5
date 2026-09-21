@@ -822,6 +822,13 @@ def _parser() -> argparse.ArgumentParser:
     operation_base.add_argument("--execution-layout", type=Path, required=True)
     operation_base.add_argument("--observation-rois", type=Path, required=True)
     operation_base.add_argument("--output-dir", type=Path, required=True)
+    cue_position = commands.add_parser(
+        "mobile-cue-position",
+        help="read the hero's current minimap position from one frame, sending no input",
+    )
+    cue_position.add_argument("--serial", required=True)
+    cue_position.add_argument("--config", type=Path, required=True)
+    cue_position.add_argument("--observation-rois", type=Path, required=True)
     active_probe = commands.add_parser(
         "mobile-active-probe",
         help="run one bounded released-pulse identity probe through the guarded testbed",
@@ -3282,6 +3289,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "contract": str(args.contract),
                         **checked,
                     }
+        elif args.command == "mobile-cue-position":
+            from hok_agent.mobile_testbed import detect_mobile_cue_position
+
+            result = detect_mobile_cue_position(
+                serial=args.serial,
+                cue_contract_path=args.config,
+                observation_rois_path=args.observation_rois,
+            )
         elif args.command == "mobile-operation-team-side":
             from hok_agent.mobile_testbed import detect_mobile_operation_team_side
 

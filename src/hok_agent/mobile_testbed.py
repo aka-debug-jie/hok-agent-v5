@@ -2069,6 +2069,71 @@ def detect_mobile_operation_team_side(serial: str) -> dict[str, object]:
     }
 
 
+def detect_mobile_cue_position(
+    *, serial: str, cue_contract_path: Path, observation_rois_path: Path
+) -> dict[str, object]:
+    """Read the hero's current minimap position from one screen frame, sending no input.
+
+    A placed session is expensive: a probe at a declared cell spends minutes of device time and a
+    bounded byte budget, and the declared containment guard then fails it if the hero was never
+    moved. This check costs one screen capture and answers the only question that matters before
+    such a run - where is the hero standing, and which cell is that. It reports the position in the
+    same 128x128 minimap ROI space the analysis uses, because that is the space a target cell is
+    expressed in.
+    """
+    from hok_agent.movement_navigation_shadow import (
+        _probe_frame_candidates,
+        _probe_unique_position,
+    )
+
+    _require_mobile_input_identity()
+    guard = _open_device_guard(serial)
+    guard.check()
+    rois, rois_sha = load_observation_rois(observation_rois_path)
+    if (guard.width, guard.height, guard.rotation) != (rois.width, rois.height, rois.rotation):
+        raise MobileTestbedError("cue position check rois differ from display")
+    contract = json.loads(cue_contract_path.read_text(encoding="utf-8"))
+    cue_contract: dict[str, object] = {
+        "color": contract["color"],
+        "components": contract["components"],
+    }
+    exclusion = cast(
+        tuple[int, int, int, int],
+        tuple(map(int, cast(list[int], contract["excluded_ui_xyxy"]))),
+    )
+    frame = _frame(guard.serial)
+    minimap = _observation_roi_frame(frame, rois.minimap, 128)
+    interior, _fixed = _probe_frame_candidates(minimap[None, ...], cue_contract, exclusion)
+    position = _probe_unique_position(interior[0])
+    result: dict[str, object] = {
+        "schema_version": "hok-agent-mobile-cue-position-v1",
+        "status": "PASSED",
+        "rois_sha256": rois_sha,
+        "cue_contract_sha256": contract.get("contract_sha256"),
+        "death_replay_visible": _death_replay_visible(frame, rois),
+        "raw_frame_persisted": False,
+        "input_commands_sent": 0,
+        "control_output": False,
+        "training_allowed": False,
+        "test_allowed": False,
+    }
+    if position is None:
+        result["status"] = "FAILED"
+        result["error"] = "the hero cue is not localisable in this frame"
+        result["localized"] = False
+        return result
+    row, column = position
+    result.update(
+        {
+            "localized": True,
+            "position_y": round(float(row), 2),
+            "position_x": round(float(column), 2),
+            "cell_4px": f"{int(float(row) // 4)}:{int(float(column) // 4)}",
+        }
+    )
+    return result
+
+
 def _open_v3_predictor(
     model_path: Path, device: str
 ) -> tuple[Callable[[np.ndarray], tuple[list[int], list[float]]], int]:

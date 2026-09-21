@@ -507,7 +507,7 @@ operation-movement-v11-overfit32: storage-preflight
 operation-movement-v11-pilot: storage-preflight
 	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-movement-pilot --dataset-root "$(OPERATION_TEACHER_DATASET)" --split "$(OPERATION_MOVEMENT_SPATIAL_SPLIT)" --contract "$(OPERATION_MOVEMENT_SPATIAL_CONTRACT)" --adapter-checkpoint "$(OPERATION_POLICY_ADAPTER)" --output-dir "$(OPERATION_MOVEMENT_SPATIAL_RUN)" --device cuda --batch-size 128
 
-.PHONY: mobile-navigation-store mobile-navigation-store-batch mobile-navigation-verify traversability-build traversability-check mobile-active-probe traversability-probe-analysis
+.PHONY: mobile-navigation-store mobile-navigation-store-batch mobile-navigation-verify traversability-build traversability-check mobile-cue-position mobile-active-probe traversability-probe-analysis
 
 mobile-navigation-store: storage-preflight
 	@test -n "$(MOBILE_NAV_SERIAL)" || { echo "set MOBILE_NAV_SERIAL (or T8_SERIAL)" >&2; exit 2; }
@@ -522,6 +522,10 @@ mobile-navigation-verify: storage-preflight
 
 traversability-build: storage-preflight
 	$(RUN_PYTHON) -m hok_agent traversability-build --runs-root "$(MOBILE_NAV_RUNS)" --runs $(TRAVERSABILITY_RUNS) --output "$(TRAVERSABILITY_OUTPUT)" --cell-pixels "$(TRAVERSABILITY_CELL_PIXELS)" --minimum-samples "$(TRAVERSABILITY_MINIMUM_SAMPLES)" --minimum-rate-per-100ms "$(TRAVERSABILITY_MINIMUM_RATE)" --nominal-step-pixels "$(TRAVERSABILITY_NOMINAL_STEP)"
+
+mobile-cue-position: storage-preflight
+	@test -n "$(MOBILE_NAV_SERIAL)" || { echo "set MOBILE_NAV_SERIAL (or T8_SERIAL)" >&2; exit 2; }
+	@HOK_MOBILE_IDENTITY_PATH="$(MOBILE_NAV_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-cue-position --serial "$(MOBILE_NAV_SERIAL)" --config "$(MOBILE_PROBE_CONTRACT)" --observation-rois "$(MOBILE_NAV_ROIS)"
 
 mobile-active-probe: storage-preflight
 	@test -n "$(MOBILE_NAV_SERIAL)" || { echo "set MOBILE_NAV_SERIAL (or T8_SERIAL)" >&2; exit 2; }
