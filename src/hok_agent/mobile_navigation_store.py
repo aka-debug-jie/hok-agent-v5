@@ -169,8 +169,44 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
         )
     ):
         raise MobileTestbedError("mobile navigation store region filter differs")
+    approach_raw = contract.get("final_approach")
+    final_approach = cast(dict[str, object] | None, approach_raw)
+    if approach_raw is not None:
+        if (
+            not isinstance(approach_raw, dict)
+            or approach_raw.get("mode") != "declared_deceleration"
+        ):
+            raise MobileTestbedError("mobile navigation store final approach differs")
+        tiers = approach_raw.get("tiers")
+        default_hold = approach_raw.get("default_hold_ms")
+        if (
+            not isinstance(tiers, list)
+            or not cast(list[object], tiers)
+            or not isinstance(default_hold, int)
+            or int(default_hold) <= 0
+        ):
+            raise MobileTestbedError("mobile navigation store final approach differs")
+        ordered: list[tuple[float, int]] = []
+        for item in cast(list[object], tiers):
+            if not isinstance(item, dict):
+                raise MobileTestbedError("mobile navigation store final approach differs")
+            entry = cast(dict[str, object], item)
+            distance = entry.get("maximum_distance_pixels")
+            hold = entry.get("hold_ms")
+            if (
+                not isinstance(distance, (int, float))
+                or not isinstance(hold, int)
+                or float(distance) <= 0
+                or hold <= 0
+            ):
+                raise MobileTestbedError("mobile navigation store final approach differs")
+            ordered.append((float(distance), int(hold)))
+        ordered.sort()
+        if any(later[1] < earlier[1] for earlier, later in zip(ordered, ordered[1:], strict=False)):
+            raise MobileTestbedError("mobile navigation store final approach differs")
     resolved = dict(block)
     resolved["progress_guard"] = progress_guard
+    resolved["final_approach"] = final_approach
     resolved["region_filter"] = region_filter
     resolved["policy_bundle_sha256"] = contract_sha
     resolved["event_engine_sha256"] = hashlib.sha256(
@@ -408,6 +444,18 @@ def _rotate_direction(direction: str, sectors: int) -> str:
     return _MOVEMENT_ORDER[(index + sectors) % len(_MOVEMENT_ORDER)]
 
 
+def _approach_hold_ms(
+    distance: float | None, tiers: list[tuple[float, int]], default_hold_ms: int
+) -> int:
+    """Declared deceleration: the tier whose distance bound covers the remaining distance."""
+    if distance is None:
+        return default_hold_ms
+    for maximum_distance, hold_ms in sorted(tiers, key=lambda item: item[0]):
+        if distance <= maximum_distance:
+            return hold_ms
+    return default_hold_ms
+
+
 def _region_safe_direction(
     position: tuple[float, float],
     desired: str,
@@ -520,6 +568,8 @@ class _NavigationRuntime:
     maximum_duration_seconds: float
     progress_guard: dict[str, object] | None
     region_filter: dict[str, object] | None
+    approach_tiers: list[tuple[float, int]]
+    approach_default_hold_ms: int
     guard: DeviceGuard
     session: ScrcpyControlSession
     joystick: PersistentJoystick
@@ -587,6 +637,30 @@ def _prepare_navigation_runtime(
         ),
         progress_guard=cast(dict[str, object] | None, store_contract.get("progress_guard")),
         region_filter=cast(dict[str, object] | None, store_contract.get("region_filter")),
+        approach_tiers=(
+            [
+                (
+                    float(cast(float, cast(dict[str, object], item)["maximum_distance_pixels"])),
+                    int(cast(int, cast(dict[str, object], item)["hold_ms"])),
+                )
+                for item in cast(
+                    list[object],
+                    cast(dict[str, object], store_contract["final_approach"])["tiers"],
+                )
+            ]
+            if store_contract.get("final_approach") is not None
+            else []
+        ),
+        approach_default_hold_ms=(
+            int(
+                cast(
+                    int,
+                    cast(dict[str, object], store_contract["final_approach"])["default_hold_ms"],
+                )
+            )
+            if store_contract.get("final_approach") is not None
+            else 0
+        ),
         guard=guard,
         session=ScrcpyControlSession(guard.serial, 30),
         joystick=PersistentJoystick(execution_layout, guard.width, guard.height),
@@ -915,7 +989,11 @@ def _run_episode(
                 break
             step_id += 1
             hold = (
-                runtime.approach_hold_ms
+                _approach_hold_ms(
+                    distance, runtime.approach_tiers, runtime.approach_default_hold_ms
+                )
+                if runtime.approach_tiers
+                else runtime.approach_hold_ms
                 if distance is not None and distance <= runtime.approach_distance
                 else runtime.hold_ms
             )

@@ -582,3 +582,59 @@ def test_route_b_v3_contract_rejects_a_broken_region_filter() -> None:
         mutate(value)
         with pytest.raises(MobileTestbedError):
             store_runner._store_contract(value, "0" * 64)
+
+
+def test_approach_hold_shrinks_with_the_remaining_distance() -> None:
+    tiers = [(8.0, 200), (16.0, 400), (32.0, 800)]
+    pick = store_runner._approach_hold_ms
+    assert pick(3.0, tiers, 1200) == 200
+    assert pick(8.0, tiers, 1200) == 200
+    assert pick(12.0, tiers, 1200) == 400
+    assert pick(20.0, tiers, 1200) == 800
+    assert pick(60.0, tiers, 1200) == 1200
+    assert pick(None, tiers, 1200) == 1200
+    assert pick(5.0, [], 1200) == 1200
+
+
+def test_route_b_v4_contract_declares_the_deceleration_table() -> None:
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    contract, sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v4.json"
+    )
+    assert len(sha) == 64
+    approach = cast(dict, contract["final_approach"])
+    assert approach["mode"] == "declared_deceleration"
+    tiers = sorted(
+        (float(item["maximum_distance_pixels"]), int(item["hold_ms"])) for item in approach["tiers"]
+    )
+    assert tiers[0][0] < tiers[-1][0]
+    assert tiers[0][1] < tiers[-1][1]
+    assert approach["default_hold_ms"] >= tiers[-1][1]
+    resolved = store_runner._store_contract(contract, sha)
+    assert resolved["final_approach"] == approach
+    assert cast(dict, contract["region_filter"])["mode"] == "feasible_direction_within_region"
+
+
+def test_route_b_v4_contract_rejects_a_broken_deceleration_table() -> None:
+    value = json.loads(
+        (ROOT / "configs/movement_goal_navigation_route_b_v4.json").read_text(encoding="utf-8")
+    )
+    for mutate in (
+        lambda item: item["final_approach"].__setitem__("mode", "ad_hoc"),
+        lambda item: item["final_approach"].__setitem__("tiers", []),
+        lambda item: item["final_approach"].__setitem__("default_hold_ms", 0),
+        lambda item: item["final_approach"].__setitem__(
+            "tiers",
+            [
+                {"maximum_distance_pixels": 8.0, "hold_ms": 800},
+                {"maximum_distance_pixels": 16.0, "hold_ms": 200},
+            ],
+        ),
+    ):
+        value = json.loads(
+            (ROOT / "configs/movement_goal_navigation_route_b_v4.json").read_text(encoding="utf-8")
+        )
+        mutate(value)
+        with pytest.raises(MobileTestbedError):
+            store_runner._store_contract(value, "0" * 64)
