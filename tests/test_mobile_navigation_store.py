@@ -457,3 +457,62 @@ def test_store_v2_contract_carries_the_localisation_gap_guard() -> None:
     assert block["maximum_localization_gap_frames"] == 10
     v1, _ = _goal_navigation_contract(ROOT / "configs/movement_goal_navigation_store_v1.json")
     assert "maximum_localization_gap_frames" not in cast(dict, v1["store"])
+
+
+def test_rotate_direction_wraps_the_eight_way_order() -> None:
+    assert store_runner._rotate_direction("north", 1) == "north_east"
+    assert store_runner._rotate_direction("north", -1) == "north_west"
+    assert store_runner._rotate_direction("north", 8) == "north"
+    assert store_runner._rotate_direction("west", 3) == "north_east"
+    with pytest.raises(MobileTestbedError):
+        store_runner._rotate_direction("wait", 1)
+
+
+def test_progress_guard_offset_holds_each_bearing_for_the_hold_window() -> None:
+    offsets = [1, -1, 2, -2]
+    assert store_runner._progress_guard_offset(0, 3, offsets) == 1
+    assert store_runner._progress_guard_offset(2, 3, offsets) == 1
+    assert store_runner._progress_guard_offset(3, 3, offsets) == -1
+    assert store_runner._progress_guard_offset(11, 3, offsets) == -2
+    with pytest.raises(MobileTestbedError):
+        store_runner._progress_guard_offset(12, 3, offsets)
+    with pytest.raises(MobileTestbedError):
+        store_runner._progress_guard_offset(0, 0, offsets)
+
+
+def test_route_b_v2_contract_declares_the_progress_guard() -> None:
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    contract, sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v2.json"
+    )
+    assert len(sha) == 64
+    guard = cast(dict, contract["progress_guard"])
+    assert guard["mode"] == "bounded_bearing_escape"
+    assert guard["confirmation_steps"] >= 2
+    assert set(guard["escape_offsets_sectors"]) == {1, -1, 2, -2}
+    assert guard["escape_hold_steps"] >= 2
+    resolved = store_runner._store_contract(contract, sha)
+    assert resolved["progress_guard"] == guard
+    v1, v1_sha = _goal_navigation_contract(ROOT / "configs/movement_goal_navigation_route_b_v1.json")
+    assert "progress_guard" not in v1
+    assert store_runner._store_contract(v1, v1_sha)["progress_guard"] is None
+
+
+def test_route_b_v2_contract_rejects_a_broken_progress_guard() -> None:
+    value = json.loads(
+        (ROOT / "configs/movement_goal_navigation_route_b_v2.json").read_text(encoding="utf-8")
+    )
+    for mutate in (
+        lambda item: item["progress_guard"].__setitem__("mode", "ad_hoc"),
+        lambda item: item["progress_guard"].__setitem__("escape_offsets_sectors", []),
+        lambda item: item["progress_guard"].__setitem__("escape_offsets_sectors", [9]),
+        lambda item: item["progress_guard"].__setitem__("confirmation_steps", 0),
+        lambda item: item["progress_guard"].__setitem__("escape_hold_steps", 0),
+    ):
+        value = json.loads(
+            (ROOT / "configs/movement_goal_navigation_route_b_v2.json").read_text(encoding="utf-8")
+        )
+        mutate(value)
+        with pytest.raises(MobileTestbedError):
+            store_runner._store_contract(value, "0" * 64)

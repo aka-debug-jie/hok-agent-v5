@@ -130,7 +130,34 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
         or block.get("schema_version") != MOBILE_NAVIGATION_STORE_CONTRACT_SCHEMA
     ):
         raise MobileTestbedError("mobile navigation store contract differs")
+    guard_raw = contract.get("progress_guard")
+    if guard_raw is not None and not isinstance(guard_raw, dict):
+        raise MobileTestbedError("mobile navigation store progress guard differs")
+    progress_guard = cast(dict[str, object] | None, guard_raw)
+    if progress_guard is not None:
+        offsets = progress_guard.get("escape_offsets_sectors")
+        if (
+            progress_guard.get("mode") != "bounded_bearing_escape"
+            or not isinstance(offsets, list)
+            or not cast(list[object], offsets)
+            or any(
+                not isinstance(item, int) or abs(int(item)) > 3
+                for item in cast(list[object], offsets)
+            )
+            or any(
+                not isinstance(progress_guard.get(key), (int, float))
+                or float(cast(float, progress_guard[key])) <= 0
+                for key in (
+                    "minimum_improvement_pixels",
+                    "confirmation_steps",
+                    "escape_hold_steps",
+                    "maximum_events_per_episode",
+                )
+            )
+        ):
+            raise MobileTestbedError("mobile navigation store progress guard differs")
     resolved = dict(block)
+    resolved["progress_guard"] = progress_guard
     resolved["policy_bundle_sha256"] = contract_sha
     resolved["event_engine_sha256"] = hashlib.sha256(
         json.dumps(block, sort_keys=True, separators=(",", ":")).encode()
@@ -342,6 +369,30 @@ def _transition(
     }
 
 
+_MOVEMENT_ORDER = (
+    "north", "north_east", "east", "south_east",
+    "south", "south_west", "west", "north_west",
+)
+
+
+def _rotate_direction(direction: str, sectors: int) -> str:
+    """Rotate a joystick direction by whole 45-degree sectors, wrapping around."""
+    if direction not in _MOVEMENT_ORDER:
+        raise MobileTestbedError("cannot rotate a non-direction")
+    index = _MOVEMENT_ORDER.index(direction)
+    return _MOVEMENT_ORDER[(index + sectors) % len(_MOVEMENT_ORDER)]
+
+
+def _progress_guard_offset(escape_step: int, hold_steps: int, offsets: list[int]) -> int:
+    """The bearing offset for one step of a bounded escape schedule."""
+    if hold_steps <= 0 or not offsets or escape_step < 0:
+        raise MobileTestbedError("progress guard escape schedule is invalid")
+    index = escape_step // hold_steps
+    if index >= len(offsets):
+        raise MobileTestbedError("progress guard escape schedule is exhausted")
+    return offsets[index]
+
+
 def _episode_outcome(
     *,
     arrived: bool,
@@ -393,6 +444,7 @@ class _NavigationRuntime:
     maximum_steps: int
     maximum_gap: int
     maximum_duration_seconds: float
+    progress_guard: dict[str, object] | None
     guard: DeviceGuard
     session: ScrcpyControlSession
     joystick: PersistentJoystick
@@ -458,6 +510,7 @@ def _prepare_navigation_runtime(
         maximum_duration_seconds=float(
             cast(float, contract.get("maximum_duration_seconds", 0.0))
         ),
+        progress_guard=cast(dict[str, object] | None, store_contract.get("progress_guard")),
         guard=guard,
         session=ScrcpyControlSession(guard.serial, 30),
         joystick=PersistentJoystick(execution_layout, guard.width, guard.height),
@@ -485,6 +538,42 @@ def _run_episode(
     previous_joystick = "wait"
     region_streak = 0
     missing_streak = 0
+    progress_guard = runtime.progress_guard
+    guard_offsets = (
+        [
+            int(cast(int, item))
+            for item in cast(list[object], progress_guard["escape_offsets_sectors"])
+        ]
+        if progress_guard is not None
+        else []
+    )
+    guard_hold = (
+        int(cast(int, progress_guard["escape_hold_steps"]))
+        if progress_guard is not None
+        else 0
+    )
+    guard_confirmation = (
+        int(cast(int, progress_guard["confirmation_steps"]))
+        if progress_guard is not None
+        else 0
+    )
+    guard_improvement = (
+        float(cast(float, progress_guard["minimum_improvement_pixels"]))
+        if progress_guard is not None
+        else 0.0
+    )
+    guard_max_events = (
+        int(cast(int, progress_guard["maximum_events_per_episode"]))
+        if progress_guard is not None
+        else 0
+    )
+    guard_escape_steps = len(guard_offsets) * guard_hold
+    best_distance: float | None = None
+    no_progress_streak = 0
+    escape_active = False
+    escape_steps = 0
+    guard_events = 0
+    guard_escape_steps_total = 0
     waypoint_index = 0
     pointer_messages = 0
     retry_total = 0
@@ -560,6 +649,26 @@ def _run_episode(
                 if position is None
                 else float(np.hypot(position[0] - target[0], position[1] - target[1]))
             )
+            if progress_guard is not None and distance is not None:
+                improved = best_distance is None or distance <= best_distance - guard_improvement
+                if improved:
+                    best_distance = distance
+                    no_progress_streak = 0
+                    if escape_active:
+                        escape_active = False
+                        escape_steps = 0
+                else:
+                    no_progress_streak += 1
+                if (
+                    not escape_active
+                    and no_progress_streak >= guard_confirmation
+                    and guard_events < guard_max_events
+                ):
+                    escape_active = True
+                    escape_steps = 0
+                    guard_events += 1
+                    best_distance = distance
+                    no_progress_streak = 0
             requested_joystick = "wait"
             if position is not None and not death and not outside_region:
                 requested_joystick = _goal_navigation_direction(
@@ -568,6 +677,22 @@ def _run_episode(
             applied_joystick, owner, reason = _route(
                 requested_joystick, known=known, death=death, outside_region=outside_region
             )
+            if (
+                escape_active
+                and progress_guard is not None
+                and not death
+                and applied_joystick != "wait"
+                and escape_steps < guard_escape_steps
+            ):
+                offset = _progress_guard_offset(escape_steps, guard_hold, guard_offsets)
+                applied_joystick = _rotate_direction(applied_joystick, offset)
+                escape_steps += 1
+                guard_escape_steps_total += 1
+                owner = "deterministic_router"
+                reason = "progress_guard_escape"
+            elif escape_active and escape_steps >= guard_escape_steps:
+                escape_active = False
+                escape_steps = 0
             requested = JOYSTICK_TO_STORE_DIRECTION[requested_joystick]
             applied = JOYSTICK_TO_STORE_DIRECTION[applied_joystick]
             command = _movement_command(previous_applied, applied)
@@ -679,6 +804,9 @@ def _run_episode(
                     "final_status": status,
                     "done": done,
                     "abort_reason": abort_reason,
+                    "progress_guard_escape": escape_active,
+                    "progress_guard_escape_step": escape_steps,
+                    "progress_guard_events": guard_events,
                     "terminal_reason": terminal_reason,
                     "training_eligible": stored.payload["training_eligible"],
                 }
@@ -725,6 +853,8 @@ def _run_episode(
         and all(row["final_status"] in {"acknowledged", "noop"} for row in steps),
         "failure": failure,
         "abort_reason": abort_reason,
+        "progress_guard_events": guard_events,
+        "progress_guard_escape_steps": guard_escape_steps_total,
         "duration_seconds": round(time.monotonic() - started, 8),
         "step_rows": steps,
     }

@@ -817,6 +817,35 @@ NEXT_DECISION: either fund the stall guard and the route B re-run, or record rou
   over a bounded window and change the bearing), which is now evidence-driven rather than defensive,
   then re-run route B under unchanged gates. This step used 28,607,477 new bytes.
 
+### Progress guard fires and escapes, but is not region-aware (2026-09-21)
+
+- `configs/movement_goal_navigation_route_b_v2.json` (`c6cbbb51`) adds a declared `progress_guard`:
+  a bounded bearing escape with a 0.5 px minimum improvement, a 3-step confirmation, offsets of
+  +1/-1/+2/-2 sectors held for 3 steps each, and 8 events per episode. One trigger covers both route
+  B failure modes, because neither a stall nor a non-converging oscillation improves the
+  running-minimum distance to the target.
+- Two wiring defects were found and fixed while bringing it live, both silent and both caught only by
+  the live run:
+  - the guard locals were first named `guard`, shadowing the `DeviceGuard` already bound in the same
+    function (the same shadowing class as the earlier `deadline` bug);
+  - `_store_contract` returns the **store block**, so a top-level `progress_guard` never reached the
+    runtime and the guard was silently `None`, which is why the first re-run reported zero events.
+    A test now asserts the resolved block carries the guard.
+- Live result: the guard fires and escapes, so the mechanism works. `route-b-batch-3` records 6, 3
+  and 4 events with 23, 6 and 7 escape steps, all written per step and recoverable in the Store
+  (`mobile-navigation-verify --all`: `recoverable=true`, 121 transitions, no findings).
+- **Route B still arrives in none of three episodes**, and now for a new, clearly diagnosed reason:
+  the rotated escape bearings are not region-aware, so the escape drives the hero **out of the
+  declared free-movement region** and the episode ends as `SAFETY_STOP` at x=34.6, x=100.9 and
+  x=15.7 against the region bounds 35 and 95. The fix therefore traded a stall for a region
+  violation rather than reaching arrivals.
+- Infrastructure gates again all passed: 121 transitions, 3 terminal transitions, store integrity ok,
+  backlog-free, zero retries, stable binding.
+- Recorded next step: make the escape region-aware (skip or re-rank an offset whose direction would
+  leave the free-movement region from the current position), then re-run route B under unchanged
+  gates. Until then the chain's validated scope remains the two-waypoint diagonal. This step used
+  18,180,327 new bytes.
+
 ### 2026-09-09 development review and factual corrections
 
 - Code inspection: `run_change_geometry_replay` in movement_goal_canvas.py appends plain step
