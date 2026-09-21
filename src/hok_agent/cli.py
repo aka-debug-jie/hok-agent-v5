@@ -875,8 +875,25 @@ def _parser() -> argparse.ArgumentParser:
         help="reload one committed device navigation episode and verify its frames",
     )
     navigation_verify.add_argument("--store", type=Path, required=True)
-    navigation_verify.add_argument("--episode-id", required=True)
+    navigation_verify.add_argument("--episode-id")
     navigation_verify.add_argument("--frame-root", type=Path, required=True)
+    navigation_verify.add_argument(
+        "--all",
+        action="store_true",
+        help="verify every episode in the store plus its integrity",
+    )
+    navigation_store_batch = commands.add_parser(
+        "mobile-navigation-store-batch",
+        help="run several consecutive device navigation episodes on one store (L2 gate)",
+    )
+    navigation_store_batch.add_argument("--serial", required=True)
+    navigation_store_batch.add_argument("--config", type=Path, required=True)
+    navigation_store_batch.add_argument("--visual-layout", type=Path, required=True)
+    navigation_store_batch.add_argument("--execution-layout", type=Path, required=True)
+    navigation_store_batch.add_argument("--observation-rois", type=Path, required=True)
+    navigation_store_batch.add_argument("--output-dir", type=Path, required=True)
+    navigation_store_batch.add_argument("--episodes", type=int, default=3)
+    navigation_store_batch.add_argument("--enable-input", action="store_true")
     operation_side = commands.add_parser(
         "mobile-operation-team-side",
         help="detect blue or red side from the loading-panel self highlight",
@@ -3058,12 +3075,35 @@ def main(argv: Sequence[str] | None = None) -> int:
                 enable_input=args.enable_input,
             )
         elif args.command == "mobile-navigation-verify":
-            from hok_agent.mobile_navigation_store import verify_mobile_navigation_episode
+            from hok_agent.mobile_navigation_store import (
+                verify_mobile_navigation_episode,
+                verify_mobile_navigation_store,
+            )
 
-            result = verify_mobile_navigation_episode(
-                store_path=args.store,
-                episode_id=args.episode_id,
-                frame_root=args.frame_root,
+            if args.all:
+                result = verify_mobile_navigation_store(
+                    store_path=args.store, frame_root=args.frame_root
+                )
+            elif args.episode_id:
+                result = verify_mobile_navigation_episode(
+                    store_path=args.store,
+                    episode_id=args.episode_id,
+                    frame_root=args.frame_root,
+                )
+            else:
+                raise SystemExit("mobile-navigation-verify needs --episode-id or --all")
+        elif args.command == "mobile-navigation-store-batch":
+            from hok_agent.mobile_navigation_store import run_mobile_navigation_episodes
+
+            result = run_mobile_navigation_episodes(
+                serial=args.serial,
+                contract_path=args.config,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
+                episodes=args.episodes,
+                enable_input=args.enable_input,
             )
         elif args.command == "mobile-operation-team-side":
             from hok_agent.mobile_testbed import detect_mobile_operation_team_side

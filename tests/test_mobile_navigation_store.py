@@ -127,18 +127,19 @@ def test_movement_command_covers_every_transition() -> None:
 
 def test_router_masks_keep_requested_and_applied_separate() -> None:
     route = store_runner._route
-    assert route("E", known=True, death=False, outside_region=False) == (
-        "E",
+    assert route("east", known=True, death=False, outside_region=False) == (
+        "east",
         "geometry_rule",
         "geometry_rule",
     )
-    assert route("E", known=True, death=True, outside_region=False)[0] == "STOP"
-    assert route("E", known=True, death=False, outside_region=True)[0] == "STOP"
-    assert route("E", known=False, death=False, outside_region=False) == (
-        "STOP",
+    assert route("east", known=True, death=True, outside_region=False)[0] == "wait"
+    assert route("east", known=True, death=False, outside_region=True)[0] == "wait"
+    assert route("east", known=False, death=False, outside_region=False) == (
+        "wait",
         "deterministic_router",
         "unknown_position",
     )
+    assert store_runner.JOYSTICK_TO_STORE_DIRECTION["wait"] == "STOP"
 
 
 def test_direction_vocabulary_round_trips() -> None:
@@ -269,3 +270,106 @@ def test_verify_requires_a_terminal_transition(tmp_path: Path) -> None:
     )
     assert report["recoverable"] is False
     assert "terminal_transition_missing" in cast(list[str], report["findings"])
+
+
+def test_store_lists_episodes_and_reports_integrity(tmp_path: Path) -> None:
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    database = tmp_path / "transitions.sqlite3"
+    with UnifiedTransitionStore(database) as store:
+        assert store.episode_ids() == ()
+        assert store.integrity() == "ok"
+        packets = _chain(frames, 1, "ep-a")
+        store.append(  # type: ignore[arg-type]
+            cast(
+                "object",
+                _row(
+                    packets[0],
+                    packets[1],
+                    step_id=0,
+                    done=True,
+                    reason="NAVIGATION_GOAL_REACHED",
+                    end_kind="TERMINATED",
+                ),
+            )
+        )
+        assert store.episode_ids() == ("ep-a",)
+
+
+def test_verify_store_covers_every_episode_and_integrity(tmp_path: Path) -> None:
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    database = tmp_path / "transitions.sqlite3"
+    with UnifiedTransitionStore(database) as store:
+        for episode_id in ("ep-a", "ep-b"):
+            packets = _chain(frames, 1, episode_id)
+            stored = store.append(  # type: ignore[arg-type]
+                cast(
+                    "object",
+                    _row(
+                        packets[0],
+                        packets[1],
+                        step_id=0,
+                        done=True,
+                        reason="NAVIGATION_GOAL_REACHED",
+                        end_kind="TERMINATED",
+                    ),
+                )
+            )
+            assert stored.validation.valid, stored.validation.errors
+    report = store_runner.verify_mobile_navigation_store(
+        store_path=database, frame_root=frames
+    )
+    assert report["recoverable"] is True
+    assert report["episodes"] == 2
+    assert report["episode_ids"] == ["ep-a", "ep-b"]
+    assert report["transitions"] == 2
+    assert report["store_integrity"] == "ok"
+    assert report["findings"] == []
+
+    empty = tmp_path / "empty.sqlite3"
+    with UnifiedTransitionStore(empty):
+        pass
+    blank = store_runner.verify_mobile_navigation_store(
+        store_path=empty, frame_root=frames
+    )
+    assert blank["recoverable"] is False
+    assert blank["episodes"] == 0
+
+
+def test_batch_runner_rejects_a_bad_episode_count(tmp_path: Path) -> None:
+    with pytest.raises(MobileTestbedError):
+        store_runner.run_mobile_navigation_episodes(
+            serial="unused",
+            contract_path=STORE_CONTRACT,
+            visual_layout_path=tmp_path,
+            execution_layout_path=tmp_path,
+            observation_rois_path=tmp_path,
+            output_dir=tmp_path / "out",
+            episodes=0,
+        )
+
+
+def test_batch_episode_ids_are_distinct_and_ordered() -> None:
+    contract, sha = _goal_navigation_contract(STORE_CONTRACT)
+    prefix = cast(str, cast(dict, contract["store"])["episode_prefix"])
+    base = store_runner._episode_id(prefix, sha)
+    ids = [f"{base}-{ordinal:02d}" for ordinal in range(1, 4)]
+    assert len(set(ids)) == 3
+    assert ids[0] < ids[1] < ids[2]
+    assert all(item.startswith(base) for item in ids)
+
+
+def test_router_output_is_always_a_joystick_direction() -> None:
+    """Regression: the router must stay in the joystick vocabulary for every mask."""
+    for death in (False, True):
+        for outside_region in (False, True):
+            for known in (False, True):
+                applied, owner, reason = store_runner._route(
+                    "east", known=known, death=death, outside_region=outside_region
+                )
+                assert applied in store_runner.JOYSTICK_TO_STORE_DIRECTION, (applied, reason)
+                assert store_runner.STORE_TO_JOYSTICK_DIRECTION[
+                    store_runner.JOYSTICK_TO_STORE_DIRECTION[applied]
+                ] == applied
+                assert owner in {"geometry_rule", "deterministic_router"}

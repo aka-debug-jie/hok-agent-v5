@@ -496,6 +496,16 @@ class UnifiedTransitionStore:
             cast(HierarchicalTransitionRecord, json.loads(encoded)) for (encoded,) in cursor
         )
 
+    def episode_ids(self) -> tuple[str, ...]:
+        cursor = self._require_connection().execute(
+            "SELECT DISTINCT episode_id FROM transitions ORDER BY episode_id"
+        )
+        return tuple(str(row[0]) for row in cursor)
+
+    def integrity(self) -> str:
+        row = self._require_connection().execute("PRAGMA integrity_check").fetchone()
+        return "unknown" if row is None else str(row[0])
+
     def count(self, *, training_only: bool = False) -> int:
         query = "SELECT COUNT(*) FROM transitions"
         if training_only:
