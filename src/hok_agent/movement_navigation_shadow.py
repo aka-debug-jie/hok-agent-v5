@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -11,6 +12,7 @@ from typing import cast
 
 import numpy as np
 
+from hok_agent.mobile_navigation_store import JOYSTICK_TO_STORE_DIRECTION
 from hok_agent.movement_mvp import StageAMovement, _movement_command
 from hok_agent.movement_real_rgb import (
     _file_sha256,
@@ -20,6 +22,11 @@ from hok_agent.movement_real_rgb import (
     _mask_components,
     _object_sha256,
     _player_candidates,
+)
+from hok_agent.traversability_probe import (
+    analyse_probe_pulses,
+    probe_grid_block,
+    validate_probe_analysis,
 )
 
 _MOVEMENT_VECTORS = {
@@ -1707,6 +1714,206 @@ def run_active_probe_forensics(
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.tmp-", dir=output_dir.parent))
     try:
+        (staging / "report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(staging, output_dir)
+    except BaseException:
+        if staging.exists():
+            for path in staging.iterdir():
+                path.unlink()
+            staging.rmdir()
+        raise
+    return report
+
+
+def run_traversability_probe_analysis(
+    contract_path: Path, analysis_path: Path, session_root: Path, output_dir: Path
+) -> dict[str, object]:
+    """Turn a controlled response probe into a drift-corrected per-cell traversability grid.
+
+    Two contracts are bound because they answer different questions: the session contract fixes the
+    cue, the colour gates and the schedule that produced the persisted frames, while the analysis
+    contract declares the cell size, the sample floor and the idle margin. Recording both digests
+    keeps a grid from being attributed to the wrong instrument.
+
+    Position is recovered offline from the persisted minimap frames with the same frozen cue the
+    A-gate used; the probe persists no coordinates, and the frozen detector is read only, never
+    retuned.
+    """
+    started = time.monotonic()
+    contract = _load_bound_json(contract_path, "contract_sha256")
+    directions = tuple(cast(list[str], contract.get("directions", [])))
+    if (
+        contract.get("schema_version") != "movement-active-probe-contract-v1"
+        or contract.get("training_allowed") is not False
+        or contract.get("test_allowed") is not False
+        or directions != _PROBE_DIRECTIONS
+    ):
+        raise ValueError("traversability probe contract differs")
+    analysis_contract = _load_bound_json(analysis_path, "contract_sha256")
+    analysis_block = cast(dict[str, object], analysis_contract.get("traversability_analysis", {}))
+    validate_probe_analysis(analysis_block)
+    if session_root.is_symlink() or not session_root.is_dir():
+        raise ValueError("traversability probe session root differs")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("traversability probe output already exists")
+    sessions_required = int(cast(int, contract["sessions_required"]))
+    directories = sorted(
+        path
+        for path in session_root.iterdir()
+        if path.is_dir() and (path / "summary.json").is_file()
+    )
+    if not directories or len(directories) > sessions_required:
+        raise ValueError("traversability probe session count differs")
+    measurement = cast(dict[str, object], contract["measurement"])
+    gap_ms = int(cast(int, measurement["maximum_gap_to_analysis_frame_ms"]))
+    hold_ms = int(cast(int, contract["hold_ms"]))
+    cue_contract: dict[str, object] = {
+        "color": contract["color"],
+        "components": contract["components"],
+    }
+    exclusion = cast(
+        tuple[int, int, int, int],
+        tuple(map(int, cast(list[int], contract["excluded_ui_xyxy"]))),
+    )
+    observations: list[dict[str, object]] = []
+    idle_speeds: list[float] = []
+    per_session: dict[str, object] = {}
+    opened_shards: list[dict[str, object]] = []
+    for directory in directories:
+        bundle, opened = _load_forensic_session(directory, contract)
+        opened_shards.extend(opened)
+        frames = cast(np.ndarray, bundle["frames"])
+        times = cast(np.ndarray, bundle["times"])
+        events = cast(list[dict[str, object]], bundle["events"])
+        interior, _fixed = _probe_frame_candidates(frames, cue_contract, exclusion)
+        tracked = np.asarray(
+            [
+                _probe_unique_position(interior[index]) or (float("nan"), float("nan"))
+                for index in range(len(frames))
+            ],
+            dtype=np.float64,
+        )
+        localized = ~np.isnan(tracked[:, 0])
+        localized_times = times[localized]
+        localized_positions = tracked[localized]
+        pulses = 0
+        paired = 0
+        refused = 0
+        for event in events:
+            if event.get("kind") != "pulse":
+                continue
+            pulses += 1
+            press_ack_ms = int(cast(int, event["press_ack_ms"]))
+            release_ack_ms = int(cast(int, event["release_ack_ms"]))
+            press = _forensic_delta(
+                localized_times, localized_positions, press_ack_ms, release_ack_ms, gap_ms
+            )
+            bearing = JOYSTICK_TO_STORE_DIRECTION.get(str(event["direction"]))
+            if press is None or bearing is None:
+                refused += 1
+                continue
+            start_frame = int(cast(int, press["start_frame"]))
+            paired += 1
+            observations.append(
+                {
+                    "position": [
+                        float(localized_positions[start_frame][0]),
+                        float(localized_positions[start_frame][1]),
+                    ],
+                    "direction": bearing,
+                    "dy": float(cast(float, press["dy"])),
+                    "dx": float(cast(float, press["dx"])),
+                    "movement_ms": float(hold_ms),
+                }
+            )
+        control_windows = 0
+        for event in events:
+            if event.get("kind") != "control":
+                continue
+            window = _forensic_delta(
+                localized_times,
+                localized_positions,
+                int(cast(int, event["window_start_ms"])),
+                int(cast(int, event["window_end_ms"])),
+                gap_ms,
+            )
+            if window is None:
+                continue
+            span_ms = int(cast(int, event["window_end_ms"])) - int(
+                cast(int, event["window_start_ms"])
+            )
+            if span_ms <= 0:
+                continue
+            control_windows += 1
+            idle_speeds.append(
+                math.hypot(float(cast(float, window["dy"])), float(cast(float, window["dx"])))
+                / span_ms
+                * 100.0
+            )
+        per_session[directory.name] = {
+            "frames": len(frames),
+            "localized_frames": int(localized.sum()),
+            "control_windows_measured": control_windows,
+            "pulses": pulses,
+            "paired_pulses": paired,
+            "refused_pulses": refused,
+        }
+    # The idle bound comes from windows in which nothing was commanded. A window glued to the
+    # previous press is not neutral: under an opposite-pairs schedule it carries the opposite
+    # bearing's residual motion, and subtracting it doubles the estimate instead of correcting it.
+    idle_rate_per_100ms = (
+        float(np.percentile(np.asarray(idle_speeds, dtype=np.float64), 95)) if idle_speeds else 0.0
+    )
+    analysis = analyse_probe_pulses(
+        observations,
+        cell_pixels=float(cast(float, analysis_block["cell_pixels"])),
+        minimum_pulses=int(cast(int, analysis_block["minimum_pulses"])),
+        idle_margin_pixels=float(cast(float, analysis_block["idle_margin_pixels"])),
+        idle_rate_per_100ms=idle_rate_per_100ms,
+    )
+    block = probe_grid_block(
+        analysis,
+        cell_pixels=float(cast(float, analysis_block["cell_pixels"])),
+        press_ms=float(hold_ms),
+        idle_rate_per_100ms=idle_rate_per_100ms,
+        minimum_samples=int(cast(int, analysis_block["minimum_pulses"])),
+        minimum_rate_per_100ms=float(cast(float, analysis_block["minimum_rate_per_100ms"])),
+        nominal_step_pixels=float(cast(float, analysis_block["nominal_step_pixels"])),
+        source_sessions=[directory.name for directory in directories],
+    )
+    report: dict[str, object] = {
+        "schema_version": "hok-agent-traversability-probe-report-v1",
+        "status": "PASSED" if observations else "FAILED",
+        "contract": str(contract_path),
+        "contract_sha256": contract["contract_sha256"],
+        "analysis_contract": str(analysis_path),
+        "analysis_contract_sha256": analysis_contract["contract_sha256"],
+        "session_root": str(session_root),
+        "sessions": per_session,
+        "hold_ms": hold_ms,
+        "idle_rate_per_100ms": idle_rate_per_100ms,
+        "idle_speed_samples": len(idle_speeds),
+        "observations": len(observations),
+        "opened_shards": opened_shards,
+        "coverage": block["coverage"],
+        "diagnostics": cast(dict[str, object], block["probe"])["diagnostics"],
+        "grid_sha256": hashlib.sha256(
+            json.dumps(block, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest(),
+        "wall_seconds": round(time.monotonic() - started, 3),
+        "training_allowed": False,
+        "test_allowed": False,
+    }
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent)
+    )
+    try:
+        (staging / "grid.json").write_text(
+            json.dumps(block, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         (staging / "report.json").write_text(
             json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )

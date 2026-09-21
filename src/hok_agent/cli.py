@@ -82,6 +82,7 @@ def _parser() -> argparse.ArgumentParser:
             "action-response-identity-audit",
             "active-probe-audit",
             "active-probe-forensics",
+            "traversability-probe-analysis",
             "real-player-tracking-audit",
             "real-player-flow-audit",
             "joystick-visibility",
@@ -138,6 +139,11 @@ def _parser() -> argparse.ArgumentParser:
     movement_mvp.add_argument("--geometric-base", action="store_true")
     movement_mvp.add_argument("--target-root", type=Path)
     movement_mvp.add_argument("--prior-report", type=Path)
+    movement_mvp.add_argument(
+        "--analysis",
+        type=Path,
+        help="contract declaring the traversability probe analysis parameters",
+    )
     movement_mvp.add_argument("--goal-canvas-report", type=Path)
     movement_mvp.add_argument("--overfit-report", type=Path)
     movement_mvp.add_argument("--session-root", type=Path)
@@ -1947,6 +1953,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 result = run_active_probe_audit(
                     args.config, args.session_root, args.output_dir
+                )
+            elif args.mode == "traversability-probe-analysis":
+                if args.session_root is None or args.analysis is None:
+                    raise ValueError(
+                        "traversability-probe-analysis requires --session-root and --analysis"
+                    )
+                from hok_agent.movement_navigation_shadow import (
+                    run_traversability_probe_analysis,
+                )
+
+                result = run_traversability_probe_analysis(
+                    args.config, args.analysis, args.session_root, args.output_dir
                 )
             elif args.mode == "active-probe-forensics":
                 if args.session_root is None:
