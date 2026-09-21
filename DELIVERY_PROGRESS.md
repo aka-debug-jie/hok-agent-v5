@@ -14,17 +14,17 @@ Only this section schedules work; all experiment entries below are historical ev
 ```text
 OBJECTIVE: prepare the bounded multi-direction active probe for no-source identity and control
 STATUS: RUNNING
-NEXT_ACTION: the no-source identity/control gate and the goal-navigation milestone have passed; select the next milestone from the convergence plan
-INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v9, the offline forensics verdict, the bounded control checks, the passing v9 probe batch and the passing goal-navigation sessions
-CHANGED_FILES: probe contracts v1-v9, goal-navigation contract v1, audit, forensics, hero-cue tracker and fallback, joystick press settle, paced probe loop, goal-navigation runner, declared region/stall/drift guards, planner, runner/CLI and focused tests
+NEXT_ACTION: finish the A-stage staged admission (1 -> 3 -> 10) with contract a3: place the hero on the open map, confirm the final-approach hold removes the near-target limit cycle, then re-run the staged driver
+INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v9, the offline forensics verdict, the bounded control checks, the passing v9 probe batch, the passing goal-navigation sessions, the 704 recorded A-gate minimap frames, the persisted minimap frames of the failed staged rounds, and the live guarded movement, fade and reposition diagnostics
+CHANGED_FILES: probe contracts v1-v9, goal-navigation contracts v1 and a1-a3, audit, forensics, hero-cue tracker and fallback, the masked-ZNCC template tracker and its contract block, re-acquisition gating and event accounting, final-approach hold, opt-in minimap-frame persistence, joystick press settle, paced probe loop, goal-navigation runner, declared region/stall/drift guards, planner, runner/CLI and focused tests
 PRIMARY_METRIC: pre-registered coverage/fate accounting, pulse-versus-control separation and waypoint arrival
 BASELINE: v1 audit reported paired-event responses only, with no release semantics or denominators
-RESULT: two milestones passed on 2026-09-20; the no-source identity and control gate passed with batch `active-probe-v25` under contract v9 (`92594112`), audit report `c1491607`, both sessions verified with direction consistency 1.0, median commanded projection 9.87 and 10.12 px, paired responses 7.2-11.2 px, coverage 1.0 and zero identity switches; the goal-navigation milestone then passed with `goal-navigation-v8-1` and `goal-navigation-v8-2` under contract `b9f53e37`, both reaching all three declared waypoints and stopping on arrival with final errors 3.03 and 2.98 px, localization fractions 0.92 and 0.91, zero identity switches and every gate true; the earlier probe batches failed for three separate reasons that are now fixed (the joystick press and drag were sent 0.2-0.6 ms apart, the probe loop spun without sleeping and starved the response, and the minimap cue went blind over parts of the map), and the frozen player detector was not retuned
+RESULT: two milestones passed on 2026-09-20; the no-source identity and control gate passed with batch `active-probe-v25` under contract v9 (`92594112`), audit report `c1491607`, both sessions verified with direction consistency 1.0, median commanded projection 9.87 and 10.12 px, paired responses 7.2-11.2 px, coverage 1.0 and zero identity switches; the goal-navigation milestone then passed with `goal-navigation-v8-1` and `goal-navigation-v8-2` under contract `b9f53e37`, both reaching all three declared waypoints and stopping on arrival with final errors 3.03 and 2.98 px, localization fractions 0.92 and 0.91, zero identity switches and every gate true; the earlier probe batches failed for three separate reasons that are now fixed (the joystick press and drag were sent 0.2-0.6 ms apart, the probe loop spun without sleeping and starved the response, and the minimap cue went blind over parts of the map), and the frozen player detector was not retuned; on 2026-09-21 the A-stage blocker was traced to the association gate rather than the detector (the frozen cue localises 704/704 on the recorded A-gate frames and the hero marker was present in every frame of the failing round, while the 8 px gate rejected a 9-13 px legitimate step and then froze the previous position), a masked-ZNCC template tracker was implemented and then rejected on evidence because the adjacent chasing enemy marker contaminates the template, and the corrected contract a3 sizes the association gate to one observation, applies a 30 px re-acquisition gate only after a lost frame, and shortens the final-approach hold to 400 ms; offline replay of the failed rounds raises localisation from 0.230 and 0.027 to 0.986, and the live staged runs reached stage 10 with 11/14 arrivals and stage 3 with 3/4 rounds at localisation 1.000, so the staged 1 -> 3 -> 10 admission has not yet passed
 ENGINEERING_HOURS_USED_AND_CAP: not instrumented yet, cap 4 h
 GPU_SECONDS: 0, cap 0
-NEW_BYTES: 531,306,357 used by the active-probe and goal-navigation lineages to date (531,241,179 probe plus 65,178 goal-navigation); the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit
+NEW_BYTES: 561,628,269 used by the active-probe and goal-navigation lineages to date (531,241,179 probe plus 65,178 goal-navigation plus 30,321,912 for the a2/a3 goal-navigation runs and their persisted minimap frames); the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit
 STOP_REASON: none; the owner rejected the data-source-limited stop and directed continuation with the same no-source constraint
-NEXT_DECISION: both current milestones are recorded; decide the next milestone
+NEXT_DECISION: re-validate the final-approach hold live and complete the staged admission, or keep the A stage blocked and report the remaining control limit cycle
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -322,6 +322,44 @@ NEXT_DECISION: both current milestones are recorded; decide the next milestone
   reliability limit, which the short milestone run did not.
 - Next work is a more reliable hero cue for closed-loop navigation over longer routes; the staged
   driver itself is ready and unchanged by that work.
+
+### Hero-cue root cause, the rejected template branch and the corrected A contract (2026-09-21)
+
+- The A-stage blocker was not the detector. On the 704 recorded A-gate minimap frames the frozen
+  green cue localises 704/704, and in the failing navigation round the hero's green marker was
+  present in every frame. The loss was the association gate: the hero legitimately moves 9-13 px
+  between two 1.2 s observations, so an 8 px gate rejected the marker, `previous_position` was
+  then frozen, and the cue never recovered until its 10-frame reset.
+- A masked normalised-cross-correlation template tracker was implemented (pure NumPy, no OpenCV),
+  tested, and validated on the recorded frames, then rejected on evidence. The player's marker is
+  always adjacent to a chasing enemy marker, so a colour-masked template is contaminated by the
+  enemy's ring and self-matches its original location (score 0.30 at the stale position against
+  0.05 at the true hero), and a geometric mask makes the ring template translation-tolerant and
+  equally sticky. The tracker and its contract block remain available behind `hero_template`, but
+  no contract enables them; this is a recorded negative result, not a working feature.
+- Widening the extension pair distance (the earlier a1 attempt) was the wrong knob: it widens the
+  ungated `paired` branch and produced the identity jumps. The gated association distance is the
+  correct knob.
+- Corrected contract `configs/movement_goal_navigation_a3.json` (`ab4f5b50`): association 14 px,
+  re-acquisition 30 px applied only after a lost frame, pair distance kept at 7 px,
+  `allow_green_fallback` true, a `maximum_consecutive_violation_frames` guard, and a shorter
+  `final_approach_hold_ms` of 400 ms inside `final_approach_distance_pixels` of 12 px so the hero
+  can converge instead of limit-cycling. The runner now reports `reacquisition_events` separately
+  from `identity_switch_events`, so a recovery after a lost frame is not counted as an identity
+  error. `mobile-goal-navigation` and `mobile-goal-navigation-staged` gained an opt-in
+  `--persist-minimap-frames` diagnostic that writes derived minimap shards under `HOK_LARGE_ROOT`.
+- Offline replay of the two failed rounds of `goal-navigation-a3-staged-1` raises localisation
+  from 0.230 and 0.027 to 0.986 with zero identity switches and no accepted step above the gate.
+- Live staged runs: `goal-navigation-a3-staged-1` reached stage 10 with 11/14 arrivals (stages 1
+  and 3 passed; two stage-10 rounds lost the cue and one round limit-cycled 8 px from the target).
+  `goal-navigation-a3-staged-2` passed stage 1 and 3 of 4 stage-3 rounds at localisation 1.000,
+  failing one round on the same 8 px limit cycle. `goal-navigation-a3-staged-3` could not start
+  because the hero had respawned at the fountain, whose marker sits inside the declared fixed-UI
+  box, so the cue returned nothing and the runner sent no input for the whole run.
+- The staged 1 -> 3 -> 10 admission has not yet passed. Two blockers remain: the near-target limit
+  cycle (addressed by the final-approach hold, not yet re-validated live) and the fountain or
+  out-of-region start, which needs the hero placed on the open map because the fountain marker is
+  excluded and the runner then idles. This run used 30,321,912 new bytes.
 
 ### 2026-09-09 development review and factual corrections
 

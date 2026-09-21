@@ -1724,3 +1724,160 @@ def test_goal_navigation_staged_rejects_invalid_inputs(tmp_path: Path) -> None:
                 stages=stages,
                 takeovers=takeovers,
             )
+
+
+def _goal_navigation_marker_frame(center_y: int, center_x: int) -> np.ndarray:
+    frame = np.zeros((128, 128, 3), dtype=np.uint8)
+    frame[center_y - 6 : center_y + 6, center_x - 6 : center_x + 6] = (0, 200, 0)
+    frame[center_y - 3 : center_y + 3, center_x - 3 : center_x + 3] = (200, 0, 0)
+    return frame
+
+
+def test_goal_navigation_template_tracks_a_shifted_marker() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, _ = mobile_testbed._goal_navigation_contract(
+        root / "configs/movement_goal_navigation_a2.json"
+    )
+    config = contract["hero_template"]
+    assert isinstance(config, dict)
+    first = _goal_navigation_marker_frame(60, 60)
+    template = mobile_testbed._goal_navigation_build_template(
+        first, (60.0, 60.0), config["template_half_size"], contract, config["minimum_marker_pixels"]
+    )
+    assert template is not None
+    assert template.marker_pixels >= config["minimum_marker_pixels"]
+    assert len(template.sha256) == 64
+    moved = _goal_navigation_marker_frame(66, 63)
+    match = mobile_testbed._goal_navigation_match_template(
+        moved, template, (60.0, 60.0), config["search_radius"], config["minimum_score"]
+    )
+    assert match is not None
+    score, position_y, position_x = match
+    assert score > 0.9
+    assert abs(position_y - 66.0) < 1.0
+    assert abs(position_x - 63.0) < 1.0
+    assert (
+        mobile_testbed._goal_navigation_match_template(
+            np.zeros((128, 128, 3), dtype=np.uint8),
+            template,
+            (60.0, 60.0),
+            config["search_radius"],
+            config["minimum_score"],
+        )
+        is None
+    )
+
+
+def test_goal_navigation_template_rejects_a_marker_free_patch() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, _ = mobile_testbed._goal_navigation_contract(
+        root / "configs/movement_goal_navigation_a2.json"
+    )
+    config = contract["hero_template"]
+    assert isinstance(config, dict)
+    assert (
+        mobile_testbed._goal_navigation_build_template(
+            np.zeros((128, 128, 3), dtype=np.uint8),
+            (64.0, 64.0),
+            config["template_half_size"],
+            contract,
+            config["minimum_marker_pixels"],
+        )
+        is None
+    )
+
+
+def test_goal_navigation_tracked_cue_bootstraps_then_resets() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, _ = mobile_testbed._goal_navigation_contract(
+        root / "configs/movement_goal_navigation_a2.json"
+    )
+    config = contract["hero_template"]
+    assert isinstance(config, dict)
+    state = mobile_testbed._GoalNavigationTemplateState()
+    positions = []
+    for index, offset in enumerate((0, 3, 6, 8)):
+        frame = _goal_navigation_marker_frame(60, 60 + offset)
+        positions.append(
+            mobile_testbed._goal_navigation_tracked_cue(frame, contract, state, index)
+        )
+    assert all(position is not None for position in positions)
+    assert state.seed_frame == 0
+    assert state.template is not None
+    assert state.matches == 3
+    for index in range(config["missing_frames_before_reset"] + 2):
+        frame = np.zeros((128, 128, 3), dtype=np.uint8)
+        assert (
+            mobile_testbed._goal_navigation_tracked_cue(
+                frame, contract, state, 4 + index
+            )
+            is None
+        )
+    assert state.template is None
+    assert state.previous is None
+
+
+def test_goal_navigation_a2_contract_rejects_template_tampering(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    value = json.loads(
+        (root / "configs/movement_goal_navigation_a2.json").read_text(encoding="utf-8")
+    )
+    value["hero_template"]["minimum_score"] = 0.0
+    tampered = tmp_path / "goal-a2.json"
+    tampered.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(mobile_testbed.MobileTestbedError):
+        mobile_testbed._goal_navigation_contract(tampered)
+
+
+def test_goal_navigation_a3_sizes_the_gates_to_measured_displacement() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, digest = mobile_testbed._goal_navigation_contract(
+        root / "configs/movement_goal_navigation_a3.json"
+    )
+    assert len(digest) == 64
+    assert "hero_template" not in contract
+    tracker = contract["hero_tracker"]
+    extension = contract["hero_cue_extension"]
+    assert isinstance(tracker, dict) and isinstance(extension, dict)
+    assert tracker["maximum_association_l1_distance"] == 14.0
+    assert extension["maximum_reacquisition_l1_distance"] == 30.0
+    assert extension["maximum_pair_l1_distance"] == 7.0
+    assert extension["allow_green_fallback"] is True
+    assert contract["free_movement_region"]["maximum_consecutive_violation_frames"] == 10
+    assert contract["final_approach_distance_pixels"] == 12.0
+    assert contract["final_approach_hold_ms"] == 400
+
+
+def test_goal_navigation_cue_reacquires_after_a_large_legitimate_step() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, _ = mobile_testbed._goal_navigation_contract(
+        root / "configs/movement_goal_navigation_a3.json"
+    )
+    previous = (64.0, 64.0)
+
+    def green_ring(center_y: int, center_x: int) -> np.ndarray:
+        frame = np.zeros((128, 128, 3), dtype=np.uint8)
+        frame[center_y - 5 : center_y + 5, center_x - 5 : center_x + 5] = (0, 200, 0)
+        return frame
+
+    assert mobile_testbed._goal_navigation_cue(green_ring(80, 80), contract, previous) is None
+    assert mobile_testbed._goal_navigation_cue(green_ring(74, 74), contract, previous) is None
+    position = mobile_testbed._goal_navigation_cue(green_ring(72, 70), contract, previous)
+    assert position is not None
+    assert abs(position[0] - 72.0) < 1.0
+    assert abs(position[1] - 70.0) < 1.0
+
+
+def test_goal_navigation_cue_widens_the_gate_only_while_reacquiring() -> None:
+    root = Path(__file__).resolve().parents[1]
+    contract, _ = mobile_testbed._goal_navigation_contract(
+        root / "configs/movement_goal_navigation_a3.json"
+    )
+    previous = (64.0, 64.0)
+    frame = np.zeros((128, 128, 3), dtype=np.uint8)
+    frame[50:60, 40:50] = (0, 200, 0)
+    assert mobile_testbed._goal_navigation_cue(frame, contract, previous) is None
+    position = mobile_testbed._goal_navigation_cue(frame, contract, previous, True)
+    assert position is not None
+    assert abs(position[0] - 54.5) < 1.0
+    assert abs(position[1] - 44.5) < 1.0

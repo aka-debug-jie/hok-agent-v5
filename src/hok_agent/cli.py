@@ -842,6 +842,7 @@ def _parser() -> argparse.ArgumentParser:
     goal_navigation.add_argument("--observation-rois", type=Path, required=True)
     goal_navigation.add_argument("--output-dir", type=Path, required=True)
     goal_navigation.add_argument("--enable-input", action="store_true")
+    goal_navigation.add_argument("--persist-minimap-frames", action="store_true")
     goal_navigation_staged = commands.add_parser(
         "mobile-goal-navigation-staged",
         help="run the fixed start-to-end navigation in staged rounds 1 -> 3 -> 10",
@@ -857,6 +858,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     goal_navigation_staged.add_argument("--takeovers", type=int, default=0)
     goal_navigation_staged.add_argument("--enable-input", action="store_true")
+    goal_navigation_staged.add_argument("--persist-minimap-frames", action="store_true")
     operation_side = commands.add_parser(
         "mobile-operation-team-side",
         help="detect blue or red side from the loading-panel self highlight",
@@ -3008,6 +3010,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 observation_rois_path=args.observation_rois,
                 output_dir=args.output_dir,
                 enable_input=args.enable_input,
+                persist_minimap_frames=args.persist_minimap_frames,
             )
         elif args.command == "mobile-goal-navigation-staged":
             from hok_agent.mobile_testbed import run_mobile_goal_navigation_staged
@@ -3022,6 +3025,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 stages=tuple(args.stages),
                 takeovers=args.takeovers,
                 enable_input=args.enable_input,
+                persist_minimap_frames=args.persist_minimap_frames,
             )
         elif args.command == "mobile-operation-team-side":
             from hok_agent.mobile_testbed import detect_mobile_operation_team_side

@@ -3128,6 +3128,7 @@ def _goal_navigation_cue(
     frame: np.ndarray,
     contract: dict[str, object],
     previous: tuple[float, float] | None = None,
+    reacquiring: bool = False,
 ) -> tuple[float, float] | None:
     if frame.shape != (128, 128, 3):
         raise MobileTestbedError("goal navigation minimap frame is invalid")
@@ -3196,6 +3197,7 @@ def _goal_navigation_cue(
     reacquisition = float(
         cast(float, extension.get("maximum_reacquisition_l1_distance", 1e9))
     ) if isinstance(extension, dict) else 1e9
+    green_gate = reacquisition if reacquiring else association
     for component in _goal_navigation_components(green_mask):
         size, mean_y, mean_x, height, width = component
         if not (
@@ -3226,7 +3228,7 @@ def _goal_navigation_cue(
                 largest = (float(size), mean_y, mean_x)
             if previous is not None:
                 distance = abs(mean_y - previous[0]) + abs(mean_x - previous[1])
-                if distance <= association and (
+                if distance <= green_gate and (
                     fallback is None or distance < fallback[0]
                 ):
                     fallback = (float(distance), mean_y, mean_x)
@@ -3239,6 +3241,226 @@ def _goal_navigation_cue(
     if previous is None and allow_green_fallback and largest is not None:
         return (largest[1], largest[2])
     return None
+
+
+GOAL_NAVIGATION_TEMPLATE_SCHEMA = "movement-goal-navigation-hero-template-v1"
+GOAL_NAVIGATION_TEMPLATE_DILATION = 2
+GOAL_NAVIGATION_TEMPLATE_REQUIRED_FIELDS = (
+    "mode",
+    "template_half_size",
+    "search_radius",
+    "minimum_score",
+    "maximum_jump_l1_distance",
+    "missing_frames_before_reset",
+    "minimum_marker_pixels",
+)
+
+
+def _goal_navigation_marker_mask(frame: np.ndarray, contract: dict[str, object]) -> np.ndarray:
+    """Return the hero-marker pixels (green ring or red attack ring) of a minimap frame."""
+    color = cast(dict[str, object], contract["color"])
+    rgb = frame.astype(np.int16)
+    red_channel = rgb[..., 0]
+    green_channel = rgb[..., 1]
+    blue_channel = rgb[..., 2]
+    green_mask = (
+        (green_channel > int(cast(int, color["green_minimum"])))
+        & (green_channel - red_channel > int(cast(int, color["green_red_margin"])))
+        & (green_channel - blue_channel > int(cast(int, color["green_blue_margin"])))
+    )
+    red_mask = (
+        (red_channel > int(cast(int, color["red_minimum"])))
+        & (red_channel - green_channel > int(cast(int, color["red_green_margin"])))
+        & (red_channel - blue_channel > int(cast(int, color["red_blue_margin"])))
+    )
+    return green_mask | red_mask
+
+
+def _goal_navigation_dilate_mask(mask: np.ndarray, iterations: int) -> np.ndarray:
+    result = mask
+    for _ in range(iterations):
+        grown = result.copy()
+        grown[1:, :] |= result[:-1, :]
+        grown[:-1, :] |= result[1:, :]
+        grown[:, 1:] |= result[:, :-1]
+        grown[:, :-1] |= result[:, 1:]
+        grown[1:, 1:] |= result[:-1, :-1]
+        grown[:-1, :-1] |= result[1:, 1:]
+        grown[1:, :-1] |= result[:-1, 1:]
+        grown[:-1, 1:] |= result[1:, :-1]
+        result = grown
+    return result
+
+
+@dataclass(frozen=True)
+class _GoalNavigationTemplate:
+    """A masked hero-marker patch used for normalized cross-correlation tracking."""
+
+    weights: np.ndarray
+    centered: np.ndarray
+    variance: float
+    marker_pixels: int
+    sha256: str
+
+
+@dataclass
+class _GoalNavigationTemplateState:
+    previous: tuple[float, float] | None = None
+    template: _GoalNavigationTemplate | None = None
+    missing_frames: int = 0
+    seed_frame: int = -1
+    seed_position: tuple[float, float] | None = None
+    matches: int = 0
+
+
+def _goal_navigation_build_template(
+    frame: np.ndarray,
+    position: tuple[float, float],
+    half: int,
+    contract: dict[str, object],
+    minimum_marker_pixels: int,
+) -> _GoalNavigationTemplate | None:
+    center_y = int(round(position[0]))
+    center_x = int(round(position[1]))
+    y0 = center_y - half
+    x0 = center_x - half
+    y1 = center_y + half + 1
+    x1 = center_x + half + 1
+    if y0 < 0 or x0 < 0 or y1 > frame.shape[0] or x1 > frame.shape[1]:
+        return None
+    crop = frame[y0:y1, x0:x1, :]
+    marker = _goal_navigation_dilate_mask(
+        _goal_navigation_marker_mask(crop, contract), GOAL_NAVIGATION_TEMPLATE_DILATION
+    )
+    marker_pixels = int(marker.sum())
+    if marker_pixels < minimum_marker_pixels:
+        return None
+    weights = marker.astype(np.float64) / float(marker_pixels)
+    patch = crop.astype(np.float64)
+    mean = (patch * weights[..., None]).sum(axis=(0, 1))
+    centered = patch - mean
+    variance = float(((centered * centered) * weights[..., None]).sum())
+    if variance <= 1e-9:
+        return None
+    digest = hashlib.sha256(np.ascontiguousarray(crop).tobytes()).hexdigest()
+    return _GoalNavigationTemplate(
+        weights=weights,
+        centered=centered,
+        variance=variance,
+        marker_pixels=marker_pixels,
+        sha256=digest,
+    )
+
+
+def _goal_navigation_match_template(
+    frame: np.ndarray,
+    template: _GoalNavigationTemplate,
+    previous: tuple[float, float],
+    radius: int,
+    minimum_score: float,
+) -> tuple[float, float, float] | None:
+    """Return (score, y, x) of the best masked-ZNCC match around ``previous``, or None."""
+    height, width = template.weights.shape
+    center_y = int(round(previous[0]))
+    center_x = int(round(previous[1]))
+    y0 = max(0, center_y - height // 2 - radius)
+    x0 = max(0, center_x - width // 2 - radius)
+    y1 = min(frame.shape[0], center_y + height // 2 + radius + 1)
+    x1 = min(frame.shape[1], center_x + width // 2 + radius + 1)
+    if y1 - y0 < height or x1 - x0 < width:
+        return None
+    crop = frame[y0:y1, x0:x1, :].astype(np.float64)
+    output_height = crop.shape[0] - height + 1
+    output_width = crop.shape[1] - width + 1
+    weighted_sum = np.zeros((output_height, output_width, 3), dtype=np.float64)
+    squared_sum = np.zeros((output_height, output_width, 3), dtype=np.float64)
+    covariance = np.zeros((output_height, output_width, 3), dtype=np.float64)
+    for offset_y in range(height):
+        for offset_x in range(width):
+            weight = float(template.weights[offset_y, offset_x])
+            if weight == 0.0:
+                continue
+            window = crop[
+                offset_y : offset_y + output_height, offset_x : offset_x + output_width, :
+            ]
+            weighted_sum += weight * window
+            squared_sum += weight * window * window
+            covariance += weight * window * template.centered[offset_y, offset_x, :]
+    variance = np.clip(squared_sum - weighted_sum * weighted_sum, 0.0, None).sum(axis=2)
+    numerator = covariance.sum(axis=2)
+    denominator = np.sqrt(variance * template.variance)
+    scores = np.where(denominator > 1e-9, numerator / np.maximum(denominator, 1e-9), -1.0)
+    index = int(np.argmax(scores))
+    best = float(scores.reshape(-1)[index])
+    if best < minimum_score:
+        return None
+    row, column = np.unravel_index(index, scores.shape)
+    return (
+        best,
+        float(y0 + int(row) + height // 2),
+        float(x0 + int(column) + width // 2),
+    )
+
+
+def _goal_navigation_tracked_cue(
+    frame: np.ndarray,
+    contract: dict[str, object],
+    state: _GoalNavigationTemplateState,
+    frame_index: int,
+) -> tuple[float, float] | None:
+    """Track the hero cue with a bootstrapped masked template, falling back to the frozen cue."""
+    config = contract.get("hero_template")
+    if not isinstance(config, dict):
+        reacquiring = state.missing_frames > 0
+        position = _goal_navigation_cue(frame, contract, state.previous, reacquiring)
+        if position is None:
+            state.missing_frames += 1
+            return None
+        state.previous = position
+        state.missing_frames = 0
+        return position
+    half = int(cast(int, config["template_half_size"]))
+    radius = int(cast(int, config["search_radius"]))
+    minimum_score = float(cast(float, config["minimum_score"]))
+    maximum_jump = float(cast(float, config["maximum_jump_l1_distance"]))
+    reset_missing = int(cast(int, config["missing_frames_before_reset"]))
+    minimum_marker_pixels = int(cast(int, config["minimum_marker_pixels"]))
+    if state.template is not None and state.previous is not None:
+        match = _goal_navigation_match_template(
+            frame, state.template, state.previous, radius, minimum_score
+        )
+        if match is not None:
+            position_y, position_x = match[1], match[2]
+            if (
+                abs(position_y - state.previous[0]) + abs(position_x - state.previous[1])
+                <= maximum_jump
+            ):
+                state.previous = (position_y, position_x)
+                state.missing_frames = 0
+                state.matches += 1
+                return state.previous
+        state.missing_frames += 1
+        if state.missing_frames > reset_missing:
+            state.template = None
+            state.previous = None
+            state.missing_frames = 0
+    position = _goal_navigation_cue(
+        frame, contract, state.previous, state.missing_frames > 0
+    )
+    if position is None:
+        state.missing_frames += 1
+        return None
+    if state.template is None:
+        template = _goal_navigation_build_template(
+            frame, position, half, contract, minimum_marker_pixels
+        )
+        if template is not None:
+            state.template = template
+            state.seed_frame = frame_index
+            state.seed_position = position
+    state.previous = position
+    state.missing_frames = 0
+    return position
 
 
 def _goal_navigation_direction(
@@ -3304,6 +3526,31 @@ def _goal_navigation_contract(path: Path) -> tuple[dict[str, object], str]:
         )
     ):
         raise MobileTestbedError("goal navigation policy differs")
+    if any(
+        key in value and not isinstance(value[key], (int, float))
+        for key in ("final_approach_distance_pixels", "final_approach_hold_ms")
+    ):
+        raise MobileTestbedError("goal navigation approach policy differs")
+    template = value.get("hero_template")
+    if template is not None and (
+        not isinstance(template, dict)
+        or any(key not in template for key in GOAL_NAVIGATION_TEMPLATE_REQUIRED_FIELDS)
+        or template["mode"] != "masked-zncc-bootstrap-from-frozen-cue"
+        or not all(
+            isinstance(template[key], int)
+            for key in (
+                "template_half_size",
+                "search_radius",
+                "missing_frames_before_reset",
+                "minimum_marker_pixels",
+            )
+        )
+        or not all(
+            isinstance(template[key], (int, float))
+            for key in ("minimum_score", "maximum_jump_l1_distance")
+        )
+    ):
+        raise MobileTestbedError("goal navigation hero template differs")
     return value, digest
 
 
@@ -3316,6 +3563,7 @@ def run_mobile_goal_navigation(
     observation_rois_path: Path,
     output_dir: Path,
     enable_input: bool = True,
+    persist_minimap_frames: bool = False,
 ) -> dict[str, object]:
     contract, contract_sha = _goal_navigation_contract(contract_path)
     visual_layout, visual_sha = load_layout(visual_layout_path)
@@ -3338,6 +3586,10 @@ def run_mobile_goal_navigation(
     ]
     tolerance = float(cast(float, contract["arrival_tolerance_pixels"]))
     hold_ms = int(cast(int, contract["direction_hold_ms"]))
+    approach_hold_ms = int(cast(int, contract.get("final_approach_hold_ms", hold_ms)))
+    approach_distance = float(
+        cast(float, contract.get("final_approach_distance_pixels", tolerance))
+    )
     period_ms = int(cast(int, contract["observation_period_ms"]))
     maximum_seconds = float(cast(float, contract["maximum_duration_seconds"]))
     maximum_commands = int(cast(int, contract["maximum_commands"]))
@@ -3345,9 +3597,13 @@ def run_mobile_goal_navigation(
     session = ScrcpyControlSession(guard.serial, 30)
     watchdog = GuardWatchdog(guard, ACTIVE_PROBE_GUARD_INTERVAL_SECONDS)
     observations: list[dict[str, object]] = []
+    minimap_frames: list[np.ndarray] = []
+    minimap_elapsed_ms: list[int] = []
     pointer_messages = 0
     commands_issued = 0
     identity_switch_events = 0
+    reacquisition_events = 0
+    reacquiring = False
     failure: str | None = None
     arrived = False
     waypoint_index = 0
@@ -3361,7 +3617,11 @@ def run_mobile_goal_navigation(
             maximum_jump = float(
                 cast(float, tracker_config["maximum_association_l1_distance"])
             )
+    template_config = contract.get("hero_template")
+    if isinstance(template_config, dict):
+        maximum_jump = float(cast(float, template_config["maximum_jump_l1_distance"]))
     previous_position: tuple[float, float] | None = None
+    template_state = _GoalNavigationTemplateState()
     region = contract.get("free_movement_region")
     region_streak = 0
 
@@ -3395,7 +3655,11 @@ def run_mobile_goal_navigation(
                     failure = "DEATH_RESPAWN_OR_ENDED"
                     break
                 minimap = _observation_roi_frame(frame, rois.minimap)
-                position = _goal_navigation_cue(minimap, contract, previous_position)
+                template_state.previous = previous_position
+                position = _goal_navigation_tracked_cue(
+                    minimap, contract, template_state, len(observations)
+                )
+                previous_position = template_state.previous
                 target = targets[waypoint_index]
                 distance = (
                     None
@@ -3411,6 +3675,9 @@ def run_mobile_goal_navigation(
                         "screen_valid": True,
                     }
                 )
+                if persist_minimap_frames:
+                    minimap_frames.append(minimap.copy())
+                    minimap_elapsed_ms.append(round(frame_timestamp_ns / 1_000_000))
                 if position is not None and isinstance(region, dict):
                     inside_region = (
                         float(cast(float, region["minimum_y"])) <= position[0]
@@ -3436,8 +3703,12 @@ def run_mobile_goal_navigation(
                         + abs(position[1] - previous_position[1])
                         > maximum_jump
                     ):
-                        identity_switch_events += 1
+                        if reacquiring:
+                            reacquisition_events += 1
+                        else:
+                            identity_switch_events += 1
                     previous_position = position
+                reacquiring = position is None
                 if distance is not None and distance <= tolerance:
                     waypoint_index += 1
                     if waypoint_index >= len(targets):
@@ -3456,7 +3727,10 @@ def run_mobile_goal_navigation(
                     if enable_input and joystick.direction != "wait":
                         dispatch(joystick.release())
                     current_direction = "wait"
-                hold_deadline = time.monotonic() + hold_ms / 1000
+                hold_deadline = time.monotonic() + (
+                    approach_hold_ms if distance is not None and distance <= approach_distance
+                    else hold_ms
+                ) / 1000
                 while time.monotonic() < hold_deadline:
                     watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
                     time.sleep(GOAL_NAVIGATION_LOOP_SLEEP_SECONDS)
@@ -3504,6 +3778,18 @@ def run_mobile_goal_navigation(
         "training_eligible": False,
         "manual_annotation_required": False,
         "control_output": pointer_messages > 0,
+        "hero_template_sha256": (
+            template_state.template.sha256 if template_state.template is not None else None
+        ),
+        "hero_template_seed_frame": template_state.seed_frame,
+        "hero_template_seed_position": (
+            None if template_state.seed_position is None else list(template_state.seed_position)
+        ),
+        "hero_template_marker_pixels": (
+            template_state.template.marker_pixels if template_state.template is not None else None
+        ),
+        "hero_template_matches": template_state.matches,
+        "derived_minimap_persisted": persist_minimap_frames,
     }
     gates = cast(dict[str, object], contract["gates"])
     localized_fraction = len(localized) / len(observations) if observations else 0.0
@@ -3521,6 +3807,7 @@ def run_mobile_goal_navigation(
     }
     summary["localized_fraction"] = localized_fraction
     summary["identity_switch_events"] = identity_switch_events
+    summary["reacquisition_events"] = reacquisition_events
     summary["checks"] = checks
     summary["gates_passed"] = all(checks.values())
     summary["summary_sha256"] = _summary_identity(summary)
@@ -3533,6 +3820,32 @@ def run_mobile_goal_navigation(
         (staging / "summary.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+        if persist_minimap_frames and minimap_frames:
+            shard_rows: list[dict[str, object]] = []
+            shards = staging / "shards"
+            shards.mkdir()
+            for index in range(0, len(minimap_frames), 256):
+                name = f"minimap-{index // 256:04d}.npz"
+                np.savez_compressed(
+                    shards / name,
+                    minimap_rgb=np.stack(minimap_frames[index : index + 256]),
+                    frame_elapsed_ms=np.asarray(
+                        minimap_elapsed_ms[index : index + 256], dtype=np.int64
+                    ),
+                )
+                shard_rows.append(
+                    {
+                        "path": name,
+                        "sha256": hashlib.sha256((shards / name).read_bytes()).hexdigest(),
+                        "rows": len(minimap_frames[index : index + 256]),
+                    }
+                )
+            summary["minimap_frame_shards"] = shard_rows
+            summary["minimap_frames"] = len(minimap_frames)
+            summary["summary_sha256"] = _summary_identity(summary)
+            (staging / "summary.json").write_text(
+                json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
         staging.rename(output)
     except BaseException:
         if staging.exists():
@@ -3558,6 +3871,7 @@ def run_mobile_goal_navigation_staged(
     stages: tuple[int, ...] = GOAL_NAVIGATION_DEFAULT_STAGES,
     takeovers: int = 0,
     enable_input: bool = True,
+    persist_minimap_frames: bool = False,
 ) -> dict[str, object]:
     """Run the fixed start-to-end navigation in staged rounds 1 -> 3 -> 10.
 
@@ -3587,6 +3901,7 @@ def run_mobile_goal_navigation_staged(
                 observation_rois_path=observation_rois_path,
                 output_dir=output / f"stage-{stage}" / f"round-{index}",
                 enable_input=enable_input,
+                persist_minimap_frames=persist_minimap_frames,
             )
             rounds_total += 1
             if bool(round_summary.get("arrived")):
