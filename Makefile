@@ -120,6 +120,12 @@ MOBILE_NAV_IDENTITY ?=configs/mobile_testbed_identity.local.json
 MOBILE_NAV_RUNS ?=$(HOK_RUNS_ROOT)/hierarchical-movement-mvp
 MOBILE_NAV_STORE ?=$(MOBILE_NAV_RUNS)/route-b-v15-store
 MOBILE_NAV_EPISODES ?=3
+MOBILE_PROBE_CONTRACT ?=configs/movement_active_probe_v10.json
+# Run names are their own sequence, independent of the contract version: active-probe-v10 is an
+# older run that used probe contract v3, so a new probe must not be named after its contract.
+MOBILE_PROBE_ROOT ?=$(MOBILE_NAV_RUNS)/active-probe-v26
+MOBILE_PROBE_SESSION ?=session-001
+MOBILE_PROBE_AUDIT ?=$(HOK_AUDIT_ROOT)/hierarchical-movement-mvp/traversability-probe-v26-analysis
 TRAVERSABILITY_CELL_PIXELS ?=4.0
 TRAVERSABILITY_MINIMUM_SAMPLES ?=3
 TRAVERSABILITY_MINIMUM_RATE ?=0.08
@@ -501,11 +507,11 @@ operation-movement-v11-overfit32: storage-preflight
 operation-movement-v11-pilot: storage-preflight
 	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" CUBLAS_WORKSPACE_CONFIG=:4096:8 $(RUN_PYTHON) -m hok_agent operation-movement-pilot --dataset-root "$(OPERATION_TEACHER_DATASET)" --split "$(OPERATION_MOVEMENT_SPATIAL_SPLIT)" --contract "$(OPERATION_MOVEMENT_SPATIAL_CONTRACT)" --adapter-checkpoint "$(OPERATION_POLICY_ADAPTER)" --output-dir "$(OPERATION_MOVEMENT_SPATIAL_RUN)" --device cuda --batch-size 128
 
-.PHONY: mobile-navigation-store mobile-navigation-store-batch mobile-navigation-verify traversability-build traversability-check
+.PHONY: mobile-navigation-store mobile-navigation-store-batch mobile-navigation-verify traversability-build traversability-check mobile-active-probe traversability-probe-analysis
 
 mobile-navigation-store: storage-preflight
 	@test -n "$(MOBILE_NAV_SERIAL)" || { echo "set MOBILE_NAV_SERIAL (or T8_SERIAL)" >&2; exit 2; }
-	HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(MOBILE_NAV_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-navigation-store --serial "$(MOBILE_NAV_SERIAL)" --config "$(MOBILE_NAV_ROUTE)" --visual-layout "$(MOBILE_NAV_VISUAL_LAYOUT)" --execution-layout "$(MOBILE_NAV_EXECUTION_LAYOUT)" --observation-rois "$(MOBILE_NAV_ROIS)" --output-dir "$(MOBILE_NAV_STORE)" --enable-input
+	@HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(MOBILE_NAV_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-navigation-store --serial "$(MOBILE_NAV_SERIAL)" --config "$(MOBILE_NAV_ROUTE)" --visual-layout "$(MOBILE_NAV_VISUAL_LAYOUT)" --execution-layout "$(MOBILE_NAV_EXECUTION_LAYOUT)" --observation-rois "$(MOBILE_NAV_ROIS)" --output-dir "$(MOBILE_NAV_STORE)" --enable-input
 
 mobile-navigation-store-batch: storage-preflight
 	@test -n "$(MOBILE_NAV_SERIAL)" || { echo "set MOBILE_NAV_SERIAL (or T8_SERIAL)" >&2; exit 2; }
@@ -516,6 +522,13 @@ mobile-navigation-verify: storage-preflight
 
 traversability-build: storage-preflight
 	$(RUN_PYTHON) -m hok_agent traversability-build --runs-root "$(MOBILE_NAV_RUNS)" --runs $(TRAVERSABILITY_RUNS) --output "$(TRAVERSABILITY_OUTPUT)" --cell-pixels "$(TRAVERSABILITY_CELL_PIXELS)" --minimum-samples "$(TRAVERSABILITY_MINIMUM_SAMPLES)" --minimum-rate-per-100ms "$(TRAVERSABILITY_MINIMUM_RATE)" --nominal-step-pixels "$(TRAVERSABILITY_NOMINAL_STEP)"
+
+mobile-active-probe: storage-preflight
+	@test -n "$(MOBILE_NAV_SERIAL)" || { echo "set MOBILE_NAV_SERIAL (or T8_SERIAL)" >&2; exit 2; }
+	@HOK_LARGE_ROOT="$(HOK_LARGE_ROOT)" HOK_MOBILE_IDENTITY_PATH="$(MOBILE_NAV_IDENTITY)" $(RUN_PYTHON) -m hok_agent mobile-active-probe --serial "$(MOBILE_NAV_SERIAL)" --config "$(MOBILE_PROBE_CONTRACT)" --visual-layout "$(MOBILE_NAV_VISUAL_LAYOUT)" --execution-layout "$(MOBILE_NAV_EXECUTION_LAYOUT)" --observation-rois "$(MOBILE_NAV_ROIS)" --output-dir "$(MOBILE_PROBE_ROOT)/$(MOBILE_PROBE_SESSION)" --enable-input
+
+traversability-probe-analysis: storage-preflight
+	$(RUN_PYTHON) -m hok_agent movement-mvp --mode traversability-probe-analysis --config "$(MOBILE_PROBE_CONTRACT)" --analysis "$(MOBILE_PROBE_CONTRACT)" --session-root "$(MOBILE_PROBE_ROOT)" --output-dir "$(MOBILE_PROBE_AUDIT)"
 
 traversability-check: storage-preflight
 	$(RUN_PYTHON) -m hok_agent traversability-check --runs-root "$(MOBILE_NAV_RUNS)" --contract "$(MOBILE_NAV_ROUTE)" --runs $(TRAVERSABILITY_RUNS)
