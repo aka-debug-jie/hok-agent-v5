@@ -856,7 +856,10 @@ def run_command_response_audit(
     return report
 
 
-R0_PANEL_SCHEMA = "hok-agent-r0-panel-feedback-contract-v1"
+R0_PANEL_SCHEMAS = (
+    "hok-agent-r0-panel-feedback-contract-v1",
+    "hok-agent-r0-panel-feedback-contract-v2",
+)
 PANEL_AUDIT_SCHEMA = "hok-agent-panel-feedback-audit-v1"
 PANEL_REQUIRED_GATES = (
     "minimum_steps",
@@ -872,8 +875,16 @@ def load_panel_feedback_contract(path: Path) -> tuple[dict[str, object], str]:
     payload = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
     gates = payload.get("gates")
     statistics = payload.get("statistics")
+    authorization = payload.get("owner_authorization")
+    if authorization is not None and (
+        not isinstance(authorization, dict)
+        or authorization.get("authorized_by") != "owner"
+        or not authorization.get("change")
+        or not authorization.get("consequence")
+    ):
+        raise FeedbackAuditError("owner authorization block differs")
     if (
-        payload.get("schema_version") != R0_PANEL_SCHEMA
+        payload.get("schema_version") not in R0_PANEL_SCHEMAS
         or not isinstance(gates, dict)
         or not isinstance(statistics, list)
         or {str(item) for item in cast(list[object], statistics)}
@@ -885,6 +896,10 @@ def load_panel_feedback_contract(path: Path) -> tuple[dict[str, object], str]:
         is not False
     ):
         raise FeedbackAuditError("r0 panel feedback contract differs")
+    if authorization is not None and not bool(
+        cast(dict[str, object], payload.get("claim_boundary", {})).get("gate_is_owner_authorized")
+    ):
+        raise FeedbackAuditError("authorized gate must be declared in the claim boundary")
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     ).hexdigest()
@@ -909,6 +924,10 @@ def run_panel_feedback_audit(
 ) -> dict[str, object]:
     contract, contract_sha = load_panel_feedback_contract(panel_contract_path)
     gates = cast(dict[str, object], contract["gates"])
+    authorization = contract.get("owner_authorization")
+    verification_class = (
+        "owner_authorized_bar" if isinstance(authorization, dict) else "pre_registered"
+    )
     output = _new_large_output(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     with UnifiedTransitionStore(store_path) as store:
@@ -992,6 +1011,8 @@ def run_panel_feedback_audit(
     report: dict[str, object] = {
         "schema_version": PANEL_AUDIT_SCHEMA,
         "status": "PASSED" if not failures and integrity == "ok" else "FAILED",
+        "verification_class": verification_class,
+        "owner_authorization": authorization,
         "panel_contract_sha256": contract_sha,
         "store_path": store_path.name,
         "store_integrity": integrity,
@@ -1023,6 +1044,13 @@ def run_panel_feedback_audit(
         },
         "per_episode": per_episode,
         "gate_failures": failures,
+        "unresolved_concerns": []
+        if not isolated
+        else [
+            "the discrete-state structural test still reports isolated ambiguous steps "
+            f"{isolated}, i.e. not_resolvable_at_this_cadence; a pass under an owner-authorized "
+            "bar does not resolve this"
+        ],
         "unverified_remainder": [
             "the audit verifies that the ROI carries a periodic strongly bimodal signal; the "
             "isolated-ambiguous test shows it is not resolvable into a discrete state at the "

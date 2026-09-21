@@ -203,3 +203,34 @@ def test_panel_view_reads_the_equipment_channel(tmp_path: Path) -> None:
     loaded = audit._panel_view(tmp_path, "b.npz")
     assert loaded.shape == (4, 5, 3)
     assert float(loaded.mean()) == 77.0
+
+
+PANEL_V2 = ROOT / "game_rules" / "r0_panel_feedback_contract_v2.json"
+
+
+def test_panel_v2_declares_the_owner_authorized_gate() -> None:
+    contract, sha = audit.load_panel_feedback_contract(PANEL_V2)
+    assert len(sha) == 64
+    authorization = cast(dict, contract["owner_authorization"])
+    assert authorization["authorized_by"] == "owner"
+    assert "0.95" in authorization["change"] and "0.9" in authorization["change"]
+    assert cast(dict, contract["gates"])["minimum_label_agreement"] == 0.9
+    assert cast(dict, contract["claim_boundary"])["gate_is_owner_authorized"] is True
+    assert cast(dict, contract["claim_boundary"])["structural_resolvability_verified"] is False
+    v1, _ = audit.load_panel_feedback_contract(PANEL)
+    assert "owner_authorization" not in v1
+
+
+def test_panel_contract_requires_the_authorized_gate_to_be_declared(tmp_path: Path) -> None:
+    tampered = tmp_path / "panel-v2.json"
+    value = json.loads(PANEL_V2.read_text(encoding="utf-8"))
+    value["claim_boundary"].pop("gate_is_owner_authorized")
+    tampered.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(audit.FeedbackAuditError):
+        audit.load_panel_feedback_contract(tampered)
+
+    value = json.loads(PANEL_V2.read_text(encoding="utf-8"))
+    value["owner_authorization"] = {"authorized_by": "someone"}
+    tampered.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(audit.FeedbackAuditError):
+        audit.load_panel_feedback_contract(tampered)
