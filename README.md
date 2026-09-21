@@ -10,23 +10,29 @@ The public tree contains no device identity, calibrated layout, recordings, data
 ## Current work
 
 Follow the one active task in [DELIVERY_PROGRESS.md](DELIVERY_PROGRESS.md#current-execution-state).
-The [engineering plan](docs/ENGINEERING_CONVERGENCE_PLAN.md) defined the completed offline batch:
+That ledger is the authority for actual results; this section only orientates.
 
-- N1 produced four 10-second QA GIFs, a same-frame goal counterfactual and frame records. It
-  remains `DATA_SOURCE_LIMITED`: 212/4,455 direct observations.
-- N2 now records multi-goal movement in the existing Store and restores from transition 4.
-  Interrupted and continuous 10-episode runs contain identical 140-transition content.
-- P0 processed the complete session002 as an offline Shadow. Only208/1,485 frames have direct
-  localization and the longest valid run is6.6s, so navigation remains data-source limited.
-- The no-source action-response audit evaluates54 existing movement events. Fourteen of17
-  session002 interior pairs respond by at least1 pixel in the sent direction, while0/45 fixed-UI
-  pairs do. This supports an active-probe design; cross-session player identity remains unresolved.
+The narrow no-source chain is delivered on the owner-authorized self-built test app, with no
+internal API, backend or internal reference:
 
-The frozen hierarchical package contains a 10-episode synthetic geometry report alongside the
-older recoverable rule/Event evidence. Its 352/352 decisions and 10/10 routes are narrow simulator
-results; packaging does not prove the newer strategy already uses the older recovery runtime.
-The current Movement learning route has no promoted checkpoint. Real-player/goal observability
-and real gameplay improvement remain unproven. Historical model results are retained separately.
+- No-source identity and control passed with batch `active-probe-v25` under contract v9
+  (`92594112`): 704/704 localisation, direction consistency 1.0, zero identity switches.
+- Declared-target navigation passed, including the staged `1 -> 3 -> 10` admission with
+  `goal-navigation-a3-staged-5` under contract `6e5401d7`: 14 of 14 rounds arrived, arrival rate
+  1.0, arrival errors 1.69-4.00 px, zero identity switches.
+- The chain is bound into the single `UnifiedTransitionStore` (L1 and L2) with
+  `mobile-navigation-store-2` and `mobile-navigation-store-batch-2` under contract `0e603fcc`:
+  terminal transition written before the episode ends, every step causal-order valid, a reload
+  verifier that reports the episodes recoverable, and three consecutive episodes with no action
+  backlog, no frame-reference damage and store integrity ok.
+
+Single-policy post-training is closed as `DATA_SOURCE_LIMITED`, not left open: R0 tested three
+feedback lines and all three failed for a reportable reason - the navigation feedback has no
+independent map reference and its second derivation is a duplicate, the commanded-response reward
+is structurally independent but keeps a sub-pixel tail (p95 5.63 px), and the discrete panel signal
+is periodic but not resolvable at the 1.2 s observation cadence. No visual event engine is permitted
+on this route. Reopening needs an external independent reference; the deterministic chain above is
+the delivered result. Historical model results are retained separately and remain unproven.
 
 ## Environment and commands
 

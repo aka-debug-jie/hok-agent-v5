@@ -12,9 +12,9 @@ forensics-first plan; the read-only forensics verdict below now governs the next
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text
-OBJECTIVE: define and independently check the frozen task and feedback for the R milestone's single-policy post-training (R0)
-STATUS: DONE
-NEXT_ACTION: R0 is exhausted on all three feedback lines (independent reference, commanded-response estimator, discrete panel signal), so the next decision is an external independent reference for this route or a stop that records the data-source limit; do not open R1
+OBJECTIVE: close the R milestone as data-source limited and record the delivered no-source visual control chain (no-source identity/control, goal navigation, L1/L2 runtime integration)
+STATUS: DATA_SOURCE_LIMITED
+NEXT_ACTION: none on this route. The three passed milestones (A-gate identity/control, P/A goal navigation, L1/L2 store-bound runtime) stay frozen; single-policy post-training stays closed until an external independent reference is provided
 INPUT_EVIDENCE: frozen action-response audit, the failed batches v1-v9, the offline forensics verdict, the bounded control checks, the passing v9 probe batch, the passing goal-navigation sessions, the 704 recorded A-gate minimap frames, the persisted minimap frames of the failed staged rounds, and the live guarded movement, fade and reposition diagnostics
 CHANGED_FILES: probe contracts v1-v9, goal-navigation contracts v1, a1-a3 and the store contract, the R0 feedback contract, the R0 response-task contracts v1 and v2 and the R0 panel-feedback contract, the store-bound device navigation runner, its consecutive-episode batch mode and its episode/store verifiers, the read-only Store episode listing and integrity query, the R0 feedback audit and its QA sheet writer, audit, forensics, hero-cue tracker and fallback, the masked-ZNCC template tracker and its contract block, re-acquisition gating and event accounting, final-approach hold, direction hysteresis, opt-in minimap-frame persistence, joystick press settle, paced probe loop, goal-navigation runner, declared region/stall/drift guards, planner, runner/CLI and focused tests
 PRIMARY_METRIC: feedback coverage over every step and the agreement between the recorded signal and an independent reference, with the unverified remainder stated explicitly
@@ -23,8 +23,8 @@ RESULT: two milestones passed on 2026-09-20; the no-source identity and control 
 ENGINEERING_HOURS_USED_AND_CAP: UNKNOWN used; engineering effective time is still not instrumented and cannot be reconstructed from the artifacts. The cap is 24 h per milestone as of the owner decision on 2026-09-21 (P/L/A/R0/R1 all raised from the earlier 4-16 h figures); R1 keeps its own 24 h / 4 GPU h envelope but is not authorized
 GPU_SECONDS: 0, cap 0; automated run wall clock for the store-bound runtime work is 142.3 s over 7 instrumented episodes (19.6 + 45.3 + 77.4), excluding the un-instrumented reposition and diagnostics runs
 NEW_BYTES: 607,350,490 used by the active-probe and goal-navigation lineages to date (531,241,179 probe plus 65,178 goal-navigation plus 48,977,309 for the a2/a3 goal-navigation runs plus 2,936,087 for the single store-bound run plus 13,549,043 for the first two store-bound batches plus 10,363,263 for the R0 evidence batch and its feedback audit plus 15,376 for the four response audits plus 3,055 for the panel audit); the 268,435,456 question cap is exceeded and the owner has stated there is no budget limit
-STOP_REASON: R0 stop condition met on all three feedback lines: no independent map reference exists, the commanded-response estimator keeps a sub-pixel tail that fails its pre-declared per-step gates, and the discrete panel signal is periodic but has isolated ambiguous steps so it is not resolvable into a state at the 1.2 s cadence
-NEXT_DECISION: obtain an external independent reference for this route, or stop and record the data-source limit; R1 stays closed
+STOP_REASON: data-source limited. R0 failed on all three feedback lines (no independent map reference; commanded-response estimator tail p95 5.63 px with one correction refuted; discrete panel signal periodic but not resolvable at the 1.2 s cadence), no visual event engine is permitted on this route, and the plan's honest option for no new reference is to record the limit rather than keep trading a new run id, threshold or contract for the same problem
+NEXT_DECISION: only an external independent reference (for example a modifiable self-built app exposing a test-only position reference while the deployed Actor still reads RGB only) reopens R; otherwise the deterministic chain is the delivered result and R1 stays closed
 ```
 
 - The main checkout's older Global Agent `CURRENT GOAL` statement is historical; this worktree
@@ -556,6 +556,40 @@ NEXT_DECISION: obtain an external independent reference for this route, or stop 
   derivation was a duplicate; the commanded-response reward is structurally independent but its
   estimator keeps a sub-pixel tail (p95 5.63 px) with one correction refuted; and the panel signal
   is periodic but not discrete at this cadence. R1 stays closed. This step used 3,055 new bytes.
+
+### R closed as data-source limited: what is delivered and what is not (2026-09-21)
+
+- The owner chose to record the data-source limit and close. The plan's own rule for this case is
+  that with no new reference the real autonomous application is recorded as data-source limited,
+  and the same problem must not be carried on through a new run id, threshold or contract.
+
+- Delivered and frozen, all from the same no-source route (serial, foreground-package, display,
+  identity, layout and ROI gates; no internal API, no backend, no internal reference):
+
+  | Capability | Evidence |
+  |---|---|
+  | No-source identity and control | `active-probe-v25` under contract v9 (`92594112`), audit `c1491607`, 704/704 localisation, direction consistency 1.0, zero identity switches |
+  | Declared-target navigation | `goal-navigation-v8-1/2` and the staged `goal-navigation-a3-staged-5` under contract `6e5401d7`: 14 of 14 rounds arrived, arrival rate 1.0, errors 1.69-4.00 px, localisation 1.000 (0.964 in one round), zero identity switches |
+  | Store-bound runtime (L1/L2) | `mobile-navigation-store-2` and `mobile-navigation-store-batch-2` under contract `0e603fcc`: 15 and 56 transitions, terminal transition written before the episode ends, every step causal-order valid, reload verifier `recoverable=true`, 3 consecutive episodes with no action backlog, no frame-reference damage and store integrity ok |
+
+- Not delivered, and the reason is a limit of the data source rather than of effort:
+
+  | Missing | Why |
+  |---|---|
+  | Single-policy post-training (R1) | No admissible feedback. The navigation feedback has no independent map reference and its second derivation is a duplicate (63/63 exact); the commanded-response reward is structurally independent (duplication 0.0, coverage 0.921, positive response 0.746) but its estimator keeps a sub-pixel tail (p95 5.63 px against a pre-declared 4.0 px gate) and the one correction for the same cause made it worse; the discrete panel signal is periodic (17 transitions, duty 0.492, non-duplicate statistics) but not resolvable at the 1.2 s observation cadence (2 of 6 ambiguous steps isolated) |
+  | Visual events on this route | The only RGB event engine (E1a health) is frozen with `mobile_capture_allowed=false` and `reward_allowed=false`, and the transition event vocabulary has no navigation type, so the slot is versioned and hashed but claims nothing |
+  | Semantic accuracy claims | There is no independent map or state reference, so position results are reported as development usability only |
+
+- What would reopen it: an external independent reference, for example a modifiable self-built app
+  that exposes a test-only position reference while the deployed Actor still reads RGB only. No
+  human labels are required and none were used. Until then the deterministic chain is the result.
+
+- Total recorded cost: 607,350,490 bytes across the probe and goal-navigation lineages, 0 GPU
+  seconds, and engineering effective time UNKNOWN because it was never instrumented. The failed
+  intermediate runs are kept as evidence: active-probe v1-v9, goal-navigation a1-a9 and a2/a3
+  stages, `mobile-navigation-store-1`, `mobile-navigation-store-batch-1`,
+  `navigation-feedback-audit-1`, `navigation-response-audit-2` and `-4`, and
+  `navigation-panel-audit-1`.
 
 ### 2026-09-09 development review and factual corrections
 
