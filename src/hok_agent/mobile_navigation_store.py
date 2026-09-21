@@ -156,8 +156,22 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
             )
         ):
             raise MobileTestbedError("mobile navigation store progress guard differs")
+    filter_raw = contract.get("region_filter")
+    if filter_raw is not None and not isinstance(filter_raw, dict):
+        raise MobileTestbedError("mobile navigation store region filter differs")
+    region_filter = cast(dict[str, object] | None, filter_raw)
+    if region_filter is not None and (
+        region_filter.get("mode") != "feasible_direction_within_region"
+        or any(
+            not isinstance(region_filter.get(key), (int, float))
+            or float(cast(float, region_filter[key])) <= 0
+            for key in ("nominal_step_pixels", "margin_pixels")
+        )
+    ):
+        raise MobileTestbedError("mobile navigation store region filter differs")
     resolved = dict(block)
     resolved["progress_guard"] = progress_guard
+    resolved["region_filter"] = region_filter
     resolved["policy_bundle_sha256"] = contract_sha
     resolved["event_engine_sha256"] = hashlib.sha256(
         json.dumps(block, sort_keys=True, separators=(",", ":")).encode()
@@ -369,6 +383,17 @@ def _transition(
     }
 
 
+_DIRECTION_STEPS = {
+    "north": (-1.0, 0.0),
+    "north_east": (-0.7071067811865476, 0.7071067811865476),
+    "east": (0.0, 1.0),
+    "south_east": (0.7071067811865476, 0.7071067811865476),
+    "south": (1.0, 0.0),
+    "south_west": (0.7071067811865476, -0.7071067811865476),
+    "west": (0.0, -1.0),
+    "north_west": (-0.7071067811865476, -0.7071067811865476),
+}
+
 _MOVEMENT_ORDER = (
     "north", "north_east", "east", "south_east",
     "south", "south_west", "west", "north_west",
@@ -381,6 +406,55 @@ def _rotate_direction(direction: str, sectors: int) -> str:
         raise MobileTestbedError("cannot rotate a non-direction")
     index = _MOVEMENT_ORDER.index(direction)
     return _MOVEMENT_ORDER[(index + sectors) % len(_MOVEMENT_ORDER)]
+
+
+def _region_safe_direction(
+    position: tuple[float, float],
+    desired: str,
+    region: dict[str, object],
+    nominal_step_pixels: float,
+    margin_pixels: float,
+) -> str:
+    """Mask any applied direction whose nominal next step would leave the free-movement region.
+
+    The nearest safe bearing is used when the desired one is unsafe, which turns a wall into a
+    follow-along behaviour. If no single step can return inside, the filter heads for the region
+    centre rather than picking arbitrarily.
+    """
+    if desired not in _DIRECTION_STEPS:
+        return desired
+    minimum_y = float(cast(float, region["minimum_y"])) + margin_pixels
+    maximum_y = float(cast(float, region["maximum_y"])) - margin_pixels
+    minimum_x = float(cast(float, region["minimum_x"])) + margin_pixels
+    maximum_x = float(cast(float, region["maximum_x"])) - margin_pixels
+
+    def predicted(name: str) -> tuple[float, float]:
+        step_y, step_x = _DIRECTION_STEPS[name]
+        return (
+            position[0] + step_y * nominal_step_pixels,
+            position[1] + step_x * nominal_step_pixels,
+        )
+
+    def inside(point: tuple[float, float]) -> bool:
+        return minimum_y <= point[0] <= maximum_y and minimum_x <= point[1] <= maximum_x
+
+    if inside(predicted(desired)):
+        return desired
+    index = _MOVEMENT_ORDER.index(desired)
+    for offset in (1, -1, 2, -2, 3, -3, 4):
+        candidate = _MOVEMENT_ORDER[(index + offset) % len(_MOVEMENT_ORDER)]
+        if inside(predicted(candidate)):
+            return candidate
+    centre_y = (
+        float(cast(float, region["minimum_y"])) + float(cast(float, region["maximum_y"]))
+    ) / 2
+    centre_x = (
+        float(cast(float, region["minimum_x"])) + float(cast(float, region["maximum_x"]))
+    ) / 2
+    return min(
+        _MOVEMENT_ORDER,
+        key=lambda name: abs(predicted(name)[0] - centre_y) + abs(predicted(name)[1] - centre_x),
+    )
 
 
 def _progress_guard_offset(escape_step: int, hold_steps: int, offsets: list[int]) -> int:
@@ -445,6 +519,7 @@ class _NavigationRuntime:
     maximum_gap: int
     maximum_duration_seconds: float
     progress_guard: dict[str, object] | None
+    region_filter: dict[str, object] | None
     guard: DeviceGuard
     session: ScrcpyControlSession
     joystick: PersistentJoystick
@@ -511,6 +586,7 @@ def _prepare_navigation_runtime(
             cast(float, contract.get("maximum_duration_seconds", 0.0))
         ),
         progress_guard=cast(dict[str, object] | None, store_contract.get("progress_guard")),
+        region_filter=cast(dict[str, object] | None, store_contract.get("region_filter")),
         guard=guard,
         session=ScrcpyControlSession(guard.serial, 30),
         joystick=PersistentJoystick(execution_layout, guard.width, guard.height),
@@ -574,6 +650,7 @@ def _run_episode(
     escape_steps = 0
     guard_events = 0
     guard_escape_steps_total = 0
+    region_filter_masked_steps = 0
     waypoint_index = 0
     pointer_messages = 0
     retry_total = 0
@@ -693,6 +770,27 @@ def _run_episode(
             elif escape_active and escape_steps >= guard_escape_steps:
                 escape_active = False
                 escape_steps = 0
+            region_filter = runtime.region_filter
+            region_filter_applied = False
+            if (
+                region_filter is not None
+                and position is not None
+                and not death
+                and applied_joystick != "wait"
+            ):
+                masked = _region_safe_direction(
+                    position,
+                    applied_joystick,
+                    region,
+                    float(cast(float, region_filter["nominal_step_pixels"])),
+                    float(cast(float, region_filter["margin_pixels"])),
+                )
+                if masked != applied_joystick:
+                    applied_joystick = masked
+                    region_filter_applied = True
+                    region_filter_masked_steps += 1
+                    owner = "deterministic_router"
+                    reason = "region_filter_masked"
             requested = JOYSTICK_TO_STORE_DIRECTION[requested_joystick]
             applied = JOYSTICK_TO_STORE_DIRECTION[applied_joystick]
             command = _movement_command(previous_applied, applied)
@@ -804,9 +902,11 @@ def _run_episode(
                     "final_status": status,
                     "done": done,
                     "abort_reason": abort_reason,
+                    "region_filter_applied": region_filter_applied,
                     "progress_guard_escape": escape_active,
                     "progress_guard_escape_step": escape_steps,
-                    "progress_guard_events": guard_events,
+                    "region_filter_masked_steps": region_filter_masked_steps,
+        "progress_guard_events": guard_events,
                     "terminal_reason": terminal_reason,
                     "training_eligible": stored.payload["training_eligible"],
                 }

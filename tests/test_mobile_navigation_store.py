@@ -516,3 +516,69 @@ def test_route_b_v2_contract_rejects_a_broken_progress_guard() -> None:
         mutate(value)
         with pytest.raises(MobileTestbedError):
             store_runner._store_contract(value, "0" * 64)
+
+
+REGION = {"minimum_y": 35.0, "maximum_y": 95.0, "minimum_x": 35.0, "maximum_x": 95.0}
+
+
+def test_region_filter_keeps_the_desired_direction_when_it_is_safe() -> None:
+    safe = store_runner._region_safe_direction((60.0, 60.0), "east", REGION, 6.0, 4.0)
+    assert safe == "east"
+
+
+def test_region_filter_masks_a_step_that_would_leave_the_region() -> None:
+    """From x=93 an east step exits the region, so the filter must pick another bearing."""
+    masked = store_runner._region_safe_direction((60.0, 93.0), "east", REGION, 6.0, 4.0)
+    assert masked != "east"
+    step_y, step_x = store_runner._DIRECTION_STEPS[masked]
+    assert 35.0 + 4.0 <= 60.0 + step_y * 6.0 <= 95.0 - 4.0
+    assert 35.0 + 4.0 <= 93.0 + step_x * 6.0 <= 95.0 - 4.0
+
+
+def test_region_filter_turns_a_corner_into_a_follow_along_bearing() -> None:
+    """At the bottom-right corner both east and south are unsafe, so a lateral bearing is chosen."""
+    masked = store_runner._region_safe_direction((93.0, 93.0), "south_east", REGION, 6.0, 4.0)
+    assert masked in {"west", "north", "north_west", "south_west", "north_east"}
+
+
+def test_region_filter_heads_inward_from_outside_the_region() -> None:
+    inward = store_runner._region_safe_direction((60.0, 20.0), "west", REGION, 6.0, 4.0)
+    step_y, step_x = store_runner._DIRECTION_STEPS[inward]
+    assert 20.0 + step_x * 6.0 > 20.0
+    assert inward in {"east", "north_east", "south_east"}
+
+
+def test_region_filter_passes_wait_through_unchanged() -> None:
+    assert store_runner._region_safe_direction((60.0, 60.0), "wait", REGION, 6.0, 4.0) == "wait"
+
+
+def test_route_b_v3_contract_declares_the_region_filter() -> None:
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    contract, sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_route_b_v3.json"
+    )
+    assert len(sha) == 64
+    region_filter = cast(dict, contract["region_filter"])
+    assert region_filter["mode"] == "feasible_direction_within_region"
+    assert region_filter["nominal_step_pixels"] > 0 and region_filter["margin_pixels"] > 0
+    resolved = store_runner._store_contract(contract, sha)
+    assert resolved["region_filter"] == region_filter
+    assert cast(dict, contract["progress_guard"])["mode"] == "bounded_bearing_escape"
+
+
+def test_route_b_v3_contract_rejects_a_broken_region_filter() -> None:
+    value = json.loads(
+        (ROOT / "configs/movement_goal_navigation_route_b_v3.json").read_text(encoding="utf-8")
+    )
+    for mutate in (
+        lambda item: item["region_filter"].__setitem__("mode", "ad_hoc"),
+        lambda item: item["region_filter"].__setitem__("nominal_step_pixels", 0),
+        lambda item: item["region_filter"].__setitem__("margin_pixels", -1),
+    ):
+        value = json.loads(
+            (ROOT / "configs/movement_goal_navigation_route_b_v3.json").read_text(encoding="utf-8")
+        )
+        mutate(value)
+        with pytest.raises(MobileTestbedError):
+            store_runner._store_contract(value, "0" * 64)
