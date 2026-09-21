@@ -342,6 +342,36 @@ def _transition(
     }
 
 
+def _episode_outcome(
+    *,
+    arrived: bool,
+    death: bool,
+    outside_region: bool,
+    missing_streak: int,
+    maximum_gap: int,
+    budget_exhausted: bool,
+) -> tuple[bool, str, str, str | None]:
+    """Decide whether the episode ends and why.
+
+    A sustained localisation gap is a capture failure, not a timeout: without this a run that can
+    never localise silently burns its whole duration while sending no input, which is both a wasted
+    attempt and misleading evidence.
+    """
+    if arrived:
+        return True, "NAVIGATION_GOAL_REACHED", "TERMINATED", None
+    if death:
+        return True, "SAFETY_STOP", "ERROR", "death_or_ended_screen"
+    if outside_region:
+        return True, "SAFETY_STOP", "ERROR", "outside_free_movement_region"
+    if maximum_gap > 0 and missing_streak > maximum_gap:
+        return True, "CAPTURE_FAILURE", "ERROR", "localization_gap"
+    if budget_exhausted:
+        # An episode must always end with a terminal transition; a step or duration cap is a
+        # truncated episode, not a non-terminal one, which the reload verifier would reject.
+        return True, "TIMEOUT", "TRUNCATED", "step_or_duration_budget_exhausted"
+    return False, "NOT_DONE", "NOT_DONE", None
+
+
 @dataclass(frozen=True, slots=True)
 class _NavigationRuntime:
     contract: dict[str, object]
@@ -361,6 +391,8 @@ class _NavigationRuntime:
     region_limit: int
     settle_ns: int
     maximum_steps: int
+    maximum_gap: int
+    maximum_duration_seconds: float
     guard: DeviceGuard
     session: ScrcpyControlSession
     joystick: PersistentJoystick
@@ -422,6 +454,10 @@ def _prepare_navigation_runtime(
         region_limit=int(cast(int, region.get("maximum_consecutive_violation_frames", 10))),
         settle_ns=int(cast(int, store_contract["settle_ms"])) * 1_000_000,
         maximum_steps=int(cast(int, store_contract["maximum_steps"])),
+        maximum_gap=int(cast(int, store_contract.get("maximum_localization_gap_frames", 0))),
+        maximum_duration_seconds=float(
+            cast(float, contract.get("maximum_duration_seconds", 0.0))
+        ),
         guard=guard,
         session=ScrcpyControlSession(guard.serial, 30),
         joystick=PersistentJoystick(execution_layout, guard.width, guard.height),
@@ -448,6 +484,7 @@ def _run_episode(
     previous_applied = "STOP"
     previous_joystick = "wait"
     region_streak = 0
+    missing_streak = 0
     waypoint_index = 0
     pointer_messages = 0
     retry_total = 0
@@ -455,7 +492,9 @@ def _run_episode(
     arrived = False
     terminal_reason = "NOT_DONE"
     end_kind = "NOT_DONE"
+    abort_reason: str | None = None
     started = time.monotonic()
+    episode_deadline = started + runtime.maximum_duration_seconds
     last_position: tuple[float, float] | None = None
     committed: tuple[HierarchicalTransitionRecord, ...] = ()
 
@@ -502,6 +541,7 @@ def _run_episode(
             previous_position = state.previous
             last_position = position
             known = position is not None
+            missing_streak = 0 if known else missing_streak + 1
             outside_region = False
             if position is not None:
                 inside = (
@@ -579,13 +619,15 @@ def _run_episode(
                 waypoint_index += 1
                 if waypoint_index >= len(runtime.targets):
                     arrived = True
-            if arrived:
-                terminal_reason = "NAVIGATION_GOAL_REACHED"
-                end_kind = "TERMINATED"
-            elif death or outside_region:
-                terminal_reason = "SAFETY_STOP"
-                end_kind = "ERROR"
-            done = arrived or death or outside_region
+            done, terminal_reason, end_kind, abort_reason = _episode_outcome(
+                arrived=arrived,
+                death=death,
+                outside_region=outside_region,
+                missing_streak=missing_streak,
+                maximum_gap=runtime.maximum_gap,
+                budget_exhausted=time.monotonic() >= episode_deadline
+                or step_id + 1 >= runtime.maximum_steps,
+            )
             row = _transition(
                 store_contract=runtime.store_contract,
                 episode_id=episode_id,
@@ -636,6 +678,7 @@ def _run_episode(
                     "retry_count": retry_count,
                     "final_status": status,
                     "done": done,
+                    "abort_reason": abort_reason,
                     "terminal_reason": terminal_reason,
                     "training_eligible": stored.payload["training_eligible"],
                 }
@@ -681,6 +724,7 @@ def _run_episode(
         "backlog_free": max_messages <= 2
         and all(row["final_status"] in {"acknowledged", "noop"} for row in steps),
         "failure": failure,
+        "abort_reason": abort_reason,
         "duration_seconds": round(time.monotonic() - started, 8),
         "step_rows": steps,
     }

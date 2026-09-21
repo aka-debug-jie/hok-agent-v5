@@ -373,3 +373,87 @@ def test_router_output_is_always_a_joystick_direction() -> None:
                     store_runner.JOYSTICK_TO_STORE_DIRECTION[applied]
                 ] == applied
                 assert owner in {"geometry_rule", "deterministic_router"}
+
+
+def test_episode_outcome_ends_a_sustained_localisation_gap() -> None:
+    outcome = store_runner._episode_outcome
+    assert outcome(
+        arrived=False,
+        death=False,
+        outside_region=False,
+        missing_streak=3,
+        maximum_gap=10,
+        budget_exhausted=False,
+    ) == (False, "NOT_DONE", "NOT_DONE", None)
+    assert outcome(
+        arrived=False,
+        death=False,
+        outside_region=False,
+        missing_streak=11,
+        maximum_gap=10,
+        budget_exhausted=False,
+    ) == (True, "CAPTURE_FAILURE", "ERROR", "localization_gap")
+    assert outcome(
+        arrived=False,
+        death=False,
+        outside_region=False,
+        missing_streak=99,
+        maximum_gap=0,
+        budget_exhausted=False,
+    ) == (False, "NOT_DONE", "NOT_DONE", None)
+
+
+def test_episode_outcome_priority_keeps_arrival_and_safety_first() -> None:
+    outcome = store_runner._episode_outcome
+    assert outcome(
+        arrived=True,
+        death=True,
+        outside_region=True,
+        missing_streak=99,
+        maximum_gap=10,
+        budget_exhausted=True,
+    )[1] == "NAVIGATION_GOAL_REACHED"
+    assert outcome(
+        arrived=False,
+        death=True,
+        outside_region=False,
+        missing_streak=0,
+        maximum_gap=10,
+        budget_exhausted=False,
+    ) == (True, "SAFETY_STOP", "ERROR", "death_or_ended_screen")
+    assert outcome(
+        arrived=False,
+        death=False,
+        outside_region=True,
+        missing_streak=0,
+        maximum_gap=10,
+        budget_exhausted=False,
+    ) == (True, "SAFETY_STOP", "ERROR", "outside_free_movement_region")
+
+
+def test_episode_outcome_truncates_an_exhausted_budget() -> None:
+    """A step or duration cap must still produce a terminal transition, never a dangling NOT_DONE."""
+    outcome = store_runner._episode_outcome
+    done, reason, end_kind, abort = outcome(
+        arrived=False,
+        death=False,
+        outside_region=False,
+        missing_streak=0,
+        maximum_gap=10,
+        budget_exhausted=True,
+    )
+    assert (done, reason, end_kind) == (True, "TIMEOUT", "TRUNCATED")
+    assert abort == "step_or_duration_budget_exhausted"
+
+
+def test_store_v2_contract_carries_the_localisation_gap_guard() -> None:
+    from hok_agent.mobile_testbed import _goal_navigation_contract
+
+    contract, sha = _goal_navigation_contract(
+        ROOT / "configs/movement_goal_navigation_store_v2.json"
+    )
+    assert len(sha) == 64
+    block = cast(dict, contract["store"])
+    assert block["maximum_localization_gap_frames"] == 10
+    v1, _ = _goal_navigation_contract(ROOT / "configs/movement_goal_navigation_store_v1.json")
+    assert "maximum_localization_gap_frames" not in cast(dict, v1["store"])
