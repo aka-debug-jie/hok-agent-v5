@@ -221,6 +221,7 @@ def run_navigation_feedback_audit(
     ]
     tolerance = float(cast(float, navigation["arrival_tolerance_pixels"]))
     output = _new_large_output(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
     with UnifiedTransitionStore(store_path) as store:
         episode_ids = store.episode_ids()
         episodes: dict[str, tuple[HierarchicalTransitionRecord, ...]] = {
@@ -467,6 +468,322 @@ def run_navigation_feedback_audit(
     (output / "step-derivations.jsonl").write_text(
         "".join(json.dumps(row, sort_keys=True) + "\n" for row in derivations), encoding="utf-8"
     )
+    (output / "report.json").write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return report
+
+
+R0_RESPONSE_SCHEMA = "hok-agent-r0-response-task-contract-v1"
+RESPONSE_AUDIT_SCHEMA = "hok-agent-command-response-audit-v1"
+RESPONSE_REQUIRED_SIGNALS = (
+    "patch_displacement",
+    "commanded_response",
+    "progress",
+    "dead_reckoned_progress",
+    "terminal",
+)
+RESPONSE_REQUIRED_GATES = (
+    "minimum_response_coverage",
+    "minimum_positive_response_fraction",
+    "maximum_episode_net_displacement_error_px",
+    "minimum_episodes_within_net_error",
+    "minimum_dead_reckoning_steps",
+    "maximum_exact_agreement_fraction",
+)
+PATCH_HALF = 11
+PATCH_SEARCH = 16
+DIRECTION_VECTORS: dict[str, tuple[float, float]] = {
+    "north": (-1.0, 0.0),
+    "north_east": (-0.7071067811865476, 0.7071067811865476),
+    "east": (0.0, 1.0),
+    "south_east": (0.7071067811865476, 0.7071067811865476),
+    "south": (1.0, 0.0),
+    "south_west": (0.7071067811865476, -0.7071067811865476),
+    "west": (0.0, -1.0),
+    "north_west": (-0.7071067811865476, -0.7071067811865476),
+}
+
+
+def load_response_task_contract(path: Path) -> tuple[dict[str, object], str]:
+    payload = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+    signals = payload.get("signals")
+    gates = payload.get("gates")
+    names = {cast(dict[str, object], item)["name"] for item in cast(list[object], signals or [])}
+    if (
+        payload.get("schema_version") != R0_RESPONSE_SCHEMA
+        or not isinstance(signals, list)
+        or not isinstance(gates, dict)
+        or names != set(RESPONSE_REQUIRED_SIGNALS)
+        or any(key not in gates for key in RESPONSE_REQUIRED_GATES)
+        or cast(dict[str, object], payload.get("independence", {})).get("duplication_guard") is None
+    ):
+        raise FeedbackAuditError("r0 response task contract differs")
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+    return payload, digest
+
+
+def _grey(frame: np.ndarray) -> np.ndarray:
+    return cast(np.ndarray, frame.astype(np.float64).mean(axis=2))
+
+
+def _patch_displacement(
+    current: np.ndarray, following: np.ndarray, position: tuple[float, float]
+) -> tuple[float, float, float] | None:
+    """Best zero-mean correlation shift of the hero patch; a frame measurement, not a cue delta."""
+    center_y = int(round(position[0]))
+    center_x = int(round(position[1]))
+    margin = PATCH_HALF + PATCH_SEARCH
+    if (
+        center_y - margin < 0
+        or center_x - margin < 0
+        or center_y + margin >= current.shape[0]
+        or center_x + margin >= current.shape[1]
+    ):
+        return None
+    patch = _grey(
+        current[
+            center_y - PATCH_HALF : center_y + PATCH_HALF,
+            center_x - PATCH_HALF : center_x + PATCH_HALF,
+        ]
+    )
+    patch = patch - patch.mean()
+    norm = float(np.sqrt((patch * patch).sum()))
+    if norm <= 1e-9:
+        return None
+    best: tuple[float, float, float] | None = None
+    for offset_y in range(-PATCH_SEARCH, PATCH_SEARCH + 1):
+        for offset_x in range(-PATCH_SEARCH, PATCH_SEARCH + 1):
+            window = _grey(
+                following[
+                    center_y - PATCH_HALF + offset_y : center_y + PATCH_HALF + offset_y,
+                    center_x - PATCH_HALF + offset_x : center_x + PATCH_HALF + offset_x,
+                ]
+            )
+            window = window - window.mean()
+            denominator = float(np.sqrt((window * window).sum())) * norm
+            if denominator <= 1e-9:
+                continue
+            score = float((patch * window).sum() / denominator)
+            if best is None or score > best[0]:
+                best = (score, float(offset_y), float(offset_x))
+    return best
+
+
+def run_command_response_audit(
+    *,
+    response_contract_path: Path,
+    navigation_contract_path: Path,
+    store_path: Path,
+    frame_root: Path,
+    output_dir: Path,
+) -> dict[str, object]:
+    contract, contract_sha = load_response_task_contract(response_contract_path)
+    _navigation, navigation_sha = _goal_navigation_contract(navigation_contract_path)
+    gates = cast(dict[str, object], contract["gates"])
+    output = _new_large_output(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    with UnifiedTransitionStore(store_path) as store:
+        episode_ids = store.episode_ids()
+        episodes: dict[str, tuple[HierarchicalTransitionRecord, ...]] = {
+            episode_id: store.load_episode(episode_id) for episode_id in episode_ids
+        }
+        integrity = store.integrity()
+    steps = _step_rows(store_path.parent)
+    rows_by_key = {
+        (cast(str, row.get("episode_id")), cast(int, row.get("step_id", -1))): row for row in steps
+    }
+    per_episode: list[dict[str, object]] = []
+    responses: list[float] = []
+    move_steps = 0
+    stop_steps = 0
+    held_direction: str | None = None
+    without_displacement = 0
+    duplicate_steps = 0
+    compared_steps = 0
+    step_errors: list[float] = []
+    step_bias_y = 0.0
+    step_bias_x = 0.0
+    for episode_id in episode_ids:
+        records = episodes[episode_id]
+        dead_reckoned_y = 0.0
+        dead_reckoned_x = 0.0
+        cue_first: tuple[float, float] | None = None
+        cue_last: tuple[float, float] | None = None
+        dead_steps = 0
+        for record in records:
+            step_id = int(record["step_id"])
+            step_row = rows_by_key.get((episode_id, step_id))
+            if step_row is None:
+                continue
+            position = step_row.get("position")
+            if position is None:
+                continue
+            cue = (float(cast(list[float], position)[0]), float(cast(list[float], position)[1]))
+            cue_first = cue if cue_first is None else cue_first
+            cue_last = cue
+            dispatched = step_row.get("dispatched_direction")
+            if isinstance(dispatched, str):
+                held_direction = dispatched
+            command = held_direction if step_row.get("movement_command") == "KEEP" else dispatched
+            following_position = rows_by_key.get((episode_id, step_id + 1), {}).get("position")
+            if isinstance(following_position, list):
+                compare = (
+                    float(cast(list[float], following_position)[0]) - cue[0],
+                    float(cast(list[float], following_position)[1]) - cue[1],
+                )
+            else:
+                compare = None
+            current = _minimap(frame_root, record["observation"]["frame_bundle_ref"])
+            following = _minimap(frame_root, record["next_observation"]["frame_bundle_ref"])
+            displacement = _patch_displacement(current, following, cue)
+            if command == "wait" or command is None:
+                stop_steps += 1
+            else:
+                move_steps += 1
+            if displacement is None:
+                without_displacement += 1
+                continue
+            dead_steps += 1
+            dead_reckoned_y += displacement[1]
+            dead_reckoned_x += displacement[2]
+            if compare is not None:
+                compared_steps += 1
+                step_errors.append(
+                    abs(displacement[1] - compare[0]) + abs(displacement[2] - compare[1])
+                )
+                step_bias_y += displacement[1] - compare[0]
+                step_bias_x += displacement[2] - compare[1]
+                if (
+                    abs(displacement[1] - compare[0]) <= EXACT_AGREEMENT_EPSILON
+                    and abs(displacement[2] - compare[1]) <= EXACT_AGREEMENT_EPSILON
+                ):
+                    duplicate_steps += 1
+            vector = DIRECTION_VECTORS.get(str(command))
+            if vector is not None:
+                responses.append(
+                    displacement[1] * vector[0] + displacement[2] * vector[1]
+                )
+        if cue_first is None or cue_last is None or dead_steps == 0:
+            per_episode.append(
+                {
+                    "episode_id": episode_id,
+                    "steps": len(records),
+                    "dead_reckoning_steps": dead_steps,
+                    "error_px": None,
+                    "within_error": False,
+                }
+            )
+            continue
+        error = abs(dead_reckoned_y - (cue_last[0] - cue_first[0])) + abs(
+            dead_reckoned_x - (cue_last[1] - cue_first[1])
+        )
+        within = error <= float(cast(float, gates["maximum_episode_net_displacement_error_px"]))
+        per_episode.append(
+            {
+                "episode_id": episode_id,
+                "steps": len(records),
+                "dead_reckoning_steps": dead_steps,
+                "cue_net": [cue_last[0] - cue_first[0], cue_last[1] - cue_first[1]],
+                "dead_reckoned_net": [dead_reckoned_y, dead_reckoned_x],
+                "error_px": error,
+                "within_error": within,
+            }
+        )
+    coverage = compared_steps / move_steps if move_steps else 0.0
+    positive = sum(1 for value in responses if value > 0.0) / len(responses) if responses else 0.0
+    eligible = [
+        row for row in per_episode if cast(int, row["dead_reckoning_steps"]) >= int(
+            cast(int, gates["minimum_dead_reckoning_steps"])
+        )
+    ]
+    within_fraction = (
+        sum(1 for row in eligible if bool(row["within_error"])) / len(eligible)
+        if eligible
+        else 0.0
+    )
+    duplicate_fraction = duplicate_steps / compared_steps if compared_steps else 0.0
+    failures: list[str] = []
+    if coverage < float(cast(float, gates["minimum_response_coverage"])):
+        failures.append("minimum_response_coverage")
+    if positive < float(cast(float, gates["minimum_positive_response_fraction"])):
+        failures.append("minimum_positive_response_fraction")
+    if not eligible or within_fraction < float(
+        cast(float, gates["minimum_episodes_within_net_error"])
+    ):
+        failures.append("minimum_episodes_within_net_error")
+    if duplicate_fraction > float(cast(float, gates["maximum_exact_agreement_fraction"])):
+        failures.append("displacement_duplicates_the_cue_delta")
+    report: dict[str, object] = {
+        "schema_version": RESPONSE_AUDIT_SCHEMA,
+        "status": "PASSED" if not failures and integrity == "ok" else "FAILED",
+        "response_contract_sha256": contract_sha,
+        "navigation_contract_sha256": navigation_sha,
+        "store_path": store_path.name,
+        "store_integrity": integrity,
+        "episodes": len(episode_ids),
+        "denominators": {
+            "episodes": len(episode_ids),
+            "steps": len(steps),
+            "move_steps": move_steps,
+            "stop_steps": stop_steps,
+            "steps_without_displacement": without_displacement,
+            "dead_reckoning_steps": compared_steps,
+        },
+        "response": {
+            "coverage": coverage,
+            "positive_fraction": positive,
+            "measured_steps": len(responses),
+        },
+        "dead_reckoning": {
+            "eligible_episodes": len(eligible),
+            "within_error_fraction": within_fraction,
+            "tolerance_px": float(
+                cast(float, gates["maximum_episode_net_displacement_error_px"])
+            ),
+            "per_episode": per_episode,
+        },
+        "step_diagnostic": {
+            "compared_steps": len(step_errors),
+            "l1_median_px": float(np.median(np.asarray(step_errors, dtype=np.float64)))
+            if step_errors
+            else None,
+            "l1_p95_px": float(np.quantile(np.asarray(step_errors, dtype=np.float64), 0.95))
+            if step_errors
+            else None,
+            "fraction_within_3px": sum(1 for value in step_errors if value <= 3.0)
+            / len(step_errors)
+            if step_errors
+            else 0.0,
+            "mean_bias_per_step": [
+                step_bias_y / compared_steps if compared_steps else None,
+                step_bias_x / compared_steps if compared_steps else None,
+            ],
+            "note": "reported diagnostic only; the cumulative gate is unchanged and stays failed",
+        },
+        "duplication": {
+            "compared_steps": compared_steps,
+            "duplicate_fraction": duplicate_fraction,
+            "measurement_is_frame_derived": duplicate_fraction
+            <= float(cast(float, gates["maximum_exact_agreement_fraction"])),
+        },
+        "gate_failures": failures,
+        "unverified_remainder": [
+            "the patch is anchored at the cue position, so the measurement location still depends "
+            "on the cue; only the displacement value is frame-derived",
+            "the reward compares an execution-stream direction with a patch measurement, which is "
+            "structurally independent, but neither side is an absolute map reference",
+            "the terminal label's only reference is its own rule outcome",
+        ],
+        "claim_boundary": {
+            "semantic_position_accuracy_verified": False,
+            "independent_map_reference_available": False,
+            "reward_allowed": False,
+            "training_allowed": not failures and integrity == "ok",
+        },
+    }
     (output / "report.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

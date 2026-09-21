@@ -97,3 +97,58 @@ def test_fixed_boxes_reads_both_declared_shapes() -> None:
     assert len(boxes) >= 2
     with pytest.raises(audit.FeedbackAuditError):
         audit._numbers([1, 2, 3], label="bad")
+
+
+RESPONSE = ROOT / "game_rules" / "r0_response_task_contract_v1.json"
+
+
+def test_response_contract_loads_and_hashes() -> None:
+    contract, sha = audit.load_response_task_contract(RESPONSE)
+    assert len(sha) == 64
+    names = {cast(dict, item)["name"] for item in cast(list, contract["signals"])}
+    assert names == set(audit.RESPONSE_REQUIRED_SIGNALS)
+    assert cast(dict, contract["independence"])["duplication_guard"]
+
+
+def test_response_contract_rejects_tampering(tmp_path: Path) -> None:
+    value = json.loads(RESPONSE.read_text(encoding="utf-8"))
+    value["gates"].pop("minimum_positive_response_fraction")
+    tampered = tmp_path / "r0r.json"
+    tampered.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(audit.FeedbackAuditError):
+        audit.load_response_task_contract(tampered)
+
+    value = json.loads(RESPONSE.read_text(encoding="utf-8"))
+    value["independence"].pop("duplication_guard")
+    tampered.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(audit.FeedbackAuditError):
+        audit.load_response_task_contract(tampered)
+
+
+def test_direction_vectors_are_unit_and_axis_correct() -> None:
+    vectors = audit.DIRECTION_VECTORS
+    assert vectors["north"] == (-1.0, 0.0)
+    assert vectors["east"] == (0.0, 1.0)
+    for name, vector in vectors.items():
+        norm = (vector[0] ** 2 + vector[1] ** 2) ** 0.5
+        assert abs(norm - 1.0) < 1e-9, name
+
+
+def test_patch_displacement_measures_a_shifted_patch() -> None:
+    current = np.zeros((128, 128, 3), dtype=np.uint8)
+    current[50:70, 50:70] = 200
+    current[55:65, 55:65] = 40
+    following = np.zeros((128, 128, 3), dtype=np.uint8)
+    following[54:74, 47:67] = 200
+    following[59:69, 52:62] = 40
+    measured = audit._patch_displacement(current, following, (60.0, 60.0))
+    assert measured is not None
+    assert measured[0] > 0.9
+    assert abs(measured[1] - 4.0) <= 1.0
+    assert abs(measured[2] + 3.0) <= 1.0
+
+
+def test_patch_displacement_rejects_an_edge_patch() -> None:
+    frame = np.zeros((128, 128, 3), dtype=np.uint8)
+    assert audit._patch_displacement(frame, frame, (4.0, 4.0)) is None
+    assert audit._patch_displacement(frame, frame, (60.0, 60.0)) is None

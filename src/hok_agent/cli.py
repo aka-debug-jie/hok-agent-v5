@@ -904,6 +904,15 @@ def _parser() -> argparse.ArgumentParser:
     feedback_audit.add_argument("--frame-root", type=Path, required=True)
     feedback_audit.add_argument("--output-dir", type=Path, required=True)
     feedback_audit.add_argument("--qa-samples", type=int, default=12)
+    response_audit = commands.add_parser(
+        "navigation-response-audit",
+        help="R0 revision: audit the commanded-response feedback on its cross-source reference",
+    )
+    response_audit.add_argument("--response-contract", type=Path, required=True)
+    response_audit.add_argument("--navigation-contract", type=Path, required=True)
+    response_audit.add_argument("--store", type=Path, required=True)
+    response_audit.add_argument("--frame-root", type=Path, required=True)
+    response_audit.add_argument("--output-dir", type=Path, required=True)
     operation_side = commands.add_parser(
         "mobile-operation-team-side",
         help="detect blue or red side from the loading-panel self highlight",
@@ -3102,6 +3111,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             else:
                 raise SystemExit("mobile-navigation-verify needs --episode-id or --all")
+        elif args.command == "navigation-response-audit":
+            from hok_agent.navigation_feedback_audit import run_command_response_audit
+
+            result = run_command_response_audit(
+                response_contract_path=args.response_contract,
+                navigation_contract_path=args.navigation_contract,
+                store_path=args.store,
+                frame_root=args.frame_root,
+                output_dir=args.output_dir,
+            )
         elif args.command == "navigation-feedback-audit":
             from hok_agent.navigation_feedback_audit import run_navigation_feedback_audit
 
