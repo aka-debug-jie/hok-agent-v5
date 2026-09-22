@@ -192,6 +192,34 @@ At this point the compact answer is that this setup is viable in principle - a s
 `main` gets within 0.0119 of the frozen teacher while cutting latency by 42 % - but a deployable
 candidate needs the acceptance question answered first.
 
+### A candidate passes the gate, with no tolerance loosened
+
+Rather than relax the zero tolerance to let the 0.0119 candidate through, the same shallow family was
+fitted a little further across seeds. Seed 1 reaches dev parity with the frozen teacher and passes the
+unchanged gate on its own merit:
+
+| Candidate | dev intent macro-F1 | delta | median reduction | p95 reduction | gate (declared max drop 0.0) |
+|---|---|---|---|---|---|
+| seed 0, 900 steps | 0.8772 | -0.0119 | 43.3 % | 42.4 % | rejected |
+| **seed 1, 1400 steps** | **0.8891** | **+0.00006** | **42.8 %** | **41.8 %** | **passed, no reasons** |
+| seed 2, 1400 steps | 0.8853 | -0.0038 | 42.8 % | 42.7 % | rejected |
+
+So the F2 feedback has now rejected and passed the same compression at the same declared threshold,
+which is the evidence that it discriminates. The passing candidate is a `resnet18_shallow` `main` with
+5,112,974 parameters against the teacher's 11,383,694, on the frozen dev split.
+
+### What "passed" does and does not mean here
+
+- It is a **dev-split** result, and the split was read many times while iterating on seeds. The gate's
+  `maximum_exact_agreement_fraction` concern applies to this line, so the honest reading is a strong
+  dev signal, not a final acceptance.
+- It is **not** a holdout result. The frozen 20-seed holdout stays unopened and remains the acceptance
+  for any candidate that changes control.
+- It is **not** a gameplay improvement. Nothing was promoted, the candidate is not wired into the
+  runtime, and `promotion_allowed` stays false on every artifact.
+- The gate's zero-intent-drop tolerance was reviewed with the owner and **left as it is**; one seed
+  passed under it without any tolerance change.
+
 ## What is deliberately not claimed
 
 - Not that any speedup has been achieved. The feedback is in place and two pilot candidates were
