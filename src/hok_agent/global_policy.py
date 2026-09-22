@@ -55,7 +55,7 @@ MAIN_ARCHITECTURE_METADATA_KEY: Final = "main_architecture"
 # The historical architecture. A checkpoint whose metadata predates this key is read as resnet18, so
 # every frozen checkpoint on disk keeps its recorded hash and still loads.
 DEFAULT_MAIN_ARCHITECTURE: Final = "resnet18"
-MAIN_ARCHITECTURES: Final = ("resnet18", "compact")
+MAIN_ARCHITECTURES: Final = ("resnet18", "resnet18_shallow", "compact")
 
 
 class GlobalPolicyError(ValueError):
@@ -335,6 +335,25 @@ class _SmallView(nn.Module):
         return cast(torch.Tensor, self.net(value))
 
 
+def _resnet_main(*, shallow: bool) -> nn.Module:
+    """A resnet18-shaped `main` view, optionally halved in depth.
+
+    Both forms keep the same widths and the same 512-wide output, so `project` and every other
+    component are untouched. The shallow form drops the second block of each layer, which keeps the
+    architecture family and its conv shapes - a gentler compression than a different network - while
+    removing roughly half the parameters, most of them from the heaviest last stage.
+    """
+    backbone = resnet18(weights=None)
+    backbone.conv1 = nn.Conv2d(3, 64, 3, stride=1, padding=1, bias=False)
+    backbone.maxpool = nn.Identity()
+    backbone.fc = nn.Identity()
+    if shallow:
+        for name in ("layer1", "layer2", "layer3", "layer4"):
+            layer = cast(nn.Sequential, getattr(backbone, name))
+            setattr(backbone, name, nn.Sequential(*list(layer.children())[:1]))
+    return cast(nn.Module, backbone)
+
+
 class _CompactMain(nn.Module):
     """A declared smaller `main` view: the same 512-wide output at ~2.4% of resnet18's parameters.
 
@@ -376,12 +395,10 @@ class GlobalMacroPolicy(nn.Module):
         self.main_architecture = main_architecture
         if main_architecture == "compact":
             self.main: nn.Module = _CompactMain()
+        elif main_architecture == "resnet18_shallow":
+            self.main = _resnet_main(shallow=True)
         else:
-            backbone = resnet18(weights=None)
-            backbone.conv1 = nn.Conv2d(3, 64, 3, stride=1, padding=1, bias=False)
-            backbone.maxpool = nn.Identity()
-            backbone.fc = nn.Identity()
-            self.main = backbone
+            self.main = _resnet_main(shallow=False)
         self.minimap = _SmallView()
         self.hud = _SmallView()
         self.project = nn.Sequential(nn.Linear(640, 128), nn.ReLU())

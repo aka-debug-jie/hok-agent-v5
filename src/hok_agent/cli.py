@@ -1598,7 +1598,9 @@ def _parser() -> argparse.ArgumentParser:
     global_distill.add_argument("--teacher-checkpoint", type=Path, required=True)
     global_distill.add_argument("--output-dir", type=Path, required=True)
     global_distill.add_argument(
-        "--main-architecture", choices=("resnet18", "compact"), default="compact"
+        "--main-architecture",
+        choices=("resnet18", "resnet18_shallow", "compact"),
+        default="resnet18_shallow",
     )
     global_distill.add_argument("--epochs", type=int, default=1)
     global_distill.add_argument("--maximum-steps", type=int, default=50)

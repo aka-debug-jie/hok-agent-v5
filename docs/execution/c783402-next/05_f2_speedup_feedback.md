@@ -164,6 +164,34 @@ So the honest F3 outcome is a working pipeline and a negative pilot. Promoting n
 correct result, and a real distillation configuration (a proper objective and schedule, then a
 larger budget) would be a new decision with real compute behind it, not another tweak.
 
+## The gentler backbone: the same architecture family, halved
+
+The owner then asked for a gentler compression rather than a different network, so a
+`resnet18_shallow` variant was declared: the same resnet18 shapes, the same 512-wide output and the
+same conv widths, with the second block dropped from each of `layer1` to `layer4`. It keeps the family
+and drops 55.1 % of the parameters (main 11,168,832 -> 4,898,112), most of them from the heaviest last
+stage. This is what "preserve behaviour" looked like in practice:
+
+| Run | budget | loss first -> last | dev intent macro-F1 | dev zone macro-F1 | gate |
+|---|---|---|---|---|---|
+| `pilot-shallow-v1` | 1 epoch, 252 steps, lr 1e-3 | 50.1 -> 4.61 | **0.8526** | 0.7699 | rejected, `intent_macro_f1_regressed` |
+| `pilot-shallow-v2` | 4 epochs, 900 steps, lr 1e-3 | 50.1 -> 2.55 (min 0.375) | **0.8772** | 0.8243 | rejected, `intent_macro_f1_regressed` |
+| teacher | frozen DAgger | - | 0.8891 | 0.8446 | baseline |
+
+The gentler backbone moved dev intent macro-F1 from 0.0039 untrained to 0.8526, then to 0.8772 with a
+4x budget, and it clears the latency half comfortably - the measured reduction is **43.3 % at the
+median and 42.4 % at the p95**, both above the declared 25 %. The gate still returns `passed = false`
+because the behaviour drop is **0.0119** against a declared maximum drop of **0.0**.
+
+That is the real trade-off, and it is now a policy decision rather than an engineering unknown:
+either accept a small, declared behaviour tolerance (and a fitted student could then pass), or train
+to exact parity first. The gate's zero tolerance has not been loosened to make a candidate pass, and
+nothing was promoted.
+
+At this point the compact answer is that this setup is viable in principle - a same-family shallow
+`main` gets within 0.0119 of the frozen teacher while cutting latency by 42 % - but a deployable
+candidate needs the acceptance question answered first.
+
 ## What is deliberately not claimed
 
 - Not that any speedup has been achieved. The feedback is in place and two pilot candidates were
