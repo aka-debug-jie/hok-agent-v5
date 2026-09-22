@@ -27,7 +27,7 @@ the ledger sections of [DELIVERY_PROGRESS.md](../DELIVERY_PROGRESS.md).
 | v12 | `4a18c686b464` | same declared values, hysteresis no longer fed back | `route-b-batch-15-stage1` 0/1, back to 3 of 4 |
 | v13 | `393dd82ba7c6` | last target `(50,80)` becomes `(50,70)`, because `(50,80)` measured unobservable | `route-b-batch-16-stage1` **1/1 arrived, 4 of 4** — the first complete four-waypoint pass. `route-b-batch-17-stage3x` then 0/3 on the same digest, so the pass is start-position dependent |
 | v14 | `caa0a58d67b3` | adds `no_advance_guard` (`flat_localised_position`, 12 steps, 1.0 px) so a frozen screen is an `ACTION_FAILURE` rather than a `TIMEOUT` | `route-b-batch-18-stage3` 0/3, 0 of 4, `TIMEOUT`, `no_advance_events=0` — the guard correctly did not fire because the world was still advancing |
-| v15 | `ba46e2b21624` | adds the measured traversability mask and a final-approach commitment of three steps | `route-b-batch-19-stage3` and `-20-stage10` passed 3/3 and 10/10 but with the mask **inert** (a vocabulary defect, see below). After the fix, `route-b-batch-22-stage1`, `-23-stage3` and `-21-stage10` passed **1/1, 3/3 and 10/10** with the mask live. The 2026-09-22 rebind of the same digest passed stage 1 (1/1) but failed stage 3 (1/3) on a corrected-death-box false positive, so the pass is scoped to commit `7fb530a` |
+| v15 | `ba46e2b21624` | adds the measured traversability mask and a final-approach commitment of three steps | `route-b-batch-19-stage3` and `-20-stage10` passed 3/3 and 10/10 but with the mask **inert** (a vocabulary defect, see below). After the fix, `route-b-batch-22-stage1`, `-23-stage3` and `-21-stage10` passed **1/1, 3/3 and 10/10** with the mask live. The 2026-09-22 rebind of the same digest passed stage 1 (1/1) but failed stage 3 (1/3) on a corrected-death-box false positive; the detector then gained a declared confirmation policy and the pass was **re-bound to the current code** by `route-b-rebind3-stage1`, `-stage3` and `-stage10` at **1/1, 3/3 and 10/10** on the same contract but with ROIs `876adf7626a1` and a declared 1.5 px placement |
 
 ## The v15 traversability grid
 
@@ -62,7 +62,10 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
   `(53, 68)` or `(62.9, 61.9)`, and the pass therefore holds from the measured starting positions
   only. The recorded failing start `(78.4, 55.4)` was then re-run deliberately, in three consecutive
   episodes from that start with the contract unchanged, and it failed all three: the route does not
-  fit its declared 90 s duration budget from there.
+  fit its declared 90 s duration budget from there. Reproducing the pass also depends on placement:
+  a start 2.8-3.9 px from the recorded passing starts timed out, while a start delivered within
+  0.66-0.79 px by the declared 1.5 px placement passed, so the tolerance on the measured start is
+  about one pixel rather than the four pixels the earlier coarse placement assumed.
 - **The cause is a real obstruction, and it agrees with the mask.** All three of those episodes end
   with the hero stalled about ten pixels from waypoint `(50, 50)`, needing to travel north. The
   closest one stalls in cell `14:12`, which is exactly a cell where the frozen grid removes north,
@@ -83,28 +86,33 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
 - **Mask attribution.** The mask is live and fires on 1 to 5 steps per episode, but its isolated
   contribution is not measured by a controlled ablation. The commitment is the driver: an earlier
   run of the same contract with the mask inert passed 13 of 13 episodes.
-- **The pass is bound to its own commit, not to the current code.** On 2026-09-22 the staged
-  admission was re-run against the unchanged contract `ba46e2b2` and the corrected ROIs `6c9cc65c`
-  to turn that inference into a fact, and it did not reproduce. The hero was first placed back in
-  the recorded passing cluster by the declared reposition `movement_goal_navigation_reposition_v3.json`
-  (`05a0b689ac51`), stopping at `(54.65, 71.38)`. `route-b-rebind-stage1` then passed 1 of 1, but
-  `route-b-rebind-stage3` failed 1 of 3 and blocked stage 10: episode 1 stopped
-  `SAFETY_STOP`/`death_or_ended_screen` at `(65.8, 79.7)`. That stop is a false positive, proven
-  from the stop frame: the green-ring cue centroid equals the logged position, the main view shows a
-  full health bar with no death overlay, the hud skills are coloured rather than greyed, and the
-  next episode begins beside the stop rather than at the fountain. The cause is the enlarged
-  `(683, 0, 937, 46)` death box from `5031c82`, which reads only about 100-120 red and 0 white on
-  ordinary frames but overlaps the top-centre in-match announcement region, where a red banner with
-  white text clears the unchanged 2000/80 thresholds. The fourteen-of-fourteen pass therefore stands
-  for commit `7fb530a` only. The detector was then fixed at its cause rather than by relaxing a
-  threshold: the box and its minima are unchanged, and the stop now also requires the colour test to
+- **The pass is re-bound to the current code, from a declared 1.5 px placement.** On 2026-09-22 the
+  staged admission was re-run against the unchanged contract `ba46e2b2` to turn the inference into a
+  fact, and the first attempt failed: it passed stage 1 but stopped stage 3 on a corrected-death-box
+  false positive, and after the detector was fixed a second attempt timed out from a start 2.8-3.9 px
+  off the recorded passing starts. Placement was the obstacle, so
+  `movement_goal_navigation_reposition_v4.json` (`51cadbc07470`) declares a 1.5 px arrival tolerance, a
+  6.0 px deceleration entry with the 200 ms tier and a 0.5 px no-advance travel; the route's own 4.0 px
+  arrival gate is untouched. It landed 1.41 px from its target and delivered a start measured 0.79 px
+  from the recorded passing start by the green-ring centre and 0.66 px by the route run's first fix.
+  `route-b-rebind3-stage1`, `-stage3` and `-stage10` then passed **1/1, 3/3 and 10/10** with the death
+  policy live and ROIs `876adf7626a1`, every store verified. The pass is now bound to the checked-out
+  code, and the start sensitivity is sharper rather than gone: it depends on that 1.5 px placement.
+- **The death-box defect and its fix, kept because they bound the pass's history.** The enlarged
+  `(683, 0, 937, 46)` box from `5031c82` reads only about 100-120 red and 0 white on ordinary frames
+  but overlaps the top-centre in-match announcement region, where a red banner with white text clears
+  the unchanged 2000/80 thresholds; it stopped `route-b-rebind-stage3` episode 1 while the hero was
+  walking. The stop is proven false from the stop frame: the green-ring cue centroid equals the logged
+  position, the main view shows a full health bar with no death overlay, the hud skills are coloured
+  rather than greyed, and the next episode begins beside the stop rather than at the fountain. The fix
+  relaxes nothing: the box and minima are unchanged and the stop now also requires the colour test to
   hold for `confirmation_steps` 2 consecutive observations and the localised hero to travel at most
-  `maximum_travel_pixels` 1.0 over `stationary_window_steps` 2. That refuses the recorded stop step on
-  both halves (banner streak one against two, two-step travel 4.24 px against 1.0) while the owner
-  death reference still reads death-visible; the negative set is preserved under
-  `audit/hierarchical-movement-mvp/death-box-negatives-v1/`. The fix was then exercised on device:
-  `route-b-rebind2-stage1` ran its full 97 steps to a budget timeout with no banner stop, so the
-  policy held, but it did not arrive from a start 2.8-3.9 px off the recorded passing starts (the
-  passing stage-1 run began 1.2-1.7 px away), which is inside the recorded start-sensitivity band.
-  The pass is therefore still not re-bound and still keeps commit `7fb530a`, and the named obstacle
-  is placement precision rather than the detector.
+  `maximum_travel_pixels` 1.0 over `stationary_window_steps` 2, with a lost marker counting as no
+  travel. That refuses the recorded stop step on both halves (streak one against two, travel 4.24 px
+  against 1.0) while the owner death reference still reads death-visible, and the negative set is
+  preserved under `audit/hierarchical-movement-mvp/death-box-negatives-v1/`. The confirmation is shown
+  to do real work rather than merely never firing: in the ten-episode stage `death_banner_steps` is 1
+  in episodes 1, 4 and 6 while `death_confirmed_steps` is 0 in all of them, so three raw colour hits
+  were rejected while the hero kept walking and arrived. The offending non-death banner itself is still
+  unphotographed, because the runner persists no life-state strip; the counted rejections are direct
+  evidence that a rejection happened but weaker than a picture.

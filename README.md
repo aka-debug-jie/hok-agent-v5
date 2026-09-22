@@ -42,10 +42,16 @@ internal API, backend or internal reference:
   announcement region and stopped a run whose hero was demonstrably alive. The box and its
   thresholds were then left unchanged and the stop was given a declared confirmation policy: the
   banner must hold for two consecutive observations and the hero must not travel in the same window,
-  since a dead hero cannot move. That policy held on device (a fresh stage-1 run went its full 97
-  steps with no banner stop) but did not arrive, from a start 2.8-3.9 px off the recorded passing
-  starts, so the pass is still not re-bound and the named obstacle is placement precision. Versions
-  and digests are indexed in [docs/ROUTE_B_CONTRACT_INDEX.md](docs/ROUTE_B_CONTRACT_INDEX.md).
+  since a dead hero cannot move. That policy held on device, and the reason the pass is bound to the
+  current code is a declared **1.5 px placement**: the earlier coarse placement could only deliver a
+  start 2.8-3.9 px from the recorded passing starts and the route timed out, while the tight placement
+  delivered one 0.66-0.79 px from it and the admission then passed **1/1, 3/3 and 10/10** under the
+  unchanged contract `ba46e2b2` with the death policy live (ROIs `876adf7626a1`, every store verified).
+  The confirmation is shown to do real work rather than never firing: across the ten-episode stage
+  three raw banner hits appeared and all three were rejected while the hero kept walking and arrived.
+  The start sensitivity is therefore sharper, not gone - reproducing the pass depends on that 1.5 px
+  placement. Versions and digests are indexed in
+  [docs/ROUTE_B_CONTRACT_INDEX.md](docs/ROUTE_B_CONTRACT_INDEX.md).
 
 Single-policy post-training is closed as `DATA_SOURCE_LIMITED`, not left open: R0 tested three
 feedback lines and all three failed for a reportable reason - the navigation feedback has no
