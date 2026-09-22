@@ -288,9 +288,23 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
         ordered.sort()
         if any(later[1] < earlier[1] for earlier, later in zip(ordered, ordered[1:], strict=False)):
             raise MobileTestbedError("mobile navigation store final approach differs")
+        exit_margin = approach_raw.get("direct_bearing_exit_margin_pixels")
+        if exit_margin is not None and (
+            not isinstance(exit_margin, (int, float)) or float(exit_margin) < 0
+        ):
+            raise MobileTestbedError("mobile navigation store final approach differs")
         commitment = approach_raw.get("commitment_steps")
         if commitment is not None and (not isinstance(commitment, int) or int(commitment) < 1):
             raise MobileTestbedError("mobile navigation store final approach differs")
+        stall_commitment = (
+            cast(dict[str, object], planner_raw).get("stall_commitment_steps")
+            if planner_raw is not None
+            else None
+        )
+        if stall_commitment is not None and (
+            not isinstance(stall_commitment, int) or int(stall_commitment) < 1
+        ):
+            raise MobileTestbedError("mobile navigation store planner stall commitment differs")
         direct_bearing = approach_raw.get("direct_bearing")
         if direct_bearing is not None and not isinstance(direct_bearing, bool):
             raise MobileTestbedError("mobile navigation store final approach differs")
@@ -977,6 +991,8 @@ class _NavigationRuntime:
     no_advance_guard: dict[str, object] | None
     traversability: dict[str, object] | None
     approach_commitment: int
+    approach_exit_margin: float
+    stall_commitment: int
     backlog_free_maximum_messages: int
     approach_tiers: list[tuple[float, int]]
     approach_default_hold_ms: int
@@ -1073,6 +1089,28 @@ def _prepare_navigation_runtime(
         ),
         no_advance_guard=cast(dict[str, object] | None, contract.get("no_advance_guard")),
         traversability=cast(dict[str, object] | None, contract.get("traversability")),
+        approach_exit_margin=float(
+            cast(
+                float,
+                (
+                    cast(dict[str, object], store_contract["final_approach"]).get(
+                        "direct_bearing_exit_margin_pixels", 0.0
+                    )
+                    if store_contract.get("final_approach") is not None
+                    else 0.0
+                ),
+            )
+        ),
+        stall_commitment=int(
+            cast(
+                int,
+                (
+                    cast(dict[str, object], contract["planner"]).get("stall_commitment_steps", 1)
+                    if contract.get("planner") is not None
+                    else 1
+                ),
+            )
+        ),
         approach_commitment=int(
             cast(
                 int,
@@ -1200,8 +1238,12 @@ def _run_episode(
     )
     committed_approach: str | None = None
     committed_steps = 0
+    committed_stall: str | None = None
+    stall_commitment_steps = 0
+    was_in_approach_band = False
     traversability_masked_steps = 0
     approach_committed_steps = 0
+    stall_committed_steps = 0
     advance_anchor: tuple[float, float] | None = None
     advance_steps = 0
     no_advance = False
@@ -1315,16 +1357,28 @@ def _run_episode(
                     guard_events += 1
                     best_distance = distance
                     no_progress_streak = 0
+            # The direct-approach aim is chosen by band membership, and membership flickers when
+            # the hero sits on the boundary: the cold-start failure spent forty-five steps between
+            # 9.2 and 12.4 px against a declared 12.0, alternating north and north-east because
+            # inside the band it aims at the waypoint and outside it aims at the path lookahead.
+            # That is not the bearing hysteresis removed in v12 - it is the boundary of the band -
+            # so entering and leaving use different distances, by the declared exit margin.
+            if position is None or death or outside_region or distance is None:
+                in_approach_band = False
+            elif distance <= runtime.approach_distance:
+                in_approach_band = True
+            else:
+                in_approach_band = bool(
+                    was_in_approach_band
+                    and distance <= runtime.approach_distance + runtime.approach_exit_margin
+                )
+            was_in_approach_band = in_approach_band
             requested_joystick = "wait"
             planner = runtime.planner
             if planner is not None and position is not None and not death and not outside_region:
                 if start_position is None:
                     start_position = position
-                if (
-                    runtime.approach_direct_bearing
-                    and distance is not None
-                    and distance <= runtime.approach_distance
-                ):
+                if runtime.approach_direct_bearing and in_approach_band:
                     # Inside the declared final approach the aim is the waypoint itself. The planner
                     # otherwise aims at its path reference plus a lookahead, which at a few pixels
                     # out keeps correcting across the leg instead of closing the remaining gap.
@@ -1368,13 +1422,7 @@ def _run_episode(
                             recovery_events += 1
                         recovery_steps += 1
                         recovery_steps_total += 1
-            in_approach_band = (
-                position is not None
-                and not death
-                and not outside_region
-                and distance is not None
-                and distance <= runtime.approach_distance
-            )
+            # in_approach_band was computed above, with the declared exit margin applied.
             if (
                 runtime.traversability is not None
                 and position is not None
@@ -1404,6 +1452,30 @@ def _run_episode(
             )
             if was_committed:
                 approach_committed_steps += 1
+            # The stall response has the same failure mode the approach had. The planner rewards a
+            # lateral component with an absolute value, so the two opposite sidesteps score equally
+            # and it can alternate between them: on the cold-start failure the hero oscillated in x
+            # for about 25 s inside a 2 px box, alternating north-east and west, making no forward
+            # progress at all. Holding the chosen sidestep for the declared commitment is the same
+            # fix that closed the fine-approach stall, applied to the stall response instead.
+            if runtime.stall_commitment > 1 and escape_active and not in_approach_band:
+                (
+                    requested_joystick,
+                    committed_stall,
+                    stall_commitment_steps,
+                    was_stall_committed,
+                ) = _commit_approach(
+                    requested_joystick,
+                    committed_stall,
+                    stall_commitment_steps,
+                    runtime.stall_commitment,
+                    True,
+                )
+                if was_stall_committed:
+                    stall_committed_steps += 1
+            else:
+                committed_stall = None
+                stall_commitment_steps = 0
             applied_joystick, owner, reason = _route(
                 requested_joystick,
                 known=known,
@@ -1618,7 +1690,8 @@ def _run_episode(
                     "no_advance_steps": advance_steps,
                     "traversability_masked_steps": traversability_masked_steps,
                     "approach_committed_steps": approach_committed_steps,
-        "progress_guard_events": guard_events,
+                    "stall_committed_steps": stall_committed_steps,
+                    "progress_guard_events": guard_events,
                     "terminal_reason": terminal_reason,
                     "training_eligible": stored.payload["training_eligible"],
                 }
