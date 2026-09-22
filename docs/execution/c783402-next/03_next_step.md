@@ -1,45 +1,50 @@
 # The single next step
 
-## Status: `READY_OFFLINE_DESIGN`
+## Status: `IMPLEMENTED_OFFLINE`, device acceptance pending
 
-The existing interfaces are reusable, so the next step is a design, not a new runner and not a
-new contract. This document stops at the design points; implementing them needs a separate
-decision.
+The design was implemented offline and its lifecycle is pinned by tests. What remains is a device
+run, which needs its own authorization. This document records both.
 
-**The next step:** a session-level wrapper that runs the declared placement contract and then the
-unchanged Route B v15 contract on one guard, one scrcpy session and one Store, with a start gate
-between the phases and separate placement/route accounting.
+**The implemented step:** `run_mobile_navigation_placement_route` runs the declared placement
+contract and then the unchanged Route B v15 contract on one guard, one scrcpy session and one
+Store, with a start gate between the phases and separate placement/route accounting. It is exposed
+as `hok-agent mobile-navigation-placement-route`. Nothing in the route contract, the ROIs, the
+layouts, the thresholds, the executor, the Router or the Store schema changed.
 
-## Design points (reuse only)
+## What is in place
 
-1. **One session, two phases, one process.** Assemble the runtime once, open the guard and session
-   once, run the placement phase, then the route phase, then release once. The whole point is that
-   the placement and the route share the session instead of being two invocations.
-2. **A start gate between the phases.** Compare the placement phase's last localised position
-   against a declared start tolerance. On failure, emit a distinct setup outcome and stop without
-   starting the route; bound the placement attempts so a bad start cannot loop.
-3. **Separate denominators.** Report `session_attempts`, `placement_successes`, `route_started`,
-   `route_successes`, `end_to_end_successes`, and the placement and route wall times separately. A
-   placement arrival must not increment route successes.
-4. **Two contracts, one session.** Because `arrival_tolerance_pixels` is a single scalar per
-   contract, keep placement (1.5 px) and route (4.0 px) as two declared contracts rather than one
-   five-target contract.
-5. **Phase identity in the record.** Each transition row should carry which phase it belongs to,
-   so a placement step is never read as a route step.
+- One session, two phases, one process: both phases share a `_NavigationDevice`, so the guard and
+  session are opened once and closed once.
+- Start gate: `_placement_start_gate` refuses the route when the placement did not arrive, lost its
+  marker, or stopped outside the declared start tolerance. One placement attempt per invocation, so
+  a bad start cannot loop.
+- Separate denominators: `session_attempts`, `placement_successes`, `route_started`,
+  `route_successes`, `end_to_end_successes`, plus placement and route wall times.
+- Phase identity from the episode id (`…-placement` / `…-route`), with no Store schema change.
+- Offline coverage: seven tests, `tests/test_mobile_navigation_store.py`, using fake runtimes and
+  counter monkeypatches; they prove scheduling, the refusal and the cleanup only.
 
-## Offline test cases to write first
+## The device acceptance, when it is authorized
 
-Verified against fake runtimes and already-allowed fixtures; no phone. These prove software logic
-only, not cold start and not game ability.
+One run first, under the unchanged staged rule (1, then 3 only if the chain changed to justify a
+rebind, not for a documentation update). The placement phase uses the same 1.5 px contract that
+produced the bound pass:
 
-| Scenario | Expected |
-|---|---|
-| Placement reaches the declared start and identity/screen are valid | one session created; the route starts only after placement ends |
-| Placement does not meet the start condition | the route does not start; report a setup failure, not a route success or failure |
-| The guard is invalid or the observation is stale between phases | release the pointer and stop; do not inherit the previous command |
-| The route reaches all four waypoints | record task completion, then exit; do not emit the arrival reward twice |
-| Timeout, capture failure or action failure | keep distinct exit semantics; never masquerade as a win or a loss |
-| A second run | state explicitly whether it re-places; do not treat the previous end point as an already-valid start |
+```text
+hok-agent mobile-navigation-placement-route \
+  --serial <authorized serial> \
+  --placement-config configs/movement_goal_navigation_reposition_v4.json \
+  --config configs/movement_goal_navigation_route_b_v15.json \
+  --visual-layout ../hok-agent-v5/configs/mobile_testbed_layout_calibrated_v3.json \
+  --execution-layout ../hok-agent-v5/configs/mobile_testbed_layout_all_actions_corrected.local.json \
+  --observation-rois ../hok-agent-v5/configs/mobile_observation_rois.local.json \
+  --output-dir $HOK_LARGE_ROOT/runs/hierarchical-movement-mvp/placement-route-1 \
+  --enable-input
+```
+
+Reported, always: total session attempts, placement successes, route starts, route arrivals,
+end-to-end successes, and the placement and route times separately. A refused start must not be
+folded into a route success rate.
 
 ## Milestones, relabelled
 

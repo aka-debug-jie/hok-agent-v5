@@ -907,6 +907,18 @@ def _parser() -> argparse.ArgumentParser:
     navigation_store_batch.add_argument("--output-dir", type=Path, required=True)
     navigation_store_batch.add_argument("--episodes", type=int, default=3)
     navigation_store_batch.add_argument("--enable-input", action="store_true")
+    placement_route = commands.add_parser(
+        "mobile-navigation-placement-route",
+        help="place the hero, confirm the start, then run the route on one session and store",
+    )
+    placement_route.add_argument("--serial", required=True)
+    placement_route.add_argument("--placement-config", type=Path, required=True)
+    placement_route.add_argument("--config", type=Path, required=True)
+    placement_route.add_argument("--visual-layout", type=Path, required=True)
+    placement_route.add_argument("--execution-layout", type=Path, required=True)
+    placement_route.add_argument("--observation-rois", type=Path, required=True)
+    placement_route.add_argument("--output-dir", type=Path, required=True)
+    placement_route.add_argument("--enable-input", action="store_true")
     traversability_build = commands.add_parser(
         "traversability-build",
         help="rebuild the measured traversability grid from an explicit, pinned run list",
@@ -3230,6 +3242,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 observation_rois_path=args.observation_rois,
                 output_dir=args.output_dir,
                 episodes=args.episodes,
+                enable_input=args.enable_input,
+            )
+        elif args.command == "mobile-navigation-placement-route":
+            from hok_agent.mobile_navigation_store import (
+                run_mobile_navigation_placement_route,
+            )
+
+            result = run_mobile_navigation_placement_route(
+                serial=args.serial,
+                placement_contract_path=args.placement_config,
+                route_contract_path=args.config,
+                visual_layout_path=args.visual_layout,
+                execution_layout_path=args.execution_layout,
+                observation_rois_path=args.observation_rois,
+                output_dir=args.output_dir,
                 enable_input=args.enable_input,
             )
         elif args.command == "traversability-build":

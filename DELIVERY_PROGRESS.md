@@ -14,6 +14,16 @@ handoff is recorded in [`docs/execution/c783402-next/`](docs/execution/c783402-n
 binds the existing facts, names the same-session placement-then-route lifecycle gap, and opens no
 device, capture, training or push work. The bound pass, the mask scope and the closed limits are
 unchanged.
+Updated 2026-09-22 (later): that lifecycle gap was then implemented offline as
+`run_mobile_navigation_placement_route` (CLI `mobile-navigation-placement-route`), which runs the
+declared placement contract and then the unchanged Route B v15 contract on one guard, one scrcpy
+session and one Store, with a `_placement_start_gate` between the phases and separate
+placement/route denominators; the route contract, the ROIs, the layouts, the thresholds, the
+executor, the Router and the Store schema are untouched and `training_eligible` stays false; seven
+offline tests pin the scheduling, the refusal and the single release, and `make check` passes with
+Ruff, strict mypy over 76 files and 657 tests. Next action: a first authorized device run of the
+composed chain (1 run, then 3 only if the chain changed enough to justify a rebind), which is not
+authorized here; the cold-start limit, the mask scope and the bound pass remain unchanged.
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text

@@ -16,6 +16,17 @@ This directory holds the read-only result of the first task in
 - `03_next_step.md` - the single next step, its status, the milestone relabelling, and the
   explicit ceiling.
 
+## Update: the gap was then closed offline
+
+After the read-only pass, the same-session lifecycle was implemented offline as
+`run_mobile_navigation_placement_route` (CLI `mobile-navigation-placement-route`) in
+`src/hok_agent/mobile_navigation_store.py`, with seven offline tests in
+`tests/test_mobile_navigation_store.py`. The route contract, the ROIs, the layouts, the
+thresholds, the executor, the Router and the Store schema are unchanged and `training_eligible`
+stays `false`. The device acceptance is not run and not authorized here; the cold-start limit, the
+mask scope and the bound pass are unchanged. `02_reuse_gap.md` and `03_next_step.md` record the
+implemented status.
+
 ## What this is not
 
 - Not a runtime configuration. No contract, layout, ROI or threshold is added or changed here.

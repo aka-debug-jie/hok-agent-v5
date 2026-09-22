@@ -89,6 +89,7 @@ from hok_agent.traversability import (
 
 MOBILE_NAVIGATION_STORE_SCHEMA = "hok-agent-mobile-navigation-store-session-v1"
 MOBILE_NAVIGATION_STORE_BATCH_SCHEMA = "hok-agent-mobile-navigation-store-batch-v1"
+MOBILE_NAVIGATION_PLACEMENT_ROUTE_SCHEMA = "hok-agent-mobile-navigation-placement-route-v1"
 MOBILE_NAVIGATION_STORE_CONTRACT_SCHEMA = "movement-goal-navigation-store-contract-v1"
 MOBILE_NAVIGATION_STORE_REQUIRED_FIELDS = (
     "policy_bundle_version",
@@ -1068,6 +1069,21 @@ def _episode_outcome(
 
 
 @dataclass(frozen=True, slots=True)
+class _NavigationDevice:
+    """One opened guard, scrcpy session, joystick and watchdog, shared by two contract phases.
+
+    A composed placement-then-route run must not open a second guard between the phases: the whole
+    point is that the start the placement reaches is the start the route leaves from. The device is
+    therefore resolved once and handed to each phase's runtime.
+    """
+
+    guard: DeviceGuard
+    session: ScrcpyControlSession
+    joystick: PersistentJoystick
+    watchdog: GuardWatchdog
+
+
+@dataclass(frozen=True, slots=True)
 class _NavigationRuntime:
     contract: dict[str, object]
     contract_sha: str
@@ -1125,6 +1141,7 @@ def _prepare_navigation_runtime(
     observation_rois_path: Path,
     output: Path,
     enable_input: bool,
+    device: _NavigationDevice | None = None,
 ) -> _NavigationRuntime:
     contract, contract_sha = _goal_navigation_contract(contract_path)
     store_contract = _store_contract(contract, contract_sha)
@@ -1133,7 +1150,17 @@ def _prepare_navigation_runtime(
     rois, rois_sha = load_observation_rois(observation_rois_path)
     if visual_layout.width != execution_layout.width:
         raise MobileTestbedError("mobile navigation store layouts differ")
-    guard = _open_device_guard(serial)
+    if device is None:
+        guard = _open_device_guard(serial)
+        session = ScrcpyControlSession(guard.serial, 30)
+        joystick = PersistentJoystick(execution_layout, guard.width, guard.height)
+        watchdog = GuardWatchdog(guard, ACTIVE_PROBE_GUARD_INTERVAL_SECONDS)
+    else:
+        # A composed run passes the already-opened device so both phases share one session.
+        guard = device.guard
+        session = device.session
+        joystick = device.joystick
+        watchdog = device.watchdog
     if (guard.width, guard.height) != (visual_layout.width, visual_layout.height):
         raise MobileTestbedError("mobile navigation store display differs")
     if rois.width != guard.width or rois.height != guard.height:
@@ -1267,9 +1294,9 @@ def _prepare_navigation_runtime(
             else 0
         ),
         guard=guard,
-        session=ScrcpyControlSession(guard.serial, 30),
-        joystick=PersistentJoystick(execution_layout, guard.width, guard.height),
-        watchdog=GuardWatchdog(guard, ACTIVE_PROBE_GUARD_INTERVAL_SECONDS),
+        session=session,
+        joystick=joystick,
+        watchdog=watchdog,
         frames_dir=output / "frames",
         database=output / "transitions.sqlite3",
         enable_input=enable_input,
@@ -2298,6 +2325,218 @@ def run_mobile_navigation_episodes(
         json.dumps(batch, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return batch
+
+
+def _placement_start_gate(
+    *,
+    placement: dict[str, object],
+    declared_start: tuple[float, float],
+    tolerance: float,
+) -> dict[str, object]:
+    """Decide whether the route may start, from the placement episode's own recorded outcome.
+
+    This is a pre-action check, not an independent truth claim: it reads the position the frozen
+    green-ring cue localised at the placement's last step and compares it with the declared start.
+    A placement that did not arrive, lost its marker, or stopped outside the declared start
+    tolerance refuses the route; the caller then never starts the route phase, so a bad start
+    cannot be retried forever.
+    """
+    final = placement.get("final_position")
+    if not isinstance(final, list) or len(final) != 2:
+        return {
+            "started_route": False,
+            "reason": "PLACEMENT_POSITION_MISSING",
+            "distance_pixels": None,
+        }
+    distance = math.hypot(
+        float(cast(float, final[0])) - declared_start[0],
+        float(cast(float, final[1])) - declared_start[1],
+    )
+    if not bool(placement.get("arrived")):
+        return {
+            "started_route": False,
+            "reason": "PLACEMENT_NOT_ARRIVED",
+            "distance_pixels": distance,
+        }
+    if distance > tolerance:
+        return {
+            "started_route": False,
+            "reason": "PLACEMENT_OUTSIDE_START_TOLERANCE",
+            "distance_pixels": distance,
+        }
+    return {
+        "started_route": True,
+        "reason": "PLACEMENT_CONFIRMED",
+        "distance_pixels": distance,
+    }
+
+
+def _placement_route_summary(
+    *,
+    placement: dict[str, object],
+    gate: dict[str, object],
+    route: dict[str, object] | None,
+) -> dict[str, object]:
+    """Separate denominators, because a placement arrival is not a route success.
+
+    `session_attempts` counts one composed attempt. A placement-only arrival can raise
+    `placement_successes` and nothing else: `route_started`, `route_successes` and
+    `end_to_end_successes` all stay zero when the route phase did not run or did not arrive.
+    """
+    placed = bool(gate.get("started_route"))
+    routed = route is not None
+    arrived = routed and bool(cast(dict[str, object], route).get("arrived"))
+    return {
+        "session_attempts": 1,
+        "placement_successes": 1 if placed else 0,
+        "route_started": 1 if routed else 0,
+        "route_successes": 1 if arrived else 0,
+        "end_to_end_successes": 1 if (placed and arrived) else 0,
+        "placement_seconds": placement.get("duration_seconds"),
+        "route_seconds": None if route is None else route.get("duration_seconds"),
+        "placement_episode_id": placement.get("episode_id"),
+        "route_episode_id": None if route is None else route.get("episode_id"),
+        "start_gate": gate,
+    }
+
+
+def run_mobile_navigation_placement_route(
+    *,
+    serial: str,
+    placement_contract_path: Path,
+    route_contract_path: Path,
+    visual_layout_path: Path,
+    execution_layout_path: Path,
+    observation_rois_path: Path,
+    output_dir: Path,
+    enable_input: bool = True,
+) -> dict[str, object]:
+    """Place, confirm the start, then run the unchanged route, all on one session and one Store.
+
+    Both phases share the opened device and the single `UnifiedTransitionStore`. The placement
+    phase's declared single target is the declared start. The route starts only when the placement
+    arrived and its recorded final position is inside the declared start tolerance. The route
+    contract is not modified: its own arrival gate is untouched.
+    """
+    output = _new_large_output(output_dir)
+    placement_runtime = _prepare_navigation_runtime(
+        serial=serial,
+        contract_path=placement_contract_path,
+        visual_layout_path=visual_layout_path,
+        execution_layout_path=execution_layout_path,
+        observation_rois_path=observation_rois_path,
+        output=output,
+        enable_input=enable_input,
+    )
+    placement_targets = placement_runtime.targets
+    if len(placement_targets) != 1:
+        raise MobileTestbedError(
+            "mobile navigation placement route needs exactly one placement target"
+        )
+    declared_start = placement_targets[0]
+    start_tolerance = float(
+        cast(
+            float,
+            placement_runtime.contract.get(
+                "start_gate_tolerance_pixels", placement_runtime.tolerance
+            ),
+        )
+    )
+    device = _NavigationDevice(
+        guard=placement_runtime.guard,
+        session=placement_runtime.session,
+        joystick=placement_runtime.joystick,
+        watchdog=placement_runtime.watchdog,
+    )
+    route_runtime = _prepare_navigation_runtime(
+        serial=serial,
+        contract_path=route_contract_path,
+        visual_layout_path=visual_layout_path,
+        execution_layout_path=execution_layout_path,
+        observation_rois_path=observation_rois_path,
+        output=output,
+        enable_input=enable_input,
+        device=device,
+    )
+    placement_prefix = cast(str, placement_runtime.store_contract["episode_prefix"])
+    route_prefix = cast(str, route_runtime.store_contract["episode_prefix"])
+    # The phase is recoverable from the episode id, so a placement step is never read as a route
+    # step without a Store schema change.
+    placement_episode_id = (
+        f"{_episode_id(placement_prefix, placement_runtime.contract_sha)}-placement"
+    )
+    route_episode_id = f"{_episode_id(route_prefix, route_runtime.contract_sha)}-route"
+    placement: dict[str, object]
+    route: dict[str, object] | None = None
+    gate: dict[str, object]
+    pointer_messages = 0
+    _open_runtime(placement_runtime)
+    try:
+        with UnifiedTransitionStore(placement_runtime.database) as store:
+            placement = _run_episode(placement_runtime, store, placement_episode_id)
+            (output / "placement-steps.jsonl").write_text(
+                "".join(
+                    json.dumps(row, sort_keys=True) + "\n"
+                    for row in cast(list[dict[str, object]], placement.pop("step_rows"))
+                ),
+                encoding="utf-8",
+            )
+            gate = _placement_start_gate(
+                placement=placement,
+                declared_start=declared_start,
+                tolerance=start_tolerance,
+            )
+            pointer_messages += cast(int, placement.get("input_commands_sent", 0))
+            if bool(gate["started_route"]):
+                route = _run_episode(route_runtime, store, route_episode_id)
+                (output / "route-steps.jsonl").write_text(
+                    "".join(
+                        json.dumps(row, sort_keys=True) + "\n"
+                        for row in cast(list[dict[str, object]], route.pop("step_rows"))
+                    ),
+                    encoding="utf-8",
+                )
+                pointer_messages += cast(int, route.get("input_commands_sent", 0))
+    finally:
+        _close_runtime(placement_runtime, pointer_messages)
+    counters = _placement_route_summary(placement=placement, gate=gate, route=route)
+    episodes = [placement] if route is None else [placement, route]
+    verified = [
+        verify_mobile_navigation_episode(
+            store_path=placement_runtime.database,
+            episode_id=cast(str, episode["episode_id"]),
+            frame_root=placement_runtime.frames_dir,
+        )
+        for episode in episodes
+    ]
+    findings = sorted(
+        {finding for report in verified for finding in cast(list[str], report["findings"])}
+    )
+    with UnifiedTransitionStore(placement_runtime.database) as store:
+        integrity = store.integrity()
+    end_to_end = cast(int, counters["end_to_end_successes"]) == 1
+    summary: dict[str, object] = _base_summary(placement_runtime) | counters | {
+        "schema_version": MOBILE_NAVIGATION_PLACEMENT_ROUTE_SCHEMA,
+        "status": "PASSED" if end_to_end and not findings and integrity == "ok" else "FAILED",
+        "setup_failure": (
+            None
+            if bool(gate["started_route"])
+            else cast(str, gate["reason"])
+        ),
+        "declared_start_xy": [declared_start[0], declared_start[1]],
+        "start_gate_tolerance_pixels": start_tolerance,
+        "route_contract_sha256": route_runtime.contract_sha,
+        "placement_contract_sha256": placement_runtime.contract_sha,
+        "input_commands_sent": pointer_messages,
+        "frame_reference_findings": findings,
+        "store_integrity": integrity,
+        "placement_summary": placement,
+        "route_summary": route,
+    }
+    (output / "summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return summary
 
 
 def verify_mobile_navigation_store(*, store_path: Path, frame_root: Path) -> dict[str, object]:

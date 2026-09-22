@@ -1737,3 +1737,254 @@ def test_route_b_v7_keeps_v6_unchanged() -> None:
     )
     assert v7_sha == "13465a1194a666ccc2de774fb631fd7d20909959a8ac86053304204eb6da0642"
     assert cast(dict, v7["unknown_recovery"])["mode"] == "bounded_retrace"
+
+
+# --- Same-session placement then route (F1) -----------------------------------------------------
+# These tests prove the software lifecycle only: the gate reads the placement's recorded position,
+# the route is skipped when the start is not confirmed, the device is opened once and closed once,
+# and a placement arrival never counts as a route success. They do not exercise a device.
+
+
+class _FakeRuntime:
+    def __init__(self, *, contract_sha: str, prefix: str, targets, tolerance, database, frames_dir):
+        self.contract = {"arrival_tolerance_pixels": tolerance}
+        self.contract_sha = contract_sha
+        self.visual_sha = "v" * 64
+        self.execution_sha = "e" * 64
+        self.rois_sha = "r" * 64
+        self.store_contract = {
+            "episode_prefix": prefix,
+            "event_engine_version": "mobile-navigation-no-visual-event-v1",
+        }
+        self.targets = list(targets)
+        self.tolerance = tolerance
+        self.database = database
+        self.frames_dir = frames_dir
+        self.guard = object()
+        self.session = object()
+        self.joystick = object()
+        self.watchdog = object()
+        self.enable_input = False
+
+
+class _FakeStore:
+    def __init__(self, *_args, **_kwargs) -> None:
+        self.integrity_calls = 0
+
+    def __enter__(self) -> _FakeStore:
+        return self
+
+    def __exit__(self, *_exc) -> bool:
+        return False
+
+    def integrity(self) -> str:
+        self.integrity_calls += 1
+        return "ok"
+
+
+def _placement_outcome(*, arrived: bool, final: object, episode_id: str) -> dict:
+    return {
+        "episode_id": episode_id,
+        "arrived": arrived,
+        "final_position": final,
+        "duration_seconds": 12.0,
+        "input_commands_sent": 20,
+        "step_rows": [],
+    }
+
+
+def test_placement_start_gate_confirms_inside_the_declared_start_tolerance() -> None:
+    gate = store_runner._placement_start_gate(
+        placement=_placement_outcome(arrived=True, final=[53.9, 69.9], episode_id="p"),
+        declared_start=(53.5, 69.4),
+        tolerance=1.5,
+    )
+    assert gate["started_route"] is True
+    assert gate["reason"] == "PLACEMENT_CONFIRMED"
+    assert cast(float, gate["distance_pixels"]) < 1.5
+
+
+def test_placement_start_gate_refuses_an_unarrived_placement() -> None:
+    gate = store_runner._placement_start_gate(
+        placement=_placement_outcome(arrived=False, final=[53.5, 69.4], episode_id="p"),
+        declared_start=(53.5, 69.4),
+        tolerance=1.5,
+    )
+    assert gate["started_route"] is False
+    assert gate["reason"] == "PLACEMENT_NOT_ARRIVED"
+
+
+def test_placement_start_gate_refuses_a_start_outside_the_declared_tolerance() -> None:
+    # The recorded start-sensitivity band: 2.8-3.9 px is outside the 1.5 px declared placement.
+    gate = store_runner._placement_start_gate(
+        placement=_placement_outcome(arrived=True, final=[56.3, 70.0], episode_id="p"),
+        declared_start=(53.5, 69.4),
+        tolerance=1.5,
+    )
+    assert gate["started_route"] is False
+    assert gate["reason"] == "PLACEMENT_OUTSIDE_START_TOLERANCE"
+    assert cast(float, gate["distance_pixels"]) > 1.5
+
+
+def test_placement_start_gate_refuses_a_missing_position() -> None:
+    gate = store_runner._placement_start_gate(
+        placement=_placement_outcome(arrived=True, final=None, episode_id="p"),
+        declared_start=(53.5, 69.4),
+        tolerance=1.5,
+    )
+    assert gate["started_route"] is False
+    assert gate["reason"] == "PLACEMENT_POSITION_MISSING"
+
+
+def test_placement_route_summary_keeps_placement_out_of_route_success() -> None:
+    gate = {
+        "started_route": True,
+        "reason": "PLACEMENT_CONFIRMED",
+        "distance_pixels": 0.5,
+    }
+    placement = _placement_outcome(arrived=True, final=[53.5, 69.4], episode_id="p")
+    # The route phase did not run: a placement arrival alone must not raise route_successes.
+    skipped = store_runner._placement_route_summary(placement=placement, gate=gate, route=None)
+    assert skipped["placement_successes"] == 1
+    assert skipped["route_started"] == 0
+    assert skipped["route_successes"] == 0
+    assert skipped["end_to_end_successes"] == 0
+
+    refused = store_runner._placement_route_summary(
+        placement=placement,
+        gate={"started_route": False, "reason": "PLACEMENT_NOT_ARRIVED", "distance_pixels": 3.0},
+        route=None,
+    )
+    assert refused["placement_successes"] == 0
+    assert refused["end_to_end_successes"] == 0
+
+
+def test_placement_route_opens_one_device_and_starts_the_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runtimes: list[_FakeRuntime] = []
+    run_calls: list[str] = []
+    shared_devices: list[object] = []
+
+    def fake_prepare(**kwargs):
+        if runtimes:
+            # The route phase must reuse the placement phase's already-opened device.
+            shared_devices.append(kwargs["device"])
+        runtime = _FakeRuntime(
+            contract_sha=("a" if not runtimes else "b") * 64,
+            prefix="mobile-nav-ep",
+            targets=[(53.5, 69.4)] if not runtimes else [(50.0, 50.0)],
+            tolerance=1.5 if not runtimes else 4.0,
+            database=tmp_path / "transitions.sqlite3",
+            frames_dir=tmp_path / "frames",
+        )
+        runtimes.append(runtime)
+        return runtime
+
+    def fake_run(runtime, _store, episode_id):
+        run_calls.append(episode_id)
+        return _placement_outcome(arrived=True, final=[54.8, 69.9], episode_id=episode_id)
+
+    opens: list[int] = []
+    closes: list[int] = []
+    monkeypatch.setattr(store_runner, "_new_large_output", lambda _path: tmp_path)
+    monkeypatch.setattr(store_runner, "_prepare_navigation_runtime", fake_prepare)
+    monkeypatch.setattr(store_runner, "_run_episode", fake_run)
+    monkeypatch.setattr(store_runner, "_open_runtime", lambda runtime: opens.append(id(runtime)))
+    monkeypatch.setattr(
+        store_runner, "_close_runtime", lambda runtime, messages: closes.append(messages)
+    )
+    monkeypatch.setattr(store_runner, "UnifiedTransitionStore", _FakeStore)
+    monkeypatch.setattr(
+        store_runner,
+        "verify_mobile_navigation_episode",
+        lambda **_kwargs: {"findings": [], "recoverable": True},
+    )
+
+    summary = store_runner.run_mobile_navigation_placement_route(
+        serial="unused",
+        placement_contract_path=tmp_path / "placement.json",
+        route_contract_path=tmp_path / "route.json",
+        visual_layout_path=tmp_path,
+        execution_layout_path=tmp_path,
+        observation_rois_path=tmp_path,
+        output_dir=tmp_path / "out",
+        enable_input=False,
+    )
+
+    # One session and one guard for both phases: one open and one close for the whole run.
+    assert len(opens) == 1
+    assert len(closes) == 1
+    assert len(shared_devices) == 1
+    device = shared_devices[0]
+    assert device is not None
+    assert cast(object, device).guard is runtimes[0].guard
+    assert cast(object, device).session is runtimes[0].session
+    # 54.8/69.9 is 1.4 px from the declared start, so the route did start.
+    assert run_calls == [
+        "mobile-nav-ep-" + "a" * 12 + "-placement",
+        "mobile-nav-ep-" + "b" * 12 + "-route",
+    ]
+    assert summary["status"] == "PASSED"
+    assert summary["setup_failure"] is None
+    assert summary["placement_successes"] == 1
+    assert summary["route_successes"] == 1
+    assert summary["end_to_end_successes"] == 1
+    assert summary["route_contract_sha256"] == "b" * 64
+
+
+def test_placement_route_refuses_and_never_starts_the_route_on_a_bad_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_calls: list[str] = []
+
+    def fake_prepare(**kwargs):
+        return _FakeRuntime(
+            contract_sha=("a" if kwargs["contract_path"].name == "placement.json" else "b") * 64,
+            prefix="mobile-nav-ep",
+            targets=[(53.5, 69.4)] if kwargs["contract_path"].name == "placement.json" else [(50.0, 50.0)],
+            tolerance=1.5 if kwargs["contract_path"].name == "placement.json" else 4.0,
+            database=tmp_path / "transitions.sqlite3",
+            frames_dir=tmp_path / "frames",
+        )
+
+    def fake_run(runtime, _store, episode_id):
+        run_calls.append(episode_id)
+        return _placement_outcome(arrived=True, final=[58.0, 70.0], episode_id=episode_id)
+
+    closes: list[int] = []
+    monkeypatch.setattr(store_runner, "_new_large_output", lambda _path: tmp_path)
+    monkeypatch.setattr(store_runner, "_prepare_navigation_runtime", fake_prepare)
+    monkeypatch.setattr(store_runner, "_run_episode", fake_run)
+    monkeypatch.setattr(store_runner, "_open_runtime", lambda runtime: None)
+    monkeypatch.setattr(
+        store_runner, "_close_runtime", lambda runtime, messages: closes.append(messages)
+    )
+    monkeypatch.setattr(store_runner, "UnifiedTransitionStore", _FakeStore)
+    monkeypatch.setattr(
+        store_runner,
+        "verify_mobile_navigation_episode",
+        lambda **_kwargs: {"findings": [], "recoverable": True},
+    )
+
+    summary = store_runner.run_mobile_navigation_placement_route(
+        serial="unused",
+        placement_contract_path=tmp_path / "placement.json",
+        route_contract_path=tmp_path / "route.json",
+        visual_layout_path=tmp_path,
+        execution_layout_path=tmp_path,
+        observation_rois_path=tmp_path,
+        output_dir=tmp_path / "out",
+        enable_input=False,
+    )
+
+    # 4.5 px from the declared start against a 1.5 px gate: the route phase must not run at all.
+    assert len(run_calls) == 1
+    assert run_calls[0].endswith("-placement")
+    assert len(closes) == 1
+    assert summary["status"] == "FAILED"
+    assert summary["setup_failure"] == "PLACEMENT_OUTSIDE_START_TOLERANCE"
+    assert summary["placement_successes"] == 0
+    assert summary["route_started"] == 0
+    assert summary["route_successes"] == 0
+    assert summary["route_summary"] is None
