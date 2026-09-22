@@ -410,3 +410,62 @@ def test_probe_contract_may_declare_a_press_subset(tmp_path: Path) -> None:
     pulses = [entry["direction"] for entry in schedule if entry["kind"] == "pulse"]
     assert set(pulses) == {"north"}
     assert len(pulses) == subset["pulses_per_direction"]
+
+
+def test_masked_persistence_is_declared_and_bounded() -> None:
+    """Keeping a bearing the mask removed has to be bounded on every axis it can run away on.
+
+    The corridor measurement is what justifies the exception: at the stall cell the mask removes
+    north
+    on a 0.0548 projection while north is the only bearing with a northward component and the hero
+    creeps about 0.6 px per press by the wall. The rule is still an exception, so its hold length,
+    activation count, stall trigger and stall bound are all declared, and a block that leaves any of
+    them open must not load.
+    """
+    import json as _json
+
+    contract = _json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "configs"
+            / "movement_goal_navigation_route_b_v21.json"
+        ).read_text(encoding="utf-8")
+    )
+    block = contract["masked_persistence"]
+    assert block["mode"] == "hold-the-masked-goal-bearing"
+    assert block["maximum_steps"] == 40
+    good = store_runner._validate_masked_persistence(dict(block))
+    assert good["maximum_activations_per_episode"] == 2
+    for broken in (
+        {**block, "mode": "other"},
+        {**block, "schema_version": "other"},
+        {**block, "maximum_steps": 0},
+        {**block, "maximum_activations_per_episode": 0},
+        {**block, "trigger_stall_steps": 0},
+        {**block, "trigger_stall_progress_pixels": 0.0},
+        {**block, "confirmation_minimum_progress_pixels": 0.0},
+        {**block, "persistence_bearings": []},
+        {**block, "persistence_bearings": ["up"]},
+    ):
+        with pytest.raises(MobileTestbedError):
+            store_runner._validate_masked_persistence(broken)
+    # a persistence block is meaningless without the mask it makes an exception to
+    without_grid = {k: v for k, v in contract.items() if k != "traversability"}
+    with pytest.raises(MobileTestbedError):
+        store_runner._store_contract(without_grid, "0" * 64)
+
+
+def test_no_progress_stall_reads_progress_rather_than_motion() -> None:
+    """A stall here is an absence of progress, which is why the v16 and detour rules never fired."""
+    stall = store_runner._no_progress_stall
+    # oscillating inside two pixels is a stall, even though the hero keeps moving
+    assert stall([10.0, 9.0, 9.6, 9.2, 9.8, 9.4], 6, 2.0) is True
+    # real progress is not a stall
+    assert stall([20.0, 18.0, 16.0, 14.0, 12.0, 10.0], 6, 2.0) is False
+    # too short a window cannot be judged, and an empty one never is
+    assert stall([10.0, 9.5], 6, 2.0) is False
+    assert stall([], 1, 2.0) is False
+    # a one-step window is degenerate and reads as a stall; the loader's floor is what prevents it
+    assert stall([10.0], 1, 2.0) is True
+    # only the most recent declared steps are read
+    assert stall([100.0, 10.0, 9.6, 9.5, 9.4, 9.3], 5, 2.0) is True

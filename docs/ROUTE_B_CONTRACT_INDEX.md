@@ -32,6 +32,9 @@ the ledger sections of [DELIVERY_PROGRESS.md](../DELIVERY_PROGRESS.md).
 | v18 | `f6ae612becc7` | adds a declared bounded grid detour on top of the v15 grid and mask: a breadth-first search over the frozen grid, triggered only when the mask has just removed the goal-directed bearing and the hero has stalled, with two attempts per episode and `detour_exhausted` as its own outcome | `route-b-detour-stage1` 0/1: the trigger asked for no motion, the failure oscillates, so `detour_attempts=0` and it timed out at `14:12` |
 | v19 | `a7945b2c` | same detour with the trigger corrected to a no-progress rule (goal-distance improvement over six localised steps) | `route-b-detour3-stage1` 0/1 but the detour fired: two attempts at `14:12`, plan `NE NW`, ended `detour_exhausted` at twenty steps. It moved the hero **east**, and the measured displacements show every bounded press in that cell is a wall slide (north = 1.70 px west against 0.20 px north), so no available bearing goes north and no cell-transition plan is sound (mean bounded displacement under 2 px against 4 px cells) |
 
+| v20 | `8a0c4bc45400` | adds a declared bounded persistence on a bearing the mask removes: activated only when the mask has just removed the goal bearing and the hero has made no progress, bounded by steps and activations, counted, and inert unless declared | `route-b-persistence-stage1` 0/1 and `route-b-persistence2-stage1` 0/1: the first acceptance (the mask stopped firing) ended every hold after two steps, and the second (goal progress) held for forty-seven steps without ever confirming, because the creep runs west while the goal is north |
+| v21 | `2b165cb2d5c9` | same rule with a declared upward sweep (north, north-east, north-west) and acceptance measured on the goal bearing derived from the position and target | `route-b-persistence3-stage1` 0/1: both activations ended after nine steps and the run timed out, and the attempt is also invalid as a cold-start test because its placement could not reach the cold start from inside the corridor, leaving the hero at `(59.5, 47.1)` |
+
 ## The v15 traversability grid
 
 The grid is frozen inside the v15 contract and aggregated from these exact source runs:
@@ -133,8 +136,17 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
   while the mask removes the bearing that produces that creep at the stall cell (`0.0548` against the
   `0.08` floor). The displacement record and the lateral-gap evidence the detour named are both present,
   and the mechanism the result points to is a bounded declared persistence on a masked bearing whose
-  creep is measured. The probe reads `13:12` north at `0.0209` (n=5) against the incidental `0.2808`
-  (n=15); the disagreement is recorded, not smoothed.
+  creep is measured. That mechanism was then built and tried three times, and none gets through
+  (`route-b-persistence-stage1`, `-persistence2-stage1`, `-persistence3-stage1`, contracts v20 and v21):
+  the first acceptance ended every hold after two steps because the mask answers about the planner's
+  proposal rather than the goal bearing, the second held for forty-seven steps without confirming
+  because the creep runs west while the goal is north, and the third - a declared upward sweep accepted
+  when the derived goal bearing stops being masked - ended both activations after nine steps and also
+  started from the wrong place, because its placement could not reach the cold start from inside the
+  corridor. So the limit stands with three declared escape mechanisms tried on hardware - the commitment
+  and hysteresis (v16, v17), the grid detour (v18, v19) and this persistence (v20, v21) - and the
+  obstacle is the acceptance signal rather than the hold. The probe reads `13:12` north at `0.0209`
+  (n=5) against the incidental `0.2808` (n=15); the disagreement is recorded, not smoothed.
 - **The probe now refuses a moving hero, and that is measured to matter.** The corridor traverse's
   failure was diagnosed as a walking hero: the analyser subtracts the idle rate it measures, so an idle
   drift of `0.4551` px per 100 ms raised the floor above every bounded press and only 12.7 percent of

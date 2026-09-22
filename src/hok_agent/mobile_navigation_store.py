@@ -328,6 +328,11 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
         if contract.get("traversability") is None:
             raise MobileTestbedError("detour requires a traversability grid")
         validate_detour(contract["detour"])
+    if contract.get("masked_persistence") is not None:
+        # This rule holds a bearing the mask removed, so it also has no meaning without the mask.
+        if contract.get("traversability") is None:
+            raise MobileTestbedError("masked persistence requires a traversability grid")
+        _validate_masked_persistence(contract["masked_persistence"])
     advance_raw = contract.get("no_advance_guard")
     no_advance_guard = cast(dict[str, object] | None, advance_raw)
     if advance_raw is not None and (
@@ -735,6 +740,65 @@ def _death_confirmed(
     return travel <= maximum_travel_pixels
 
 
+def _no_progress_stall(
+    window: Sequence[float], steps: int, maximum_progress_pixels: float
+) -> bool:
+    """Whether the goal distance improved by no more than the declared bound over ``steps``.
+
+    A stall in this route is an absence of progress, not an absence of motion: the recorded failure
+    oscillates inside a couple of pixels, so a flat-position rule never engages, which is how the
+    v16 commitment and the detour's first device attempt both failed. Measuring the improvement in
+    goal distance instead
+    """
+    if len(window) < steps or steps < 1:
+        return False
+    recent = list(window[-steps:])
+    return recent[0] - min(recent) <= maximum_progress_pixels
+
+
+def _goal_bearing(position: tuple[float, float], target: tuple[float, float]) -> str:
+    """The joystick-vocabulary bearing from a position toward a target.
+
+    The mask is asked about the planner's proposal, and that proposal changes for the planner's own
+    reasons, so whether the mask fired this step is not the same question as whether the
+    here". This derives the latter directly from the position and the target, using the same
+    eight-sector rounding the recovery path already uses.
+    """
+    angle = math.atan2(target[1] - position[1], -(target[0] - position[0]))
+    return _MOVEMENT_ORDER[round(angle / (math.pi / 4)) % len(_MOVEMENT_ORDER)]
+
+
+def _validate_masked_persistence(block: object) -> dict[str, object]:
+    """Validate a declared masked-bearing persistence block, raising on anything ambiguous.
+
+    This rule deliberately keeps a bearing the frozen grid removed, so every number that bounds it
+    has to be declared: how long it may be held, how many times it may be tried in an episode, what
+    counts as the stall that activates it, and how much progress confirms it. A mistyped field is a
+    load failure rather than a default.
+    """
+    if (
+        not isinstance(block, dict)
+        or block.get("schema_version") != "hok-agent-declared-masked-persistence-v1"
+        or block.get("mode") != "hold-the-masked-goal-bearing"
+    ):
+        raise MobileTestbedError("mobile navigation store masked persistence differs")
+    for key in ("maximum_steps", "maximum_activations_per_episode", "trigger_stall_steps"):
+        if not isinstance(block.get(key), int) or int(cast(int, block[key])) < 1:
+            raise MobileTestbedError("mobile navigation store masked persistence differs")
+    for key in ("trigger_stall_progress_pixels", "confirmation_minimum_progress_pixels"):
+        if not isinstance(block.get(key), (int, float)) or float(cast(float, block[key])) <= 0.0:
+            raise MobileTestbedError("mobile navigation store masked persistence differs")
+    bearings = block.get("persistence_bearings")
+    if (
+        not isinstance(bearings, list)
+        or not bearings
+        or not all(isinstance(item, str) and item in _MOVEMENT_ORDER for item in bearings)
+        or len(set(bearings)) != len(bearings)
+    ):
+        raise MobileTestbedError("mobile navigation store masked persistence differs")
+    return block
+
+
 def _no_advance_detected(
     previous_anchor: tuple[float, float] | None,
     previous_steps: int,
@@ -1033,6 +1097,7 @@ class _NavigationRuntime:
     no_advance_guard: dict[str, object] | None
     traversability: dict[str, object] | None
     detour: dict[str, object] | None
+    masked_persistence: dict[str, object] | None
     approach_commitment: int
     approach_exit_margin: float
     stall_commitment: int
@@ -1136,6 +1201,7 @@ def _prepare_navigation_runtime(
         no_advance_guard=cast(dict[str, object] | None, contract.get("no_advance_guard")),
         traversability=cast(dict[str, object] | None, contract.get("traversability")),
         detour=cast(dict[str, object] | None, contract.get("detour")),
+        masked_persistence=cast(dict[str, object] | None, contract.get("masked_persistence")),
         approach_exit_margin=float(
             cast(
                 float,
@@ -1335,8 +1401,27 @@ def _run_episode(
     detour_effective_events = 0
     detour_confirm_left = 0
     detour_confirm_baseline: float | None = None
-    detour_distance_window: list[float] = []
+    stall_distance_window: list[float] = []
     detour_exhausted = False
+    # Bounded masked-bearing persistence: the state is explicit so a hold cannot be half-applied,
+    # and every counter is reported, because a rule that keeps a mask-removed bearing has to show
+    # in the record rather than inferred from the outcome.
+    persistence_left = 0
+    persistence_activations = 0
+    persistence_steps = 0
+    persistence_effective_events = 0
+    persistence_exhausted_events = 0
+    persistence_index = 0
+    # One window serves every declared rule that needs a stall; each rule reads its own declared
+    # own declared number of steps out of it, so a contract may declare one rule or both.
+    stall_window_length = max(
+        [
+            int(cast(int, block["trigger_stall_steps"]))
+            for block in (runtime.detour, runtime.masked_persistence)
+            if block is not None
+        ]
+        or [0]
+    )
 
     def dispatch(operations: list[TouchOperation]) -> tuple[int, int, int, int, str]:
         nonlocal pointer_messages, retry_total
@@ -1424,22 +1509,19 @@ def _run_episode(
                 if position is None
                 else float(np.hypot(position[0] - target[0], position[1] - target[1]))
             )
-            # The detour trigger needs its own stall definition, and it must be "no progress" rather
-            # than "no motion". The v16 attempt failed because its stall rule never engaged, and the
-            # detour's first device attempt did the same with a one-pixel travel bound: the recorded
-            # failure oscillates inside a couple of pixels, so the hero keeps moving while the goal
-            # distance barely changes. This window measures the improvement in goal distance instead
-            # so oscillation cannot hide a stall, and a lost marker empties it because an unknown
-            # position is not evidence either way.
-            if runtime.detour is not None:
+            # Two declared rules need a stall, and it must be no-progress, not no-motion. The v16
+            # v16 attempt failed because its stall rule never engaged, and the detour's first device
+            # attempt did the same with a one-pixel bound: the failure oscillates inside a couple of
+            # pixels, so the hero keeps moving while the goal distance barely changes. This window
+            # window measures the improvement in goal distance instead so oscillation cannot hide a
+            # stall, and a lost marker empties it, since an unknown position is not evidence either
+            if stall_window_length:
                 if distance is None:
-                    detour_distance_window = []
+                    stall_distance_window = []
                 else:
-                    detour_distance_window.append(distance)
-                    if len(detour_distance_window) > int(
-                        cast(int, runtime.detour["trigger_stall_steps"])
-                    ):
-                        detour_distance_window.pop(0)
+                    stall_distance_window.append(distance)
+                    if len(stall_distance_window) > stall_window_length:
+                        stall_distance_window.pop(0)
             if progress_guard is not None and distance is not None:
                 improved = best_distance is None or distance <= best_distance - guard_improvement
                 if improved:
@@ -1527,6 +1609,7 @@ def _run_episode(
                         recovery_steps_total += 1
             # in_approach_band was computed above, with the declared exit margin applied.
             traversability_masked_here = False
+            masked_away_bearing: str | None = None
             if (
                 runtime.traversability is not None
                 and position is not None
@@ -1538,6 +1621,7 @@ def _run_episode(
                 )
                 if masked_joystick != requested_joystick:
                     traversability_masked_steps += 1
+                    masked_away_bearing = requested_joystick
                     requested_joystick = masked_joystick
                     traversability_masked_here = True
             # The finest press tier moves the hero about 0.65 px, near the position noise floor,
@@ -1586,6 +1670,70 @@ def _run_episode(
             # commitment deliberately holds its aim. It does not outrank the mask: a planned bearing
             # is re-masked before it is applied, so the detour can only pick a bearing the frozen
             # grid permits. Nothing here reads the device or the model.
+            # The declared masked-bearing persistence deliberately keeps a bearing the frozen grid
+            # removed, so it is bounded on every axis and reported: it activates only when the mask
+            # has just removed the goal bearing and the hero has made no progress, it may be tried
+            # only the declared number of times per episode and held only the declared steps, and it
+            # ends when the goal distance improves by the declared amount, which means the creep
+            # worked. The corridor measurement justifies it: at the stall cell
+            # the mask removes north on a 0.0548 projection while north is the only bearing with
+            # a northward component and the hero creeps about 0.6 px per press by the wall, so the
+            # mask removes the only press that moves. Nothing here reads the device or the model.
+            if (
+                runtime.masked_persistence is not None
+                and detour_phase == "idle"
+                and position is not None
+                and not death
+                and not outside_region
+            ):
+                persistence_applied = False
+                persistence = runtime.masked_persistence
+                sweep = cast(list[str], persistence["persistence_bearings"])
+                goal_bearing = _goal_bearing(position, target)
+                if (
+                    persistence_left > 0
+                    and runtime.traversability is not None
+                    and _mask_joystick_bearing(position, goal_bearing, runtime.traversability)
+                    == goal_bearing
+                ):
+                    # The goal bearing is usable in this cell now, measured on the bearing itself
+                    # rather than on the planner's proposal, so the sweep did what it was for and
+                    # normal planning resumes.
+                    persistence_effective_events += 1
+                    persistence_left = 0
+                if (
+                    persistence_left <= 0
+                    and persistence_activations
+                    < int(cast(int, persistence["maximum_activations_per_episode"]))
+                    and traversability_masked_here
+                    and masked_away_bearing is not None
+                    and _no_progress_stall(
+                        stall_distance_window,
+                        int(cast(int, persistence["trigger_stall_steps"])),
+                        float(cast(float, persistence["trigger_stall_progress_pixels"])),
+                    )
+                ):
+                    persistence_activations += 1
+                    persistence_left = int(cast(int, persistence["maximum_steps"]))
+                    persistence_index = 0
+                    committed_approach = None
+                    committed_steps = 0
+                if persistence_left > 0:
+                    # Sweep the declared upward bearings rather than holding one. The directional
+                    # probe is what shows this is the escaping motion: cycling north, north-east and
+                    # north-west carried the hero five cells up the corridor, while holding one
+                    # masked bearing did not. The sweep is bounded by the declared step count.
+                    requested_joystick = sweep[persistence_index % len(sweep)]
+                    persistence_applied = True
+                    persistence_index += 1
+                    committed_approach = None
+                    committed_steps = 0
+                    persistence_steps += 1
+                    persistence_left -= 1
+                    if persistence_left == 0:
+                        # The declared sweep ran out while the goal bearing was still blocked, so
+                        # this activation is recorded as exhausted and normal masking resumes.
+                        persistence_exhausted_events += 1
             detour_bearing: str | None = None
             if (
                 runtime.detour is not None
@@ -1597,10 +1745,10 @@ def _run_episode(
                 detour = runtime.detour
                 traversability_block = runtime.traversability
                 attempts_cap = int(cast(int, detour["maximum_attempts_per_episode"]))
-                stalled = (
-                    len(detour_distance_window) >= int(cast(int, detour["trigger_stall_steps"]))
-                    and detour_distance_window[0] - min(detour_distance_window)
-                    <= float(cast(float, detour["trigger_stall_progress_pixels"]))
+                stalled = _no_progress_stall(
+                    stall_distance_window,
+                    int(cast(int, detour["trigger_stall_steps"])),
+                    float(cast(float, detour["trigger_stall_progress_pixels"])),
                 )
                 if detour_phase == "running":
                     detour_bearing = detour_plan_bearings[detour_index]
@@ -1675,6 +1823,9 @@ def _run_episode(
             if detour_bearing is not None and reason == "geometry_rule":
                 owner = "deterministic_router"
                 reason = "detour_applied"
+            elif persistence_applied and reason == "geometry_rule":
+                owner = "deterministic_router"
+                reason = "persistence_hold"
             recovery_applied = reason in {"unknown_recovery_retrace", "unknown_recovery_waypoint"}
             if escape_active and progress_guard is not None and not death:
                 if (
@@ -1958,6 +2109,10 @@ def _run_episode(
         "detour_unknown_steps": detour_unknown_steps,
         "detour_effective_events": detour_effective_events,
         "detour_exhausted": int(detour_exhausted),
+        "masked_persistence_activations": persistence_activations,
+        "masked_persistence_steps": persistence_steps,
+        "masked_persistence_effective_events": persistence_effective_events,
+        "masked_persistence_exhausted_events": persistence_exhausted_events,
         "duration_seconds": round(time.monotonic() - started, 8),
         "step_rows": steps,
     }
