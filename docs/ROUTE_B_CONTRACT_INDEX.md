@@ -107,6 +107,17 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
   the press did not move the hero along the commanded bearing - but it means a route that has to travel
   along a wall while pressed against it is the case where the mask removes the only thing that moves.
   The recorded ablation agrees: with the mask inert the same contract passed thirteen of thirteen.
+- **The thin cells stay unmeasured, and the reason is measured.** A declared bounded traverse of the wall
+  corridor (probe contract `da70e99fa632`, region moved to include `15:13`/`16:13`, cell cap 8 to 12)
+  was placed at `(63.0, 54.0)` and ran its two sessions: 96 pulses and 24 control windows each, zero
+  hard stops, 776 and 778 of 780 frames localised. Both sessions passed their own gates, but the analysis
+  failed on `region_conformant` and `concentration_conformant`, because the measured idle drift is
+  `0.4551` px per 100 ms against bounded-tier press rates of `0.05` to `0.18`. Only 12.7 percent of the 79
+  cell-bearing observations clear that idle bound, and the thin cells return one to three samples per
+  bearing at rates at or near zero. Filling them needs many incidental visits rather than a short
+  traverse, which is why the mask's bounded-tier contribution is only measurable where the route already
+  goes, and why the earlier probe line used a 2500 ms instrument that measures a tier the Router never
+  issues.
 - **Mask attribution.** The mask is live and fires on 1 to 5 steps per episode, but its isolated
   contribution is not measured by a controlled ablation. The commitment is the driver: an earlier
   run of the same contract with the mask inert passed 13 of 13 episodes.
