@@ -310,6 +310,9 @@ class ObservationROIs:
     death_replay_banner: tuple[int, int, int, int]
     death_minimum_red_pixels: int
     death_minimum_white_pixels: int
+    death_confirmation_steps: int
+    death_stationary_window_steps: int
+    death_maximum_travel_pixels: float
 
     @property
     def recommended_center(self) -> tuple[int, int]:
@@ -1722,6 +1725,25 @@ def load_observation_rois(path: Path) -> tuple[ObservationROIs, str]:
     minimum_white = death.get("minimum_white_text_pixels")
     if not isinstance(minimum_red, int) or not isinstance(minimum_white, int):
         raise MobileTestbedError("mobile death replay thresholds are invalid")
+    # Colour alone cannot identify the death-replay prompt. The same box reads about 1350 red
+    # pixels on a live frame when red-brown terrain passes under it, so the red count only says
+    # "something red is here". The banner is a UI state, though, and a dead hero does not move:
+    # requiring the colour test to hold for several consecutive observations and the localised
+    # position to stay put within the declared window separates a death from a banner that crosses
+    # a moving hero. The 2026-09-22 rebind stopped a run on a banner while the hero was walking at
+    # about 3 px per step, which is exactly what this rule refuses.
+    confirmation_steps = death.get("confirmation_steps", 2)
+    stationary_window_steps = death.get("stationary_window_steps", 2)
+    maximum_travel = death.get("maximum_travel_pixels", 1.0)
+    if (
+        not isinstance(confirmation_steps, int)
+        or confirmation_steps < 1
+        or not isinstance(stationary_window_steps, int)
+        or stationary_window_steps < 1
+        or not isinstance(maximum_travel, (int, float))
+        or float(maximum_travel) < 0.0
+    ):
+        raise MobileTestbedError("mobile death replay confirmation policy is invalid")
     return (
         ObservationROIs(
             width,
@@ -1734,6 +1756,9 @@ def load_observation_rois(path: Path) -> tuple[ObservationROIs, str]:
             box("death_replay_banner"),
             minimum_red,
             minimum_white,
+            confirmation_steps,
+            stationary_window_steps,
+            float(maximum_travel),
         ),
         hashlib.sha256(data).hexdigest(),
     )

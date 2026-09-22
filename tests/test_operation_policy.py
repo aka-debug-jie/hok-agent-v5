@@ -71,6 +71,9 @@ def test_operation_policy_crop_uses_private_screen_mapping() -> None:
         (0, 0, 10, 10),
         1,
         1,
+        2,
+        2,
+        1.0,
     )
     cropped = operation_policy._resize_crops(frames, rois.main_view, rois)
     assert cropped.shape == (2, 128, 128, 3)

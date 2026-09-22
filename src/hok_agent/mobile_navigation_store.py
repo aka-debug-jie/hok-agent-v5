@@ -35,6 +35,7 @@ import json
 import math
 import os
 import time
+from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -700,6 +701,32 @@ def _commit_approach(
     return requested, requested, 1, False
 
 
+def _death_confirmed(
+    banner_streak: int,
+    recent_positions: Sequence[tuple[float, float] | None],
+    confirmation_steps: int,
+    maximum_travel_pixels: float,
+) -> bool:
+    """Confirm a death from a sustained banner and a hero that is not moving.
+
+    The banner colour test is a raw measurement of "something red and white is in the box". It is
+    true on red-brown terrain, on in-match announcements and on the death-replay prompt alike, so it
+    cannot be the stop on its own: the 2026-09-22 rebind stopped an episode while the hero was
+    walking at about three pixels per step. A death is a state, though, and a dead hero does not
+    move, so the banner must hold for the declared number of consecutive observations and the
+    localised position must stay within the declared travel over the declared window. A lost marker
+    counts as no travel, because a missing cue is itself consistent with death and the alternative
+    would be to require localisation during the one state that removes it.
+    """
+    if banner_streak < confirmation_steps:
+        return False
+    fixed = [item for item in recent_positions if item is not None]
+    if len(fixed) < 2:
+        return True
+    travel = math.hypot(fixed[-1][0] - fixed[0][0], fixed[-1][1] - fixed[0][1])
+    return travel <= maximum_travel_pixels
+
+
 def _no_advance_detected(
     previous_anchor: tuple[float, float] | None,
     previous_steps: int,
@@ -993,6 +1020,9 @@ class _NavigationRuntime:
     approach_commitment: int
     approach_exit_margin: float
     stall_commitment: int
+    death_confirmation_steps: int
+    death_stationary_window_steps: int
+    death_maximum_travel_pixels: float
     backlog_free_maximum_messages: int
     approach_tiers: list[tuple[float, int]]
     approach_default_hold_ms: int
@@ -1111,6 +1141,9 @@ def _prepare_navigation_runtime(
                 ),
             )
         ),
+        death_confirmation_steps=rois.death_confirmation_steps,
+        death_stationary_window_steps=rois.death_stationary_window_steps,
+        death_maximum_travel_pixels=rois.death_maximum_travel_pixels,
         approach_commitment=int(
             cast(
                 int,
@@ -1264,6 +1297,13 @@ def _run_episode(
     episode_deadline = started + runtime.maximum_duration_seconds
     last_position: tuple[float, float] | None = None
     committed: tuple[HierarchicalTransitionRecord, ...] = ()
+    # A death is a state, not a single frame. The banner colour test alone fires on any red UI or
+    # terrain that passes under the declared box, so it is confirmed only after it holds for the
+    # declared number of consecutive observations and the hero has not travelled within the declared
+    # window. A dead hero cannot move; the 2026-09-22 rebind stopped while the hero was walking.
+    banner_streak = 0
+    recent_positions: list[tuple[float, float] | None] = []
+    death = False
 
     def dispatch(operations: list[TouchOperation]) -> tuple[int, int, int, int, str]:
         nonlocal pointer_messages, retry_total
@@ -1301,12 +1341,22 @@ def _run_episode(
             else:
                 capture_start_ns, capture_end_ns, frame_timestamp_ns, frame = pending
                 pending = None
-            death = _death_replay_visible(frame, rois)
+            banner = _death_replay_visible(frame, rois)
             minimap = _observation_roi_frame(frame, rois.minimap)
             state.previous = previous_position
             position = _goal_navigation_tracked_cue(minimap, contract, state, step_id)
             previous_position = state.previous
             last_position = position
+            banner_streak = banner_streak + 1 if banner else 0
+            recent_positions.append(position)
+            if len(recent_positions) > runtime.death_stationary_window_steps:
+                recent_positions.pop(0)
+            death = _death_confirmed(
+                banner_streak,
+                recent_positions,
+                runtime.death_confirmation_steps,
+                runtime.death_maximum_travel_pixels,
+            )
             known = position is not None
             missing_streak = 0 if known else missing_streak + 1
             if known:

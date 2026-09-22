@@ -322,6 +322,68 @@ def test_death_banner_box_must_cover_the_measured_banner_extent(tmp_path: Path) 
     assert rois.death_replay_banner == (720, 0, 880, 22)
 
 
+def test_death_confirmation_policy_is_declared_and_validated(tmp_path: Path) -> None:
+    """The colour test alone is not the stop: the confirmation policy must be declared and checked.
+
+    The same box reads about 1350 red pixels on a live frame when red-brown terrain passes under it,
+    and the 2026-09-22 rebind stopped a run on the banner while the hero was walking, so the stop
+    also requires the banner to persist and the hero to stay put. Those numbers are declared beside
+    the box, and a config that declares an unusable one must not load.
+    """
+
+    def write(death: dict[str, object]) -> Path:
+        path = tmp_path / f"rois-{len(death)}-{death.get('confirmation_steps', 'd')}.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": mobile_testbed.OBSERVATION_ROI_SCHEMA,
+                    "screen": {"width": 1600, "height": 720, "rotation": 1},
+                    "main_view": {"pixel_box_xyxy": [312, 60, 1280, 650]},
+                    "minimap": {"pixel_box_xyxy": [80, 0, 312, 232]},
+                    "hud": {"pixel_box_xyxy": [832, 216, 1600, 720]},
+                    "recommended_equipment": {"pixel_box_xyxy": [160, 240, 260, 345]},
+                    "death_replay_banner": death,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    base: dict[str, object] = {
+        "pixel_box_xyxy": [683, 0, 937, 46],
+        "minimum_red_pixels": 2000,
+        "minimum_white_text_pixels": 80,
+    }
+    # absence is defaulted, so an existing config keeps loading
+    rois, _sha = mobile_testbed.load_observation_rois(write(dict(base)))
+    assert rois.death_confirmation_steps == 2
+    assert rois.death_stationary_window_steps == 2
+    assert rois.death_maximum_travel_pixels == 1.0
+    # the declared values are what the runtime reads
+    rois, _sha = mobile_testbed.load_observation_rois(
+        write(
+            dict(
+                base,
+                confirmation_steps=4,
+                stationary_window_steps=5,
+                maximum_travel_pixels=0.5,
+            )
+        )
+    )
+    assert rois.death_confirmation_steps == 4
+    assert rois.death_stationary_window_steps == 5
+    assert rois.death_maximum_travel_pixels == 0.5
+    # an unusable policy is refused rather than silently defaulted
+    for broken in (
+        dict(base, confirmation_steps=0),
+        dict(base, stationary_window_steps=0),
+        dict(base, maximum_travel_pixels=-1.0),
+        dict(base, confirmation_steps=2.5),
+    ):
+        with pytest.raises(mobile_testbed.MobileTestbedError):
+            mobile_testbed.load_observation_rois(write(broken))
+
+
 def test_operation_movement_teacher_contract_and_state_filter() -> None:
     root = Path(__file__).resolve().parents[1]
     contract, digest = mobile_testbed._movement_teacher_contract(

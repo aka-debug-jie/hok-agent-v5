@@ -441,6 +441,41 @@ def test_localisation_cutoff_is_the_stop_rule_not_a_death_classifier() -> None:
     )
 
 
+def test_death_confirmation_requires_a_sustained_banner_and_a_stationary_hero() -> None:
+    """A death is a state: the banner must last and the hero must not be moving.
+
+    The 2026-09-22 rebind stopped `route-b-rebind-stage3` episode 1 on `death_or_ended_screen`
+    while the hero was walking. The recorded trace is the negative case here: the banner was false
+    on steps 0-43 and true only on step 44, and the two-step position window at that step moved
+    about 4.2 px. Both conditions therefore refuse the stop, while a real death satisfies both.
+    """
+    confirmed = store_runner._death_confirmed
+
+    # one frame of the banner is never a death, however red it is
+    assert confirmed(1, [(50.0, 50.0), (50.0, 50.0)], 2, 1.0) is False
+    assert confirmed(0, [(50.0, 50.0)], 2, 1.0) is False
+
+    # the recorded false positive: the banner is seen while the hero is moving
+    assert confirmed(1, [(68.8, 82.7), (65.8, 79.7)], 2, 1.0) is False
+    assert confirmed(2, [(68.8, 82.7), (65.8, 79.7)], 2, 1.0) is False
+
+    # a sustained banner with a stationary hero is a death
+    assert confirmed(2, [(50.0, 50.0), (50.0, 50.1)], 2, 1.0) is True
+    assert confirmed(5, [(50.0, 50.0), (50.0, 50.0)], 2, 1.0) is True
+
+    # a lost marker during a sustained banner is consistent with death, not with life
+    assert confirmed(2, [None, None], 2, 1.0) is True
+    assert confirmed(2, [(50.0, 50.0), None], 2, 1.0) is True
+
+    # the confirmation length is respected, not hard-coded
+    assert confirmed(2, [(50.0, 50.0), (50.0, 50.0)], 3, 1.0) is False
+    assert confirmed(3, [(50.0, 50.0), (50.0, 50.0)], 3, 1.0) is True
+
+    # the travel bound is respected, not hard-coded
+    assert confirmed(2, [(50.0, 50.0), (50.0, 51.5)], 2, 1.0) is False
+    assert confirmed(2, [(50.0, 50.0), (50.0, 51.5)], 2, 2.0) is True
+
+
 def test_episode_outcome_priority_keeps_arrival_and_safety_first() -> None:
     outcome = store_runner._episode_outcome
     assert outcome(

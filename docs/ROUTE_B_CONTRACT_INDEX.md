@@ -96,5 +96,11 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
   `(683, 0, 937, 46)` death box from `5031c82`, which reads only about 100-120 red and 0 white on
   ordinary frames but overlaps the top-centre in-match announcement region, where a red banner with
   white text clears the unchanged 2000/80 thresholds. The fourteen-of-fourteen pass therefore stands
-  for commit `7fb530a` only, and no device run on this route is trustworthy until the death detector
-  gains a declared discriminator.
+  for commit `7fb530a` only. The detector was then fixed at its cause rather than by relaxing a
+  threshold: the box and its minima are unchanged, and the stop now also requires the colour test to
+  hold for `confirmation_steps` 2 consecutive observations and the localised hero to travel at most
+  `maximum_travel_pixels` 1.0 over `stationary_window_steps` 2. That refuses the recorded stop step on
+  both halves (banner streak one against two, two-step travel 4.24 px against 1.0) while the owner
+  death reference still reads death-visible; the negative set is preserved under
+  `audit/hierarchical-movement-mvp/death-box-negatives-v1/`. No device run has exercised the fix yet,
+  so a fresh stage-1 rebind is the next experiment and the pass still keeps commit `7fb530a`.

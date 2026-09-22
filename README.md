@@ -39,9 +39,11 @@ internal API, backend or internal reference:
   `(50, 70)` rather than `(50, 80)` because `(50, 80)` measured unobservable. Finally, the pass is
   scoped to its own commit: a 2026-09-22 rebind of the same contract passed stage 1 (1/1) but
   failed stage 3 (1/3), because the corrected death box now covers the top-centre in-match
-  announcement region and stopped a run whose hero was demonstrably alive, so no device run on
-  this route is trustworthy until the death detector gains a declared discriminator. Versions and
-  digests are indexed in [docs/ROUTE_B_CONTRACT_INDEX.md](docs/ROUTE_B_CONTRACT_INDEX.md).
+  announcement region and stopped a run whose hero was demonstrably alive. The box and its
+  thresholds were then left unchanged and the stop was given a declared confirmation policy: the
+  banner must hold for two consecutive observations and the hero must not travel in the same window,
+  since a dead hero cannot move. Versions and digests are indexed in
+  [docs/ROUTE_B_CONTRACT_INDEX.md](docs/ROUTE_B_CONTRACT_INDEX.md).
 
 Single-policy post-training is closed as `DATA_SOURCE_LIMITED`, not left open: R0 tested three
 feedback lines and all three failed for a reportable reason - the navigation feedback has no
