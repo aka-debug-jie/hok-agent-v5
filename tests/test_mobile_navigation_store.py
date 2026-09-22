@@ -1982,9 +1982,109 @@ def test_placement_route_refuses_and_never_starts_the_route_on_a_bad_start(
     assert len(run_calls) == 1
     assert run_calls[0].endswith("-placement")
     assert len(closes) == 1
-    assert summary["status"] == "FAILED"
+    assert summary["status"] == "SETUP_FAILED"
     assert summary["setup_failure"] == "PLACEMENT_OUTSIDE_START_TOLERANCE"
     assert summary["placement_successes"] == 0
     assert summary["route_started"] == 0
     assert summary["route_successes"] == 0
     assert summary["route_summary"] is None
+
+
+def _install_composed_fakes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outcomes) -> dict:
+    """Install a two-phase fake device and return the call record."""
+    prepared: list[int] = []
+    run_calls: list[str] = []
+    opens: list[int] = []
+    closes: list[int] = []
+
+    def fake_prepare(**_kwargs):
+        index = len(prepared)
+        prepared.append(index)
+        return _FakeRuntime(
+            contract_sha=("a" if index == 0 else "b") * 64,
+            prefix="mobile-nav-ep",
+            targets=[(53.5, 69.4)] if index == 0 else [(50.0, 50.0)],
+            tolerance=1.5 if index == 0 else 4.0,
+            database=tmp_path / "transitions.sqlite3",
+            frames_dir=tmp_path / "frames",
+        )
+
+    def fake_run(_runtime, _store, episode_id):
+        outcome = outcomes[len(run_calls)]
+        run_calls.append(episode_id)
+        return outcome(episode_id)
+
+    monkeypatch.setattr(store_runner, "_new_large_output", lambda _path: tmp_path)
+    monkeypatch.setattr(store_runner, "_prepare_navigation_runtime", fake_prepare)
+    monkeypatch.setattr(store_runner, "_run_episode", fake_run)
+    monkeypatch.setattr(store_runner, "_open_runtime", lambda runtime: opens.append(id(runtime)))
+    monkeypatch.setattr(
+        store_runner, "_close_runtime", lambda _runtime, messages: closes.append(messages)
+    )
+    monkeypatch.setattr(store_runner, "UnifiedTransitionStore", _FakeStore)
+    monkeypatch.setattr(
+        store_runner,
+        "verify_mobile_navigation_episode",
+        lambda **_kwargs: {"findings": [], "recoverable": True},
+    )
+    return {"run_calls": run_calls, "opens": opens, "closes": closes}
+
+
+def _run_composed(tmp_path: Path) -> dict:
+    return store_runner.run_mobile_navigation_placement_route(
+        serial="unused",
+        placement_contract_path=tmp_path / "placement.json",
+        route_contract_path=tmp_path / "route.json",
+        visual_layout_path=tmp_path,
+        execution_layout_path=tmp_path,
+        observation_rois_path=tmp_path,
+        output_dir=tmp_path / "out",
+        enable_input=False,
+    )
+
+
+def test_placement_route_reports_a_setup_failure_when_the_placement_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A placement that lost its marker refuses the start and still releases the pointer once."""
+    calls = _install_composed_fakes(
+        tmp_path,
+        monkeypatch,
+        [
+            lambda ep: _placement_outcome(arrived=False, final=None, episode_id=ep),
+            lambda ep: _placement_outcome(arrived=True, final=[50.0, 50.0], episode_id=ep),
+        ],
+    )
+    summary = _run_composed(tmp_path)
+    assert summary["status"] == "SETUP_FAILED"
+    assert summary["setup_failure"] == "PLACEMENT_POSITION_MISSING"
+    assert summary["route_started"] == 0
+    assert summary["route_summary"] is None
+    assert len(calls["run_calls"]) == 1
+    assert calls["run_calls"][0].endswith("-placement")
+    # The pointer is released once even though the route phase never ran.
+    assert len(calls["closes"]) == 1
+
+
+def test_placement_route_scores_a_route_that_started_and_did_not_arrive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A confirmed start that then fails is a route failure, not a setup failure."""
+    calls = _install_composed_fakes(
+        tmp_path,
+        monkeypatch,
+        [
+            lambda ep: _placement_outcome(arrived=True, final=[53.6, 69.5], episode_id=ep),
+            lambda ep: _placement_outcome(arrived=False, final=[52.0, 60.0], episode_id=ep),
+        ],
+    )
+    summary = _run_composed(tmp_path)
+    assert summary["status"] == "FAILED"
+    assert summary["setup_failure"] is None
+    assert summary["placement_successes"] == 1
+    assert summary["route_started"] == 1
+    assert summary["route_successes"] == 0
+    assert summary["end_to_end_successes"] == 0
+    assert len(calls["run_calls"]) == 2
+    assert calls["run_calls"][0].endswith("-placement")
+    assert calls["run_calls"][1].endswith("-route")

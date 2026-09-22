@@ -48,9 +48,11 @@ Added, all offline:
 
 Deliberately not touched: the route contracts and their 4.0 px gate, the ROIs, the layouts, the
 thresholds, the executor, the Router and the Store schema. `training_eligible` stays `false`.
-A refused start is a run-level `setup_failure` status, not a new Store terminal reason, so no
-schema change was needed. Phase identity is carried by the episode id (`…-placement` / `…-route`),
-which is recoverable from the Store without a new column.
+A refused start is a run-level status, not a new Store terminal reason, so no schema change was
+needed: the composed run reports `status` as `PASSED`, `SETUP_FAILED` or `FAILED`, and
+`setup_failure` names the gate reason. `SETUP_FAILED` means the route never ran, so it is scored
+neither as a route success nor as a route failure. Phase identity is carried by the episode id
+(`…-placement` / `…-route`), which is recoverable from the Store without a new column.
 
 ## What this table does not claim
 

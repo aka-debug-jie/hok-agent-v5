@@ -2515,14 +2515,20 @@ def run_mobile_navigation_placement_route(
     with UnifiedTransitionStore(placement_runtime.database) as store:
         integrity = store.integrity()
     end_to_end = cast(int, counters["end_to_end_successes"]) == 1
+    started = bool(gate["started_route"])
+    # A refused start is its own status, not a route failure: the route never ran, so it cannot be
+    # scored either way, and folding it into FAILED would make a bad placement look like bad
+    # navigation.
+    if not started:
+        status = "SETUP_FAILED"
+    elif end_to_end and not findings and integrity == "ok":
+        status = "PASSED"
+    else:
+        status = "FAILED"
     summary: dict[str, object] = _base_summary(placement_runtime) | counters | {
         "schema_version": MOBILE_NAVIGATION_PLACEMENT_ROUTE_SCHEMA,
-        "status": "PASSED" if end_to_end and not findings and integrity == "ok" else "FAILED",
-        "setup_failure": (
-            None
-            if bool(gate["started_route"])
-            else cast(str, gate["reason"])
-        ),
+        "status": status,
+        "setup_failure": None if started else cast(str, gate["reason"]),
         "declared_start_xy": [declared_start[0], declared_start[1]],
         "start_gate_tolerance_pixels": start_tolerance,
         "route_contract_sha256": route_runtime.contract_sha,

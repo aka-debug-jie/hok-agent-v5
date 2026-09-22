@@ -20,9 +20,12 @@ layouts, the thresholds, the executor, the Router or the Store schema changed.
   a bad start cannot loop.
 - Separate denominators: `session_attempts`, `placement_successes`, `route_started`,
   `route_successes`, `end_to_end_successes`, plus placement and route wall times.
+- Status is `PASSED`, `SETUP_FAILED` (the route never ran, so it is scored neither way) or
+  `FAILED` (the route ran and did not arrive), with `setup_failure` naming the gate reason.
 - Phase identity from the episode id (`…-placement` / `…-route`), with no Store schema change.
-- Offline coverage: seven tests, `tests/test_mobile_navigation_store.py`, using fake runtimes and
-  counter monkeypatches; they prove scheduling, the refusal and the cleanup only.
+- Offline coverage: nine tests, `tests/test_mobile_navigation_store.py`, using fake runtimes and
+  counter monkeypatches; they prove scheduling, the refusal (including a lost marker and a
+  placement that failed), the accounting and the single release only.
 
 ## The device acceptance, when it is authorized
 
