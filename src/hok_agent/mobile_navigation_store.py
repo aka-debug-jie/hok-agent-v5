@@ -1304,6 +1304,8 @@ def _run_episode(
     banner_streak = 0
     recent_positions: list[tuple[float, float] | None] = []
     death = False
+    banner_steps = 0
+    death_steps = 0
 
     def dispatch(operations: list[TouchOperation]) -> tuple[int, int, int, int, str]:
         nonlocal pointer_messages, retry_total
@@ -1357,6 +1359,10 @@ def _run_episode(
                 runtime.death_confirmation_steps,
                 runtime.death_maximum_travel_pixels,
             )
+            if banner:
+                banner_steps += 1
+            if death:
+                death_steps += 1
             known = position is not None
             missing_streak = 0 if known else missing_streak + 1
             if known:
@@ -1806,6 +1812,10 @@ def _run_episode(
         "no_advance_events": int(no_advance),
         "traversability_masked_steps": traversability_masked_steps,
         "approach_committed_steps": approach_committed_steps,
+        # A banner that is seen and rejected is the evidence that the confirmation policy is doing
+        # work rather than the run simply never meeting a banner, so both counts are reported.
+        "death_banner_steps": banner_steps,
+        "death_confirmed_steps": death_steps,
         "duration_seconds": round(time.monotonic() - started, 8),
         "step_rows": steps,
     }

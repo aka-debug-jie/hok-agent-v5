@@ -42,8 +42,10 @@ internal API, backend or internal reference:
   announcement region and stopped a run whose hero was demonstrably alive. The box and its
   thresholds were then left unchanged and the stop was given a declared confirmation policy: the
   banner must hold for two consecutive observations and the hero must not travel in the same window,
-  since a dead hero cannot move. Versions and digests are indexed in
-  [docs/ROUTE_B_CONTRACT_INDEX.md](docs/ROUTE_B_CONTRACT_INDEX.md).
+  since a dead hero cannot move. That policy held on device (a fresh stage-1 run went its full 97
+  steps with no banner stop) but did not arrive, from a start 2.8-3.9 px off the recorded passing
+  starts, so the pass is still not re-bound and the named obstacle is placement precision. Versions
+  and digests are indexed in [docs/ROUTE_B_CONTRACT_INDEX.md](docs/ROUTE_B_CONTRACT_INDEX.md).
 
 Single-policy post-training is closed as `DATA_SOURCE_LIMITED`, not left open: R0 tested three
 feedback lines and all three failed for a reportable reason - the navigation feedback has no

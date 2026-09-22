@@ -102,5 +102,9 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
   `maximum_travel_pixels` 1.0 over `stationary_window_steps` 2. That refuses the recorded stop step on
   both halves (banner streak one against two, two-step travel 4.24 px against 1.0) while the owner
   death reference still reads death-visible; the negative set is preserved under
-  `audit/hierarchical-movement-mvp/death-box-negatives-v1/`. No device run has exercised the fix yet,
-  so a fresh stage-1 rebind is the next experiment and the pass still keeps commit `7fb530a`.
+  `audit/hierarchical-movement-mvp/death-box-negatives-v1/`. The fix was then exercised on device:
+  `route-b-rebind2-stage1` ran its full 97 steps to a budget timeout with no banner stop, so the
+  policy held, but it did not arrive from a start 2.8-3.9 px off the recorded passing starts (the
+  passing stage-1 run began 1.2-1.7 px away), which is inside the recorded start-sensitivity band.
+  The pass is therefore still not re-bound and still keeps commit `7fb530a`, and the named obstacle
+  is placement precision rather than the detector.
