@@ -9,6 +9,11 @@ and run evidence are local artifacts below `HOK_LARGE_ROOT`; they are not distri
 Updated 2026-09-14: the owner rejected the data-source-limited stop and re-opened the active-probe route under the same no-source constraint.
 Updated 2026-09-20: the owner raised the byte cap, allowed scene adjustment, and asked for a
 forensics-first plan; the read-only forensics verdict below now governs the next decision.
+Updated 2026-09-22: a read-only baseline-binding and reuse-gap pass for the `c783402` next-step
+handoff is recorded in [`docs/execution/c783402-next/`](docs/execution/c783402-next/README.md); it
+binds the existing facts, names the same-session placement-then-route lifecycle gap, and opens no
+device, capture, training or push work. The bound pass, the mask scope and the closed limits are
+unchanged.
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text
