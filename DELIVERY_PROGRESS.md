@@ -1795,6 +1795,32 @@ NEXT_DECISION: accept route B at its recorded scope (staged 1 then 3 then 10 fro
   `$HOK_LARGE_ROOT/audit/hierarchical-movement-mvp/owner-death-reference/`. The local ROIs are not
   distributed in Git, so this change lives in the local configuration and is recorded here.
 
+### Cold-start test declared in advance: does v15 pass from the start v14 failed from (2026-09-21)
+
+- Declared before the run, so the interpretation cannot be chosen afterwards. The question is
+  whether the two rules added in v15 removed the start-position dependence that the record already
+  shows: v13 passed from `(62.9, 61.9)` and v14 then failed three consecutive episodes from
+  `(78.4, 55.4)`, stalling at about `(59.6, 46.5)`.
+- Contract: route B v15, `ba46e2b21624`, unchanged. Start: the hero placed at `(78.4, 55.4)`, which
+  is cell `19:13` - also a cell where the frozen grid removes north-east on 178 samples and north on
+  12, so a failure there would be diagnosable against the mask rather than merely reported. Three
+  consecutive episodes, the contract's own gates unchanged, output under
+  `route-b-coldstart-v14-start-1`.
+- Pre-declared readings, both of which are useful and neither of which permits a threshold change:
+  - three of three arrivals would show the v15 commitment and mask removed the start dependence at
+    the one start on record that defeated the route, and would widen the claim from "the measured
+    starts" to "including the recorded failing start";
+  - anything less than three of three would confirm the dependence, and the report then names where
+    each episode stopped, whether the mask fired there, and whether the commitment held, without
+    re-running, substituting a session, or relaxing a gate.
+- The gates are the contract's own (`arrival_required`, 4.0 px maximum arrival error, 0.8 minimum
+  localized fraction, zero identity switches, 10 s minimum valid run), so a failure is a failure.
+- Device state checked immediately before: `adb` reports `device`, the screen is awake, the
+  foreground package is the authorised one, the display is 720x1600 at rotation 1, storage is
+  mounted read-write, a screenshot decodes, and the frozen cue localises the hero at `(62.9, 64.0)`,
+  cell `15:15`, with zero input commands sent. The correction to the death box is in force, so the
+  `death_replay_visible: false` that accompanies these checks now means what it says.
+
 ## Public release state
 
 - Version: `0.1.0`.
