@@ -302,15 +302,13 @@ def validate_detour(block: object) -> dict[str, object]:
         raise MobileTestbedError("mobile navigation store detour differs")
     integers = ("maximum_steps", "maximum_attempts_per_episode", "trigger_stall_steps",
                 "confirmation_steps")
-    numbers = ("trigger_stall_travel_pixels", "confirmation_minimum_progress_pixels")
+    numbers = ("trigger_stall_progress_pixels", "confirmation_minimum_progress_pixels")
     for key in integers:
         if not isinstance(block.get(key), int) or int(cast(int, block[key])) < 1:
             raise MobileTestbedError("mobile navigation store detour differs")
     for key in numbers:
-        if not isinstance(block.get(key), (int, float)) or float(cast(float, block[key])) < 0.0:
+        if not isinstance(block.get(key), (int, float)) or float(cast(float, block[key])) <= 0.0:
             raise MobileTestbedError("mobile navigation store detour differs")
-    if float(cast(float, block["confirmation_minimum_progress_pixels"])) <= 0.0:
-        raise MobileTestbedError("mobile navigation store detour differs")
     order = block.get("bearing_order")
     if (
         not isinstance(order, list)

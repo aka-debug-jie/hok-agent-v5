@@ -317,3 +317,22 @@ def test_mismatched_head_observation_is_rejected_from_training(tmp_path: Path) -
         stored = store.append(row)
         assert "movement_applied_observation_id_mismatch" in stored.validation.errors
         assert stored.payload["training_eligible"] is False
+
+
+def test_detour_failure_is_an_error_class_terminal() -> None:
+    """A declared detour that is spent is its own failure, and its end kind must agree.
+
+    The store derives the expected episode end kind from the terminal reason, so registering a new
+    failure reason without registering its class leaves every such episode unable to write a valid
+    terminal transition, which is what the first device run of the detour hit. DETOUR_FAILURE is an
+    error, not a truncated step budget and not a completed episode.
+    """
+    row = _transition(terminal=True)
+    row["terminal_reason"] = "DETOUR_FAILURE"
+    row["episode_end_kind"] = "ERROR"
+    result = validate_transition(row)
+    assert "episode_end_kind_mismatch" not in result.errors
+    assert result.valid is True
+
+    row["episode_end_kind"] = "TRUNCATED"
+    assert "episode_end_kind_mismatch" in validate_transition(row).errors

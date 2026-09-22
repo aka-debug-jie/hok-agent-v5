@@ -1335,8 +1335,7 @@ def _run_episode(
     detour_effective_events = 0
     detour_confirm_left = 0
     detour_confirm_baseline: float | None = None
-    detour_stall_anchor: tuple[float, float] | None = None
-    detour_stall_steps = 0
+    detour_distance_window: list[float] = []
     detour_exhausted = False
 
     def dispatch(operations: list[TouchOperation]) -> tuple[int, int, int, int, str]:
@@ -1425,24 +1424,22 @@ def _run_episode(
                 if position is None
                 else float(np.hypot(position[0] - target[0], position[1] - target[1]))
             )
-            # The detour trigger needs its own stall run, separate from the no-advance guard: the
-            # guard erases a stall once the world moves at all, while a stall that alternates
-            # between two bearings keeps the world moving and makes no progress. A lost marker
-            # resets the run.
+            # The detour trigger needs its own stall definition, and it must be "no progress" rather
+            # than "no motion". The v16 attempt failed because its stall rule never engaged, and the
+            # detour's first device attempt did the same with a one-pixel travel bound: the recorded
+            # failure oscillates inside a couple of pixels, so the hero keeps moving while the goal
+            # distance barely changes. This window measures the improvement in goal distance instead
+            # so oscillation cannot hide a stall, and a lost marker empties it because an unknown
+            # position is not evidence either way.
             if runtime.detour is not None:
-                if position is None:
-                    detour_stall_anchor = None
-                    detour_stall_steps = 0
-                elif detour_stall_anchor is None or float(
-                    np.hypot(
-                        position[0] - detour_stall_anchor[0],
-                        position[1] - detour_stall_anchor[1],
-                    )
-                ) > float(cast(float, runtime.detour["trigger_stall_travel_pixels"])):
-                    detour_stall_anchor = position
-                    detour_stall_steps = 1
+                if distance is None:
+                    detour_distance_window = []
                 else:
-                    detour_stall_steps += 1
+                    detour_distance_window.append(distance)
+                    if len(detour_distance_window) > int(
+                        cast(int, runtime.detour["trigger_stall_steps"])
+                    ):
+                        detour_distance_window.pop(0)
             if progress_guard is not None and distance is not None:
                 improved = best_distance is None or distance <= best_distance - guard_improvement
                 if improved:
@@ -1600,7 +1597,11 @@ def _run_episode(
                 detour = runtime.detour
                 traversability_block = runtime.traversability
                 attempts_cap = int(cast(int, detour["maximum_attempts_per_episode"]))
-                stalled = detour_stall_steps >= int(cast(int, detour["trigger_stall_steps"]))
+                stalled = (
+                    len(detour_distance_window) >= int(cast(int, detour["trigger_stall_steps"]))
+                    and detour_distance_window[0] - min(detour_distance_window)
+                    <= float(cast(float, detour["trigger_stall_progress_pixels"]))
+                )
                 if detour_phase == "running":
                     detour_bearing = detour_plan_bearings[detour_index]
                     detour_index += 1
@@ -1637,7 +1638,13 @@ def _run_episode(
                         )
                         detour_attempts += 1
                         if plan is not None and plan.bearings:
-                            detour_plan_bearings = list(plan.bearings)
+                            # The planner speaks the recorded store vocabulary while the Router and
+                            # the joystick speak the joystick vocabulary, and the two overlap on
+                            # nothing. Convert once, here, at the boundary: handing a raw plan
+                            # bearing on would both mask nothing and send an invalid direction.
+                            detour_plan_bearings = [
+                                STORE_TO_JOYSTICK_DIRECTION[bearing] for bearing in plan.bearings
+                            ]
                             detour_unknown_steps += plan.unknown_steps
                             detour_index = 1
                             detour_bearing = detour_plan_bearings[0]

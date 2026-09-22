@@ -29,7 +29,8 @@ the ledger sections of [DELIVERY_PROGRESS.md](../DELIVERY_PROGRESS.md).
 | v14 | `caa0a58d67b3` | adds `no_advance_guard` (`flat_localised_position`, 12 steps, 1.0 px) so a frozen screen is an `ACTION_FAILURE` rather than a `TIMEOUT` | `route-b-batch-18-stage3` 0/3, 0 of 4, `TIMEOUT`, `no_advance_events=0` — the guard correctly did not fire because the world was still advancing |
 | v15 | `ba46e2b21624` | adds the measured traversability mask and a final-approach commitment of three steps | `route-b-batch-19-stage3` and `-20-stage10` passed 3/3 and 10/10 but with the mask **inert** (a vocabulary defect, see below). After the fix, `route-b-batch-22-stage1`, `-23-stage3` and `-21-stage10` passed **1/1, 3/3 and 10/10** with the mask live. The 2026-09-22 rebind of the same digest passed stage 1 (1/1) but failed stage 3 (1/3) on a corrected-death-box false positive; the detector then gained a declared confirmation policy and the pass was **re-bound to the current code** by `route-b-rebind3-stage1`, `-stage3` and `-stage10` at **1/1, 3/3 and 10/10** on the same contract but with ROIs `876adf7626a1` and a declared 1.5 px placement |
 
-| v18 | `f6ae612becc7` | adds a declared bounded grid detour on top of the v15 grid and mask: a breadth-first search over the frozen grid, triggered only when the mask has just removed the goal-directed bearing and the hero has stalled, with two attempts per episode and `detour_exhausted` as its own outcome | not yet run on device; validated offline on the recorded stall cells (`14:12` -> `NE NW`, `15:12` -> `N NE NW`, `14:11` -> `NE N`, `19:16` -> `NE E SE SE`), every plan ending in the goal cell, avoiding every obstructed pair and staying inside the region |
+| v18 | `f6ae612becc7` | adds a declared bounded grid detour on top of the v15 grid and mask: a breadth-first search over the frozen grid, triggered only when the mask has just removed the goal-directed bearing and the hero has stalled, with two attempts per episode and `detour_exhausted` as its own outcome | `route-b-detour-stage1` 0/1: the trigger asked for no motion, the failure oscillates, so `detour_attempts=0` and it timed out at `14:12` |
+| v19 | `a7945b2c` | same detour with the trigger corrected to a no-progress rule (goal-distance improvement over six localised steps) | `route-b-detour3-stage1` 0/1 but the detour fired: two attempts at `14:12`, plan `NE NW`, ended `detour_exhausted` at twenty steps. It moved the hero **east**, and the measured displacements show every bounded press in that cell is a wall slide (north = 1.70 px west against 0.20 px north), so no available bearing goes north and no cell-transition plan is sound (mean bounded displacement under 2 px against 4 px cells) |
 
 ## The v15 traversability grid
 
@@ -85,8 +86,15 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
   built as contract v18 (`f6ae612becc7`): a bounded breadth-first search over the same frozen grid,
   triggered when the mask has just removed the goal-directed bearing and the hero has stalled, with
   re-masking of every planned bearing, a declared attempt and confirmation budget, and
-  `detour_exhausted` as its own failure. It is validated offline but has not run on device, so the
-  limit still stands.
+  `detour_exhausted` as its own failure. It was then run, and it did not open the limit: v18 never
+  fired because its trigger asked for no motion while the failure oscillates, and v19 (`a7945b2c`)
+  fired twice at `14:12` but its plan moved the hero east. Measuring the actual displacements corrects
+  the explanation the earlier text carried: the grid stores only the projection onto the commanded
+  bearing, and at `14:12` a bounded north press is a 1.70 px **west** slide against 0.20 px north, so
+  the cell is a wall slide rather than a slow-but-passable bearing. No bearing available there goes
+  north, and no cell-transition plan is sound because the mean bounded displacement is under two
+  pixels against four-pixel cells. Opening the limit needs a displacement-vector record per
+  `(cell, bearing)` and evidence of a lateral gap, neither of which exists.
 - **The route is not the original rectangle.** The fourth waypoint is `(50, 70)`, not `(50, 80)`,
   because `(50, 80)` measured unobservable: across six runs and 211 localised samples the closest
   any localised position came to it was exactly 6.00 px against a 4.0 px tolerance.

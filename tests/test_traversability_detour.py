@@ -15,6 +15,7 @@ from typing import cast
 import pytest
 
 from hok_agent import mobile_navigation_store as store_runner
+from hok_agent import mobile_testbed
 from hok_agent.mobile_testbed import MobileTestbedError, _goal_navigation_contract
 from hok_agent.traversability import (
     BEARING_STEPS,
@@ -138,6 +139,21 @@ def test_plan_grid_detour_requires_a_declared_bearing_permutation() -> None:
         )
 
 
+def test_the_detour_plan_vocabulary_is_convertible_to_the_joystick_vocabulary() -> None:
+    """The planner and the Router use disjoint vocabularies, and the boundary must be total.
+
+    This pins the second instance of the vocabulary trap: the planner returns `NE`, the Router and
+    the joystick want `north_east`, and the two overlap on nothing. Handing a plan bearing straight
+    to the Router would silently mask nothing and then send an invalid direction, which is exactly
+    what the first device attempt of the detour did.
+    """
+    for bearing in MOVEMENT_ORDER:
+        joystick = store_runner.STORE_TO_JOYSTICK_DIRECTION[bearing]
+        assert joystick in mobile_testbed.MOVEMENTS
+        assert store_runner.JOYSTICK_TO_STORE_DIRECTION[joystick] == bearing
+        assert joystick not in MOVEMENT_ORDER
+
+
 def test_validate_detour_requires_every_declared_number() -> None:
     good: dict[str, object] = {
         "schema_version": "hok-agent-declared-detour-v1",
@@ -145,7 +161,7 @@ def test_validate_detour_requires_every_declared_number() -> None:
         "maximum_steps": 8,
         "maximum_attempts_per_episode": 2,
         "trigger_stall_steps": 6,
-        "trigger_stall_travel_pixels": 1.0,
+        "trigger_stall_progress_pixels": 2.0,
         "confirmation_steps": 3,
         "confirmation_minimum_progress_pixels": 2.0,
         "bearing_order": list(MOVEMENT_ORDER),
@@ -157,7 +173,7 @@ def test_validate_detour_requires_every_declared_number() -> None:
         {**good, "maximum_steps": 0},
         {**good, "maximum_attempts_per_episode": 0},
         {**good, "trigger_stall_steps": 0},
-        {**good, "trigger_stall_travel_pixels": -1.0},
+        {**good, "trigger_stall_progress_pixels": 0.0},
         {**good, "confirmation_steps": 0},
         {**good, "confirmation_minimum_progress_pixels": 0.0},
         {**good, "bearing_order": ["N"]},

@@ -26,6 +26,7 @@ TerminalReason = Literal[
     "SAFETY_STOP",
     "CAPTURE_FAILURE",
     "ACTION_FAILURE",
+    "DETOUR_FAILURE",
     "TIMEOUT",
     "NAVIGATION_GOAL_REACHED",
     "VIDEO_EOF",
@@ -331,6 +332,7 @@ def validate_transition(row: HierarchicalTransitionRecord) -> TransitionValidati
             "SAFETY_STOP",
             "CAPTURE_FAILURE",
             "ACTION_FAILURE",
+            "DETOUR_FAILURE",
         }:
             expected_end_kind = "ERROR"
         else:
