@@ -1577,6 +1577,19 @@ def _parser() -> argparse.ArgumentParser:
     global_challenge.add_argument("--checkpoint", type=Path, required=True)
     global_challenge.add_argument("--output-dir", type=Path, required=True)
     global_challenge.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
+    global_speed = commands.add_parser(
+        "global-agent-speed-report",
+        help="measure one frozen Global Agent checkpoint's parameters, latency and behaviour",
+    )
+    global_speed.add_argument("--checkpoint", type=Path, required=True)
+    global_speed.add_argument("--dataset-root", type=Path, required=True)
+    global_speed.add_argument("--baseline-checkpoint", type=Path, default=None)
+    global_speed.add_argument("--split", default="dev")
+    global_speed.add_argument("--batch-size", type=int, default=8)
+    global_speed.add_argument("--repetitions", type=int, default=30)
+    global_speed.add_argument("--maximum-intent-macro-f1-drop", type=float, default=0.0)
+    global_speed.add_argument("--minimum-latency-reduction-fraction", type=float, default=0.25)
+    global_speed.add_argument("--output-dir", type=Path, default=None)
     global_shadow = commands.add_parser(
         "global-agent-shadow", help="run one zero-control Global Agent V4L2 Shadow session"
     )
@@ -4054,6 +4067,38 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.output_dir,
                 device_name=args.device,
             )
+        elif args.command == "global-agent-speed-report":
+            from hok_agent.global_policy import (
+                compare_global_speed,
+                measure_global_speed,
+            )
+
+            if args.baseline_checkpoint is not None:
+                result = compare_global_speed(
+                    baseline_checkpoint=args.baseline_checkpoint,
+                    candidate_checkpoint=args.checkpoint,
+                    dataset_root=args.dataset_root,
+                    split=args.split,
+                    batch_size=args.batch_size,
+                    repetitions=args.repetitions,
+                    maximum_intent_macro_f1_drop=args.maximum_intent_macro_f1_drop,
+                    minimum_latency_reduction_fraction=args.minimum_latency_reduction_fraction,
+                )
+            else:
+                result = {
+                    "candidate": measure_global_speed(
+                        checkpoint_path=args.checkpoint,
+                        dataset_root=args.dataset_root,
+                        split=args.split,
+                        batch_size=args.batch_size,
+                        repetitions=args.repetitions,
+                    )
+                }
+            if args.output_dir is not None:
+                args.output_dir.mkdir(parents=True, exist_ok=True)
+                (args.output_dir / "speed-report.json").write_text(
+                    json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+                )
         elif args.command == "global-agent-challenge":
             from hok_agent.global_policy import run_global_challenges
 

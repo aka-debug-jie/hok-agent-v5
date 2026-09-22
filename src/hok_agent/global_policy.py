@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from collections import Counter, defaultdict, deque
 from copy import copy, deepcopy
 from pathlib import Path
@@ -523,6 +524,296 @@ def load_global_model(path: Path, device: torch.device) -> tuple[GlobalMacroPoli
     model.load_state_dict(load_file(path, device="cpu"), strict=True)
     model.to(device).eval()
     return model, metadata
+
+
+GLOBAL_SPEED_SCHEMA: Final = "hok-agent-global-speed-report-v1"
+
+
+def _percentile(sorted_samples: list[float], quantile: float) -> float:
+    """Nearest-rank percentile of an ascending sample list."""
+    if not sorted_samples:
+        raise GlobalPolicyError("no latency samples")
+    index = min(len(sorted_samples) - 1, max(0, int(round(quantile * len(sorted_samples))) - 1))
+    return sorted_samples[index]
+
+
+def _parameter_groups(model: GlobalMacroPolicy) -> dict[str, int]:
+    """Parameters by part, because almost all of them live in the single resnet18 view."""
+    return {
+        "main": sum(p.numel() for p in model.main.parameters()),
+        "minimap": sum(p.numel() for p in model.minimap.parameters()),
+        "hud": sum(p.numel() for p in model.hud.parameters()),
+        "temporal_and_heads": sum(
+            p.numel()
+            for part in (
+                model.project,
+                model.temporal,
+                model.pool,
+                model.intent,
+                model.zone,
+                model.scene,
+            )
+            for p in part.parameters()
+        ),
+        "total": sum(p.numel() for p in model.parameters()),
+    }
+
+
+SPEED_LATENCY_NOTE: Final = (
+    "CPU latency on this host is not stable across runs: the same frozen model measured a median "
+    "batch time between about 0.47 s and about 2.8 s in different contexts, while within one "
+    "process five rounds spread 1.27x. A candidate must therefore be timed in the same process as "
+    "its baseline, in alternating rounds, never as two separate runs."
+)
+
+
+def _speed_batch(
+    dataset: GlobalWindowDataset, indices: list[int]
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    samples = [dataset[index] for index in indices]
+    return (
+        torch.stack([sample[0] for sample in samples]),
+        torch.stack([sample[1] for sample in samples]),
+        torch.stack([sample[2] for sample in samples]),
+    )
+
+
+def _measure_latency(model: GlobalMacroPolicy, batch: tuple[torch.Tensor, ...]) -> float:
+    """Time one forward pass and return milliseconds."""
+    started = time.perf_counter()
+    with torch.no_grad():
+        model(*batch)
+    return (time.perf_counter() - started) * 1000.0
+
+
+def _measure_behaviour(
+    model: GlobalMacroPolicy, dataset: GlobalWindowDataset, *, batch_size: int
+) -> dict[str, float]:
+    intent_target: list[int] = []
+    intent_predicted: list[int] = []
+    zone_target: list[int] = []
+    zone_predicted: list[int] = []
+    model.eval()
+    with torch.no_grad():
+        for start in range(0, len(dataset), batch_size):
+            indices = list(range(start, min(start + batch_size, len(dataset))))
+            logits = model(*_speed_batch(dataset, indices))
+            predicted_intent = logits[0].argmax(dim=1)
+            predicted_zone = logits[1].argmax(dim=1)
+            for row, index in enumerate(indices):
+                intent_predicted.append(int(predicted_intent[row]))
+                zone_predicted.append(int(predicted_zone[row]))
+                intent_target.append(int(dataset[index][3]))
+                zone_target.append(int(dataset[index][4]))
+    return {
+        "intent_macro_f1": round(
+            _macro_f1(intent_target, intent_predicted, len(ENABLED_INTENTS)), 6
+        ),
+        "zone_macro_f1": round(_macro_f1(zone_target, zone_predicted, len(ENABLED_ZONES)), 6),
+    }
+
+
+def _speed_report(
+    *,
+    checkpoint_path: Path,
+    model: GlobalMacroPolicy,
+    metadata: dict[str, str],
+    dataset: GlobalWindowDataset,
+    samples: list[float],
+    batch_size: int,
+    repetitions: int,
+    warmup: int,
+    measurement: str,
+) -> dict[str, object]:
+    ordered = sorted(samples)
+    return {
+        "schema_version": GLOBAL_SPEED_SCHEMA,
+        "checkpoint_path": str(checkpoint_path),
+        "checkpoint_sha256": _sha(checkpoint_path.read_bytes()),
+        "variant": metadata["variant"],
+        "window_frames": metadata["window_frames"],
+        "windows": len(dataset),
+        "batch_size": batch_size,
+        "repetitions": repetitions,
+        "warmup": warmup,
+        "measurement": measurement,
+        "parameters": _parameter_groups(model),
+        "latency_ms": {
+            "median": round(_percentile(ordered, 0.5), 4),
+            "p95": round(_percentile(ordered, 0.95), 4),
+            "minimum": round(ordered[0], 4),
+            "maximum": round(ordered[-1], 4),
+        },
+        "latency_ms_per_decision": round(_percentile(ordered, 0.5) / batch_size, 4),
+        "behaviour": _measure_behaviour(model, dataset, batch_size=batch_size),
+    }
+
+
+def measure_global_speed(
+    *,
+    checkpoint_path: Path,
+    dataset_root: Path,
+    split: str = "dev",
+    batch_size: int = 8,
+    repetitions: int = 30,
+    warmup: int = 3,
+) -> dict[str, object]:
+    """Measure one frozen Global Agent checkpoint: parameters, forward latency and split behaviour.
+
+    Read-only. It loads an existing checkpoint, feeds existing frozen windows through the model on
+    CPU, and reports the two quantities a speed candidate must preserve and improve - the split's
+    behaviour and the measured forward latency. It trains nothing, writes no checkpoint, opens no
+    capture source and sends nothing to a device. A single report is a baseline or a smoke, not a
+    comparison: see `compare_global_speed` for the interleaved judgement.
+    """
+    if checkpoint_path.is_symlink() or not checkpoint_path.is_file():
+        raise GlobalPolicyError("speed report needs one regular checkpoint file")
+    if batch_size < 1 or repetitions < 1 or warmup < 0:
+        raise GlobalPolicyError("invalid speed report budget")
+    dataset = GlobalWindowDataset(dataset_root, split)
+    if len(dataset) < batch_size:
+        raise GlobalPolicyError("split has fewer windows than the declared batch")
+    model, metadata = load_global_model(checkpoint_path, torch.device("cpu"))
+    batch = _speed_batch(dataset, list(range(batch_size)))
+    with torch.no_grad():
+        for _ in range(warmup):
+            model(*batch)
+    samples = [_measure_latency(model, batch) for _ in range(repetitions)]
+    return _speed_report(
+        checkpoint_path=checkpoint_path,
+        model=model,
+        metadata=metadata,
+        dataset=dataset,
+        samples=samples,
+        batch_size=batch_size,
+        repetitions=repetitions,
+        warmup=warmup,
+        measurement="single",
+    )
+
+
+def compare_global_speed(
+    *,
+    baseline_checkpoint: Path,
+    candidate_checkpoint: Path,
+    dataset_root: Path,
+    split: str = "dev",
+    batch_size: int = 8,
+    repetitions: int = 30,
+    warmup: int = 3,
+    maximum_intent_macro_f1_drop: float = 0.0,
+    minimum_latency_reduction_fraction: float = 0.25,
+) -> dict[str, object]:
+    """Interleave a baseline and a candidate in one process, then judge behaviour and latency.
+
+    The two models are timed alternately in the same rounds, because separate runs on this host are
+    not comparable (see `SPEED_LATENCY_NOTE`). Behaviour is measured per model on the same split.
+    """
+    for path in (baseline_checkpoint, candidate_checkpoint):
+        if path.is_symlink() or not path.is_file():
+            raise GlobalPolicyError("speed comparison needs two regular checkpoint files")
+    if batch_size < 1 or repetitions < 1 or warmup < 0:
+        raise GlobalPolicyError("invalid speed comparison budget")
+    dataset = GlobalWindowDataset(dataset_root, split)
+    if len(dataset) < batch_size:
+        raise GlobalPolicyError("split has fewer windows than the declared batch")
+    baseline_model, baseline_meta = load_global_model(baseline_checkpoint, torch.device("cpu"))
+    candidate_model, candidate_meta = load_global_model(candidate_checkpoint, torch.device("cpu"))
+    batch = _speed_batch(dataset, list(range(batch_size)))
+    with torch.no_grad():
+        for _ in range(warmup):
+            baseline_model(*batch)
+            candidate_model(*batch)
+    baseline_samples: list[float] = []
+    candidate_samples: list[float] = []
+    for _ in range(repetitions):
+        baseline_samples.append(_measure_latency(baseline_model, batch))
+        candidate_samples.append(_measure_latency(candidate_model, batch))
+    baseline = _speed_report(
+        checkpoint_path=baseline_checkpoint,
+        model=baseline_model,
+        metadata=baseline_meta,
+        dataset=dataset,
+        samples=baseline_samples,
+        batch_size=batch_size,
+        repetitions=repetitions,
+        warmup=warmup,
+        measurement="interleaved",
+    )
+    candidate = _speed_report(
+        checkpoint_path=candidate_checkpoint,
+        model=candidate_model,
+        metadata=candidate_meta,
+        dataset=dataset,
+        samples=candidate_samples,
+        batch_size=batch_size,
+        repetitions=repetitions,
+        warmup=warmup,
+        measurement="interleaved",
+    )
+    return {
+        "schema_version": GLOBAL_SPEED_SCHEMA,
+        "measurement": "interleaved",
+        "latency_note": SPEED_LATENCY_NOTE,
+        "baseline": baseline,
+        "candidate": candidate,
+        "verdict": global_speed_verdict(
+            baseline=baseline,
+            candidate=candidate,
+            maximum_intent_macro_f1_drop=maximum_intent_macro_f1_drop,
+            minimum_latency_reduction_fraction=minimum_latency_reduction_fraction,
+        ),
+    }
+
+
+def global_speed_verdict(
+    *,
+    baseline: dict[str, object],
+    candidate: dict[str, object],
+    maximum_intent_macro_f1_drop: float = 0.0,
+    minimum_latency_reduction_fraction: float = 0.25,
+) -> dict[str, object]:
+    """Judge a speed candidate against a frozen baseline: behaviour preserved AND latency down.
+
+    The F2 definition is explicit that parameters and self-supervised loss are not substitutes:
+    parameters are reported, and are never a reason to pass or fail on their own. A candidate passes
+    only when it keeps the behaviour (the split's intent macro-F1 within the declared drop) and
+    actually reduces the measured latency at both the median and the p95.
+    """
+    if baseline.get("schema_version") != GLOBAL_SPEED_SCHEMA:
+        raise GlobalPolicyError("baseline is not a Global Agent speed report")
+    if candidate.get("schema_version") != GLOBAL_SPEED_SCHEMA:
+        raise GlobalPolicyError("candidate is not a Global Agent speed report")
+    base_behaviour = cast(dict[str, float], baseline["behaviour"])
+    cand_behaviour = cast(dict[str, float], candidate["behaviour"])
+    base_latency = cast(dict[str, float], baseline["latency_ms"])
+    cand_latency = cast(dict[str, float], candidate["latency_ms"])
+    intent_delta = cand_behaviour["intent_macro_f1"] - base_behaviour["intent_macro_f1"]
+    median_reduction = 1.0 - cand_latency["median"] / base_latency["median"]
+    p95_reduction = 1.0 - cand_latency["p95"] / base_latency["p95"]
+    reasons: list[str] = []
+    if intent_delta < -abs(maximum_intent_macro_f1_drop):
+        reasons.append("intent_macro_f1_regressed")
+    if median_reduction < minimum_latency_reduction_fraction:
+        reasons.append("median_latency_not_reduced")
+    if p95_reduction < minimum_latency_reduction_fraction:
+        reasons.append("p95_latency_not_reduced")
+    base_parameters = cast(dict[str, int], baseline["parameters"])
+    cand_parameters = cast(dict[str, int], candidate["parameters"])
+    return {
+        "schema_version": GLOBAL_SPEED_SCHEMA,
+        "passed": not reasons,
+        "reasons": reasons,
+        "intent_macro_f1_delta": round(intent_delta, 6),
+        "median_latency_reduction_fraction": round(median_reduction, 6),
+        "p95_latency_reduction_fraction": round(p95_reduction, 6),
+        "parameters_delta": cand_parameters["total"] - base_parameters["total"],
+        "parameters_note": "reported for context only; never a pass reason",
+        "declared": {
+            "maximum_intent_macro_f1_drop": maximum_intent_macro_f1_drop,
+            "minimum_latency_reduction_fraction": minimum_latency_reduction_fraction,
+        },
+    }
 
 
 def train_global_bc(
