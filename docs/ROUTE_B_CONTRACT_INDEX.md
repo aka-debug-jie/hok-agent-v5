@@ -58,9 +58,25 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
 
 ## Scope limits that travel with the pass
 
-- **Start position.** Every passing run began near `(53, 68)` or `(62.9, 61.9)`; the recorded
-  failures began elsewhere, including `(78.4, 55.4)`. Start-position independence is not
-  established.
+- **Start position, now measured and named rather than merely open.** Every passing run began near
+  `(53, 68)` or `(62.9, 61.9)`, and the pass therefore holds from the measured starting positions
+  only. The recorded failing start `(78.4, 55.4)` was then re-run deliberately, in three consecutive
+  episodes from that start with the contract unchanged, and it failed all three: the route does not
+  fit its declared 90 s duration budget from there.
+- **The cause is a real obstruction, and it agrees with the mask.** All three of those episodes end
+  with the hero stalled about ten pixels from waypoint `(50, 50)`, needing to travel north. The
+  closest one stalls in cell `14:12`, which is exactly a cell where the frozen grid removes north,
+  at 0.080 px per 100 ms over 36 bounded samples against 0.183 for north-east in the same cell. The
+  route is not failing because a rule is wrong; it must go north through a cell where north does not
+  work. That is the strongest evidence so far that the mask measures something real, and it arrives
+  from a direction nobody designed.
+- **What that limit is not, and what would close it.** It is not a commitment or hysteresis problem:
+  two declared fixes were tried and both failed for reasons now recorded (v16's stall commitment
+  never engaged because the stall is inside the approach band, and v17's band hysteresis engaged but
+  the hero genuinely cannot go north). The mask can only remove a bearing, it cannot plan a detour:
+  the only better bearing at `14:12` is north-east, which moves away from the goal, and the greedy
+  objective will not take a two-step detour such as west then north. Closing the limit needs declared
+  detour planning, which the route does not have and which is not built here.
 - **The route is not the original rectangle.** The fourth waypoint is `(50, 70)`, not `(50, 80)`,
   because `(50, 80)` measured unobservable: across six runs and 211 localised samples the closest
   any localised position came to it was exactly 6.00 px against a 4.0 px tolerance.

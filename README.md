@@ -30,10 +30,14 @@ internal API, backend or internal reference:
   `arrival_rate` 1.0, no action backlog and store integrity ok on the independent reload
   verifier. Its two declared rules are a measured traversability mask, built from the
   already-recorded transitions and normalised by the declared press duration, and a
-  three-step final-approach commitment. Two limits travel with it: the pass holds from the
-  measured starting positions only, and the fourth waypoint is `(50, 70)` rather than
-  `(50, 80)` because `(50, 80)` measured unobservable. Versions and digests are indexed in
-  [docs/ROUTE_B_CONTRACT_INDEX.md](docs/ROUTE_B_CONTRACT_INDEX.md).
+  three-step final-approach commitment. Two limits travel with it. The pass holds from the
+  measured starting positions only: the recorded failing start `(78.4, 55.4)` was re-run in
+  three consecutive episodes and failed all three, stalling about ten pixels short of waypoint
+  `(50, 50)` in cell `14:12`, where the route must go north and the mask removes north - so the
+  route's own failure lands on the mask's decision and agrees with it, and the limit is a real
+  obstruction rather than a rule defect that further tuning would close. The fourth waypoint is
+  `(50, 70)` rather than `(50, 80)` because `(50, 80)` measured unobservable. Versions and
+  digests are indexed in [docs/ROUTE_B_CONTRACT_INDEX.md](docs/ROUTE_B_CONTRACT_INDEX.md).
 
 Single-policy post-training is closed as `DATA_SOURCE_LIMITED`, not left open: R0 tested three
 feedback lines and all three failed for a reportable reason - the navigation feedback has no
