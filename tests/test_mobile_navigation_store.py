@@ -2088,3 +2088,131 @@ def test_placement_route_scores_a_route_that_started_and_did_not_arrive(
     assert len(calls["run_calls"]) == 2
     assert calls["run_calls"][0].endswith("-placement")
     assert calls["run_calls"][1].endswith("-route")
+
+
+# --- The step loop must run a contract that declares no masked persistence -----------------------
+# Regression: `persistence_applied` was first assigned only inside the declared masked-persistence
+# block, but the router reads it on every step, so a run on a contract without that block raised
+# UnboundLocalError on its first step. A device run of the placement contract hit it; this pins it
+# offline with a fake device so it cannot come back untested.
+
+
+class _RecordingStore:
+    def __init__(self) -> None:
+        self.rows: list[object] = []
+
+    def append(self, row):  # noqa: ANN001, ANN201
+        self.rows.append(row)
+
+        class _Result:
+            class validation:  # noqa: N801
+                valid = True
+                errors: list[str] = []
+
+            payload: dict = {"training_eligible": False}
+
+        return _Result()
+
+    def load_episode(self, _episode_id: str) -> list:
+        return []
+
+
+def _fake_navigation_runtime(tmp_path: Path, **overrides):
+    from types import SimpleNamespace
+
+    values = {
+        "contract": {},
+        "contract_sha": "p" * 64,
+        "store_contract": _store_block(),
+        "visual_sha": "v" * 64,
+        "execution_sha": "e" * 64,
+        "rois_sha": "r" * 64,
+        "rois": SimpleNamespace(minimap=object(), death_confirmation_steps=2),
+        "targets": [(60.0, 60.0)],
+        "tolerance": 4.0,
+        "hold_ms": 100,
+        "approach_hold_ms": 100,
+        "approach_distance": 4.0,
+        "hysteresis": 0,
+        "region": {
+            "minimum_x": -1000.0,
+            "maximum_x": 1000.0,
+            "minimum_y": -1000.0,
+            "maximum_y": 1000.0,
+            "maximum_consecutive_violation_frames": 10,
+        },
+        "region_limit": 10,
+        "settle_ns": 0,
+        "maximum_steps": 1,
+        "maximum_gap": 10,
+        "maximum_duration_seconds": 90.0,
+        "progress_guard": None,
+        "region_filter": None,
+        "planner": None,
+        "unknown_recovery": None,
+        "approach_press_distance": None,
+        "approach_direct_bearing": False,
+        "no_advance_guard": None,
+        "traversability": None,
+        "detour": None,
+        "masked_persistence": None,
+        "approach_commitment": 1,
+        "approach_exit_margin": 0.0,
+        "stall_commitment": 1,
+        "death_confirmation_steps": 2,
+        "death_stationary_window_steps": 2,
+        "death_maximum_travel_pixels": 1.0,
+        "backlog_free_maximum_messages": 2,
+        "approach_tiers": [],
+        "approach_default_hold_ms": 0,
+        "guard": SimpleNamespace(width=1600, height=720),
+        "session": SimpleNamespace(frame_size=(1600, 720), frame=lambda: (0, np.zeros((4, 4, 3), np.uint8))),
+        "joystick": SimpleNamespace(direction="wait", set_direction=lambda _d: []),
+        "watchdog": SimpleNamespace(ensure_fresh_or_refresh=lambda _ms: None),
+        "frames_dir": tmp_path,
+        "database": tmp_path / "transitions.sqlite3",
+        "enable_input": False,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def _patch_step_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(store_runner, "_death_replay_visible", lambda *_a: False)
+    monkeypatch.setattr(
+        store_runner, "_observation_roi_frame", lambda *_a: np.zeros((4, 4, 3), np.uint8)
+    )
+    monkeypatch.setattr(store_runner, "_goal_navigation_tracked_cue", lambda *_a: (60.0, 60.0))
+    monkeypatch.setattr(store_runner, "_packet", lambda *_a, **_k: object())
+    monkeypatch.setattr(store_runner, "_transition", lambda **_k: {})
+
+
+def test_run_episode_binds_persistence_applied_without_the_declared_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_step_loop(monkeypatch)
+    runtime = _fake_navigation_runtime(tmp_path, masked_persistence=None)
+    summary = store_runner._run_episode(runtime, _RecordingStore(), "ep-placement")
+    assert summary["steps"] == 1
+    assert summary["status"] == "PASSED"
+    assert summary["masked_persistence_activations"] == 0
+    assert summary["failure"] is None
+
+
+def test_run_episode_binds_persistence_applied_with_the_declared_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_step_loop(monkeypatch)
+    runtime = _fake_navigation_runtime(
+        tmp_path,
+        masked_persistence={
+            "persistence_bearings": ["north"],
+            "maximum_activations_per_episode": 2,
+            "trigger_stall_steps": 2,
+            "trigger_stall_progress_pixels": 1.0,
+            "maximum_steps": 6,
+        },
+    )
+    summary = store_runner._run_episode(runtime, _RecordingStore(), "ep-route")
+    assert summary["steps"] == 1
+    assert summary["failure"] is None

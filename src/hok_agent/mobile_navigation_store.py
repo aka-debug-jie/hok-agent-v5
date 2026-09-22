@@ -1432,13 +1432,17 @@ def _run_episode(
     detour_exhausted = False
     # Bounded masked-bearing persistence: the state is explicit so a hold cannot be half-applied,
     # and every counter is reported, because a rule that keeps a mask-removed bearing has to show
-    # in the record rather than inferred from the outcome.
+    # in the record rather than inferred from the outcome. `persistence_applied` is initialised here
+    # rather than inside the declared block on purpose: the router reads it on every step, so a
+    # contract that does not declare masked persistence must still have it bound - a run on the
+    # placement contract crashed on its first step when it was first assigned only in that block.
     persistence_left = 0
     persistence_activations = 0
     persistence_steps = 0
     persistence_effective_events = 0
     persistence_exhausted_events = 0
     persistence_index = 0
+    persistence_applied = False
     # One window serves every declared rule that needs a stall; each rule reads its own declared
     # own declared number of steps out of it, so a contract may declare one rule or both.
     stall_window_length = max(
