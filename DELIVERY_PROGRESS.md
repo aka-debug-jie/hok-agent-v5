@@ -70,6 +70,26 @@ contract keeps its own 14 of 14 at its own commit. No further device work is sch
 is to be built, and `F2`-`F5` stay blocked on scope because no independent result reference exists.
 The delivered artifacts are the composed runner and its CLI, the offline tests, the pass and its
 limits, and `docs/execution/c783402-next/`; the last commit of the delivered scope is `5c17846`.
+Updated 2026-09-22 (source boundary): the owner authorized a cue-independent absolute position
+reference derived from the same RGB, to open F2, so a read-only feasibility check was run before any
+contract or code was written and its verdict is `NOT_FEASIBLE`, recorded in
+[`docs/execution/c783402-next/04_absolute_reference_feasibility.md`](docs/execution/c783402-next/04_absolute_reference_feasibility.md).
+On the persisted 128x128 views of `placement-route-2` the minimap background is static (88.4 percent
+of pixels under 5 grey levels of temporal standard deviation), so the map is drawn whole and fixed
+and supplies a coordinate frame but no hero position; there is no viewport rectangle and no second
+structural hero indicator, while green content is not unique (a 69-151 px bottom-right region, an
+18x19 moving ring and a fixed UI element at `(121, 89)`) and 636-752 terrain pixels are red every
+frame; and the camera view carries no recoverable rigid translation, since a brute-force search
+returns the best shift `(0, 0)` on every sampled step against 50.1 percent of pixels changing by more
+than 15 grey levels per frame. The only position source is therefore a hero-marker detector reading
+the same pixels as the frozen cue, which the R0 contract already forbids as self-proof, so nothing
+was built and no stub, fake adapter or second research line was created. The fixed map does support
+one honest, separate thing - a cue-independent registration check that the crop, scale and offset did
+not shift between sessions - which is a data-quality guard, not a position or reward reference. F2
+therefore remains unopened: it needs either a genuinely different source the owner names and
+confirms is obtainable, or the in-boundary task of behavior preservation plus measured latency on the
+frozen composed task. The delivered scope, the cold-start limit, the mask scope and the bound pass
+are unchanged.
 Only this section schedules work; all experiment entries below are historical evidence.
 
 ```text
