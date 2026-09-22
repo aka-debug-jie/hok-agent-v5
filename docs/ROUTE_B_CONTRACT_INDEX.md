@@ -118,6 +118,19 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
   traverse, which is why the mask's bounded-tier contribution is only measurable where the route already
   goes, and why the earlier probe line used a 2500 ms instrument that measures a tier the Router never
   issues.
+- **The probe now refuses a moving hero, and that is measured to matter.** The corridor traverse's
+  failure was diagnosed as a walking hero: the analyser subtracts the idle rate it measures, so an idle
+  drift of `0.4551` px per 100 ms raised the floor above every bounded press and only 12.7 percent of
+  observations cleared it. Contract `3588ae62866a` declares an optional `stationarity_preflight` - eight
+  frames, 1.5 px - and abandons the session before any pulse if the localised hero moves further. The
+  same traverse re-run records travel of `0.0` and `0.136` px, idle drift down to `0.1047`, observations
+  clearing the idle bound up from 12.7 to 42.7 percent, a second session that is fully region-conformant
+  with zero violations where the earlier run had nine, and the thin cell `16:13` resolved to three to six
+  samples on eight bearings. It is still not enough for the corridor: the analysis is FAILED because the
+  first session drifted out during the run, the traverse covers `16:12` through `23:12` so its own pulses
+  walked the hero away from the wall, and `15:13` still holds a single sample, because the contract
+  requires all eight directions and south is more responsive than north there (`0.1527` against
+  `0.0000`).
 - **Mask attribution.** The mask is live and fires on 1 to 5 steps per episode, but its isolated
   contribution is not measured by a controlled ablation. The commitment is the driver: an earlier
   run of the same contract with the mask inert passed 13 of 13 episodes.

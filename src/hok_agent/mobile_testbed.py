@@ -7155,6 +7155,17 @@ def _active_probe_contract(path: Path) -> tuple[dict[str, object], str]:
         > int(cast(int, budgets["maximum_duration_seconds_per_session"])) * 1000
     ):
         raise MobileTestbedError("active probe schedule exceeds its budget")
+    # Optional, so the earlier probe contracts still load, but a declared one must be usable: a
+    # pre-flight that cannot fail on anything would be worse than none.
+    stationarity = value.get("stationarity_preflight")
+    if stationarity is not None and (
+        not isinstance(stationarity, dict)
+        or not isinstance(stationarity.get("frames"), int)
+        or int(cast(int, stationarity["frames"])) < 2
+        or not isinstance(stationarity.get("maximum_travel_pixels"), (int, float))
+        or float(cast(float, stationarity["maximum_travel_pixels"])) <= 0.0
+    ):
+        raise MobileTestbedError("active probe stationarity preflight differs")
     return value, digest
 
 
@@ -7281,6 +7292,49 @@ def _publish_active_probe_session(
         staging.rename(output)
 
 
+def _active_probe_stationarity_travel(
+    session: ScrcpyControlSession,
+    rois: ObservationROIs,
+    cue_contract: dict[str, object],
+    watchdog: GuardWatchdog,
+    frames: int,
+    frame_interval: float,
+) -> float | None:
+    """Largest travel of the localised hero over a declared pre-flight window, or None if unlocalised.
+
+    Placed sessions are expensive, and the wall-corridor traverse is what shows why this has to be
+    measured first: it spent two full 96-pulse sessions and then failed because the hero was walking
+    during the idle windows, with a measured idle drift of 0.4551 px per 100 ms against bounded-tier
+    press rates of 0.05 to 0.18. The analyser subtracts the idle rate it measures, so a moving hero
+    does not merely add noise, it raises the floor above every press and makes the whole session
+    uninterpretable. Reading the travel before any pulse is dispatched lets a run be abandoned for a
+    few screen captures instead of a session.
+    """
+    from hok_agent.movement_navigation_shadow import _probe_frame_candidates, _probe_unique_position
+
+    exclusion = (
+        int(cast(list[int], cue_contract["excluded_ui_xyxy"])[0]),
+        int(cast(list[int], cue_contract["excluded_ui_xyxy"])[1]),
+        int(cast(list[int], cue_contract["excluded_ui_xyxy"])[2]),
+        int(cast(list[int], cue_contract["excluded_ui_xyxy"])[3]),
+    )
+    positions: list[tuple[float, float]] = []
+    for index in range(frames):
+        if index:
+            time.sleep(frame_interval)
+        watchdog.ensure_fresh_or_refresh(ACTIVE_PROBE_GUARD_STALENESS_MS)
+        _timestamp_ns, frame = session.frame()
+        minimap = _observation_roi_frame(frame, rois.minimap)
+        interior, _fixed = _probe_frame_candidates(minimap[None, ...], cue_contract, exclusion)
+        position = _probe_unique_position(interior[0])
+        if position is not None:
+            positions.append(position)
+    if len(positions) < 2:
+        return None
+    first = positions[0]
+    return max(math.hypot(item[0] - first[0], item[1] - first[1]) for item in positions)
+
+
 def run_mobile_active_probe(
     *,
     serial: str,
@@ -7358,8 +7412,29 @@ def run_mobile_active_probe(
         watchdog.start()
         _wait_active_probe_scene(session.frame, minimum_mean, minimum_std)
         started = time.monotonic()
+        # A placed session is only interpretable while the hero is actually standing still, so the
+        # declared pre-flight is checked before the first pulse. A hero that walks during the idle
+        # windows raises the analyser's idle floor above every bounded press, which is exactly how the
+        # wall-corridor traverse spent two sessions and produced an uninterpretable grid.
+        stationarity = contract.get("stationarity_preflight")
+        stationarity_travel: float | None = None
+        if stationarity is not None:
+            stationarity_travel = _active_probe_stationarity_travel(
+                session,
+                rois,
+                contract,
+                watchdog,
+                int(cast(int, cast(dict[str, object], stationarity)["frames"])),
+                frame_interval,
+            )
+            if stationarity_travel is None:
+                failure = "STATIONARITY_PREFLIGHT_NO_CANDIDATE"
+            elif stationarity_travel > float(
+                cast(float, cast(dict[str, object], stationarity)["maximum_travel_pixels"])
+            ):
+                failure = "STATIONARITY_PREFLIGHT_DRIFT"
         next_frame_due = started
-        while time.monotonic() - started < run_seconds:
+        while failure is None and time.monotonic() - started < run_seconds:
             now = time.monotonic()
             elapsed_ms = round((now - started) * 1000)
             if active is None and active_index < len(schedule):
@@ -7468,6 +7543,8 @@ def run_mobile_active_probe(
         "input_enabled": enable_input,
         "hard_stops": hard_stops,
         "failure": failure,
+        "stationarity_preflight_declared": contract.get("stationarity_preflight") is not None,
+        "stationarity_travel_pixels": stationarity_travel,
         "raw_frames_persisted": False,
         "coordinates_persisted": False,
         "training_eligible": False,

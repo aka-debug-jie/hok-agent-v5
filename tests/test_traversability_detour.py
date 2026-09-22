@@ -8,6 +8,7 @@ and the cells the recorded cold-start failures actually stalled in.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import cast
@@ -305,3 +306,54 @@ def test_tier_restricted_vectors_report_the_slide_the_projection_hides(tmp_path:
     assert north["magnitude_rate"] == pytest.approx(0.1346, abs=1e-3)
     assert north["magnitude_rate"] > north["projection_rate"]
     assert north["mean_press_ms"] == 400.0
+
+
+def test_probe_contract_accepts_a_stationarity_preflight_and_refuses_a_useless_one(
+    tmp_path: Path,
+) -> None:
+    """The pre-flight is optional so earlier probe contracts load, but a declared one must bite.
+
+    The wall-corridor traverse spent two full sessions and then failed because the hero was walking
+    during the idle windows - measured idle drift 0.4551 px per 100 ms against bounded press rates
+    of 0.05 to 0.18 - and the analyser subtracts the idle rate it measures, so a moving hero raises
+    the floor above every press. A pre-flight that cannot fail on anything would be worse than none.
+    """
+    import json as _json
+
+    from hok_agent import mobile_testbed as testbed
+
+    probe_path = (
+        Path(__file__).resolve().parents[1] / "configs" / "movement_active_probe_v14.json"
+    )
+    base = _json.loads(probe_path.read_text(encoding="utf-8"))
+
+    def write(block: object) -> Path:
+        payload = dict(base)
+        if block is None:
+            payload.pop("stationarity_preflight", None)
+        else:
+            payload["stationarity_preflight"] = block
+        unsigned = {k: v for k, v in payload.items() if k != "contract_sha256"}
+        payload["contract_sha256"] = hashlib.sha256(
+            _json.dumps(unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+        path = Path(base_path) / f"probe-{abs(hash(str(block)))}.json"
+        path.write_text(_json.dumps(payload), encoding="utf-8")
+        return path
+
+    base_path = tmp_path
+    declared = {"frames": 8, "maximum_travel_pixels": 1.5}
+    contract, _sha = testbed._active_probe_contract(write(declared))
+    assert contract["stationarity_preflight"] == declared
+    # absence is allowed so the earlier contracts keep loading
+    contract, _sha = testbed._active_probe_contract(write(None))
+    assert "stationarity_preflight" not in contract
+    for broken in (
+        {"frames": 1, "maximum_travel_pixels": 1.5},
+        {"frames": 8, "maximum_travel_pixels": 0.0},
+        {"frames": 8, "maximum_travel_pixels": -1.0},
+        {"frames": 8},
+        {},
+    ):
+        with pytest.raises(testbed.MobileTestbedError):
+            testbed._active_probe_contract(write(broken))
