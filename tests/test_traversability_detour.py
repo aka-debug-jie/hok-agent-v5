@@ -357,3 +357,56 @@ def test_probe_contract_accepts_a_stationarity_preflight_and_refuses_a_useless_o
     ):
         with pytest.raises(testbed.MobileTestbedError):
             testbed._active_probe_contract(write(broken))
+
+
+def test_probe_contract_may_declare_a_press_subset(tmp_path: Path) -> None:
+    """A directional sweep gives up cancellation on purpose, and the declaration must be exact.
+
+    In the wall corridor south is responsive while north is not, so the balanced eight-direction
+    schedule cancels less well in one axis and walks the hero away from the wall. A contract may
+    therefore narrow what it presses, but only to a unique subset of the vocabulary it still
+    declares in full, so the analysis vocabulary is unchanged and only the schedule is narrowed.
+    """
+    import json as _json
+
+    from hok_agent import mobile_testbed as testbed
+
+    probe_path = (
+        Path(__file__).resolve().parents[1] / "configs" / "movement_active_probe_v15.json"
+    )
+    base = _json.loads(probe_path.read_text(encoding="utf-8"))
+    assert base["press_directions"] == ["north", "north_east", "north_west"]
+
+    def write(block: object) -> Path:
+        payload = dict(base)
+        if block is None:
+            payload.pop("press_directions", None)
+        else:
+            payload["press_directions"] = block
+        unsigned = {k: v for k, v in payload.items() if k != "contract_sha256"}
+        payload["contract_sha256"] = hashlib.sha256(
+            _json.dumps(unsigned, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+        path = tmp_path / f"probe-subset-{abs(hash(str(block)))}.json"
+        path.write_text(_json.dumps(payload), encoding="utf-8")
+        return path
+
+    northward = ["north", "north_east", "north_west"]
+    contract, _sha = testbed._active_probe_contract(write(northward))
+    assert contract["press_directions"] == northward
+    # the full vocabulary is still declared, so the analysis side is untouched
+    assert contract["directions"] == ["north", "north_east", "east", "south_east", "south",
+                                      "south_west", "west", "north_west"]
+    # absence keeps the balanced schedule, so the earlier contracts still load
+    contract, _sha = testbed._active_probe_contract(write(None))
+    assert "press_directions" not in contract
+    # a unique non-empty subset of the declared vocabulary, and nothing else
+    for broken in ([], ["north", "north"], ["up"], ["north", 3]):
+        with pytest.raises(testbed.MobileTestbedError):
+            testbed._active_probe_contract(write(broken))
+    # the schedule presses only the declared subset, in the declared order
+    subset, _sha = testbed._active_probe_contract(write(["north"]))
+    schedule = testbed.plan_active_probe_schedule(subset)
+    pulses = [entry["direction"] for entry in schedule if entry["kind"] == "pulse"]
+    assert set(pulses) == {"north"}
+    assert len(pulses) == subset["pulses_per_direction"]

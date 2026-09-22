@@ -118,6 +118,23 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
   traverse, which is why the mask's bounded-tier contribution is only measurable where the route already
   goes, and why the earlier probe line used a 2500 ms instrument that measures a tier the Router never
   issues.
+- **The corridor is narrow, not blocked, and the cold-start point is a mask-floor question.** A probe
+  contract may now declare the subset it presses (`press_directions`, order `declared-subset-repeating`),
+  because a balanced eight-direction schedule cannot measure a wall: south is responsive and north is
+  not, so its own pulses walk the hero away from the wall. Two directional traverses were placed at
+  `14:12` and both passed every gate (region and concentration conformant, zero violations, idle drift
+  `0.085` and `0.0437`). `movement_active_probe_v15` pressed north, north-east and north-west six times
+  each and covered `14:12` to `14:10`, where nothing upward clears the `0.05` floor.
+  `movement_active_probe_v16` pressed twelve times each and covered `14:12` north-west to `9:12`, about
+  five cells and seventy-two observations, where four cell-bearing pairs sit at or above the floor with
+  at least three samples: `10:12` north `0.2018` (n=3), `13:12` north-east `0.0773` (n=5), `13:12`
+  north-west `0.0575` (n=5), `12:12` north-west `0.0602` (n=7). So the hero creeps north-west about five
+  cells, or twenty to twenty-four pixels, over thirty-six bounded presses, an implied `0.6` px per press,
+  while the mask removes the bearing that produces that creep at the stall cell (`0.0548` against the
+  `0.08` floor). The displacement record and the lateral-gap evidence the detour named are both present,
+  and the mechanism the result points to is a bounded declared persistence on a masked bearing whose
+  creep is measured. The probe reads `13:12` north at `0.0209` (n=5) against the incidental `0.2808`
+  (n=15); the disagreement is recorded, not smoothed.
 - **The probe now refuses a moving hero, and that is measured to matter.** The corridor traverse's
   failure was diagnosed as a walking hero: the analyser subtracts the idle rate it measures, so an idle
   drift of `0.4551` px per 100 ms raised the floor above every bounded press and only 12.7 percent of

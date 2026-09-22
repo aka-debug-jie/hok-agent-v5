@@ -7029,6 +7029,12 @@ def _active_probe_opposite_pair_order(
 
 def plan_active_probe_schedule(contract: dict[str, object]) -> list[dict[str, object]]:
     directions = cast(list[str], contract["directions"])
+    # The balanced schedule cancels by construction only while it can press opposite pairs. In the wall
+    # corridor that is the wrong instrument: south is responsive there (0.1527 against 0.0000 for
+    # north), so the pair cancels less well in one axis and the footprint walks the hero away from the
+    # wall it is supposed to measure. A contract may therefore declare the subset it actually presses,
+    # giving up the cancellation on purpose to spend the pulses on the bearings under test.
+    pressed = cast(list[str], contract.get("press_directions") or directions)
     pulses_per_direction = int(cast(int, contract["pulses_per_direction"]))
     hold_ms = int(cast(int, contract["hold_ms"]))
     observation_ms = int(cast(int, contract["observation_ms"]))
@@ -7040,11 +7046,15 @@ def plan_active_probe_schedule(contract: dict[str, object]) -> list[dict[str, ob
         contract.get("direction_order", "seeded-permutation-without-immediate-repeats")
     )
     if order_kind == "seeded-permutation-without-immediate-repeats":
-        order = _active_probe_direction_order(directions, pulses_per_direction, seed)
+        order = _active_probe_direction_order(pressed, pulses_per_direction, seed)
     elif order_kind == "cyclic-rotation-of-all-directions":
-        order = _active_probe_cyclic_order(directions, pulses_per_direction)
+        order = _active_probe_cyclic_order(pressed, pulses_per_direction)
     elif order_kind == "opposite-pairs":
-        order = _active_probe_opposite_pair_order(directions, pulses_per_direction)
+        order = _active_probe_opposite_pair_order(pressed, pulses_per_direction)
+    elif order_kind == "declared-subset-repeating":
+        # Repeat the declared order as given, so a directional sweep is reproducible and its drift
+        # direction is the declared one rather than a seeded accident.
+        order = list(pressed) * pulses_per_direction
     else:
         raise MobileTestbedError("active probe direction order differs")
     controls_after = len(order) // control_windows if control_windows else 0
@@ -7166,6 +7176,19 @@ def _active_probe_contract(path: Path) -> tuple[dict[str, object], str]:
         or float(cast(float, stationarity["maximum_travel_pixels"])) <= 0.0
     ):
         raise MobileTestbedError("active probe stationarity preflight differs")
+    # Optional, and only ever a subset of the vocabulary: the contract still declares all eight
+    # directions so its analysis vocabulary is unchanged, and this only narrows what is pressed.
+    press_directions = value.get("press_directions")
+    if press_directions is not None and (
+        not isinstance(press_directions, list)
+        or not press_directions
+        or not all(
+            isinstance(item, str) and item in cast(list[str], value["directions"])
+            for item in press_directions
+        )
+        or len(set(press_directions)) != len(press_directions)
+    ):
+        raise MobileTestbedError("active probe press directions differ")
     return value, digest
 
 
