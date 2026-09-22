@@ -27,7 +27,7 @@ the ledger sections of [DELIVERY_PROGRESS.md](../DELIVERY_PROGRESS.md).
 | v12 | `4a18c686b464` | same declared values, hysteresis no longer fed back | `route-b-batch-15-stage1` 0/1, back to 3 of 4 |
 | v13 | `393dd82ba7c6` | last target `(50,80)` becomes `(50,70)`, because `(50,80)` measured unobservable | `route-b-batch-16-stage1` **1/1 arrived, 4 of 4** — the first complete four-waypoint pass. `route-b-batch-17-stage3x` then 0/3 on the same digest, so the pass is start-position dependent |
 | v14 | `caa0a58d67b3` | adds `no_advance_guard` (`flat_localised_position`, 12 steps, 1.0 px) so a frozen screen is an `ACTION_FAILURE` rather than a `TIMEOUT` | `route-b-batch-18-stage3` 0/3, 0 of 4, `TIMEOUT`, `no_advance_events=0` — the guard correctly did not fire because the world was still advancing |
-| v15 | `ba46e2b21624` | adds the measured traversability mask and a final-approach commitment of three steps | `route-b-batch-19-stage3` and `-20-stage10` passed 3/3 and 10/10 but with the mask **inert** (a vocabulary defect, see below). After the fix, `route-b-batch-22-stage1`, `-23-stage3` and `-21-stage10` passed **1/1, 3/3 and 10/10** with the mask live |
+| v15 | `ba46e2b21624` | adds the measured traversability mask and a final-approach commitment of three steps | `route-b-batch-19-stage3` and `-20-stage10` passed 3/3 and 10/10 but with the mask **inert** (a vocabulary defect, see below). After the fix, `route-b-batch-22-stage1`, `-23-stage3` and `-21-stage10` passed **1/1, 3/3 and 10/10** with the mask live. The 2026-09-22 rebind of the same digest passed stage 1 (1/1) but failed stage 3 (1/3) on a corrected-death-box false positive, so the pass is scoped to commit `7fb530a` |
 
 ## The v15 traversability grid
 
@@ -83,3 +83,18 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
 - **Mask attribution.** The mask is live and fires on 1 to 5 steps per episode, but its isolated
   contribution is not measured by a controlled ablation. The commitment is the driver: an earlier
   run of the same contract with the mask inert passed 13 of 13 episodes.
+- **The pass is bound to its own commit, not to the current code.** On 2026-09-22 the staged
+  admission was re-run against the unchanged contract `ba46e2b2` and the corrected ROIs `6c9cc65c`
+  to turn that inference into a fact, and it did not reproduce. The hero was first placed back in
+  the recorded passing cluster by the declared reposition `movement_goal_navigation_reposition_v3.json`
+  (`05a0b689ac51`), stopping at `(54.65, 71.38)`. `route-b-rebind-stage1` then passed 1 of 1, but
+  `route-b-rebind-stage3` failed 1 of 3 and blocked stage 10: episode 1 stopped
+  `SAFETY_STOP`/`death_or_ended_screen` at `(65.8, 79.7)`. That stop is a false positive, proven
+  from the stop frame: the green-ring cue centroid equals the logged position, the main view shows a
+  full health bar with no death overlay, the hud skills are coloured rather than greyed, and the
+  next episode begins beside the stop rather than at the fountain. The cause is the enlarged
+  `(683, 0, 937, 46)` death box from `5031c82`, which reads only about 100-120 red and 0 white on
+  ordinary frames but overlaps the top-centre in-match announcement region, where a red banner with
+  white text clears the unchanged 2000/80 thresholds. The fourteen-of-fourteen pass therefore stands
+  for commit `7fb530a` only, and no device run on this route is trustworthy until the death detector
+  gains a declared discriminator.
