@@ -81,7 +81,9 @@ from hok_agent.transition_store import (
     validate_transition,
 )
 from hok_agent.traversability import (
+    plan_grid_detour,
     traversability_masked_direction,
+    validate_detour,
     validate_traversability,
 )
 
@@ -320,6 +322,12 @@ def _store_contract(contract: dict[str, object], contract_sha: str) -> dict[str,
             raise MobileTestbedError("mobile navigation store final approach differs")
     if contract.get("traversability") is not None:
         validate_traversability(contract["traversability"])
+    if contract.get("detour") is not None:
+        # The detour searches the frozen grid, so it has no meaning without one. A contract that
+        # declares a detour and no grid is refused rather than silently planning blind.
+        if contract.get("traversability") is None:
+            raise MobileTestbedError("detour requires a traversability grid")
+        validate_detour(contract["detour"])
     advance_raw = contract.get("no_advance_guard")
     no_advance_guard = cast(dict[str, object] | None, advance_raw)
     if advance_raw is not None and (
@@ -961,12 +969,14 @@ def _episode_outcome(
     missing_streak: int,
     maximum_gap: int,
     budget_exhausted: bool,
+    detour_exhausted: bool = False,
 ) -> tuple[bool, str, str, str | None]:
     """Decide whether the episode ends and why.
 
     A sustained localisation gap is a capture failure, not a timeout: without this a run that can
     never localise silently burns its whole duration while sending no input, which is both a wasted
-    attempt and misleading evidence.
+    attempt and misleading evidence. An exhausted detour budget is reported as its own failure too,
+    so a route that keeps meeting a bearing the mask removes is never quietly relabelled a timeout.
     """
     if arrived:
         return True, "NAVIGATION_GOAL_REACHED", "TERMINATED", None
@@ -981,6 +991,11 @@ def _episode_outcome(
         return True, "ACTION_FAILURE", "ERROR", "no_advance_detected"
     if maximum_gap > 0 and missing_streak > maximum_gap:
         return True, "CAPTURE_FAILURE", "ERROR", "localization_gap"
+    if detour_exhausted:
+        # Every declared detour was spent and the goal-directed bearing is still removed while the
+        # hero is still not advancing, so the route genuinely cannot get through rather than merely
+        # having run out of clock. A lost marker stays a capture failure above this.
+        return True, "DETOUR_FAILURE", "ERROR", "detour_exhausted"
     if budget_exhausted:
         # An episode must always end with a terminal transition; a step or duration cap is a
         # truncated episode, not a non-terminal one, which the reload verifier would reject.
@@ -1017,6 +1032,7 @@ class _NavigationRuntime:
     approach_direct_bearing: bool
     no_advance_guard: dict[str, object] | None
     traversability: dict[str, object] | None
+    detour: dict[str, object] | None
     approach_commitment: int
     approach_exit_margin: float
     stall_commitment: int
@@ -1119,6 +1135,7 @@ def _prepare_navigation_runtime(
         ),
         no_advance_guard=cast(dict[str, object] | None, contract.get("no_advance_guard")),
         traversability=cast(dict[str, object] | None, contract.get("traversability")),
+        detour=cast(dict[str, object] | None, contract.get("detour")),
         approach_exit_margin=float(
             cast(
                 float,
@@ -1306,6 +1323,21 @@ def _run_episode(
     death = False
     banner_steps = 0
     death_steps = 0
+    # Declared detour state. The phase is explicit so a plan cannot be half-applied, and every
+    # counter is reported, because a detour that never fires and a detour that fires and fails must
+    # not look the same in the record.
+    detour_phase = "idle"
+    detour_plan_bearings: list[str] = []
+    detour_index = 0
+    detour_attempts = 0
+    detour_steps = 0
+    detour_unknown_steps = 0
+    detour_effective_events = 0
+    detour_confirm_left = 0
+    detour_confirm_baseline: float | None = None
+    detour_stall_anchor: tuple[float, float] | None = None
+    detour_stall_steps = 0
+    detour_exhausted = False
 
     def dispatch(operations: list[TouchOperation]) -> tuple[int, int, int, int, str]:
         nonlocal pointer_messages, retry_total
@@ -1393,6 +1425,24 @@ def _run_episode(
                 if position is None
                 else float(np.hypot(position[0] - target[0], position[1] - target[1]))
             )
+            # The detour trigger needs its own stall run, separate from the no-advance guard: the
+            # guard erases a stall once the world moves at all, while a stall that alternates
+            # between two bearings keeps the world moving and makes no progress. A lost marker
+            # resets the run.
+            if runtime.detour is not None:
+                if position is None:
+                    detour_stall_anchor = None
+                    detour_stall_steps = 0
+                elif detour_stall_anchor is None or float(
+                    np.hypot(
+                        position[0] - detour_stall_anchor[0],
+                        position[1] - detour_stall_anchor[1],
+                    )
+                ) > float(cast(float, runtime.detour["trigger_stall_travel_pixels"])):
+                    detour_stall_anchor = position
+                    detour_stall_steps = 1
+                else:
+                    detour_stall_steps += 1
             if progress_guard is not None and distance is not None:
                 improved = best_distance is None or distance <= best_distance - guard_improvement
                 if improved:
@@ -1479,6 +1529,7 @@ def _run_episode(
                         recovery_steps += 1
                         recovery_steps_total += 1
             # in_approach_band was computed above, with the declared exit margin applied.
+            traversability_masked_here = False
             if (
                 runtime.traversability is not None
                 and position is not None
@@ -1491,6 +1542,7 @@ def _run_episode(
                 if masked_joystick != requested_joystick:
                     traversability_masked_steps += 1
                     requested_joystick = masked_joystick
+                    traversability_masked_here = True
             # The finest press tier moves the hero about 0.65 px, near the position noise floor,
             # so re-aiming every step lets the steps cancel. Hold the chosen bearing for the
             # declared commitment instead of re-deciding from a noisy position.
@@ -1532,6 +1584,80 @@ def _run_episode(
             else:
                 committed_stall = None
                 stall_commitment_steps = 0
+            # The declared detour outranks the geometry proposal and the approach commitment,
+            # because the v16 attempt showed the stall happens inside the approach band where the
+            # commitment deliberately holds its aim. It does not outrank the mask: a planned bearing
+            # is re-masked before it is applied, so the detour can only pick a bearing the frozen
+            # grid permits. Nothing here reads the device or the model.
+            detour_bearing: str | None = None
+            if (
+                runtime.detour is not None
+                and runtime.traversability is not None
+                and position is not None
+                and not death
+                and not outside_region
+            ):
+                detour = runtime.detour
+                traversability_block = runtime.traversability
+                attempts_cap = int(cast(int, detour["maximum_attempts_per_episode"]))
+                stalled = detour_stall_steps >= int(cast(int, detour["trigger_stall_steps"]))
+                if detour_phase == "running":
+                    detour_bearing = detour_plan_bearings[detour_index]
+                    detour_index += 1
+                    if detour_index >= len(detour_plan_bearings):
+                        detour_phase = "confirming"
+                        detour_confirm_left = int(cast(int, detour["confirmation_steps"]))
+                        detour_confirm_baseline = distance
+                elif detour_phase == "confirming":
+                    progressed = (
+                        distance is not None
+                        and detour_confirm_baseline is not None
+                        and distance
+                        <= detour_confirm_baseline
+                        - float(cast(float, detour["confirmation_minimum_progress_pixels"]))
+                    )
+                    if progressed:
+                        # The bearing is usable again and the goal distance fell over the declared
+                        # confirmation window, so the detour did what it was planned to do.
+                        detour_effective_events += 1
+                        detour_phase = "idle"
+                    else:
+                        detour_confirm_left -= 1
+                        if detour_confirm_left <= 0:
+                            detour_phase = "idle"
+                if detour_phase == "idle" and traversability_masked_here and stalled:
+                    if detour_attempts < attempts_cap:
+                        plan = plan_grid_detour(
+                            position=position,
+                            goal=target,
+                            block=traversability_block,
+                            region=region,
+                            maximum_steps=int(cast(int, detour["maximum_steps"])),
+                            bearing_order=tuple(cast(list[str], detour["bearing_order"])),
+                        )
+                        detour_attempts += 1
+                        if plan is not None and plan.bearings:
+                            detour_plan_bearings = list(plan.bearings)
+                            detour_unknown_steps += plan.unknown_steps
+                            detour_index = 1
+                            detour_bearing = detour_plan_bearings[0]
+                            if detour_index >= len(detour_plan_bearings):
+                                detour_phase = "confirming"
+                                detour_confirm_left = int(cast(int, detour["confirmation_steps"]))
+                                detour_confirm_baseline = distance
+                            else:
+                                detour_phase = "running"
+                    else:
+                        # Every declared attempt is spent and the same trigger still holds, so the
+                        # route cannot get through rather than merely having run out of clock.
+                        detour_exhausted = True
+                if detour_bearing is not None:
+                    requested_joystick = _mask_joystick_bearing(
+                        position, detour_bearing, traversability_block
+                    )
+                    committed_approach = None
+                    committed_steps = 0
+                    detour_steps += 1
             applied_joystick, owner, reason = _route(
                 requested_joystick,
                 known=known,
@@ -1539,6 +1665,9 @@ def _run_episode(
                 outside_region=outside_region,
                 recovery=recovery,
             )
+            if detour_bearing is not None and reason == "geometry_rule":
+                owner = "deterministic_router"
+                reason = "detour_applied"
             recovery_applied = reason in {"unknown_recovery_retrace", "unknown_recovery_waypoint"}
             if escape_active and progress_guard is not None and not death:
                 if (
@@ -1682,6 +1811,7 @@ def _run_episode(
                 maximum_gap=runtime.maximum_gap,
                 budget_exhausted=time.monotonic() >= episode_deadline
                 or step_id + 1 >= runtime.maximum_steps,
+                detour_exhausted=detour_exhausted,
             )
             row = _transition(
                 store_contract=runtime.store_contract,
@@ -1816,6 +1946,11 @@ def _run_episode(
         # work rather than the run simply never meeting a banner, so both counts are reported.
         "death_banner_steps": banner_steps,
         "death_confirmed_steps": death_steps,
+        "detour_attempts": detour_attempts,
+        "detour_steps": detour_steps,
+        "detour_unknown_steps": detour_unknown_steps,
+        "detour_effective_events": detour_effective_events,
+        "detour_exhausted": int(detour_exhausted),
         "duration_seconds": round(time.monotonic() - started, 8),
         "step_rows": steps,
     }

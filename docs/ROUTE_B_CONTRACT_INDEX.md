@@ -29,6 +29,8 @@ the ledger sections of [DELIVERY_PROGRESS.md](../DELIVERY_PROGRESS.md).
 | v14 | `caa0a58d67b3` | adds `no_advance_guard` (`flat_localised_position`, 12 steps, 1.0 px) so a frozen screen is an `ACTION_FAILURE` rather than a `TIMEOUT` | `route-b-batch-18-stage3` 0/3, 0 of 4, `TIMEOUT`, `no_advance_events=0` — the guard correctly did not fire because the world was still advancing |
 | v15 | `ba46e2b21624` | adds the measured traversability mask and a final-approach commitment of three steps | `route-b-batch-19-stage3` and `-20-stage10` passed 3/3 and 10/10 but with the mask **inert** (a vocabulary defect, see below). After the fix, `route-b-batch-22-stage1`, `-23-stage3` and `-21-stage10` passed **1/1, 3/3 and 10/10** with the mask live. The 2026-09-22 rebind of the same digest passed stage 1 (1/1) but failed stage 3 (1/3) on a corrected-death-box false positive; the detector then gained a declared confirmation policy and the pass was **re-bound to the current code** by `route-b-rebind3-stage1`, `-stage3` and `-stage10` at **1/1, 3/3 and 10/10** on the same contract but with ROIs `876adf7626a1` and a declared 1.5 px placement |
 
+| v18 | `f6ae612becc7` | adds a declared bounded grid detour on top of the v15 grid and mask: a breadth-first search over the frozen grid, triggered only when the mask has just removed the goal-directed bearing and the hero has stalled, with two attempts per episode and `detour_exhausted` as its own outcome | not yet run on device; validated offline on the recorded stall cells (`14:12` -> `NE NW`, `15:12` -> `N NE NW`, `14:11` -> `NE N`, `19:16` -> `NE E SE SE`), every plan ending in the goal cell, avoiding every obstructed pair and staying inside the region |
+
 ## The v15 traversability grid
 
 The grid is frozen inside the v15 contract and aggregated from these exact source runs:
@@ -79,7 +81,12 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
   the hero genuinely cannot go north). The mask can only remove a bearing, it cannot plan a detour:
   the only better bearing at `14:12` is north-east, which moves away from the goal, and the greedy
   objective will not take a two-step detour such as west then north. Closing the limit needs declared
-  detour planning, which the route does not have and which is not built here.
+  detour planning, which the route does not have and which is not built here. That planning is now
+  built as contract v18 (`f6ae612becc7`): a bounded breadth-first search over the same frozen grid,
+  triggered when the mask has just removed the goal-directed bearing and the hero has stalled, with
+  re-masking of every planned bearing, a declared attempt and confirmation budget, and
+  `detour_exhausted` as its own failure. It is validated offline but has not run on device, so the
+  limit still stands.
 - **The route is not the original rectangle.** The fourth waypoint is `(50, 70)`, not `(50, 80)`,
   because `(50, 80)` measured unobservable: across six runs and 211 localised samples the closest
   any localised position came to it was exactly 6.00 px against a 4.0 px tolerance.

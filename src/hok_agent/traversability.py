@@ -25,10 +25,10 @@ from __future__ import annotations
 import json
 import math
 import os
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Sequence
 from pathlib import Path
-from typing import cast
+from typing import NamedTuple, cast
 
 from hok_agent.mobile_testbed import MobileTestbedError
 
@@ -277,6 +277,142 @@ def traversability_masked_direction(
         if not blocked(candidate):
             return candidate
     return desired
+
+
+DETOUR_SCHEMA = "hok-agent-declared-detour-v1"
+
+
+class DetourPlan(NamedTuple):
+    """A bounded bearing sequence found by the declared grid search, with its fail-open exposure."""
+
+    bearings: tuple[str, ...]
+    unknown_steps: int
+
+
+def validate_detour(block: object) -> dict[str, object]:
+    """Validate a declared detour block, raising on anything ambiguous.
+
+    Every number here decides how far the hero may step away from the goal, so nothing is inferred:
+    a missing or mistyped field is a load failure rather than a default, and the bearing order must
+    be an exact permutation so the search's tie-break is reproducible.
+    """
+    if not isinstance(block, dict) or block.get("mode") != "bounded_grid_bfs":
+        raise MobileTestbedError("mobile navigation store detour differs")
+    if block.get("schema_version") != DETOUR_SCHEMA:
+        raise MobileTestbedError("mobile navigation store detour differs")
+    integers = ("maximum_steps", "maximum_attempts_per_episode", "trigger_stall_steps",
+                "confirmation_steps")
+    numbers = ("trigger_stall_travel_pixels", "confirmation_minimum_progress_pixels")
+    for key in integers:
+        if not isinstance(block.get(key), int) or int(cast(int, block[key])) < 1:
+            raise MobileTestbedError("mobile navigation store detour differs")
+    for key in numbers:
+        if not isinstance(block.get(key), (int, float)) or float(cast(float, block[key])) < 0.0:
+            raise MobileTestbedError("mobile navigation store detour differs")
+    if float(cast(float, block["confirmation_minimum_progress_pixels"])) <= 0.0:
+        raise MobileTestbedError("mobile navigation store detour differs")
+    order = block.get("bearing_order")
+    if (
+        not isinstance(order, list)
+        or sorted(order) != sorted(MOVEMENT_ORDER)
+        or len(order) != len(MOVEMENT_ORDER)
+    ):
+        raise MobileTestbedError("mobile navigation store detour differs")
+    return block
+
+
+def plan_grid_detour(
+    *,
+    position: tuple[float, float],
+    goal: tuple[float, float],
+    block: dict[str, object],
+    region: dict[str, object],
+    maximum_steps: int,
+    bearing_order: Sequence[str] = MOVEMENT_ORDER,
+) -> DetourPlan | None:
+    """Find a shortest bounded detour from ``position`` to ``goal`` over the frozen grid.
+
+    The mask can only remove a bearing; it cannot plan the two-step detour that goes around a cell
+    where the goal-directed bearing does not work. This is that missing plan, and it is deliberately
+    a pure function of the frozen grid: no new measurement, no model, no device read, so it can be
+    replayed offline against the recorded failures before it is ever allowed to move the hero.
+
+    Search is breadth-first, so the returned sequence is shortest in steps, and ties are broken by
+    the declared ``bearing_order`` so a plan is reproducible. A move is allowed when the frozen grid
+    does not call ``(cell, bearing)`` obstructed - the same predicate the mask already uses, which
+    means a bearing the mask would remove is never chosen - and when the destination cell's centre
+    lies inside the declared free movement region. Cells the grid never measured are walkable,
+    because the mask fails open, but every step that relies on fail-open is counted in
+    ``unknown_steps`` so a plan that only works by travelling through unmeasured space states it.
+
+    ``None`` means no path exists inside the declared step cap, which is a recorded outcome rather
+    than a silent fallback.
+    """
+    if maximum_steps < 1:
+        raise MobileTestbedError("detour maximum steps must be positive")
+    order = tuple(bearing_order)
+    if sorted(order) != sorted(MOVEMENT_ORDER) or len(order) != len(MOVEMENT_ORDER):
+        raise MobileTestbedError("detour bearing order must be a permutation of the movement order")
+    grid = cast(dict[str, object], block["grid"])
+    cells = cast(dict[str, object], grid["cells"])
+    cell_pixels = float(cast(float, grid["cell_pixels"]))
+    minimum_samples = int(cast(int, grid["minimum_samples"]))
+    minimum_rate = float(cast(float, block["minimum_rate_per_100ms"]))
+    minimum_y = float(cast(float, region["minimum_y"]))
+    maximum_y = float(cast(float, region["maximum_y"]))
+    minimum_x = float(cast(float, region["minimum_x"]))
+    maximum_x = float(cast(float, region["maximum_x"]))
+
+    def measured(cell: str, bearing: str) -> float | None:
+        entry = cells.get(cell)
+        if not isinstance(entry, dict):
+            return None
+        value = cast(dict[str, object], entry).get(bearing)
+        if not isinstance(value, dict):
+            return None
+        if int(cast(int, value["n"])) < minimum_samples:
+            return None
+        return float(cast(float, value["rate"]))
+
+    def in_region(row: int, column: int) -> bool:
+        center_y = (row + 0.5) * cell_pixels
+        center_x = (column + 0.5) * cell_pixels
+        return minimum_y <= center_y <= maximum_y and minimum_x <= center_x <= maximum_x
+
+    start = _cell_key(position, cell_pixels)
+    goal_cell = _cell_key(goal, cell_pixels)
+    if start == goal_cell:
+        return DetourPlan((), 0)
+
+    def split(cell: str) -> tuple[int, int]:
+        row, column = cell.split(":")
+        return int(row), int(column)
+
+    seen = {start}
+    queue: deque[tuple[tuple[int, int], tuple[str, ...], int]] = deque([(split(start), (), 0)])
+    while queue:
+        (row, column), bearings, unknown = queue.popleft()
+        if len(bearings) >= maximum_steps:
+            continue
+        for bearing in order:
+            step_y, step_x = BEARING_STEPS[bearing]
+            # A diagonal bearing moves one cell in each axis, so the cell step is the rounded unit
+            # vector rather than the truncated one (truncation would make every diagonal a no-op).
+            next_row = row + int(round(step_y))
+            next_column = column + int(round(step_x))
+            next_cell = f"{next_row}:{next_column}"
+            if next_cell in seen or not in_region(next_row, next_column):
+                continue
+            rate = measured(f"{row}:{column}", bearing)
+            if rate is not None and rate < minimum_rate:
+                continue
+            next_bearings = bearings + (bearing,)
+            next_unknown = unknown + (1 if rate is None else 0)
+            if next_cell == goal_cell:
+                return DetourPlan(next_bearings, next_unknown)
+            seen.add(next_cell)
+            queue.append(((next_row, next_column), next_bearings, next_unknown))
+    return None
 
 
 def tier_restricted_rates(
