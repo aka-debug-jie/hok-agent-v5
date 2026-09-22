@@ -584,6 +584,159 @@ def load_global_model(path: Path, device: torch.device) -> tuple[GlobalMacroPoli
 
 
 GLOBAL_SPEED_SCHEMA: Final = "hok-agent-global-speed-report-v1"
+GLOBAL_DISTILL_SCHEMA: Final = "hok-agent-global-distill-report-v1"
+
+
+def _build_student(
+    teacher: GlobalMacroPolicy, main_architecture: str
+) -> GlobalMacroPolicy:
+    """A student that differs from the teacher only in `main`, with every other weight copied.
+
+    Copying the teacher's non-main weights is the point: at initialisation the student's minimap,
+    hud, temporal and head behaviour is bit-identical to the frozen teacher, so any behaviour
+    change measured later is attributable to the `main` view and to training, not to a fresh
+    initialisation.
+    """
+    student = GlobalMacroPolicy(teacher.variant, main_architecture)
+    teacher_state = teacher.state_dict()
+    report = student.load_state_dict(
+        {name: value for name, value in teacher_state.items() if not name.startswith("main.")},
+        strict=False,
+    )
+    unexpected = list(report.unexpected_keys)
+    missing = [name for name in report.missing_keys if not name.startswith("main.")]
+    if unexpected or missing:
+        raise GlobalPolicyError(f"student copy is not main-only: {unexpected} {missing}")
+    return student
+
+
+def distill_global_main(
+    dataset_root: Path,
+    output_dir: Path,
+    *,
+    teacher_checkpoint: Path,
+    main_architecture: str = "compact",
+    epochs: int = 1,
+    maximum_steps: int = 50,
+    batch_size: int = 8,
+    learning_rate: float = 0.01,
+    seed: int = 0,
+    device_name: str = "cpu",
+) -> dict[str, object]:
+    """Train only the `main` view to imitate a frozen Global Agent teacher, offline.
+
+    Reads the frozen dataset and one frozen checkpoint, copies every non-`main` weight from the
+    teacher, freezes it, and distils the teacher's logits on the declared **train** split with a
+    bounded step budget. It reports dev behaviour and writes the student checkpoint, and it does
+    none of the following: open the test split, open a capture source, send anything to a device,
+    promote the student, or change the deterministic Router/executor.
+    """
+    if teacher_checkpoint.is_symlink() or not teacher_checkpoint.is_file():
+        raise GlobalPolicyError("distillation needs one regular teacher checkpoint")
+    if main_architecture not in MAIN_ARCHITECTURES:
+        raise GlobalPolicyError(f"unknown main architecture: {main_architecture}")
+    if epochs < 1 or maximum_steps < 1 or batch_size < 1:
+        raise GlobalPolicyError("invalid distillation budget")
+    manifest = load_global_manifest(dataset_root)
+    if manifest.get("test_present") is not False:
+        raise GlobalPolicyError("distillation must not open a test split")
+    train_dataset = GlobalWindowDataset(dataset_root, "train")
+    dev_dataset = GlobalWindowDataset(dataset_root, "dev")
+    if len(train_dataset) < batch_size or len(dev_dataset) < batch_size:
+        raise GlobalPolicyError("split has fewer windows than the declared batch")
+    output = _under_large_root(output_dir, output=True)
+    output.mkdir(parents=True, exist_ok=False)
+    device = torch.device(device_name)
+    torch.manual_seed(seed)
+    teacher, teacher_metadata = load_global_model(teacher_checkpoint, device)
+    teacher.eval()
+    for parameter in teacher.parameters():
+        parameter.requires_grad_(False)
+    student = _build_student(teacher, main_architecture).to(device)
+    for parameter in student.parameters():
+        parameter.requires_grad_(False)
+    for parameter in student.main.parameters():
+        parameter.requires_grad_(True)
+    frozen_before = {
+        name: parameter.detach().clone()
+        for name, parameter in student.named_parameters()
+        if not name.startswith("main.")
+    }
+    optimizer = torch.optim.Adam(student.main.parameters(), lr=learning_rate)
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(len(train_dataset)).tolist()
+    loss_trace: list[float] = []
+    steps = 0
+    student.train()
+    for _epoch in range(epochs):
+        for start in range(0, len(order), batch_size):
+            if steps >= maximum_steps:
+                break
+            indices = order[start : start + batch_size]
+            if len(indices) < batch_size:
+                break
+            batch = _speed_batch(train_dataset, indices)
+            moved = (batch[0].to(device), batch[1].to(device), batch[2].to(device))
+            with torch.no_grad():
+                target = teacher(*moved)
+            logits = student(*moved)
+            loss = (
+                F.mse_loss(logits[0], target[0])
+                + F.mse_loss(logits[1], target[1])
+                + F.mse_loss(logits[2], target[2])
+            )
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()  # type: ignore[no-untyped-call]
+            optimizer.step()
+            loss_trace.append(round(float(loss.detach()), 6))
+            steps += 1
+        if steps >= maximum_steps:
+            break
+    student.eval()
+    changed = [
+        name
+        for name, parameter in student.named_parameters()
+        if not name.startswith("main.")
+        and not torch.equal(parameter.detach(), frozen_before[name])
+    ]
+    if changed:
+        raise GlobalPolicyError(f"distillation changed a frozen parameter: {changed}")
+    student_path = output / f"student-{main_architecture}.safetensors"
+    student_sha = _save_model(
+        student_path, student, student.variant, str(manifest["manifest_sha256"])
+    )
+    report: dict[str, object] = {
+        "schema_version": GLOBAL_DISTILL_SCHEMA,
+        "teacher_checkpoint": str(teacher_checkpoint),
+        "teacher_sha256": _sha(teacher_checkpoint.read_bytes()),
+        "teacher_architecture": architecture_from_metadata(teacher_metadata),
+        "student_checkpoint": str(student_path),
+        "student_sha256": student_sha,
+        "student_architecture": main_architecture,
+        "variant": student.variant,
+        "device": device_name,
+        "seed": seed,
+        "epochs": epochs,
+        "maximum_steps": maximum_steps,
+        "steps": steps,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "train_windows": len(train_dataset),
+        "dev_windows": len(dev_dataset),
+        "loss_first": loss_trace[0] if loss_trace else None,
+        "loss_last": loss_trace[-1] if loss_trace else None,
+        "loss_trace": loss_trace,
+        "parameters": _parameter_groups(student),
+        "behaviour": _measure_behaviour(student, dev_dataset, batch_size=batch_size),
+        "frozen_parameters_unchanged": True,
+        "promotion_allowed": False,
+        "device_input_allowed": False,
+        "training_eligible": False,
+    }
+    (output / "distill-report.json").write_text(
+        _canonical(report) + "\n", encoding="utf-8"
+    )
+    return report
 
 
 def _percentile(sorted_samples: list[float], quantile: float) -> float:

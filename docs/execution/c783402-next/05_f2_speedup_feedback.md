@@ -136,10 +136,38 @@ substitutes for preserved behaviour. It also shows the latency half has large he
 `main` is cheap enough that a trained student has room to pass it - so the open question is behaviour
 recovery, which is F3's pilot.
 
+## The F3 pilot: two bounded configurations, both rejected
+
+`distill_global_main` (CLI `global-agent-distill`) was added and run twice on the frozen pilot
+`global-agent-v1/pilot-40-10-v1` (2,016 train windows, 510 dev windows), training only the compact
+`main` while every other weight is copied from the teacher and verified bit-identical afterwards.
+The gate and its thresholds were not touched between runs; only the training configuration changed.
+
+| Run | configuration | loss first -> last | dev intent macro-F1 | dev zone macro-F1 | gate |
+|---|---|---|---|---|---|
+| `pilot-compact-v1` | 200 steps, lr 0.01 | 57.9 -> 62.3 (rose) | **0.3800** | 0.4578 | rejected, `intent_macro_f1_regressed` |
+| `pilot-compact-v2` | one epoch, 252 steps, lr 3e-4 | 57.9 -> 39.9 (min 26.7, spread to 147) | **0.0683** | 0.1233 | rejected, `intent_macro_f1_regressed` |
+| teacher | frozen DAgger | - | 0.8891 | 0.8446 | baseline |
+
+Both candidates were about 99% faster than the teacher (5.5 ms against ~511 ms per batch) and 95.8%
+smaller, and **both were rejected on behaviour alone**. The untrained student started at 0.0039, so
+the first configuration did learn something, but three findings are enough to stop:
+
+- the dev result is not monotone in the budget: the lower learning rate with more steps did far
+  worse (0.0683 against 0.3800), so the current objective is not a reliable training signal;
+- the loss trace is unstable within a single run (min 26.7, max 147), consistent with an
+  ill-scaled MSE on raw logits rather than a well-behaved distillation objective;
+- neither configuration is close to the behaviour the gate requires, and the pack says explicitly
+  not to expand data, time or parameters before a small verified gain exists.
+
+So the honest F3 outcome is a working pipeline and a negative pilot. Promoting nothing is the
+correct result, and a real distillation configuration (a proper objective and schedule, then a
+larger budget) would be a new decision with real compute behind it, not another tweak.
+
 ## What is deliberately not claimed
 
-- Not that any speedup has been achieved. This is the feedback, and only the baseline and its noise
-  floor have been measured; a candidate is F3.
+- Not that any speedup has been achieved. The feedback is in place and two pilot candidates were
+  rejected; nothing replaced the frozen teacher.
 - Not that this task improves gameplay. It is the compression question the pack allows, and the pack
   says plainly it must not be called a policy-level improvement.
 - Not a re-run of the 20-seed holdout. That stays the acceptance for a candidate that changes control.

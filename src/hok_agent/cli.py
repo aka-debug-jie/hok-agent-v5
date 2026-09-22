@@ -1590,6 +1590,22 @@ def _parser() -> argparse.ArgumentParser:
     global_speed.add_argument("--maximum-intent-macro-f1-drop", type=float, default=0.0)
     global_speed.add_argument("--minimum-latency-reduction-fraction", type=float, default=0.25)
     global_speed.add_argument("--output-dir", type=Path, default=None)
+    global_distill = commands.add_parser(
+        "global-agent-distill",
+        help="train only the main view to imitate a frozen Global Agent teacher, offline",
+    )
+    global_distill.add_argument("--dataset-root", type=Path, required=True)
+    global_distill.add_argument("--teacher-checkpoint", type=Path, required=True)
+    global_distill.add_argument("--output-dir", type=Path, required=True)
+    global_distill.add_argument(
+        "--main-architecture", choices=("resnet18", "compact"), default="compact"
+    )
+    global_distill.add_argument("--epochs", type=int, default=1)
+    global_distill.add_argument("--maximum-steps", type=int, default=50)
+    global_distill.add_argument("--batch-size", type=int, default=8)
+    global_distill.add_argument("--learning-rate", type=float, default=0.01)
+    global_distill.add_argument("--seed", type=int, default=0)
+    global_distill.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     global_shadow = commands.add_parser(
         "global-agent-shadow", help="run one zero-control Global Agent V4L2 Shadow session"
     )
@@ -4065,6 +4081,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.dagger_checkpoint,
                 args.adapted_checkpoint,
                 args.output_dir,
+                device_name=args.device,
+            )
+        elif args.command == "global-agent-distill":
+            from hok_agent.global_policy import distill_global_main
+
+            result = distill_global_main(
+                args.dataset_root,
+                args.output_dir,
+                teacher_checkpoint=args.teacher_checkpoint,
+                main_architecture=args.main_architecture,
+                epochs=args.epochs,
+                maximum_steps=args.maximum_steps,
+                batch_size=args.batch_size,
+                learning_rate=args.learning_rate,
+                seed=args.seed,
                 device_name=args.device,
             )
         elif args.command == "global-agent-speed-report":

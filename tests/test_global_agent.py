@@ -242,19 +242,22 @@ def _distill_shard(path: Path, frames: int, seed: int) -> str:
     return gp._sha(path.read_bytes())
 
 
-def _distill_dataset(root: Path, episodes: int) -> Path:
+def _distill_dataset(
+    root: Path, episodes: int, splits: tuple[str, ...] = ("dev",)
+) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     rows = []
-    for index in range(episodes):
-        name = f"episode-{index}.npz"
-        rows.append(
-            {
-                "split": "dev",
-                "shard": name,
-                "shard_sha256": _distill_shard(root / name, gp.WINDOW_FRAMES, index),
-                "episode": f"ep-{index}",
-            }
-        )
+    for split in splits:
+        for index in range(episodes):
+            name = f"episode-{split}-{index}.npz"
+            rows.append(
+                {
+                    "split": split,
+                    "shard": name,
+                    "shard_sha256": _distill_shard(root / name, gp.WINDOW_FRAMES, len(rows)),
+                    "episode": f"ep-{split}-{index}",
+                }
+            )
     payload: dict[str, object] = {"test_present": False, "episodes": rows}
     payload["manifest_sha256"] = gp._sha(gp._canonical(payload).encode())
     (root / "manifest.json").write_text(json.dumps(payload), encoding="utf-8")
@@ -345,3 +348,52 @@ def test_a_metadata_without_the_key_reads_as_the_historical_resnet18() -> None:
 def test_an_unknown_architecture_is_refused_at_construction() -> None:
     with pytest.raises(gp.GlobalPolicyError):
         gp.GlobalMacroPolicy("tcn", "tinyv2")
+
+
+def test_distill_trains_only_main_and_copies_the_frozen_parameters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOK_LARGE_ROOT", str(tmp_path))
+    root = _distill_dataset(tmp_path / "dataset", episodes=2, splits=("train", "dev"))
+    teacher = gp.GlobalMacroPolicy("tcn")
+    teacher_path = tmp_path / "teacher.safetensors"
+    gp._save_model(teacher_path, teacher, "tcn", "0" * 64)
+
+    report = gp.distill_global_main(
+        root,
+        tmp_path / "run",
+        teacher_checkpoint=teacher_path,
+        main_architecture="compact",
+        epochs=1,
+        maximum_steps=2,
+        batch_size=1,
+        seed=0,
+    )
+
+    assert report["schema_version"] == gp.GLOBAL_DISTILL_SCHEMA
+    assert report["steps"] == 2
+    assert report["student_architecture"] == "compact"
+    assert report["teacher_architecture"] == "resnet18"
+    assert report["frozen_parameters_unchanged"] is True
+    assert report["promotion_allowed"] is False
+    assert report["parameters"]["total"] < report["parameters"]["main"] * 100
+    loaded, metadata = gp.load_global_model(Path(report["student_checkpoint"]), torch.device("cpu"))
+    assert loaded.main_architecture == "compact"
+    assert metadata[gp.MAIN_ARCHITECTURE_METADATA_KEY] == "compact"
+
+
+def test_distill_refuses_an_unknown_architecture_and_a_bad_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOK_LARGE_ROOT", str(tmp_path))
+    root = _distill_dataset(tmp_path / "dataset", episodes=2, splits=("train", "dev"))
+    teacher_path = tmp_path / "teacher.safetensors"
+    gp._save_model(teacher_path, gp.GlobalMacroPolicy("tcn"), "tcn", "0" * 64)
+    with pytest.raises(gp.GlobalPolicyError):
+        gp.distill_global_main(
+            root, tmp_path / "run-a", teacher_checkpoint=teacher_path, main_architecture="tinyv2"
+        )
+    with pytest.raises(gp.GlobalPolicyError):
+        gp.distill_global_main(
+            root, tmp_path / "run-b", teacher_checkpoint=teacher_path, maximum_steps=0
+        )
