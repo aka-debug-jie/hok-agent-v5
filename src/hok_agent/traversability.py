@@ -485,6 +485,85 @@ def tier_restricted_rates(
     return {"cell_pixels": cell_pixels, "cells": cells}
 
 
+def tier_restricted_vectors(
+    runs_root: Path, runs: Sequence[str], cell_pixels: float
+) -> dict[str, object]:
+    """Per-cell, per-bearing mean displacement vector at the Router's own bounded press tier.
+
+    ``tier_restricted_rates`` reports one scalar per ``(cell, bearing)``: the mean projection of the
+    measured displacement onto the commanded bearing. That is the number the mask decides on, and it
+    is deliberately partial - a press that slides sideways scores near zero even when it moves the
+    hero a long way. The detour's first device run showed why that matters: at cell ``14:12`` the
+    north projection is 0.0795 px per 100 ms, so the mask removes north, while the measured mean
+    displacement is a 1.70 px slide west, which the scalar cannot express. This reports the vector
+    itself, at the bounded tier only, so the mask's verdict can be compared with what the press
+    actually did - and so a planner has the displacement record a cell-transition model needs, which
+    the scalar projection cannot provide (a mean bounded displacement under one cell gives a
+    cell-transition graph no edges at all).
+    """
+    projections: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    banners: dict[str, dict[str, list[tuple[float, float, float]]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for run in runs:
+        if not (runs_root / run).is_dir():
+            raise MobileTestbedError(f"traversability source run is missing: {run}")
+        for episode in sorted(os.listdir(runs_root / run)):
+            log = runs_root / run / episode / "steps.jsonl"
+            if not log.is_file():
+                continue
+            rows = [
+                json.loads(line)
+                for line in log.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            for earlier, later in zip(rows, rows[1:], strict=False):
+                if earlier["position"] is None or later["position"] is None:
+                    continue
+                direction = earlier["applied_movement"]
+                if direction not in BEARING_STEPS:
+                    continue
+                press = earlier.get("approach_press_ms")
+                if not press:
+                    # Only the bounded tier: the mask guards the presses the Router actually issues,
+                    # and a long press works through a partial obstruction a short one never passes.
+                    continue
+                movement_ms = float(cast(float, press))
+                if movement_ms <= 0:
+                    continue
+                step_y, step_x = BEARING_STEPS[direction]
+                delta_y = float(later["position"][0]) - float(earlier["position"][0])
+                delta_x = float(later["position"][1]) - float(earlier["position"][1])
+                projection = delta_y * step_y + delta_x * step_x
+                key = _cell_key(
+                    (float(earlier["position"][0]), float(earlier["position"][1])), cell_pixels
+                )
+                projections[key][direction].append(projection / movement_ms * 100.0)
+                banners[key][direction].append((delta_y, delta_x, movement_ms))
+    cells: dict[str, object] = {}
+    for key in sorted(projections):
+        entry: dict[str, object] = {}
+        for direction in MOVEMENT_ORDER:
+            values = projections[key].get(direction, [])
+            samples = banners[key].get(direction, [])
+            if not values:
+                continue
+            mean_ms = sum(item[2] for item in samples) / len(samples)
+            mean_y = sum(item[0] for item in samples) / len(samples)
+            mean_x = sum(item[1] for item in samples) / len(samples)
+            entry[direction] = {
+                "n": len(values),
+                "projection_rate": round(sum(values) / len(values), 4),
+                "mean_delta_y": round(mean_y, 4),
+                "mean_delta_x": round(mean_x, 4),
+                "magnitude_rate": round(math.hypot(mean_y, mean_x) / mean_ms * 100.0, 4),
+                "mean_press_ms": round(mean_ms, 2),
+            }
+        if entry:
+            cells[key] = entry
+    return {"cell_pixels": cell_pixels, "tier": "bounded", "cells": cells}
+
+
 def traversability_coverage(block: dict[str, object]) -> dict[str, object]:
     """Report how much of the grid is actually known, so partial coverage is never hidden."""
     grid = cast(dict[str, object], block["grid"])

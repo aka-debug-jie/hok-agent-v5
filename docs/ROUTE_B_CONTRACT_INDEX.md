@@ -98,6 +98,15 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
 - **The route is not the original rectangle.** The fourth waypoint is `(50, 70)`, not `(50, 80)`,
   because `(50, 80)` measured unobservable: across six runs and 211 localised samples the closest
   any localised position came to it was exactly 6.00 px against a 4.0 px tolerance.
+- **The mask's criterion is the projection, and it can remove the most-moving bearing.** Measured from
+  the pinned runs at the Router's bounded tier, the mask makes thirty-eight decisions over forty-seven
+  covered cells: five removals and thirty-three keeps, and two of the five removals are the
+  largest-magnitude motion in their own cell. At `14:12` north is removed on a `0.0548` projection
+  while its measured mean displacement is `(-0.18, -1.73)` px, the largest motion in the cell, and at
+  `14:11` the same pattern is `0.0569` against `0.3860`. That is correct by the mask's own criterion -
+  the press did not move the hero along the commanded bearing - but it means a route that has to travel
+  along a wall while pressed against it is the case where the mask removes the only thing that moves.
+  The recorded ablation agrees: with the mask inert the same contract passed thirteen of thirteen.
 - **Mask attribution.** The mask is live and fires on 1 to 5 steps per episode, but its isolated
   contribution is not measured by a controlled ablation. The commitment is the driver: an earlier
   run of the same contract with the mask inert passed 13 of 13 episodes.

@@ -21,6 +21,7 @@ from hok_agent.traversability import (
     BEARING_STEPS,
     MOVEMENT_ORDER,
     plan_grid_detour,
+    tier_restricted_vectors,
     validate_detour,
 )
 
@@ -271,3 +272,36 @@ def test_the_frozen_v15_grid_gives_the_recorded_cold_start_stalls_a_detour() -> 
         assert plan.bearings == bearings, cell
         assert _walk(position, plan.bearings) == (12, 12), cell
         assert plan.unknown_steps == 0, cell
+
+
+def test_tier_restricted_vectors_report_the_slide_the_projection_hides(tmp_path: Path) -> None:
+    """The mask decides on one scalar; the vector shows what the press actually did.
+
+    At cell 14:12 the frozen grid removes north on a 0.0548 projection while the measured mean
+    displacement is a 1.70 px slide west. This pins the measurement that makes that visible, at the
+    Router's bounded press tier only, and pins that an unbounded press is not mixed in.
+    """
+    episode = tmp_path / "route-b-batch-synthetic" / "episode-01"
+    episode.mkdir(parents=True)
+    rows = [
+        {"position": [59.0, 50.0], "applied_movement": "N", "approach_press_ms": 400},
+        {"position": [58.8, 49.5], "applied_movement": "N", "approach_press_ms": 400},
+        {"position": [58.6, 49.0], "applied_movement": "N", "approach_press_ms": 400},
+        {"position": [58.4, 48.5], "applied_movement": "N", "approach_press_ms": 400},
+        {"position": [58.2, 48.0], "applied_movement": "N"},
+        {"position": [57.0, 47.5], "applied_movement": "N"},
+    ]
+    (episode / "steps.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8"
+    )
+    measured = tier_restricted_vectors(tmp_path, ("route-b-batch-synthetic",), 4.0)
+    cells = cast(dict[str, dict[str, dict[str, float]]], measured["cells"])
+    north = cells["14:12"]["N"]
+    assert north["n"] == 4
+    assert north["mean_delta_y"] == pytest.approx(-0.20)
+    assert north["mean_delta_x"] == pytest.approx(-0.50)
+    assert north["projection_rate"] == pytest.approx(0.05)
+    # the projection scores the press as barely responsive while it actually moved 0.54 px per press
+    assert north["magnitude_rate"] == pytest.approx(0.1346, abs=1e-3)
+    assert north["magnitude_rate"] > north["projection_rate"]
+    assert north["mean_press_ms"] == 400.0
