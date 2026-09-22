@@ -1,6 +1,6 @@
 # The single next step
 
-## Status: `DEVICE_PASSED_1_OF_1`, staged continuation pending
+## Status: `DEVICE_PASSED_4_OF_4`, not a staged admission
 
 The design was implemented offline, pinned by tests, and then run once on device after a real
 defect was found and fixed. This document records the implementation, the defect and the run.
@@ -20,19 +20,26 @@ introduced with the persistence work and it would equally have broken the placem
 contracts. The offline suite missed it because no test ran the step loop; a fake-device step-loop
 test now pins both branches.
 
-The second attempt (`placement-route-2`) passed end to end, 1 of 1 composed attempt:
+The second attempt (`placement-route-2`) passed end to end, and three further authorized runs
+(`-3`, `-4`, `-5`) passed too, so the composed chain stands at **4 of 4 passed attempts**:
 
-| Field | Value |
-|---|---|
-| placement | arrived at `(54.58, 69.36)`, `1.08 px` from the declared start `(53.5, 69.4)`, gate `1.5 px` unchanged, 29 transitions, 21.97 s |
-| route | all four waypoints under the unchanged contract `ba46e2b2`, `NAVIGATION_GOAL_REACHED`, 50 transitions, 49.90 s, `traversability_masked_steps` 1 |
-| session / store | one guard, one session, one Store, 79 transitions across both phase ids |
-| denominators | `session_attempts` 1, `placement_successes` 1, `route_started` 1, `route_successes` 1, `end_to_end_successes` 1, `setup_failure` null |
-| dispatch | 194 input commands, zero retries, zero unacked dispatches |
-| verifier | both episodes recoverable, `store_integrity=ok`, no findings |
+| Run | Start gate | Placement | Route | Verifier |
+|---|---|---|---|---|
+| `-2` | `PLACEMENT_CONFIRMED` 1.08 px | 29 steps, 21.97 s, 87 cmds | 4 wp, 50 steps, 49.90 s, mask 1 | 2 episodes recoverable, ok |
+| `-3` | `PLACEMENT_CONFIRMED` 0.32 px | 1 step, 0.8 s, 3 cmds | 4 wp, 59 steps, 55.4 s, mask 1 | 2 episodes recoverable, ok |
+| `-4` | `PLACEMENT_CONFIRMED` 0.60 px | 1 step, 0.8 s, 3 cmds | 4 wp, 52 steps, 49.9 s, mask 2 | 2 episodes recoverable, ok |
+| `-5` | `PLACEMENT_CONFIRMED` 0.90 px | 1 step, 0.8 s, 3 cmds | 4 wp, 62 steps, 57.7 s, mask 2 | 2 episodes recoverable, ok |
 
-**This is one composed run, not a staged admission.** The chain changed, so continuing to 3 needs
-the owner's word; re-running 1 -> 3 -> 10 is not implied.
+Every run: `session_attempts` 1, `placement_successes` 1, `route_started` 1, `route_successes` 1,
+`end_to_end_successes` 1, `setup_failure` null, zero retries, zero unacked dispatches, route
+contract `ba46e2b2` unchanged, `NAVIGATION_GOAL_REACHED`.
+
+**What the 4 of 4 does and does not show.** It shows the composition and its lifecycle repeat: the
+device is opened once and closed once per run, the gate confirms, both phases land in one Store and
+the reload verifier recovers every episode. It does **not** show start-position independence: runs
+`-3` to `-5` began with the hero already inside the placement tolerance, so their placement was one
+step; only `-2` began with a real placement walk. And it is **not a staged admission** for the route
+contract, which keeps its own 14 of 14 at its own commit.
 
 ## What is in place
 
@@ -70,8 +77,9 @@ into a route success rate.
 
 ## What remains
 
-- `placement-route-1` is void (0 input, 0 steps) and `placement-route-2` is 1 of 1. The chain
-  changed, so the staged rule would continue to 3 next, and that needs the owner's word.
+- The composed chain stands at 4 of 4 passed runs (`placement-route-2` to `-5`), with
+  `placement-route-1` void at 0 input and 0 steps. The repeatability is of the composition, not of
+  an independent start, and it is not a staged admission for the route contract.
 - The composed run is still read-only with respect to learning: `training_eligible` stays `false`
   and a placement start is not an independent reference.
 

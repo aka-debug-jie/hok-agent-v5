@@ -56,9 +56,10 @@ neither as a route success nor as a route failure. Phase identity is carried by 
 
 ## What this table does not claim
 
-- It does not claim a staged admission. After the first device attempt came back void, the second
-  attempt (`placement-route-2`) passed end to end as 1 of 1 composed run; the chain changed, so
-  continuing to 3 needs the owner's word.
+- It does not claim a staged admission or start-position independence. After the void first attempt,
+  four composed runs (`placement-route-2` to `-5`) passed end to end, but only `-2` began with a
+  real placement walk; the later runs already stood inside the placement tolerance. The repeatability
+  is of the composition and its lifecycle.
 - It does not claim placement solved cold start. The corridor limit and the cold-start point are
   unchanged and stay closed.
 - It does not claim any start-position robustness. Reproducing the pass still depends on the

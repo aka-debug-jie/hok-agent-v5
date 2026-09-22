@@ -25,10 +25,13 @@ After the read-only pass, the same-session lifecycle was implemented offline as
 thresholds, the executor, the Router and the Store schema are unchanged and `training_eligible`
 stays `false`. The first authorized device attempt found a real defect instead of a result: the step
 loop read `persistence_applied` before it was bound for any contract without a declared
-masked-persistence block, so it dispatched no input; that is fixed and pinned offline. The second
-attempt passed end to end as 1 of 1 composed run on one session and one Store. The cold-start limit,
-the mask scope and the bound pass are unchanged; continuing to a staged 3 needs the owner's word.
-`02_reuse_gap.md` and `03_next_step.md` record the implemented status and the run.
+masked-persistence block, so it dispatched no input; that is fixed and pinned offline. The composed
+chain then passed 4 of 4 authorized runs (`placement-route-2` to `-5`) on one session and one Store
+each, with every episode recoverable and `store_integrity=ok`. That repeatability is of the
+composition, not of an independent start: only `-2` began with a real placement walk, because the
+later runs already stood inside the placement tolerance. The cold-start limit, the mask scope and
+the bound pass are unchanged, and this is not a staged admission for the route contract.
+`02_reuse_gap.md` and `03_next_step.md` record the implemented status and the runs.
 
 ## What this is not
 
