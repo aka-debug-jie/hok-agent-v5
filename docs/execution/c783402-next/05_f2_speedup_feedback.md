@@ -220,6 +220,51 @@ which is the evidence that it discriminates. The passing candidate is a `resnet1
 - The gate's zero-intent-drop tolerance was reviewed with the owner and **left as it is**; one seed
   passed under it without any tolerance change.
 
+## The frozen holdout rejects the candidate: acceptance, not dev parity, decides
+
+The passing candidate was then run against the frozen 20-seed holdout (`global-agent-holdout`,
+`HOLDOUT_SEEDS` 4000-4019), which is fully offline: no device, no capture, no online learning. The
+candidate was entered as the `dagger` slot and the frozen DAgger baseline as the `adapted` slot,
+because the function only names roles; the selection rule keeps the frozen model when the candidate
+is not better.
+
+| Metric | Frozen baseline | Candidate (shallow s1) |
+|---|---|---|
+| non-timeout terminals | **18** | **14** |
+| tower-progress episodes | 20 | 20 |
+| mean tower damage | **12.0** | 11.55 |
+| mean stuck-time ratio | 0.0499 | 0.0614 |
+| mean fallback rate | 0.0563 | 0.0689 |
+| safety violations / invalid actions | 0 / 0 | 0 / 0 |
+| `eligible` | true | true |
+
+`status = PASSED`, `selected_model = adapted` - that is, **the frozen baseline is retained**, and this
+is the promotion rule working. Both candidates are eligible by threshold, and the strict ordering then
+prefers the baseline on non-timeout terminals.
+
+A paired per-seed read makes the shape of the loss precise:
+
+- the two agree on **14 of 20** seeds;
+- the candidate wins **1** seed the baseline loses (4005);
+- the baseline wins **5** seeds the candidate draws (4004, 4006, 4007, 4009, 4015);
+- on all five of those the candidate reaches the **same tower damage** (12, except seed 4004 at 9) and
+  ends in `draw_tick_limit`, while the baseline converts the same position into
+  `blue_win_crystal_destroyed` in 63-96 ticks.
+
+So the gap is **pacing at the decision boundary, not lost capability**: the compressed student reaches
+the objective but does not finish inside the tick budget on those seeds. Its fallback rate is also
+slightly higher on them (up to 0.115 against 0.031-0.081), which is consistent with occasional
+low-confidence decisions costing the clock.
+
+An unpaired exact test on 14/20 against 18/20 gives p = 0.235, so 14 against 18 alone would not be a
+strong claim; the value here is the paired structure and the common `draw_tick_limit` outcome, which
+say what the difference is.
+
+**The honest outcome: dev parity did not survive acceptance.** The F2 feedback did its job - it passed
+a candidate on dev and the holdout then rejected it - and nothing was promoted, no threshold changed
+and no control moved. A candidate that closes this would need to be fitted for terminal conversion and
+paced, not merely imitate the teacher's per-step logits on dev.
+
 ## What is deliberately not claimed
 
 - Not that any speedup has been achieved. The feedback is in place and two pilot candidates were
