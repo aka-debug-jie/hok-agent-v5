@@ -51,6 +51,11 @@ SCENES: Final = (
 )
 SCENE_INDEX = {value: index for index, value in enumerate(SCENES)}
 ModelVariant = Literal["pool_mlp", "tcn"]
+MAIN_ARCHITECTURE_METADATA_KEY: Final = "main_architecture"
+# The historical architecture. A checkpoint whose metadata predates this key is read as resnet18, so
+# every frozen checkpoint on disk keeps its recorded hash and still loads.
+DEFAULT_MAIN_ARCHITECTURE: Final = "resnet18"
+MAIN_ARCHITECTURES: Final = ("resnet18", "compact")
 
 
 class GlobalPolicyError(ValueError):
@@ -330,17 +335,53 @@ class _SmallView(nn.Module):
         return cast(torch.Tensor, self.net(value))
 
 
+class _CompactMain(nn.Module):
+    """A declared smaller `main` view: the same 512-wide output at ~2.4% of resnet18's parameters.
+
+    The width is fixed at 512 because `project` is `Linear(640, 128)` and the two `_SmallView`s
+    already contribute 64 each, so swapping `main` changes one component and nothing else. It is a
+    declared architecture rather than a silent swap because which `main` a checkpoint carries is
+    part of its interface.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(3, 16, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d((4, 4)),
+            nn.Flatten(),
+            nn.Linear(32 * 16, 512),
+            nn.ReLU(),
+        )
+
+    def forward(self, value: torch.Tensor) -> torch.Tensor:
+        return cast(torch.Tensor, self.net(value))
+
+
 class GlobalMacroPolicy(nn.Module):
-    def __init__(self, variant: ModelVariant = "tcn") -> None:
+    def __init__(
+        self,
+        variant: ModelVariant = "tcn",
+        main_architecture: str = DEFAULT_MAIN_ARCHITECTURE,
+    ) -> None:
         super().__init__()
         if variant not in {"pool_mlp", "tcn"}:
             raise GlobalPolicyError(f"unknown model variant: {variant}")
+        if main_architecture not in MAIN_ARCHITECTURES:
+            raise GlobalPolicyError(f"unknown main architecture: {main_architecture}")
         self.variant = variant
-        backbone = resnet18(weights=None)
-        backbone.conv1 = nn.Conv2d(3, 64, 3, stride=1, padding=1, bias=False)
-        backbone.maxpool = nn.Identity()
-        backbone.fc = nn.Identity()
-        self.main = backbone
+        self.main_architecture = main_architecture
+        if main_architecture == "compact":
+            self.main: nn.Module = _CompactMain()
+        else:
+            backbone = resnet18(weights=None)
+            backbone.conv1 = nn.Conv2d(3, 64, 3, stride=1, padding=1, bias=False)
+            backbone.maxpool = nn.Identity()
+            backbone.fc = nn.Identity()
+            self.main = backbone
         self.minimap = _SmallView()
         self.hud = _SmallView()
         self.project = nn.Sequential(nn.Linear(640, 128), nn.ReLU())
@@ -501,6 +542,7 @@ def _save_model(
     metadata = {
         "schema_version": "hok-agent-global-policy-v1",
         "variant": variant,
+        MAIN_ARCHITECTURE_METADATA_KEY: model.main_architecture,
         "manifest_sha256": manifest_sha256,
         "seed": "0",
         "window_frames": str(WINDOW_FRAMES),
@@ -512,6 +554,18 @@ def _save_model(
     return _sha(path.read_bytes())
 
 
+def architecture_from_metadata(metadata: dict[str, str]) -> str:
+    """Read the `main` architecture a checkpoint declares, defaulting to the historical resnet18.
+
+    The default is the backward-compatibility rule: every checkpoint written before this key existed
+    is resnet18, and those files are never rewritten, so their recorded hashes stay valid.
+    """
+    architecture = metadata.get(MAIN_ARCHITECTURE_METADATA_KEY, DEFAULT_MAIN_ARCHITECTURE)
+    if architecture not in MAIN_ARCHITECTURES:
+        raise GlobalPolicyError(f"unknown main architecture: {architecture}")
+    return architecture
+
+
 def load_global_model(path: Path, device: torch.device) -> tuple[GlobalMacroPolicy, dict[str, str]]:
     with safe_open(path, framework="pt", device="cpu") as handle:
         metadata = handle.metadata()
@@ -520,7 +574,10 @@ def load_global_model(path: Path, device: torch.device) -> tuple[GlobalMacroPoli
     variant = metadata.get("variant")
     if variant not in {"pool_mlp", "tcn"}:
         raise GlobalPolicyError("invalid Global Agent checkpoint variant")
-    model = GlobalMacroPolicy(cast(ModelVariant, variant))
+    # A checkpoint saved before this key existed is resnet18; that rule is what keeps every frozen
+    # checkpoint loadable without rewriting it.
+    architecture = architecture_from_metadata(metadata)
+    model = GlobalMacroPolicy(cast(ModelVariant, variant), architecture)
     model.load_state_dict(load_file(path, device="cpu"), strict=True)
     model.to(device).eval()
     return model, metadata
@@ -631,6 +688,7 @@ def _speed_report(
         "checkpoint_path": str(checkpoint_path),
         "checkpoint_sha256": _sha(checkpoint_path.read_bytes()),
         "variant": metadata["variant"],
+        "main_architecture": model.main_architecture,
         "window_frames": metadata["window_frames"],
         "windows": len(dataset),
         "batch_size": batch_size,

@@ -107,10 +107,34 @@ loads it with `strict=True`. A student whose `main` is a different network there
 loaded**: saving it succeeds, and loading it raises
 `RuntimeError: Missing key(s) in state_dict: "main.conv1.weight", "main.bn1.weight", …`.
 
-So the gradient half works and the load half does not. Turning this into a candidate needs a
+So the gradient half works and the load half does not. Turning this into a candidate needed a
 **declared architectural variant** - a versioned configuration that says which `main` a checkpoint
-carries - because that is a public interface change, not an optimizer tweak. That decision is the
-owner's, and it is exactly why this milestone stops here.
+carries - because that is a public interface change, not an optimizer tweak. The owner authorized it,
+and it is implemented:
+
+- `GlobalMacroPolicy(variant, main_architecture)`, with `MAIN_ARCHITECTURES = ("resnet18", "compact")`
+  and an unknown architecture refused at construction.
+- `_save_model` now writes `main_architecture` into the checkpoint metadata, so a checkpoint declares
+  the `main` it carries.
+- `architecture_from_metadata` reads it, and **a metadata without the key is read as resnet18**. That
+  backward-compatibility rule is what keeps every frozen checkpoint on disk loadable without being
+  rewritten, so their recorded hashes stay valid. `human_ifo.py` and `human_inverse.py` keep working
+  unchanged because they only ever build the default.
+
+With that in place the whole pipeline connects, demonstrated end to end on the frozen split:
+
+| | median | p95 | intent macro-F1 | main architecture | parameters |
+|---|---|---|---|---|---|
+| baseline (frozen teacher) | 480.1 ms | 495.8 ms | 0.8891 | resnet18 | 11,383,694 |
+| candidate (untrained compact) | 5.59 ms | 7.2 ms | 0.0039 | compact | 482,606 |
+| verdict | 98.8 % faster | 98.6 % faster | -0.885 | - | -10,901,088 |
+
+The verdict is `passed = false` with the single reason `intent_macro_f1_regressed`. That is the gate
+working exactly as declared: a candidate that is 86x faster and 95.8 % smaller is still rejected
+because its behaviour collapsed, so a latency win and a parameter win are demonstrably not
+substitutes for preserved behaviour. It also shows the latency half has large headroom - the compact
+`main` is cheap enough that a trained student has room to pass it - so the open question is behaviour
+recovery, which is F3's pilot.
 
 ## What is deliberately not claimed
 

@@ -227,30 +227,6 @@ def test_public_offline_evidence_is_path_free_and_keeps_shadow_closed() -> None:
 _MAIN_PARAMETERS = 11_168_832
 
 
-class _SmallMain(torch.nn.Module):
-    """Stand-in for the resnet18 main view: the same 512-wide output, far fewer parameters.
-
-    The output width must stay 512 because `project` is `Linear(640, 128)` and the other two views
-    already contribute 64 each, so only `main` changes.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.net = torch.nn.Sequential(
-            torch.nn.Conv2d(3, 16, 3, stride=2, padding=1),
-            torch.nn.ReLU(),
-            torch.nn.Conv2d(16, 32, 3, stride=2, padding=1),
-            torch.nn.ReLU(),
-            torch.nn.AdaptiveAvgPool2d((4, 4)),
-            torch.nn.Flatten(),
-            torch.nn.Linear(32 * 16, 512),
-            torch.nn.ReLU(),
-        )
-
-    def forward(self, value: torch.Tensor) -> torch.Tensor:
-        return self.net(value)
-
-
 def _distill_shard(path: Path, frames: int, seed: int) -> str:
     rng = np.random.default_rng(seed)
     np.savez(
@@ -287,8 +263,7 @@ def _distill_dataset(root: Path, episodes: int) -> Path:
 
 def _teacher_and_student() -> tuple[gp.GlobalMacroPolicy, gp.GlobalMacroPolicy]:
     teacher = gp.GlobalMacroPolicy("tcn")
-    student = deepcopy(teacher)
-    student.main = _SmallMain()
+    student = gp.GlobalMacroPolicy("tcn", "compact")
     return teacher, student
 
 
@@ -344,14 +319,29 @@ def test_one_distillation_step_touches_only_the_main_view(
         assert torch.equal(parameter.detach(), before[name]), name
 
 
-def test_the_existing_loader_cannot_round_trip_a_changed_main(
+def test_a_declared_variant_round_trips_through_the_frozen_loader(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The honest load-path finding: the checkpoint saves, but the frozen loader refuses it."""
     monkeypatch.setenv("HOK_LARGE_ROOT", str(tmp_path))
     _teacher, student = _teacher_and_student()
     checkpoint = tmp_path / "student.safetensors"
     gp._save_model(checkpoint, student, "tcn", "0" * 64)
 
-    with pytest.raises(RuntimeError, match="Missing key"):
-        gp.load_global_model(checkpoint, torch.device("cpu"))
+    loaded, metadata = gp.load_global_model(checkpoint, torch.device("cpu"))
+    assert metadata[gp.MAIN_ARCHITECTURE_METADATA_KEY] == "compact"
+    assert loaded.main_architecture == "compact"
+    assert gp._parameter_groups(loaded) == gp._parameter_groups(student)
+
+
+def test_a_metadata_without_the_key_reads_as_the_historical_resnet18() -> None:
+    assert gp.architecture_from_metadata({}) == gp.DEFAULT_MAIN_ARCHITECTURE
+    assert gp.architecture_from_metadata({"variant": "tcn"}) == "resnet18"
+    declared = {gp.MAIN_ARCHITECTURE_METADATA_KEY: "compact"}
+    assert gp.architecture_from_metadata(declared) == "compact"
+    with pytest.raises(gp.GlobalPolicyError):
+        gp.architecture_from_metadata({gp.MAIN_ARCHITECTURE_METADATA_KEY: "tinyv2"})
+
+
+def test_an_unknown_architecture_is_refused_at_construction() -> None:
+    with pytest.raises(gp.GlobalPolicyError):
+        gp.GlobalMacroPolicy("tcn", "tinyv2")
