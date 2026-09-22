@@ -33,6 +33,12 @@ later runs already stood inside the placement tolerance. The cold-start limit, t
 the bound pass are unchanged, and this is not a staged admission for the route contract.
 `02_reuse_gap.md` and `03_next_step.md` record the implemented status and the runs.
 
+## Frozen
+
+The owner froze the delivered scope on 2026-09-22. `F0` and `F1` are delivered, the delivered scope
+is frozen at commit `5c17846`, no further device work is scheduled, and `F2`-`F5` stay blocked on
+scope because no independent result reference exists.
+
 ## What this is not
 
 - Not a runtime configuration. No contract, layout, ROI or threshold is added or changed here.

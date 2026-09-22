@@ -1,6 +1,6 @@
 # The single next step
 
-## Status: `DEVICE_PASSED_4_OF_4`, not a staged admission
+## Status: `FROZEN` at `5c17846` - delivered, 4 of 4, not a staged admission
 
 The design was implemented offline, pinned by tests, and then run once on device after a real
 defect was found and fixed. This document records the implementation, the defect and the run.
@@ -77,11 +77,15 @@ into a route success rate.
 
 ## What remains
 
-- The composed chain stands at 4 of 4 passed runs (`placement-route-2` to `-5`), with
-  `placement-route-1` void at 0 input and 0 steps. The repeatability is of the composition, not of
-  an independent start, and it is not a staged admission for the route contract.
+- The owner froze the delivered scope on 2026-09-22. No further device work is scheduled and no new
+  rule is to be built; the composed chain stands at 4 of 4 passed runs (`placement-route-2` to `-5`),
+  with `placement-route-1` void at 0 input and 0 steps. The repeatability is of the composition, not
+  of an independent start, and it is not a staged admission for the route contract.
 - The composed run is still read-only with respect to learning: `training_eligible` stays `false`
   and a placement start is not an independent reference.
+- If work resumes, the next move is the owner's: fund a different kind of source (a corridor measured
+  over its full length, or an acceptance signal that can be confirmed) or extend the boundary so an
+  independent result reference can exist. Neither is requested here.
 
 ## Milestones, relabelled
 
