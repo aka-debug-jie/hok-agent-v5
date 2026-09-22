@@ -56,9 +56,19 @@ neither as a route success nor as a route failure. Phase identity is carried by 
 
 ## What this table does not claim
 
-- It does not claim the composed chain works on device: the composed run has not been executed on
-  hardware, and doing so needs its own authorization.
+- It does not claim a staged admission. After the first device attempt came back void, the second
+  attempt (`placement-route-2`) passed end to end as 1 of 1 composed run; the chain changed, so
+  continuing to 3 needs the owner's word.
 - It does not claim placement solved cold start. The corridor limit and the cold-start point are
   unchanged and stay closed.
 - It does not claim any start-position robustness. Reproducing the pass still depends on the
-  declared 1.5 px placement.
+  declared 1.5 px placement, and the one composed run landed at 1.08 px.
+
+## The device run, and the defect it found first
+
+The first attempt dispatched no input: `_run_episode` read `persistence_applied` on every step while
+the name was first assigned only inside the declared masked-persistence block, so a contract without
+that block raised `UnboundLocalError` on its first step. That regression would equally have broken
+the placement and the bound-route contracts, and the offline suite missed it because no test ran the
+step loop. It is fixed, and a fake-device step-loop test now pins both branches. The composed run
+then passed 1 of 1 on the second attempt.

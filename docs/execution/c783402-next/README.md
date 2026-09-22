@@ -23,9 +23,12 @@ After the read-only pass, the same-session lifecycle was implemented offline as
 `src/hok_agent/mobile_navigation_store.py`, with seven offline tests in
 `tests/test_mobile_navigation_store.py`. The route contract, the ROIs, the layouts, the
 thresholds, the executor, the Router and the Store schema are unchanged and `training_eligible`
-stays `false`. The device acceptance is not run and not authorized here; the cold-start limit, the
-mask scope and the bound pass are unchanged. `02_reuse_gap.md` and `03_next_step.md` record the
-implemented status.
+stays `false`. The first authorized device attempt found a real defect instead of a result: the step
+loop read `persistence_applied` before it was bound for any contract without a declared
+masked-persistence block, so it dispatched no input; that is fixed and pinned offline. The second
+attempt passed end to end as 1 of 1 composed run on one session and one Store. The cold-start limit,
+the mask scope and the bound pass are unchanged; continuing to a staged 3 needs the owner's word.
+`02_reuse_gap.md` and `03_next_step.md` record the implemented status and the run.
 
 ## What this is not
 
