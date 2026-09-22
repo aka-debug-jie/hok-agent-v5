@@ -84,6 +84,34 @@ action order, the Store semantics and every frozen lineage are untouched; `globa
 inside the existing Torch allowlist. A parameter reduction and a self-supervised loss are not
 substitutes for preserved behaviour and a measured latency drop.
 
+## The F3 smoke, and the blocker it found
+
+The owner asked for the pack's "minimal gradient/load smoke" before any pilot. It was run offline in
+`tests/test_global_agent.py` (the allowlisted focused test for this line; the torch allowlist in
+`safety.py` was deliberately **not** widened, and the checker rejected an earlier draft that put
+torch in a new file).
+
+What the smoke proves:
+
+| Result | Value |
+|---|---|
+| only `main` changed, 512-wide interface kept | `minimap`/`hud`/`project`/`temporal`/`pool`/`intent`/`zone`/`scene` parameter counts identical |
+| a cheaper `main` is constructible | 11,168,832 -> 267,744 parameters (2.4 %) |
+| total model | 11,383,694 -> 482,606 (**-95.8 %**) |
+| one distillation step | gradients appear on `main` only; every other parameter keeps `grad is None` and stays bit-identical |
+
+What it found, and why F3 cannot simply start:
+
+`load_global_model` constructs a `GlobalMacroPolicy`, whose `main` is hardcoded to `resnet18`, and
+loads it with `strict=True`. A student whose `main` is a different network therefore **cannot be
+loaded**: saving it succeeds, and loading it raises
+`RuntimeError: Missing key(s) in state_dict: "main.conv1.weight", "main.bn1.weight", …`.
+
+So the gradient half works and the load half does not. Turning this into a candidate needs a
+**declared architectural variant** - a versioned configuration that says which `main` a checkpoint
+carries - because that is a public interface change, not an optimizer tweak. That decision is the
+owner's, and it is exactly why this milestone stops here.
+
 ## What is deliberately not claimed
 
 - Not that any speedup has been achieved. This is the feedback, and only the baseline and its noise

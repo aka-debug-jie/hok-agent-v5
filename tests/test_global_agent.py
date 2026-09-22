@@ -4,9 +4,11 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 
+from hok_agent import global_policy as gp
 from hok_agent.global_agent import (
     ENABLED_INTENTS,
     ENABLED_ZONES,
@@ -215,3 +217,141 @@ def test_public_offline_evidence_is_path_free_and_keeps_shadow_closed() -> None:
     assert evidence["challenge_pack"]["student_passed"] is False
     assert evidence["mobile_shadow_authorized"] is False
     assert "/" not in path.read_text(encoding="utf-8")
+
+
+# --- F3 distillation smoke: one gradient step, and the load path ---------------------------------
+# The pack's minimal gradient/load smoke before any small-data pilot. It changes only the `main`
+# view, which is what F3 allows, and it checks what the frozen loader does with such a student.
+# This lives here because tests/test_global_agent.py is the allowlisted focused test for the line.
+
+_MAIN_PARAMETERS = 11_168_832
+
+
+class _SmallMain(torch.nn.Module):
+    """Stand-in for the resnet18 main view: the same 512-wide output, far fewer parameters.
+
+    The output width must stay 512 because `project` is `Linear(640, 128)` and the other two views
+    already contribute 64 each, so only `main` changes.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.net = torch.nn.Sequential(
+            torch.nn.Conv2d(3, 16, 3, stride=2, padding=1),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(16, 32, 3, stride=2, padding=1),
+            torch.nn.ReLU(),
+            torch.nn.AdaptiveAvgPool2d((4, 4)),
+            torch.nn.Flatten(),
+            torch.nn.Linear(32 * 16, 512),
+            torch.nn.ReLU(),
+        )
+
+    def forward(self, value: torch.Tensor) -> torch.Tensor:
+        return self.net(value)
+
+
+def _distill_shard(path: Path, frames: int, seed: int) -> str:
+    rng = np.random.default_rng(seed)
+    np.savez(
+        path,
+        main_rgb=rng.integers(0, 255, (frames, 16, 16, 3), dtype=np.uint8),
+        minimap_rgb=rng.integers(0, 255, (frames, 4, 4, 3), dtype=np.uint8),
+        hud_rgb=rng.integers(0, 255, (frames, 2, 4, 3), dtype=np.uint8),
+        intent=np.arange(frames, dtype=np.int64) % 3,
+        zone=np.arange(frames, dtype=np.int64) % 2,
+        scene=np.zeros(frames, dtype=np.int64),
+        tick=np.arange(frames, dtype=np.int64),
+    )
+    return gp._sha(path.read_bytes())
+
+
+def _distill_dataset(root: Path, episodes: int) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for index in range(episodes):
+        name = f"episode-{index}.npz"
+        rows.append(
+            {
+                "split": "dev",
+                "shard": name,
+                "shard_sha256": _distill_shard(root / name, gp.WINDOW_FRAMES, index),
+                "episode": f"ep-{index}",
+            }
+        )
+    payload: dict[str, object] = {"test_present": False, "episodes": rows}
+    payload["manifest_sha256"] = gp._sha(gp._canonical(payload).encode())
+    (root / "manifest.json").write_text(json.dumps(payload), encoding="utf-8")
+    return root
+
+
+def _teacher_and_student() -> tuple[gp.GlobalMacroPolicy, gp.GlobalMacroPolicy]:
+    teacher = gp.GlobalMacroPolicy("tcn")
+    student = deepcopy(teacher)
+    student.main = _SmallMain()
+    return teacher, student
+
+
+def test_a_smaller_main_keeps_the_interface_and_shrinks_the_model() -> None:
+    teacher, student = _teacher_and_student()
+    assert gp._parameter_groups(teacher)["main"] == _MAIN_PARAMETERS
+    groups = gp._parameter_groups(student)
+    assert groups["main"] < _MAIN_PARAMETERS / 10
+    for name in ("minimap", "hud", "project", "temporal", "pool", "intent", "zone", "scene"):
+        assert sum(p.numel() for p in getattr(student, name).parameters()) == sum(
+            p.numel() for p in getattr(teacher, name).parameters()
+        )
+
+
+def test_one_distillation_step_touches_only_the_main_view(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOK_LARGE_ROOT", str(tmp_path))
+    root = _distill_dataset(tmp_path / "dataset", episodes=2)
+    dataset = gp.GlobalWindowDataset(root, "dev")
+    batch = gp._speed_batch(dataset, list(range(2)))
+    teacher, student = _teacher_and_student()
+    teacher.eval()
+    for parameter in student.parameters():
+        parameter.requires_grad_(False)
+    for parameter in student.main.parameters():
+        parameter.requires_grad_(True)
+    before = {
+        name: parameter.detach().clone()
+        for name, parameter in student.named_parameters()
+        if not name.startswith("main.")
+    }
+
+    optimizer = torch.optim.SGD(student.main.parameters(), lr=0.01)
+    with torch.no_grad():
+        target = teacher(*batch)
+    logits = student(*batch)
+    loss = sum(
+        torch.nn.functional.mse_loss(student_logits, target_logits)
+        for student_logits, target_logits in zip(logits, target, strict=True)
+    )
+    loss.backward()
+    optimizer.step()
+
+    assert torch.isfinite(loss)
+    assert any(
+        p.grad is not None and bool(p.grad.abs().sum() > 0) for p in student.main.parameters()
+    )
+    for name, parameter in student.named_parameters():
+        if name.startswith("main."):
+            continue
+        assert parameter.grad is None, name
+        assert torch.equal(parameter.detach(), before[name]), name
+
+
+def test_the_existing_loader_cannot_round_trip_a_changed_main(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The honest load-path finding: the checkpoint saves, but the frozen loader refuses it."""
+    monkeypatch.setenv("HOK_LARGE_ROOT", str(tmp_path))
+    _teacher, student = _teacher_and_student()
+    checkpoint = tmp_path / "student.safetensors"
+    gp._save_model(checkpoint, student, "tcn", "0" * 64)
+
+    with pytest.raises(RuntimeError, match="Missing key"):
+        gp.load_global_model(checkpoint, torch.device("cpu"))

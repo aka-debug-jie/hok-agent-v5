@@ -4536,3 +4536,21 @@ enemy and skill1 evidence sufficiently from correlated wrong regions. Its per-he
 so this lineage is also frozen rather than expanded into a temporal model.
 It is a separate lineage and must not be presented as a continuation of the failed v2.7 or v3
 pilots by threshold relaxation.
+
+Updated 2026-09-22 (F3 smoke): the owner asked for the pack's minimal gradient/load smoke before any
+pilot, and it was run offline, recorded in
+[`docs/execution/c783402-next/05_f2_speedup_feedback.md`](docs/execution/c783402-next/05_f2_speedup_feedback.md).
+With only the `main` view replaced by a smaller network that keeps the same 512-wide output, the
+other eight parameter groups are unchanged, the model drops from 11,383,694 to 482,606 parameters
+(-95.8 percent, main 11,168,832 to 267,744), and one distillation step puts gradients on `main` only
+while every other parameter keeps `grad is None` and stays bit-identical. The smoke also found the
+blocker that stops F3 from simply starting: `load_global_model` builds a `GlobalMacroPolicy` whose
+`main` is hardcoded to resnet18 and loads it with `strict=True`, so a student with a different `main`
+saves but cannot be loaded (`RuntimeError: Missing key(s) in state_dict: "main.conv1.weight", ...`).
+A candidate therefore needs a declared architectural variant, a public interface change and the
+owner's decision, not an optimizer tweak. The smoke lives in `tests/test_global_agent.py`, the
+allowlisted focused test for this line; the Torch allowlist in `safety.py` was not widened, and the
+boundary checker rejected an earlier draft that put Torch in a new file. `make check` passes with
+Ruff, strict mypy and 674 tests. No candidate was trained, no checkpoint promoted, no device used,
+no source changed; the frozen Global Agent holdout, the F1 composed chain, the cold-start limit, the
+mask scope and the bound pass are unchanged.
