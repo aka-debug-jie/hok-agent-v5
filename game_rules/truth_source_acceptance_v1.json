@@ -1,0 +1,69 @@
+{
+  "schema_version": "hok-agent-truth-source-acceptance-v1",
+  "status": "PROPOSED_NOT_IMPLEMENTED",
+  "task": "accept an external truth source that is independent of the RGB cue detector",
+  "purpose": "break the detector-proves-itself deadlock on localization and terminal, without inventing a source",
+  "authority": {
+    "named_by": "owner",
+    "required_declaration": [
+      "source kind: B-1 app-side export | B-2 app source tree | B-3 controlled ground-truth capture",
+      "what it is: exact path, repository, or procedure",
+      "what it provides: which of F1 hero position / F2 match terminal / F3 structure state / F4 life-and-death",
+      "how it is obtained: the command or step"
+    ],
+    "not_accepted_as_proof": [
+      "a matching Android package name",
+      "an owner-attested self-built flag alone",
+      "a schema or sample that was assumed rather than shown"
+    ]
+  },
+  "facts": {
+    "F1": "hero position in a fixed frame, per sampled instant, from game state not from the screen",
+    "F2": "match terminal win/loss/draw and the ending tick, decided by the game not inferred from pixels",
+    "F3": "structure health per instant",
+    "F4": "alive state and the death or recovery moments",
+    "minimum_viable": [
+      "F1",
+      "F2"
+    ]
+  },
+  "binding": {
+    "by": "timestamp to the persisted observation",
+    "refuses": "any row whose fields the declared schema does not name",
+    "writes": "derived values only, never raw video, source paths, serials or device paths"
+  },
+  "reuses_existing_gates": "game_rules/r0_feedback_contract_v1.json",
+  "gates": {
+    "minimum_position_coverage": 0.8,
+    "maximum_reference_l1_median_px": 3.0,
+    "maximum_reference_l1_p95_px": 6.0,
+    "minimum_reference_agreement": 0.8,
+    "minimum_motion_agreement": 0.6,
+    "minimum_action_agreement": 1.0,
+    "minimum_terminal_agreement": 1.0,
+    "maximum_exact_agreement_fraction": 0.9
+  },
+  "duplication_guard": "if the second position derivation agrees with the recorded signal exactly on most steps it is a duplicate of that signal, not an independent reference, and the audit must fail",
+  "what_it_would_settle": [
+    "whether the cue-localized position is accurate, against an external frame",
+    "whether a recorded terminal was real or a timeout",
+    "whether the cold start is genuinely impassable rather than impassable to the three mechanisms tried"
+  ],
+  "what_it_would_not_settle": [
+    "whether the policy is good, on its own",
+    "a match-level win rate from one or few runs",
+    "full-match competence, which needs a scenario with departure, combat, death recovery and a terminal"
+  ],
+  "implementation_gate": {
+    "may_start_only_after": "the owner's source declaration is recorded",
+    "first_step": "a read-only importer plus a paired check against the frozen cue",
+    "forbidden_before_that": [
+      "writing a stub importer",
+      "defining a schema for a source that does not exist",
+      "describing the condition as met"
+    ]
+  },
+  "device_input_allowed": false,
+  "training_allowed": false,
+  "reward_allowed": false
+}

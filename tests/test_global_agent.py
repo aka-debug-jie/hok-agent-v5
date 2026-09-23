@@ -469,3 +469,38 @@ def test_distill_refuses_a_symlinked_auxiliary_archive(
             batch_size=1,
             auxiliary_windows=link,
         )
+
+
+def test_truth_source_acceptance_contract_is_declared_but_not_implemented() -> None:
+    """The truth-source acceptance is a proposal that reuses the R0 gates and builds nothing."""
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    payload = json.loads(
+        (root / "game_rules" / "truth_source_acceptance_v1.json").read_text(encoding="utf-8")
+    )
+    assert payload["status"] == "PROPOSED_NOT_IMPLEMENTED"
+    assert payload["facts"]["minimum_viable"] == ["F1", "F2"]
+    assert payload["device_input_allowed"] is False
+    assert payload["training_allowed"] is False
+    assert payload["reward_allowed"] is False
+    assert payload["implementation_gate"]["may_start_only_after"].startswith(
+        "the owner's source declaration"
+    )
+
+
+def test_truth_source_acceptance_reuses_the_r0_gate_values() -> None:
+    """The proposed gates must match the R0 contract exactly, not redefine them."""
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    r0 = json.loads(
+        (root / "game_rules" / "r0_feedback_contract_v1.json").read_text(encoding="utf-8")
+    )
+    proposal = json.loads(
+        (root / "game_rules" / "truth_source_acceptance_v1.json").read_text(encoding="utf-8")
+    )
+    assert proposal["gates"] == r0["gates"]
+    assert proposal["duplication_guard"] == r0["independence"]["duplication_guard"]

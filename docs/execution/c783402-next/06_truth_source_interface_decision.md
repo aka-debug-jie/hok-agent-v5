@@ -78,6 +78,15 @@ Even with the best of these, the honest gains are bounded:
 - treat a matching package name, or a self-built attestation, as proof a source is obtainable;
 - fill a missing field with a guess and later describe the condition as met.
 
+## The acceptance is declared, and nothing is built
+
+The acceptance a source would be judged by reuses the existing R0 gates rather than redefining them,
+and is recorded as a proposal at
+[`game_rules/truth_source_acceptance_v1.json`](../../../game_rules/truth_source_acceptance_v1.json)
+(`status: PROPOSED_NOT_IMPLEMENTED`). Its duplication guard is byte-equal to the R0 contract's, and its
+`implementation_gate.may_start_only_after` is the owner's declaration below. So the contract exists, the
+importer does not, and the two cannot be confused.
+
 ## The decision requested
 
 One line from the owner is enough:
