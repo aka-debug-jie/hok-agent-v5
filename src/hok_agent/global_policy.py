@@ -639,14 +639,23 @@ def distill_global_main(
     learning_rate: float = 0.01,
     seed: int = 0,
     device_name: str = "cpu",
+    auxiliary_windows: Path | None = None,
 ) -> dict[str, object]:
     """Train only the `main` view to imitate a frozen Global Agent teacher, offline.
 
     Reads the frozen dataset and one frozen checkpoint, copies every non-`main` weight from the
     teacher, freezes it, and distils the teacher's logits on the declared **train** split with a
-    bounded step budget. It reports dev behaviour and writes the student checkpoint, and it does
-    none of the following: open the test split, open a capture source, send anything to a device,
-    promote the student, or change the deterministic Router/executor.
+    bounded step budget.
+
+    `auxiliary_windows` optionally points at an already-persisted window archive (for example the
+    DAgger round's `boundary-windows.npz`), whose windows are mixed into the same objective. The
+    frozen dataset only contains the states the frozen teacher visited, and the teacher never
+    contests the crystal on its own, so the states where conversion happens exist only in that
+    boundary archive; using it changes which states are fitted, not the target rule.
+
+    It reports dev behaviour and writes the student checkpoint, and it does none of the following:
+    open the test split, open a capture source, send anything to a device, promote the student, or
+    change the deterministic Router/executor.
     """
     if teacher_checkpoint.is_symlink() or not teacher_checkpoint.is_file():
         raise GlobalPolicyError("distillation needs one regular teacher checkpoint")
@@ -659,6 +668,17 @@ def distill_global_main(
         raise GlobalPolicyError("distillation must not open a test split")
     train_dataset = GlobalWindowDataset(dataset_root, "train")
     dev_dataset = GlobalWindowDataset(dataset_root, "dev")
+    auxiliary: tuple[np.ndarray, ...] | None = None
+    if auxiliary_windows is not None:
+        if auxiliary_windows.is_symlink() or not auxiliary_windows.is_file():
+            raise GlobalPolicyError("auxiliary windows must be one regular file")
+        with np.load(auxiliary_windows, allow_pickle=False) as handle:
+            auxiliary = tuple(
+                np.asarray(handle[name])
+                for name in ("main_rgb", "minimap_rgb", "hud_rgb", "intent", "zone", "scene")
+            )
+        if auxiliary[0].shape[0] < batch_size:
+            raise GlobalPolicyError("auxiliary windows are fewer than the declared batch")
     if len(train_dataset) < batch_size or len(dev_dataset) < batch_size:
         raise GlobalPolicyError("split has fewer windows than the declared batch")
     output = _under_large_root(output_dir, output=True)
@@ -694,6 +714,28 @@ def distill_global_main(
                 break
             batch = _speed_batch(train_dataset, indices)
             moved = (batch[0].to(device), batch[1].to(device), batch[2].to(device))
+            auxiliary_moved: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None
+            if auxiliary is not None:
+                auxiliary_indices = rng.integers(
+                    0, auxiliary[0].shape[0], size=batch_size
+                ).tolist()
+                auxiliary_moved = (
+                    torch.from_numpy(np.asarray(auxiliary[0][auxiliary_indices]))
+                    .permute(0, 1, 4, 2, 3)
+                    .float()
+                    .div(255.0)
+                    .to(device),
+                    torch.from_numpy(np.asarray(auxiliary[1][auxiliary_indices]))
+                    .permute(0, 1, 4, 2, 3)
+                    .float()
+                    .div(255.0)
+                    .to(device),
+                    torch.from_numpy(np.asarray(auxiliary[2][auxiliary_indices]))
+                    .permute(0, 1, 4, 2, 3)
+                    .float()
+                    .div(255.0)
+                    .to(device),
+                )
             with torch.no_grad():
                 target = teacher(*moved)
             logits = student(*moved)
@@ -702,6 +744,27 @@ def distill_global_main(
                 + F.mse_loss(logits[1], target[1])
                 + F.mse_loss(logits[2], target[2])
             )
+            if auxiliary is not None and auxiliary_moved is not None:
+                # The boundary windows carry the teacher's own rule labels recorded during the
+                # DAgger round; the student is fitted to those labels on the states it actually
+                # mispredicts, which is what the frozen dataset lacks.
+                auxiliary_targets = (
+                    torch.from_numpy(
+                        np.asarray(auxiliary[3][auxiliary_indices], dtype=np.int64)
+                    ).to(device),
+                    torch.from_numpy(
+                        np.asarray(auxiliary[4][auxiliary_indices], dtype=np.int64)
+                    ).to(device),
+                    torch.from_numpy(
+                        np.asarray(auxiliary[5][auxiliary_indices], dtype=np.int64)
+                    ).to(device),
+                )
+                auxiliary_logits = student(*auxiliary_moved)
+                loss = loss + (
+                    F.cross_entropy(auxiliary_logits[0], auxiliary_targets[0])
+                    + F.cross_entropy(auxiliary_logits[1], auxiliary_targets[1])
+                    + 0.5 * F.cross_entropy(auxiliary_logits[2], auxiliary_targets[2])
+                )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()  # type: ignore[no-untyped-call]
             optimizer.step()

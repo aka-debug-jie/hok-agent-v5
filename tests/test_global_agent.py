@@ -397,3 +397,75 @@ def test_distill_refuses_an_unknown_architecture_and_a_bad_budget(
         gp.distill_global_main(
             root, tmp_path / "run-b", teacher_checkpoint=teacher_path, maximum_steps=0
         )
+
+
+def test_distill_uses_auxiliary_windows_and_still_leaves_frozen_weights_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOK_LARGE_ROOT", str(tmp_path))
+    root = _distill_dataset(tmp_path / "dataset", episodes=4, splits=("train", "dev"))
+    teacher_path = tmp_path / "teacher.safetensors"
+    gp._save_model(teacher_path, gp.GlobalMacroPolicy("tcn"), "tcn", "0" * 64)
+    dataset = gp.GlobalWindowDataset(root, "dev")
+    samples = [dataset[i] for i in range(4)]
+
+    def as_windows(value):  # (T, C, H, W) -> (N, T, H, W, C), the archive convention
+        return value.permute(0, 2, 3, 1).numpy()
+
+    auxiliary = tmp_path / "boundary-windows.npz"
+    np.savez(
+        auxiliary,
+        main_rgb=np.stack([as_windows(s[0]) for s in samples]),
+        minimap_rgb=np.stack([as_windows(s[1]) for s in samples]),
+        hud_rgb=np.stack([as_windows(s[2]) for s in samples]),
+        intent=np.zeros(4, dtype=np.int16),
+        zone=np.zeros(4, dtype=np.int16),
+        scene=np.zeros(4, dtype=np.int16),
+        tick=np.arange(4, dtype=np.int32),
+    )
+
+    report = gp.distill_global_main(
+        root,
+        tmp_path / "run",
+        teacher_checkpoint=teacher_path,
+        main_architecture="resnet18_shallow",
+        epochs=1,
+        maximum_steps=2,
+        batch_size=1,
+        seed=1,
+        auxiliary_windows=auxiliary,
+    )
+    assert report["steps"] == 2
+    assert report["frozen_parameters_unchanged"] is True
+    assert report["student_architecture"] == "resnet18_shallow"
+
+
+def test_distill_refuses_a_symlinked_auxiliary_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOK_LARGE_ROOT", str(tmp_path))
+    root = _distill_dataset(tmp_path / "dataset", episodes=2, splits=("train", "dev"))
+    teacher_path = tmp_path / "teacher.safetensors"
+    gp._save_model(teacher_path, gp.GlobalMacroPolicy("tcn"), "tcn", "0" * 64)
+    real = tmp_path / "real.npz"
+    np.savez(
+        real,
+        main_rgb=np.zeros((2, gp.WINDOW_FRAMES, 16, 16, 3), dtype=np.uint8),
+        minimap_rgb=np.zeros((2, gp.WINDOW_FRAMES, 4, 4, 3), dtype=np.uint8),
+        hud_rgb=np.zeros((2, gp.WINDOW_FRAMES, 2, 4, 3), dtype=np.uint8),
+        intent=np.zeros(2, dtype=np.int16),
+        zone=np.zeros(2, dtype=np.int16),
+        scene=np.zeros(2, dtype=np.int16),
+        tick=np.arange(2, dtype=np.int32),
+    )
+    link = tmp_path / "link.npz"
+    link.symlink_to(real)
+    with pytest.raises(gp.GlobalPolicyError):
+        gp.distill_global_main(
+            root,
+            tmp_path / "run",
+            teacher_checkpoint=teacher_path,
+            maximum_steps=1,
+            batch_size=1,
+            auxiliary_windows=link,
+        )

@@ -1608,6 +1608,7 @@ def _parser() -> argparse.ArgumentParser:
     global_distill.add_argument("--learning-rate", type=float, default=0.01)
     global_distill.add_argument("--seed", type=int, default=0)
     global_distill.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
+    global_distill.add_argument("--auxiliary-windows", type=Path, default=None)
     global_shadow = commands.add_parser(
         "global-agent-shadow", help="run one zero-control Global Agent V4L2 Shadow session"
     )
@@ -4099,6 +4100,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 learning_rate=args.learning_rate,
                 seed=args.seed,
                 device_name=args.device,
+                auxiliary_windows=args.auxiliary_windows,
             )
         elif args.command == "global-agent-speed-report":
             from hok_agent.global_policy import (

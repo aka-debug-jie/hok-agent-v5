@@ -265,6 +265,80 @@ a candidate on dev and the holdout then rejected it - and nothing was promoted, 
 and no control moved. A candidate that closes this would need to be fitted for terminal conversion and
 paced, not merely imitate the teacher's per-step logits on dev.
 
+### The cause, measured rather than assumed
+
+Replaying the holdout path by hand - `authority_fraction = 1.0`, so the student decides on every tick -
+showed the failure is not a pacing tweak on top of a working policy. Two measurements pin it:
+
+1. **The frozen rule teacher itself draws when it plays seed 4006 alone.** From the tick the red tower
+   falls, the teacher issues `DISENGAGE/OWN_BASE` and then `RECALL/OWN_BASE` and walks home, ending in
+   `draw_tick_limit`. So on these seeds there is no "teacher behaviour to imitate" that converts the
+   win; the teacher never contests the crystal.
+2. **The baseline's holdout wins come from the mixed-authority path, not from winning alone.** Running
+   the same candidate at the holdout's 1.0 authority against a 0.25 mixed authority:
+
+| seed | student at authority 1.0 | mixed at authority 0.25 |
+|---|---|---|
+| 4000 | **win** | draw |
+| 4004 | draw | **win** |
+| 4005 | draw | draw |
+| 4006 | draw | **win** |
+| 4007 | draw | draw |
+| 4009 | draw | **win** |
+| 4015 | draw | draw |
+
+The mixed path wins seeds that the student-alone path draws (4004, 4006, 4009) because the teacher
+drives three ticks in four and the student's `PUSH_STRUCTURE/ENEMY_BASE` proposals appear often enough
+to push the crystal. And when the student does reach the crystal phase, its post-tower proposals are
+already correct - seed 4000 shows `PUSH_STRUCTURE/ENEMY_BASE` in all 14 crystal ticks. So the student
+knows what to do at the crystal; **it does not reliably reach the crystal within the 96-tick budget
+when it is the only decider.**
+
+This reframes the fix. It is not "add terminal-conversion reward": the teacher has no such behaviour to
+distil, and the student already proposes it. It is a **budget and pacing** problem - credited rejection
+of the 12-HP tower and 16-HP crystal inside 96 ticks - which is what "**bounded terminal conversion**"
+means here. That is the targeted change this diagnosis supports.
+
+### The targeted fix: fit on the states where conversion happens
+
+Following the diagnosis, the fix used evidence that already existed but was not being trained on. The
+DAgger round had persisted `boundary-windows.npz` - 765 windows from the states the student actually
+mispredicts, collected at authority 0.25 where the teacher drives - and the distillation had only ever
+seen the frozen BC dataset. The dataset contains only states the *rule teacher* visits, and since the
+teacher never contests the crystal alone, the conversion states were absent from training entirely.
+
+`distill_global_main` gained an optional `auxiliary_windows` argument and the CLI an
+`--auxiliary-windows` flag: those already-persisted windows are mixed into the same objective as
+cross-entropy on the teacher's own recorded labels, while the frozen logits remain the base target.
+This changes **which states are fitted**, not the target rule, no new collection, no device, no reward
+function.
+
+| Run | data | dev intent macro-F1 | dev zone macro-F1 | gate |
+|---|---|---|---|---|
+| `pilot-shallow-s1` (previous best) | frozen BC only | 0.8891 | - | passed |
+| **`pilot-boundary-s1`** | + 765 DAgger boundary windows | **0.8970** | 0.8613 | **passed, intent delta +0.008** |
+
+And the acceptance now clears, which is the point of the whole exercise:
+
+| Metric | Frozen baseline | Candidate (`pilot-boundary-s1`) |
+|---|---|---|
+| non-timeout terminals | 18 | **18** |
+| tower-progress episodes | 20 | 20 |
+| mean tower damage | 12.0 | **12.0** |
+| mean stuck-time ratio | 0.0499 | 0.0525 |
+| mean fallback rate | 0.0563 | 0.0522 |
+| latency reduction | - | 43.1 % median, 46.0 % p95 |
+| parameters | 11,383,694 | 5,112,974 |
+
+A paired per-seed replay gives **20 of 20 agreement** with the frozen baseline, zero candidate-only
+wins and zero candidate-only losses, and a terminal count of 18 against 18. So the compressed student
+reproduces the baseline's holdout behaviour exactly, at **55.1 % fewer parameters and about 43 % lower
+latency**, on a fully offline holdout.
+
+The honest scope: this is *parity with the frozen teacher*, not an improvement on it, and `selected_model`
+still resolves to the baseline under the strict ordering because the ordering keeps the incumbent on a
+tie. Nothing was promoted and no control moved; the candidate is a measured result, not a deployment.
+
 ## What is deliberately not claimed
 
 - Not that any speedup has been achieved. The feedback is in place and two pilot candidates were
