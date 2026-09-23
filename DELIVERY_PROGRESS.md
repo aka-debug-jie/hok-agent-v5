@@ -4752,3 +4752,18 @@ forbids a stub importer, an assumed schema and any claim the condition is met be
 the source. Two tests pin the proposal as unimplemented and pin its gates to the R0 values. `make
 check` passes with Ruff, strict mypy and 690 tests. No importer, no device run, no training and no
 control change.
+Updated 2026-09-22 (frozen, B awaiting the owner): the owner froze the work at this point. Everything
+delivered is pushed and the worktree is clean. Four lines are complete and evidenced: the F1 composed
+placement-then-route chain (4 of 4 on device), the F2 speed feedback with its calibrated noise floor,
+the F3 compression candidate (non-inferior on the frozen holdout, 99.63 percent decision agreement on
+817 real device frames at 45.9 percent lower median latency with 55.1 percent fewer parameters), and
+the isolated non-promoting candidate Shadow path. The compression sub-line is formally closed and
+indexed. The main objective is not closed and is not blocked by engineering: it needs an external
+truth source independent of the RGB cue detector, and the acceptance it would be judged by is already
+declared (`game_rules/truth_source_acceptance_v1.json`, `PROPOSED_NOT_IMPLEMENTED`, reusing the R0
+gates verbatim) along with the interface decision
+(`docs/execution/c783402-next/06_truth_source_interface_decision.md`). Nothing more is to be built on
+that axis until the owner names a source - a stub importer, an assumed schema or any claim the
+condition is met are all forbidden. Frozen commit `c9c7312`, pushed, local equal to remote, zero to
+push. The promoted Shadow contract, the frozen detector, the Router, the executor and the Store schema
+are untouched; the cold-start limit, the mask scope and the bound pass are unchanged.
