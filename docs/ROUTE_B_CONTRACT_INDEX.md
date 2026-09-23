@@ -193,3 +193,40 @@ contract in `MOBILE_NAV_ROUTE`, so it verifies whichever route contract is selec
   were rejected while the hero kept walking and arrived. The offending non-death banner itself is still
   unphotographed, because the runner persists no life-state strip; the counted rejections are direct
   evidence that a rejection happened but weaker than a picture.
+
+## The Global Agent compression sub-line (F2/F3, closed)
+
+This is a separate lineage from Route B and does not touch it, the frozen detector, the Router, the
+executor, the Store schema or any T8/hierarchical line. It is indexed here because it is the other
+finished lineage and its acceptance rules matter as much as Route B's.
+
+| Item | Value |
+|---|---|
+| task | make one already-trained Global Agent `main` view cheaper while preserving behaviour |
+| what judges it | preserved behaviour **and** a measured latency drop, on identical inputs |
+| not substitutes | a self-supervised loss drop, a parameter-count drop |
+| baseline | DAgger `selected.safetensors`, sha `c033264f83d1c667c4dff5f93dec02183535386cfcde1a527a60303647a3e39e`, 11,383,694 params (98.1 % in one resnet18 view) |
+| candidate | `resnet18_shallow` main, sha `d9f18bb9cbdd08c1ac8f37199575686983a10307bad57dd8ab375d9c01e2e7cb`, 5,112,974 params (-55.1 %) |
+| declared architectures | `resnet18` (default), `resnet18_shallow`, `compact`; a checkpoint metadata without the key reads as `resnet18`, so every frozen checkpoint stays loadable |
+| distillation data | frozen 40/10 pilot plus the DAgger round's persisted 765 `boundary-windows.npz` |
+| dev result | intent macro-F1 0.8970 against the teacher's 0.8891 |
+| holdout result | non-inferior: 18 non-timeout terminals, 12.0 mean tower damage, 20/20 paired agreement |
+| device result | 99.63 % full-decision agreement over 817 real frames at 45.9 % lower median latency (48.61 -> 26.27 ms) |
+| gate noise floor | self-comparison 0.0 F1 delta, -0.13 % median, -2.98 % p95, against a declared 25 % threshold |
+| status | closed. Candidate unpromoted, `promotion_allowed` false, zero control |
+| evidence | [docs/execution/c783402-next/05_f2_speedup_feedback.md](execution/c783402-next/05_f2_speedup_feedback.md) |
+
+Scope limits that travel with this sub-line:
+
+- **Non-inferiority and cost, not a win.** 20 paired seeds and 99.63 % device agreement both show no
+  observed material difference, which is weaker than a tested equivalence; the candidate matched the
+  baseline and is cheaper, it is not stronger. `selected_model` resolves to the baseline because the
+  strict ordering keeps the incumbent on a tie.
+- **Not a game-outcome measurement.** Agreement is over decisions on frames, not over match results,
+  and nothing here is a policy-level improvement.
+- **One device run was cut short by the guard**, correctly: a Huawei resolver sheet took the
+  foreground at 438 s of a 600 s attempt, and the 817 cycles before it are the evidence. The guard's
+  refusal to decide off an unauthorized foreground is the protection working.
+- **The candidate is isolated in Shadow.** It runs only through the `--candidate` path, under its own
+  authorization, schema and checkpoint sha, with every read-only flag re-checked in code; the
+  promoted Shadow contract and checkpoint sha are byte-identical.

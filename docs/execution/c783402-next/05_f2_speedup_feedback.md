@@ -349,12 +349,50 @@ claim should be stated rather than left implicit:
 - **Nothing here is a gameplay improvement**, and `promotion_allowed` stays false on every artifact.
   The candidate is a measured result, not a deployment, and no control moved.
 
+## The candidate on real device frames: 99.63 % agreement at 45.9 % lower latency
+
+The holdout is a simulator. The strongest evidence for this line came from running both checkpoints on
+frames the candidate actually decided on, on hardware. Two live Shadow runs cannot be compared - they
+see different screens - so Shadow gained an opt-in `--persist-windows` archive and a
+`global-agent-shadow-compare` command that scores both checkpoints on one persisted archive, which
+makes the comparison paired by construction.
+
+A 600-second candidate Shadow attempt was stopped at **438 seconds and 817 cycles** by the device
+guard, correctly, when a Huawei resolver sheet took the foreground (`guard_or_capture_error`). The
+guard refusing to keep deciding off an unauthorized foreground is the protection working, not a
+fault, and the 817 cycles captured before that are the comparison evidence.
+
+| Quantity | Baseline (frozen DAgger) | Candidate (shallow, distilled) |
+|---|---|---|
+| full-decision agreement with baseline | - | **99.63 %** (817 windows, ~3 differ) |
+| intent agreement | - | 99.76 % |
+| zone agreement | - | 99.88 % |
+| median latency | 48.61 ms | **26.27 ms (-45.9 %)** |
+| parameters | 11,383,694 | 5,112,974 (-55.1 %) |
+| mean confidence | 0.944 | 0.989 |
+| zero-control invariants | - | `control_output` false, `device_input_allowed` false, `input_commands_sent` 0 |
+
+So the candidate does not merely avoid losing a simulator holdout: on real device frames it reproduces
+the frozen policy's decisions almost exactly, and it is cheaper and slightly more confident. That is
+the compression line's conclusion.
+
+## Line status: closed
+
+The F2/F3 compression sub-line is finished. Its deliverables are: the speed gate and its calibrated
+noise floor, the declared `main`-architecture variant with the backward-compatible reading rule, the
+bounded distillation pipeline (plain and with the DAgger boundary windows), a candidate that is
+non-inferior on the frozen holdout and 99.63 % decision-agreeing on device, and the isolated
+non-promoting Shadow path. What remains is not more work on this line: the candidate stays unpromoted
+and zero-control, and the main objective is untouched by it.
+
 ## What is deliberately not claimed
 
-- Not that the candidate is better than the frozen teacher. It is non-inferior on the holdout and
-  cheaper; it is not stronger.
-- Not that equivalence has been established. 20 paired seeds show no difference, which is weaker than
-  a tested equivalence and must not be reported as one.
+- Not that the candidate is better than the frozen teacher. It is non-inferior on the holdout, 99.63 %
+  decision-agreeing on device, and cheaper; it is not stronger.
+- Not that equivalence has been established. 20 paired seeds and 99.63 % device agreement both show no
+  observed material difference, which is weaker than a tested equivalence and must not be reported as
+  one.
 - Not that this task improves gameplay. It is the compression question the pack allows, and the pack
   says plainly it must not be called a policy-level improvement.
+- Not a game-outcome measurement. Agreement is over decisions on frames, not over match results.
 - Not a re-run of the 20-seed holdout. That stays the acceptance for a candidate that changes control.
