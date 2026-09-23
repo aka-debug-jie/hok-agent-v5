@@ -331,18 +331,30 @@ And the acceptance now clears, which is the point of the whole exercise:
 | parameters | 11,383,694 | 5,112,974 |
 
 A paired per-seed replay gives **20 of 20 agreement** with the frozen baseline, zero candidate-only
-wins and zero candidate-only losses, and a terminal count of 18 against 18. So the compressed student
-reproduces the baseline's holdout behaviour exactly, at **55.1 % fewer parameters and about 43 % lower
-latency**, on a fully offline holdout.
+wins and zero candidate-only losses, and a terminal count of 18 against 18.
 
-The honest scope: this is *parity with the frozen teacher*, not an improvement on it, and `selected_model`
-still resolves to the baseline under the strict ordering because the ordering keeps the incumbent on a
-tie. Nothing was promoted and no control moved; the candidate is a measured result, not a deployment.
+### Read this as non-inferiority, not as equivalence or a win
+
+The correct label for this result is **non-inferiority on the frozen holdout**, and the limits of that
+claim should be stated rather than left implicit:
+
+- **20 of 20 agreement is not a tested equivalence.** n = 20 gives a narrow, weak interval; the honest
+  statement is "no observed difference on these 20 seeds", not "the two are equivalent".
+- **The candidate did not beat the baseline.** It matched it. `selected_model` still resolves to the
+  baseline under the strict ordering, because the ordering keeps the incumbent on a tie. That is the
+  conservative behaviour working as intended, not a defect and not a reason to change the ordering.
+- **What the candidate buys is cost, not capability: same holdout behaviour at 55.1 % fewer parameters
+  and about 43 % lower CPU latency.** The value proposition is "do the same, more cheaply", and it holds
+  entirely offline.
+- **Nothing here is a gameplay improvement**, and `promotion_allowed` stays false on every artifact.
+  The candidate is a measured result, not a deployment, and no control moved.
 
 ## What is deliberately not claimed
 
-- Not that any speedup has been achieved. The feedback is in place and two pilot candidates were
-  rejected; nothing replaced the frozen teacher.
+- Not that the candidate is better than the frozen teacher. It is non-inferior on the holdout and
+  cheaper; it is not stronger.
+- Not that equivalence has been established. 20 paired seeds show no difference, which is weaker than
+  a tested equivalence and must not be reported as one.
 - Not that this task improves gameplay. It is the compression question the pack allows, and the pack
   says plainly it must not be called a policy-level improvement.
 - Not a re-run of the 20-seed holdout. That stays the acceptance for a candidate that changes control.

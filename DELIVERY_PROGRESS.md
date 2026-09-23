@@ -4645,7 +4645,8 @@ reach the crystal phase its post-tower proposals are already correct (seed 4000 
 the crystal inside the 96-tick budget on its own. The fix is therefore **bounded terminal conversion** -
 pacing the tower and crystal inside the tick budget - not a terminal reward, since the teacher has no
 such behaviour to distil. No code has been changed yet on this diagnosis.
-Updated 2026-09-22 (F3, the candidate reaches holdout parity): following the measured diagnosis, the
+Updated 2026-09-22 (F3, the candidate is non-inferior on the holdout):
+following the measured diagnosis, the
 targeted fix used evidence that already existed but was not being trained on. The DAgger round had
 persisted `boundary-windows.npz` - 765 windows from the states the student mispredicts, collected at
 authority 0.25 where the teacher drives - and the distillation had only ever seen the frozen BC
@@ -4656,13 +4657,15 @@ already-persisted windows into the same objective as cross-entropy on the teache
 labels, changing which states are fitted and not the target rule. The result clears both gates:
 dev intent macro-F1 0.8970 against the teacher's 0.8891 (+0.008) with a 43.1 percent median and 46.0
 percent p95 latency reduction, and the frozen 20-seed holdout now gives 18 non-timeout terminals, 20
-tower-progress episodes and 12.0 mean tower damage - exactly matching the baseline, where the previous
+tower-progress episodes and 12.0 mean tower damage - matching the baseline, where the previous
 candidate had 14 and 11.55. A paired per-seed replay gives 20 of 20 agreement, zero candidate-only
-wins and zero candidate-only losses, with terminals 18 against 18. So the compressed student
-reproduces the baseline's holdout behaviour at 55.1 percent fewer parameters (5,112,974 against
-11,383,694) and about 43 percent lower latency, entirely offline. The honest scope is parity with the
-frozen teacher, not an improvement, and `selected_model` still resolves to the baseline under the
-strict ordering because the incumbent is kept on a tie. Nothing was promoted, no threshold changed, no
-control moved, no device was used, and the frozen holdout remains the acceptance for anything that
-changes control. `make check` passes with Ruff, strict mypy and 678 tests; the F1 chain, the cold-start
-limit, the mask scope and the bound pass are unchanged.
+wins and zero candidate-only losses, with terminals 18 against 18. **The correct label is
+non-inferiority, not equivalence and not a win**: 20 paired seeds show no observed difference, which is
+weaker than a tested equivalence and must not be reported as one; the candidate matched the baseline
+rather than beating it; and what it buys is cost, not capability - the same holdout behaviour at 55.1
+percent fewer parameters (5,112,974 against 11,383,694) and about 43 percent lower latency, entirely
+offline. `selected_model` still resolves to the baseline under the strict ordering because the
+incumbent is kept on a tie, which is the conservative rule working as intended. Nothing was promoted,
+no threshold changed, no control moved, no device was used, and the frozen holdout remains the
+acceptance for anything that changes control. `make check` passes with Ruff, strict mypy and 680 tests;
+the F1 chain, the cold-start limit, the mask scope and the bound pass are unchanged.
