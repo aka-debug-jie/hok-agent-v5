@@ -33,6 +33,13 @@ later runs already stood inside the placement tolerance. The cold-start limit, t
 the bound pass are unchanged, and this is not a staged admission for the route contract.
 `02_reuse_gap.md` and `03_next_step.md` record the implemented status and the runs.
 
+## B: awaiting an owner-named truth source
+
+`06_truth_source_interface_decision.md` sets out what an external truth source must supply (hero
+position in a fixed frame, and/or match terminal), the three candidate shapes - app-side export, app
+source tree, or a controlled ground-truth capture - and what would and would not become provable with
+each. Nothing is implemented and no adapter is written until the owner names a source.
+
 ## Frozen
 
 The owner froze the delivered scope on 2026-09-22. `F0` and `F1` are delivered, the delivered scope
