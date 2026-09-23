@@ -94,3 +94,73 @@ def test_local_observation_views_bind_geometry_without_persisting_boxes(tmp_path
     assert (main.shape, minimap.shape, hud.shape) == ((128, 128, 3), (64, 64, 3), (32, 128, 3))
     assert (int(main[0, 0, 0]), int(minimap[0, 0, 0]), int(hud[0, 0, 0])) == (10, 40, 90)
     assert len(digest) == 64
+
+
+def test_candidate_shadow_has_its_own_read_only_authorization() -> None:
+    """The candidate keeps every read-only flag and is explicitly non-promoting."""
+    authorization_sha256 = global_shadow._load_candidate_authorization()
+    assert len(authorization_sha256) == 64
+    payload = json.loads(
+        global_shadow.CANDIDATE_AUTHORIZATION_PATH.read_text(encoding="utf-8")
+    )
+    assert payload["read_only_shadow_allowed"] is True
+    assert payload["control_output"] is False
+    assert payload["device_input_allowed"] is False
+    assert payload["online_learning_allowed"] is False
+    assert payload["promotion_allowed"] is False
+    assert payload["candidate_is_non_inferior"] is True
+    assert payload["candidate_checkpoint_sha256"] == global_shadow.CANDIDATE_CHECKPOINT_SHA256
+    assert payload["baseline_checkpoint_sha256"] == global_shadow.PROMOTED_CHECKPOINT_SHA256
+    assert payload["candidate_checkpoint_sha256"] != payload["baseline_checkpoint_sha256"]
+
+
+def test_candidate_and_promoted_shadow_cannot_be_confused() -> None:
+    """The two variants carry disjoint schema names and disjoint checkpoint identities."""
+    assert global_shadow.CANDIDATE_SCHEMA != global_shadow.SCHEMA
+    assert global_shadow.CANDIDATE_CHECKPOINT_SHA256 != global_shadow.PROMOTED_CHECKPOINT_SHA256
+    assert global_shadow.CANDIDATE_AUTHORIZATION_PATH != global_shadow.AUTHORIZATION_PATH
+
+
+def test_candidate_shadow_authorization_rejects_a_tampered_promotion_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A candidate authorization that claims promotion is refused, not silently accepted."""
+    payload = json.loads(
+        global_shadow.CANDIDATE_AUTHORIZATION_PATH.read_text(encoding="utf-8")
+    )
+    payload["promotion_allowed"] = True
+    tampered = tmp_path / "candidate.json"
+    tampered.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(global_shadow, "CANDIDATE_AUTHORIZATION_PATH", tampered)
+    with pytest.raises(global_shadow.GlobalShadowError, match="candidate Shadow authorization"):
+        global_shadow._load_candidate_authorization()
+
+
+def test_promoted_shadow_contract_is_unchanged_by_the_candidate_addition() -> None:
+    """The promoted authorization still loads and still pins the promoted checkpoint."""
+    _config, _config_sha, authorization_sha256 = global_shadow._load_contracts()
+    assert len(authorization_sha256) == 64
+    assert global_shadow.PROMOTED_CHECKPOINT_SHA256 == (
+        "c033264f83d1c667c4dff5f93dec02183535386cfcde1a527a60303647a3e39e"
+    )
+
+
+def test_shadow_cli_candidate_flag_grants_no_input(tmp_path: Path) -> None:
+    args = cli._parser().parse_args(
+        [
+            "global-agent-shadow",
+            "--serial",
+            "X",
+            "--video-node",
+            str(tmp_path / "v"),
+            "--checkpoint",
+            str(tmp_path / "c.safetensors"),
+            "--output-dir",
+            str(tmp_path / "o"),
+            "--run-seconds",
+            "60",
+            "--candidate",
+        ]
+    )
+    assert args.candidate is True
+    assert not hasattr(args, "enable_input")

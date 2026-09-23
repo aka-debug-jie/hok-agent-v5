@@ -4669,3 +4669,22 @@ incumbent is kept on a tie, which is the conservative rule working as intended. 
 no threshold changed, no control moved, no device was used, and the frozen holdout remains the
 acceptance for anything that changes control. `make check` passes with Ruff, strict mypy and 680 tests;
 the F1 chain, the cold-start limit, the mask scope and the bound pass are unchanged.
+Updated 2026-09-22 (candidate admitted to read-only Shadow): the owner authorized wiring the
+non-inferior candidate into Shadow, so `run_global_shadow` gained an optional `candidate` flag (CLI
+`--candidate`) that runs the authorized compression model instead of the promoted one. The change is
+additive and disjoint by construction: the frozen promoted config, the frozen
+`GLOBAL_AGENT_V1_SHADOW_AUTHORIZATION.json` and `PROMOTED_CHECKPOINT_SHA256` are byte-identical, and
+the candidate has its own `docs/GLOBAL_AGENT_CANDIDATE_SHADOW_AUTHORIZATION.json` with its own sha
+(`d9f18bb9...`), its own schema (`hok-agent-global-shadow-candidate-v1`), and every read-only flag
+re-checked in code rather than trusted from the file, with `promotion_allowed` false and the
+non-inferior claim and 20/20 paired agreement recorded. `_validate_checkpoint` now takes the expected
+sha per variant and additionally refuses a candidate whose `main_architecture` is not the declared
+`resnet18_shallow`, so the two variants can never be confused or pooled: verified that the candidate
+loads under `--candidate` and is refused by the promoted path. Shadow remains zero-control -
+`control_output` false, `device_input_allowed` false, `input_commands_sent` 0 - and the run still
+requires the existing guard, an explicit V4L2 node, the admitted 60 or 600 second duration and the
+promoted-or-candidate checkpoint sha. Five focused tests were added (candidate authorization flags,
+schema/checkpoint disjointness, refusal of a tampered promotion flag, promoted contract unchanged,
+and the CLI flag granting no input), and `make check` passes with Ruff, strict mypy and 685 tests. No
+device run was made in this step; the F1 chain, the F2 feedback, the F3 result, the cold-start limit,
+the mask scope and the bound pass are unchanged.

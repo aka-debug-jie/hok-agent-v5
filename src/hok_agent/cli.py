@@ -1619,6 +1619,11 @@ def _parser() -> argparse.ArgumentParser:
     global_shadow.add_argument("--run-seconds", type=int, choices=(60, 600), required=True)
     global_shadow.add_argument("--device", choices=("cpu", "cuda"), default="cuda")
     global_shadow.add_argument("--observation-rois", type=Path)
+    global_shadow.add_argument(
+        "--candidate",
+        action="store_true",
+        help="run the authorized non-promoting candidate compression model",
+    )
     return parser
 
 
@@ -4152,6 +4157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_dir=args.output_dir,
                 run_seconds=args.run_seconds,
                 device_name=args.device,
+                candidate=args.candidate,
                 observation_rois=args.observation_rois,
             )
         else:

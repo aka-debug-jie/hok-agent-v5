@@ -33,6 +33,19 @@ OFFLINE_EVIDENCE_PATH: Final = (
 PROMOTED_CHECKPOINT_SHA256: Final = (
     "c033264f83d1c667c4dff5f93dec02183535386cfcde1a527a60303647a3e39e"
 )
+# The candidate is a disjoint, non-promoting Shadow variant. It never replaces the promoted
+# checkpoint: the frozen promoted authorization and the promoted checkpoint sha above stay
+# byte-identical, and a candidate run reports its own schema and authorization so the two can never
+# be confused or pooled. The candidate is admitted here only because it is non-inferior
+# on the frozen holdout (20 of 20 paired agreement) and cheap; not promoted, grants no control.
+CANDIDATE_AUTHORIZATION_PATH: Final = (
+    Path(__file__).resolve().parents[2]
+    / "docs/GLOBAL_AGENT_CANDIDATE_SHADOW_AUTHORIZATION.json"
+)
+CANDIDATE_CHECKPOINT_SHA256: Final = (
+    "d9f18bb9cbdd08c1ac8f37199575686983a10307bad57dd8ab375d9c01e2e7cb"
+)
+CANDIDATE_SCHEMA: Final = "hok-agent-global-shadow-candidate-v1"
 WINDOW_FRAMES: Final = 16
 
 
@@ -159,11 +172,50 @@ def _load_contracts() -> tuple[dict[str, object], str, str]:
     )
 
 
-def _validate_checkpoint(path: Path, device: torch.device) -> GlobalMacroPolicy:
-    if _sha_file(path) != PROMOTED_CHECKPOINT_SHA256:
-        raise GlobalShadowError("checkpoint is not the authorized promoted DAgger model")
+def _validate_checkpoint(
+    path: Path, device: torch.device, *, candidate: bool = False
+) -> GlobalMacroPolicy:
+    expected = CANDIDATE_CHECKPOINT_SHA256 if candidate else PROMOTED_CHECKPOINT_SHA256
+    if _sha_file(path) != expected:
+        raise GlobalShadowError(
+            "checkpoint is not the authorized candidate compression model"
+            if candidate
+            else "checkpoint is not the authorized promoted DAgger model"
+        )
     model, _metadata = load_global_model(path, device)
+    if candidate and model.main_architecture != "resnet18_shallow":
+        raise GlobalShadowError("candidate checkpoint is not the declared shallow architecture")
     return model
+
+
+def _load_candidate_authorization() -> str:
+    """Load the candidate's own authorization, kept separate from the promoted one.
+
+    Every flag that matters is re-checked here rather than trusted from the file, and the candidate
+    term is required to be non-inferior with the recorded paired agreement. Nothing about the
+    promoted authorization or the promoted checkpoint is read or altered by this path.
+    """
+    authorization = _load_json(CANDIDATE_AUTHORIZATION_PATH)
+    expected = {
+        "schema_version": "hok-agent-global-shadow-authorization-v2-candidate",
+        "purpose": "candidate compression shadow, non-promoting",
+        "promoted_authorization_sha256_unchanged": True,
+        "baseline_checkpoint_sha256": PROMOTED_CHECKPOINT_SHA256,
+        "candidate_checkpoint_sha256": CANDIDATE_CHECKPOINT_SHA256,
+        "candidate_architecture": "resnet18_shallow",
+        "candidate_parameters": 5112974,
+        "baseline_parameters": 11383694,
+        "candidate_is_non_inferior": True,
+        "holdout_paired_agreement": "20/20",
+        "read_only_shadow_allowed": True,
+        "control_output": False,
+        "device_input_allowed": False,
+        "online_learning_allowed": False,
+        "promotion_allowed": False,
+    }
+    if authorization != expected:
+        raise GlobalShadowError("candidate Shadow authorization differs from its declared contract")
+    return _sha_bytes(_canonical(authorization).encode())
 
 
 def _candidate_modes(intent: str, zone: str, abstain: bool) -> tuple[str, str, str]:
@@ -202,8 +254,14 @@ def run_global_shadow(
     run_seconds: int,
     device_name: str,
     observation_rois: Path | None = None,
+    candidate: bool = False,
 ) -> dict[str, object]:
     config, config_sha256, authorization_sha256 = _load_contracts()
+    if candidate:
+        # A candidate run has its own authorization and its own schema, so a candidate summary can
+        # never be read as a promoted one. The promoted authorization sha is still recorded as
+        # unchanged evidence that the promoted contract was not touched.
+        authorization_sha256 = _load_candidate_authorization()
     smoke_seconds = cast(int, config["smoke_seconds"])
     formal_seconds = cast(int, config["formal_seconds"])
     sample_hz = cast(int, config["sample_hz"])
@@ -218,7 +276,7 @@ def run_global_shadow(
         raise GlobalShadowError("CUDA requested but unavailable")
     node = _validate_capture_device(str(video_node))
     output = _under_large_root(output_dir, output=True)
-    model = _validate_checkpoint(checkpoint, device)
+    model = _validate_checkpoint(checkpoint, device, candidate=candidate)
     guard = _open_device_guard(serial)
     watchdog = GuardWatchdog(guard)
     roi_boxes: dict[str, tuple[int, int, int, int]] | None = None
@@ -357,15 +415,26 @@ def run_global_shadow(
     finally:
         watchdog.stop()
     coverage = completed / max(1, scheduled)
+    if roi_sha256 is None:
+        schema = CANDIDATE_SCHEMA if candidate else SCHEMA
+    else:
+        schema = (
+            "hok-agent-global-shadow-candidate-v1.1"
+            if candidate
+            else "hok-agent-global-shadow-v1.1"
+        )
     summary: dict[str, object] = {
-        "schema_version": SCHEMA if roi_sha256 is None else "hok-agent-global-shadow-v1.1",
+        "schema_version": schema,
+        "candidate_run": candidate,
         "status": "COMPLETED" if stop_reason is None else "STOPPED",
         "run_seconds_requested": run_seconds,
         "run_seconds_observed": time.monotonic() - started,
         "config_sha256": config_sha256,
         "authorization_sha256": authorization_sha256,
         "observation_roi_sha256": roi_sha256,
-        "checkpoint_sha256": PROMOTED_CHECKPOINT_SHA256,
+        "checkpoint_sha256": (
+            CANDIDATE_CHECKPOINT_SHA256 if candidate else PROMOTED_CHECKPOINT_SHA256
+        ),
         "scheduled_cycles": scheduled,
         "completed_cycles": completed,
         "cycle_coverage": coverage,
