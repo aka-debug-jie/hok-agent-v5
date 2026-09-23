@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import statistics
 import time
 from collections import Counter, deque
 from pathlib import Path
@@ -15,6 +16,7 @@ from hok_agent.capture import _coerce_frame, _validate_capture_device
 from hok_agent.global_policy import (
     GlobalMacroPolicy,
     _is_static_window,
+    _parameter_groups,
     _predict_command,
     _under_large_root,
     load_global_model,
@@ -255,6 +257,7 @@ def run_global_shadow(
     device_name: str,
     observation_rois: Path | None = None,
     candidate: bool = False,
+    persist_windows: Path | None = None,
 ) -> dict[str, object]:
     config, config_sha256, authorization_sha256 = _load_contracts()
     if candidate:
@@ -289,6 +292,9 @@ def run_global_shadow(
     next_decision: float | None = None
     frames: deque[tuple[np.ndarray, ...]] = deque(maxlen=WINDOW_FRAMES)
     raw_frames: deque[np.ndarray] = deque(maxlen=WINDOW_FRAMES)
+    # Opt-in comparison evidence: the exact sampled windows this run decided on, so two checkpoints
+    # can later be scored on identical inputs instead of on two different live screens.
+    archived_windows: list[tuple[np.ndarray, ...]] = []
     inference_ms: list[float] = []
     end_to_end_ms: list[float] = []
     completed = scheduled = stale_frames = invalid_screen = hard_stops = 0
@@ -353,6 +359,12 @@ def run_global_shadow(
                     while next_decision <= now:
                         next_decision += 1.0 / decision_hz
                     scheduled += 1
+                    if persist_windows is not None:
+                        padded = list(frames)
+                        padded = [padded[0]] * (WINDOW_FRAMES - len(padded)) + padded
+                        archived_windows.append(
+                            tuple(np.stack([row[index] for row in padded]) for index in range(3))
+                        )
                     infer_started = time.monotonic()
                     command = _predict_command(model, frames, device)
                     infer_elapsed = (time.monotonic() - infer_started) * 1000
@@ -415,6 +427,25 @@ def run_global_shadow(
     finally:
         watchdog.stop()
     coverage = completed / max(1, scheduled)
+    persisted_sha256: str | None = None
+    if persist_windows is not None:
+        archive_path = _under_large_root(persist_windows, output=True)
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        if archived_windows:
+            np.savez_compressed(
+                archive_path,
+                main_rgb=np.stack([row[0] for row in archived_windows]),
+                minimap_rgb=np.stack([row[1] for row in archived_windows]),
+                hud_rgb=np.stack([row[2] for row in archived_windows]),
+            )
+        else:
+            np.savez_compressed(
+                archive_path,
+                main_rgb=np.zeros((0, WINDOW_FRAMES, 128, 128, 3), dtype=np.uint8),
+                minimap_rgb=np.zeros((0, WINDOW_FRAMES, 64, 64, 3), dtype=np.uint8),
+                hud_rgb=np.zeros((0, WINDOW_FRAMES, 32, 128, 3), dtype=np.uint8),
+            )
+        persisted_sha256 = _sha_file(archive_path)
     if roi_sha256 is None:
         schema = CANDIDATE_SCHEMA if candidate else SCHEMA
     else:
@@ -432,6 +463,7 @@ def run_global_shadow(
         "config_sha256": config_sha256,
         "authorization_sha256": authorization_sha256,
         "observation_roi_sha256": roi_sha256,
+        "persisted_windows_sha256": persisted_sha256,
         "checkpoint_sha256": (
             CANDIDATE_CHECKPOINT_SHA256 if candidate else PROMOTED_CHECKPOINT_SHA256
         ),
@@ -470,3 +502,123 @@ def run_global_shadow(
     summary["summary_sha256"] = _sha_bytes(_canonical(summary).encode())
     (output / "summary.json").write_text(_canonical(summary) + "\n", encoding="utf-8")
     return summary
+
+def compare_shadow_checkpoints(
+    *,
+    baseline_checkpoint: Path,
+    candidate_checkpoint: Path,
+    windows_path: Path,
+    output_path: Path,
+    device_name: str = "cpu",
+) -> dict[str, object]:
+    """Score two checkpoints on identical persisted windows, for a fair Shadow comparison.
+
+    Two live Shadow runs see different screens, so their event streams are not comparable. This
+    takes one persisted window archive - the exact inputs a Shadow run decided on - and reports how
+    often the two models choose the same intent and zone, their confidence, and each one's latency.
+    It is read-only: it loads checkpoints and an archive and writes one report; it opens no capture
+    source and sends nothing to a device. Agreement shows matched decisions, not a win.
+    """
+    for path in (baseline_checkpoint, candidate_checkpoint, windows_path):
+        if path.is_symlink() or not path.is_file():
+            raise GlobalShadowError(f"comparison needs regular files: {path}")
+    device = torch.device(device_name)
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise GlobalShadowError("CUDA requested but unavailable")
+    with np.load(windows_path, allow_pickle=False) as archive:
+        main = np.asarray(archive["main_rgb"])
+    if main.shape[0] == 0:
+        raise GlobalShadowError("window archive is empty")
+    windows = torch.from_numpy(main).permute(0, 1, 4, 2, 3).float().div(255.0).to(device)
+    total = int(windows.shape[0])
+    models = {
+        "baseline": load_global_model(baseline_checkpoint, device)[0],
+        "candidate": load_global_model(candidate_checkpoint, device)[0],
+    }
+    decisions: dict[str, list[tuple[int, int]]] = {}
+    latencies: dict[str, list[float]] = {}
+    confidences: dict[str, list[float]] = {}
+    for name, model in models.items():
+        model.eval()
+        pairs: list[tuple[int, int]] = []
+        times: list[float] = []
+        confs: list[float] = []
+        with torch.no_grad():
+            for index in range(total):
+                window = windows[index : index + 1]
+                started = time.perf_counter()
+                intent_logits, zone_logits, _scene = model(window, window, window)
+                times.append((time.perf_counter() - started) * 1000.0)
+                intent_probability = intent_logits.softmax(dim=1)
+                zone_probability = zone_logits.softmax(dim=1)
+                intent_index = int(intent_probability.argmax(dim=1).item())
+                zone_index = int(zone_probability.argmax(dim=1).item())
+                pairs.append((intent_index, zone_index))
+                confs.append(
+                    min(
+                        float(intent_probability[0, intent_index].item()),
+                        float(zone_probability[0, zone_index].item()),
+                    )
+                )
+        decisions[name] = pairs
+        latencies[name] = times
+        confidences[name] = confs
+    agree = sum(
+        1 for a, b in zip(decisions["baseline"], decisions["candidate"], strict=True) if a == b
+    )
+    intent_agree = sum(
+        1
+        for a, b in zip(decisions["baseline"], decisions["candidate"], strict=True)
+        if a[0] == b[0]
+    )
+    zone_agree = sum(
+        1
+        for a, b in zip(decisions["baseline"], decisions["candidate"], strict=True)
+        if a[1] == b[1]
+    )
+    base_median = statistics.median(latencies["baseline"])
+    cand_median = statistics.median(latencies["candidate"])
+    report: dict[str, object] = {
+        "schema_version": "hok-agent-global-shadow-comparison-v1",
+        "windows": total,
+        "windows_path": str(windows_path),
+        "baseline_checkpoint": str(baseline_checkpoint),
+        "candidate_checkpoint": str(candidate_checkpoint),
+        "device": device_name,
+        "agreement": {
+            "both_intent_and_zone": agree / total,
+            "intent": intent_agree / total,
+            "zone": zone_agree / total,
+        },
+        "mean_confidence": {
+            "baseline": round(statistics.fmean(confidences["baseline"]), 6),
+            "candidate": round(statistics.fmean(confidences["candidate"]), 6),
+        },
+        "latency_ms": {
+            "baseline": {
+                "median": round(base_median, 4),
+                "p95": round(float(np.percentile(latencies["baseline"], 95)), 4),
+            },
+            "candidate": {
+                "median": round(cand_median, 4),
+                "p95": round(float(np.percentile(latencies["candidate"], 95)), 4),
+            },
+        },
+        "median_latency_reduction_fraction": round(1.0 - cand_median / base_median, 6),
+        "parameters": {
+            "baseline": _parameter_groups(models["baseline"]),
+            "candidate": _parameter_groups(models["candidate"]),
+        },
+        "control_output": False,
+        "device_input_allowed": False,
+        "input_commands_sent": 0,
+        "note": (
+            "agreement is measured on identical persisted windows; it shows matched decisions, "
+            "not a win, and it is not a game-outcome measurement"
+        ),
+    }
+    report["report_sha256"] = _sha_bytes(_canonical(report).encode())
+    output = _under_large_root(output_path, output=True)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(_canonical(report) + "\n", encoding="utf-8")
+    return report

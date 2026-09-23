@@ -1624,6 +1624,16 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run the authorized non-promoting candidate compression model",
     )
+    global_shadow.add_argument("--persist-windows", type=Path, default=None)
+    shadow_compare = commands.add_parser(
+        "global-agent-shadow-compare",
+        help="score the candidate and promoted checkpoints on identical persisted Shadow windows",
+    )
+    shadow_compare.add_argument("--baseline-checkpoint", type=Path, required=True)
+    shadow_compare.add_argument("--candidate-checkpoint", type=Path, required=True)
+    shadow_compare.add_argument("--windows", type=Path, required=True)
+    shadow_compare.add_argument("--report", type=Path, required=True)
+    shadow_compare.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     return parser
 
 
@@ -4147,6 +4157,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.output_dir,
                 device_name=args.device,
             )
+        elif args.command == "global-agent-shadow-compare":
+            from hok_agent.global_shadow import compare_shadow_checkpoints
+
+            result = compare_shadow_checkpoints(
+                baseline_checkpoint=args.baseline_checkpoint,
+                candidate_checkpoint=args.candidate_checkpoint,
+                windows_path=args.windows,
+                output_path=args.report,
+                device_name=args.device,
+            )
         elif args.command == "global-agent-shadow":
             from hok_agent.global_shadow import run_global_shadow
 
@@ -4158,6 +4178,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 run_seconds=args.run_seconds,
                 device_name=args.device,
                 candidate=args.candidate,
+                persist_windows=args.persist_windows,
                 observation_rois=args.observation_rois,
             )
         else:

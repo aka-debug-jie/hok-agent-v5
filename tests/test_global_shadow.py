@@ -164,3 +164,71 @@ def test_shadow_cli_candidate_flag_grants_no_input(tmp_path: Path) -> None:
     )
     assert args.candidate is True
     assert not hasattr(args, "enable_input")
+
+
+def test_persist_windows_flag_is_opt_in_and_grants_no_input(tmp_path: Path) -> None:
+    """Persisting comparison windows must not add an input surface."""
+    args = cli._parser().parse_args(
+        [
+            "global-agent-shadow",
+            "--serial",
+            "X",
+            "--video-node",
+            str(tmp_path / "v"),
+            "--checkpoint",
+            str(tmp_path / "c.safetensors"),
+            "--output-dir",
+            str(tmp_path / "o"),
+            "--run-seconds",
+            "60",
+            "--candidate",
+            "--persist-windows",
+            str(tmp_path / "w.npz"),
+        ]
+    )
+    assert args.persist_windows == tmp_path / "w.npz"
+    assert not hasattr(args, "enable_input")
+    source = inspect.getsource(global_shadow.run_global_shadow)
+    # Persisting is read-only: nothing in the shadow module sends an input command.
+    assert "input_commands_sent" in source
+    assert '"input_commands_sent": 0' in source
+
+
+def test_shadow_compare_reports_agreement_and_stays_read_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOK_LARGE_ROOT", str(tmp_path))
+    from hok_agent import global_policy as gp
+
+    checkpoint = tmp_path / "m.safetensors"
+    gp._save_model(checkpoint, gp.GlobalMacroPolicy("tcn"), "tcn", "0" * 64)
+    windows = tmp_path / "windows.npz"
+    np.savez_compressed(
+        windows,
+        main_rgb=np.zeros((3, 16, 128, 128, 3), dtype=np.uint8),
+        minimap_rgb=np.zeros((3, 16, 64, 64, 3), dtype=np.uint8),
+        hud_rgb=np.zeros((3, 16, 32, 128, 3), dtype=np.uint8),
+    )
+    report = global_shadow.compare_shadow_checkpoints(
+        baseline_checkpoint=checkpoint,
+        candidate_checkpoint=checkpoint,
+        windows_path=windows,
+        output_path=tmp_path / "out" / "report.json",
+    )
+    assert report["windows"] == 3
+    # The same checkpoint against itself must agree exactly.
+    assert report["agreement"]["both_intent_and_zone"] == 1.0
+    assert report["control_output"] is False
+    assert report["device_input_allowed"] is False
+    assert report["input_commands_sent"] == 0
+    assert (tmp_path / "out" / "report.json").exists()
+
+
+def test_shadow_compare_refuses_a_missing_archive(tmp_path: Path) -> None:
+    with pytest.raises(global_shadow.GlobalShadowError):
+        global_shadow.compare_shadow_checkpoints(
+            baseline_checkpoint=tmp_path / "a.safetensors",
+            candidate_checkpoint=tmp_path / "b.safetensors",
+            windows_path=tmp_path / "missing.npz",
+            output_path=tmp_path / "out.json",
+        )
